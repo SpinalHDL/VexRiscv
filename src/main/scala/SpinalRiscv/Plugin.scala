@@ -11,7 +11,10 @@ trait Plugin[T <: Pipeline] {
   def setup(pipeline: T) : Unit = {}
   def build(pipeline: T) : Unit
 
-  implicit class implicits(stage: Stage){
-    def plug(area : Area) = area.setCompositeName(stage,getName()).reflectNames()
+  implicit class implicitsStage(stage: Stage){
+    def plug[T <: Area](area : T) : T = {area.setCompositeName(stage,getName()).reflectNames();area}
+  }
+  implicit class implicitsPipeline(stage: Pipeline){
+    def plug[T <: Area](area : T) = {area.setName(getName()).reflectNames();area}
   }
 }

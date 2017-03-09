@@ -23,22 +23,37 @@ import spinal.lib._
 
 import scala.collection.mutable.ArrayBuffer
 
-object StandardStageables{
-  object Execute0Bypass   extends Stageable(Bool)
-  object Execute1Bypass   extends Stageable(Bool)
-  object SRC1   extends Stageable(UInt(32 bits))
-  object SRC2   extends Stageable(UInt(32 bits))
-  object RESULT extends Stageable(UInt(32 bits))
-  object PC extends Stageable(UInt())
-  object INST extends Stageable(Bits(32 bits))
+
+object Riscv{
+  def funct7Range = 31 downto 25
+  def rdRange = 11 downto 7
+  def funct3Range = 14 downto 12
+  def rs1Range = 19 downto 15
+  def rs2Range = 24 downto 20
 }
 
-class SpinalRiscv(pluginConfig : Seq[Plugin[SpinalRiscv]]) extends Component with Pipeline{
-  type  T = SpinalRiscv
+
+case class VexRiscvConfig(pcWidth : Int){
+  val plugins = ArrayBuffer[Plugin[VexRiscv]]()
+
+  //Default Stageables
+  object Execute0Bypass   extends Stageable(Bool)
+  object Execute1Bypass   extends Stageable(Bool)
+  object SRC1   extends Stageable(Bits(32 bits))
+  object SRC2   extends Stageable(Bits(32 bits))
+  object RESULT extends Stageable(UInt(32 bits))
+  object PC extends Stageable(UInt(pcWidth bits))
+  object INSTRUCTION extends Stageable(Bits(32 bits))
+}
+
+
+
+class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
+  type  T = VexRiscv
 
   stages ++= List.fill(6)(new Stage())
   val prefetch :: fetch :: decode :: execute :: memory :: writeBack :: Nil = stages.toList
-  plugins ++= pluginConfig
+  plugins ++= config.plugins
 }
 
 
@@ -47,21 +62,21 @@ trait DecoderService{
   def add(encoding :Seq[(MaskedLiteral,Seq[(Stageable[_],BaseType)])])
 }
 
-class DecoderSimplePlugin extends Plugin[SpinalRiscv] with DecoderService {
+class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
   override def add(encoding: Seq[(MaskedLiteral, Seq[(Stageable[_], BaseType)])]): Unit = encoding.foreach(e => this.add(e._1,e._2))
   override def add(key: MaskedLiteral, values: Seq[(Stageable[_], BaseType)]): Unit = {
     ???
   }
 
-  override def build(pipeline: SpinalRiscv): Unit = ???
+  override def build(pipeline: VexRiscv): Unit = ???
 }
 
 trait PcManagerService{
   def jumpTo(pc : UInt,cond : Bool,stage : Stage) : Unit
 }
 
-class PcManagerSimplePlugin(resetVector : BigInt,pcWidth : Int,fastFetchCmdPcCalculation : Boolean) extends Plugin[SpinalRiscv] with PcManagerService{
-  import StandardStageables._
+class PcManagerSimplePlugin(resetVector : BigInt,fastFetchCmdPcCalculation : Boolean) extends Plugin[VexRiscv] with PcManagerService{
+
 
   //FetchService interface
   case class JumpInfo(pc: UInt, cond: Bool, stage: Stage)
@@ -69,10 +84,11 @@ class PcManagerSimplePlugin(resetVector : BigInt,pcWidth : Int,fastFetchCmdPcCal
   override def jumpTo(pc: UInt, cond: Bool, stage: Stage): Unit = jumpInfos += JumpInfo(pc,cond,stage)
 
 
-  override def build(pipeline: SpinalRiscv): Unit = {
+  override def build(pipeline: VexRiscv): Unit = {
     import pipeline.prefetch
+    import pipeline.config._
 
-    prefetch.plug(new Area {
+    prefetch plug new Area {
       import prefetch._
       //Stage always valid
       arbitration.isValid := True
@@ -104,7 +120,7 @@ class PcManagerSimplePlugin(resetVector : BigInt,pcWidth : Int,fastFetchCmdPcCal
 
       //Pipeline insertions
       insert(PC) := pc
-    })
+    }
   }
 }
 
@@ -116,41 +132,88 @@ case class IBusSimpleRsp() extends Bundle{
   val inst = Bits(32 bits)
 }
 
-class IBusSimplePlugin extends Plugin[SpinalRiscv]{
-  import StandardStageables._
+class IBusSimplePlugin extends Plugin[VexRiscv]{
   var iCmd  : Stream[IBusSimpleCmd] = null
   var iRsp  : IBusSimpleRsp = null
 
-  override def build(pipeline: SpinalRiscv): Unit = {
+  override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
+    import pipeline.config._
 
     iCmd = master(Stream(IBusSimpleCmd()))
     iCmd.valid := prefetch.arbitration.isFiring
     iCmd.pc := prefetch.output(PC)
 
-    iRsp = IBusSimpleRsp()
-    fetch.insert(INST) := iRsp.inst
+    iRsp = in(IBusSimpleRsp())
+    fetch.insert(INSTRUCTION) := iRsp.inst
   }
 }
 
-class IntAluPlugin extends Plugin[SpinalRiscv]{
-  import StandardStageables._
+trait RegFileReadKind
+object ASYNC extends RegFileReadKind
+object SYNC extends RegFileReadKind
 
+class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]{
 
-  override def setup(pipeline: SpinalRiscv): Unit = {
-    pipeline.service(classOf[DecoderService]).add(List(
-      M"0101010---" ->
-        List(
-          Execute0Bypass -> True,
-          Execute1Bypass -> True
-        )
-      )
-    )
-  }
-
-  override def build(pipeline: SpinalRiscv): Unit = {
+  override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
+    import pipeline.config._
 
+    val global = pipeline plug new Area{
+      val regFile = Mem(Bits(32 bits),32)
+    }
+
+    decode plug new Area{
+      import decode._
+      
+      val addr0 = input(INSTRUCTION)(Riscv.rs1Range).asUInt
+      val addr1 = input(INSTRUCTION)(Riscv.rs2Range).asUInt
+
+      //read register file
+      val srcInstruction = regFileReadyKind match{
+        case `ASYNC` => input(INSTRUCTION)
+        case `SYNC` =>  Mux(arbitration.isStuck,input(INSTRUCTION),fetch.output(INSTRUCTION))
+      }
+
+      val regFileReadAddress0 = srcInstruction(Riscv.rs1Range).asUInt
+      val regFileReadAddress1 = srcInstruction(Riscv.rs2Range).asUInt
+
+      val (src0,src1) = regFileReadyKind match{
+        case `ASYNC` => (global.regFile.readAsync(regFileReadAddress0),global.regFile.readAsync(regFileReadAddress1))
+        case `SYNC` =>  (global.regFile.readSync(regFileReadAddress0),global.regFile.readSync(regFileReadAddress1))
+      }
+      
+      insert(SRC1) := Mux(addr0 =/= 0, src0, B(0, 32 bit))
+      insert(SRC2) := Mux(addr1 =/= 0, src1, B(0, 32 bit))
+    }
+    
+    writeBack plug new Area{
+      import writeBack._
+      //TODO write regfile
+    }
+  }
+}
+
+class IntAluPlugin extends Plugin[VexRiscv]{
+
+
+
+//  override def setup(pipeline: VexRiscv): Unit = {
+//    pipeline.service(classOf[DecoderService]).add(List(
+//      M"0101010---" ->
+//        List(
+//          Execute0Bypass -> True,
+//          Execute1Bypass -> True
+//        )
+//      )
+//    )
+//  }
+
+  override def build(pipeline: VexRiscv): Unit = {
+    import pipeline._
+    import pipeline.config._
+
+    out(execute.input(SRC1) & execute.input(SRC2))
 
   }
 
@@ -160,11 +223,20 @@ class IntAluPlugin extends Plugin[SpinalRiscv]{
 
 object MyTopLevel {
   def main(args: Array[String]) {
-    SpinalVhdl(new SpinalRiscv(List(
-//        new IntAluPlugin
-      new PcManagerSimplePlugin(0,32,true),
-      new IBusSimplePlugin
-    )))
+    SpinalVhdl{
+      val config = VexRiscvConfig(
+        pcWidth = 32
+      )
+
+      config.plugins ++= List(
+        new PcManagerSimplePlugin(0,true),
+        new IBusSimplePlugin,
+        new RegFilePlugin(SYNC),
+        new IntAluPlugin
+      )
+
+      new VexRiscv(config)
+    }
   }
 }
 

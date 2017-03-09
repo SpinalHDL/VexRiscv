@@ -30,7 +30,7 @@ class Stage() extends Area{
   }
 
   def insert[T <: Data](key : Stageable[T]) : T = inserts.getOrElseUpdate(key.asInstanceOf[Stageable[Data]],key()).asInstanceOf[T].setPartialName(this,key.getName())
-  def apply[T <: Data](key : Stageable[T]) : T = ???
+//  def apply[T <: Data](key : Stageable[T]) : T = ???
 
 
   val arbitration = new Bundle{

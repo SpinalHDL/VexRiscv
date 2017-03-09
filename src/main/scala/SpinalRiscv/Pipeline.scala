@@ -10,12 +10,12 @@ trait Pipeline {
   type T <: Pipeline
   val plugins = ArrayBuffer[Plugin[T]]()
   var stages = ArrayBuffer[Stage]()
-  val services = ArrayBuffer[Any]()
+//  val services = ArrayBuffer[Any]()
 
   def indexOf(stage : Stage) = stages.indexOf(stage)
 
   def service[T](clazz : Class[T]) = {
-    val filtered = services.filter(_.getClass == clazz)
+    val filtered = plugins.filter(o => classOf[PcManagerService].isAssignableFrom(o.getClass))
     assert(filtered.length == 1)
     filtered.head.asInstanceOf[T]
   }
