@@ -20,6 +20,7 @@ package SpinalRiscv
 
 import java.io.File
 
+import SpinalRiscv.Riscv.IMM
 import spinal.core._
 import spinal.lib._
 
@@ -81,6 +82,17 @@ object Riscv{
   def SB                 = M"-----------------000-----0100011"
   def SH                 = M"-----------------001-----0100011"
   def SW                 = M"-----------------010-----0100011"
+
+  def BEQ                = M"-----------------000-----1100011"
+  def BNE                = M"-----------------001-----1100011"
+  def BLT                = M"-----------------100-----1100011"
+  def BGE                = M"-----------------101-----1100011"
+  def BLTU               = M"-----------------110-----1100011"
+  def BGEU               = M"-----------------111-----1100011"
+  def JALR               = M"-----------------000-----1100111"
+  def JAL                = M"-------------------------1101111"
+  def LUI                = M"-------------------------0110111"
+  def AUIPC              = M"-------------------------0010111"
 }
 
 
@@ -112,7 +124,7 @@ case class VexRiscvConfig(pcWidth : Int){
 
 
   object Src1CtrlEnum extends SpinalEnum(binarySequential){
-    val RS, IMU, IMZ, IMJB = newElement()
+    val RS, IMU, FOUR = newElement()   //IMU, IMZ IMJB
   }
 
   object Src2CtrlEnum extends SpinalEnum(binarySequential){
@@ -184,17 +196,106 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
   }
 }
 
+class NoPredictionBranchPlugin extends Plugin[VexRiscv]{
+  object BranchCtrlEnum extends SpinalEnum(binarySequential){
+    val INC,B,JAL,JALR = newElement()
+  }
+
+  object BRANCH_CTRL extends Stageable(BranchCtrlEnum())
+  object BRANCH_SOLVED extends Stageable(BranchCtrlEnum())
+
+  var jumpInterface : Flow[UInt] = null
+
+  override def setup(pipeline: VexRiscv): Unit = {
+    import pipeline.config._
+    import Riscv._
+
+    val decoderService = pipeline.service(classOf[DecoderService])
+
+    val bActions = List[(Stageable[_ <: Data],Any)](
+      LEGAL_INSTRUCTION -> True,
+      SRC1_CTRL         -> Src1CtrlEnum.RS,
+      SRC2_CTRL         -> Src2CtrlEnum.RS,
+      SRC_USE_SUB_LESS  -> True,
+      SRC1_USE          -> True,
+      SRC2_USE          -> True
+    )
+
+    val jActions = List[(Stageable[_ <: Data],Any)](
+      LEGAL_INSTRUCTION   -> True,
+      SRC1_CTRL           -> Src1CtrlEnum.FOUR,
+      SRC2_CTRL           -> Src2CtrlEnum.PC,
+      SRC_USE_SUB_LESS    -> False,
+      REGFILE_WRITE_VALID -> True,
+      SRC2_USE            -> True
+    )
+
+    decoderService.addDefault(BRANCH_CTRL, BranchCtrlEnum.INC)
+    decoderService.add(List(
+      JAL  -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JAL)),
+      JALR -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JALR)),
+      BEQ  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
+      BNE  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
+      BLT  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
+      BGE  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
+      BLTU -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> True)),
+      BGEU -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> True))
+    ))
+
+    jumpInterface = pipeline.service(classOf[PcManagerService]).createJumpInterface(pipeline.execute)
+  }
+
+
+  override def build(pipeline: VexRiscv): Unit = {
+    import pipeline._
+    import pipeline.config._
+
+    execute plug new Area {
+      import execute._
+
+      val less = input(SRC_LESS)
+      val eq = input(SRC1) === input(SRC2)
+
+      insert(BRANCH_SOLVED) := input(BRANCH_CTRL).mux[BranchCtrlEnum.C](
+        BranchCtrlEnum.INC  -> BranchCtrlEnum.INC,
+        BranchCtrlEnum.JAL  -> BranchCtrlEnum.JAL,
+        BranchCtrlEnum.JALR -> BranchCtrlEnum.JALR,
+        BranchCtrlEnum.B    -> input(INSTRUCTION)(14 downto 12).mux(
+          B"000"  -> Mux( eq  , BranchCtrlEnum.B, BranchCtrlEnum.INC),
+          B"001"  -> Mux(!eq  , BranchCtrlEnum.B, BranchCtrlEnum.INC),
+          M"1-1"  -> Mux(!less, BranchCtrlEnum.B, BranchCtrlEnum.INC),
+          default -> Mux( less, BranchCtrlEnum.B, BranchCtrlEnum.INC)
+        )
+      )
+
+      val imm = IMM(input(INSTRUCTION))
+      jumpInterface.valid := arbitration.isFiring && input(BRANCH_SOLVED) =/= BranchCtrlEnum.INC
+      jumpInterface.payload := input(BRANCH_SOLVED).mux(
+        BranchCtrlEnum.JAL  -> (input(PC)          + imm.j_sext.asUInt),
+        BranchCtrlEnum.JALR -> (input(REG1).asUInt + imm.i_sext.asUInt),
+        default             -> (input(PC)          + imm.b_sext.asUInt)    //B
+      )
+    }
+  }
+}
+
+
+
 trait PcManagerService{
-  def jumpTo(pc : UInt,cond : Bool,stage : Stage) : Unit
+  def createJumpInterface(stage : Stage) : Flow[UInt]
 }
 
 class PcManagerSimplePlugin(resetVector : BigInt,fastFetchCmdPcCalculation : Boolean) extends Plugin[VexRiscv] with PcManagerService{
 
 
   //FetchService interface
-  case class JumpInfo(pc: UInt, cond: Bool, stage: Stage)
+  case class JumpInfo(interface :  Flow[UInt], stage: Stage)
   val jumpInfos = ArrayBuffer[JumpInfo]()
-  override def jumpTo(pc: UInt, cond: Bool, stage: Stage): Unit = jumpInfos += JumpInfo(pc,cond,stage)
+  override def createJumpInterface(stage: Stage): Flow[UInt] = {
+    val interface = Flow(UInt(32 bits))
+    jumpInfos += JumpInfo(interface,stage)
+    interface
+  }
 
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -217,11 +318,11 @@ class PcManagerSimplePlugin(resetVector : BigInt,fastFetchCmdPcCalculation : Boo
       //FetchService hardware implementation
       val jump = if(jumpInfos.length != 0) {
         val sortedByStage = jumpInfos.sortWith((a, b) => pipeline.indexOf(a.stage) > pipeline.indexOf(b.stage))
-        val valids = sortedByStage.map(_.cond)
-        val pcs = sortedByStage.map(_.pc)
+        val valids = sortedByStage.map(_.interface.valid)
+        val pcs = sortedByStage.map(_.interface.payload)
 
         val pcLoad = Flow(UInt(pcWidth bits))
-        pcLoad.valid := jumpInfos.foldLeft(False)(_ || _.cond)
+        pcLoad.valid := jumpInfos.foldLeft(False)(_ || _.interface.valid)
         pcLoad.payload := MuxOH(valids, pcs)
 
         //Register managments
@@ -506,10 +607,11 @@ class SrcPlugin extends Plugin[VexRiscv]{
 
       val imm = Riscv.IMM(input(INSTRUCTION))
       insert(SRC1) := input(SRC1_CTRL).mux(
-        Src1CtrlEnum.RS -> output(REG1),
-        Src1CtrlEnum.IMU -> imm.u.resized,
-        Src1CtrlEnum.IMZ -> imm.z.resized,
-        Src1CtrlEnum.IMJB -> B(0) //TODO
+        Src1CtrlEnum.RS   -> output(REG1),
+        Src1CtrlEnum.FOUR -> B(4),
+        Src1CtrlEnum.IMU  -> imm.u.resized
+//        Src1CtrlEnum.IMZ -> imm.z.resized,
+//        Src1CtrlEnum.IMJB -> B(0)
       )
       insert(SRC2) := input(SRC2_CTRL).mux(
         Src2CtrlEnum.RS -> output(REG2),
@@ -538,7 +640,7 @@ class SrcPlugin extends Plugin[VexRiscv]{
 class IntAluPlugin extends Plugin[VexRiscv]{
 
   object AluCtrlEnum extends SpinalEnum(binarySequential){
-    val ADD_SUB, SLT_SLTU, XOR, OR, AND = newElement()
+    val ADD_SUB, SLT_SLTU, XOR, OR, AND, SRC1 = newElement()
   }
 
   object ALU_CTRL extends Stageable(AluCtrlEnum())
@@ -568,7 +670,17 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       SRC2_USE -> True
     )
 
-    pipeline.service(classOf[DecoderService]).add(List(
+    val otherAction = List(
+      LEGAL_INSTRUCTION        -> True,
+      REGFILE_WRITE_VALID      -> True,
+      BYPASSABLE_EXECUTE_STAGE -> True,
+      BYPASSABLE_MEMORY_STAGE  -> True
+    )
+
+
+
+    val decoderService = pipeline.service(classOf[DecoderService])
+    decoderService.add(List(
       ADD  -> (nonImmediateActions ++ List(ALU_CTRL -> AluCtrlEnum.ADD_SUB,  SRC_USE_SUB_LESS -> False)),
       SUB  -> (nonImmediateActions ++ List(ALU_CTRL -> AluCtrlEnum.ADD_SUB,  SRC_USE_SUB_LESS -> True)),
       SLT  -> (nonImmediateActions ++ List(ALU_CTRL -> AluCtrlEnum.SLT_SLTU, SRC_USE_SUB_LESS -> True, SRC_LESS_UNSIGNED -> False)),
@@ -578,13 +690,18 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       AND  -> (nonImmediateActions ++ List(ALU_CTRL -> AluCtrlEnum.AND))
     ))
 
-    pipeline.service(classOf[DecoderService]).add(List(
+    decoderService.add(List(
       ADDI  -> (immediateActions ++ List(ALU_CTRL -> AluCtrlEnum.ADD_SUB,  SRC_USE_SUB_LESS -> False)),
       SLTI  -> (immediateActions ++ List(ALU_CTRL -> AluCtrlEnum.SLT_SLTU, SRC_USE_SUB_LESS -> True, SRC_LESS_UNSIGNED -> False)),
       SLTIU -> (immediateActions ++ List(ALU_CTRL -> AluCtrlEnum.SLT_SLTU, SRC_USE_SUB_LESS -> True, SRC_LESS_UNSIGNED -> True)),
       XORI  -> (immediateActions ++ List(ALU_CTRL -> AluCtrlEnum.XOR)),
       ORI   -> (immediateActions ++ List(ALU_CTRL -> AluCtrlEnum.OR)),
       ANDI  -> (immediateActions ++ List(ALU_CTRL -> AluCtrlEnum.AND))
+    ))
+
+    decoderService.add(List(
+      LUI   -> (otherAction ++ List(ALU_CTRL -> AluCtrlEnum.SRC1)),
+      AUIPC -> (otherAction ++ List(ALU_CTRL -> AluCtrlEnum.ADD_SUB, SRC_USE_SUB_LESS -> False, SRC1_CTRL -> Src1CtrlEnum.IMU, SRC2_CTRL -> Src2CtrlEnum.PC))
     ))
   }
 
@@ -601,6 +718,7 @@ class IntAluPlugin extends Plugin[VexRiscv]{
         AluCtrlEnum.AND      -> (input(SRC1) & input(SRC2)),
         AluCtrlEnum.OR       -> (input(SRC1) | input(SRC2)),
         AluCtrlEnum.XOR      -> (input(SRC1) ^ input(SRC2)),
+        AluCtrlEnum.SRC1     -> input(SRC1),
         AluCtrlEnum.SLT_SLTU -> input(SRC_LESS).asBits(32 bit),
         AluCtrlEnum.ADD_SUB  -> input(SRC_ADD_SUB)
       )
@@ -706,6 +824,8 @@ object TopLevel {
         new FullBarrielShifterPlugin,
         new DBusSimplePlugin,
         new HazardSimplePlugin(true,true,true,true),
+//        new HazardSimplePlugin(false,false,false,false),
+        new NoPredictionBranchPlugin,
         new OutputAluResult
       )
 
