@@ -71,13 +71,23 @@ object Riscv{
   def SRAI               = M"010000-----------101-----0010011"
   def ORI                = M"-----------------110-----0010011"
   def ANDI               = M"-----------------111-----0010011"
+
+  def LB                 = M"-----------------000-----0000011"
+  def LH                 = M"-----------------001-----0000011"
+  def LW                 = M"-----------------010-----0000011"
+  def LBU                = M"-----------------100-----0000011"
+  def LHU                = M"-----------------101-----0000011"
+  def LWU                = M"-----------------110-----0000011"
+  def SB                 = M"-----------------000-----0100011"
+  def SH                 = M"-----------------001-----0100011"
+  def SW                 = M"-----------------010-----0100011"
 }
 
 
 
 case class VexRiscvConfig(pcWidth : Int){
   val plugins = ArrayBuffer[Plugin[VexRiscv]]()
-
+//TODO apply defaults to decoder
   //Default Stageables
   object BYPASSABLE_EXECUTE_STAGE   extends Stageable(Bool)
   object BYPASSABLE_MEMORY_STAGE   extends Stageable(Bool)
@@ -91,6 +101,8 @@ case class VexRiscvConfig(pcWidth : Int){
   object REGFILE_WRITE_VALID extends Stageable(Bool)
   object REGFILE_WRITE_DATA extends Stageable(Bits(32 bits))
 
+  object SRC1_USE extends Stageable(Bool)
+  object SRC2_USE extends Stageable(Bool)
   object SRC1   extends Stageable(Bits(32 bits))
   object SRC2   extends Stageable(Bits(32 bits))
   object SRC_ADD_SUB extends Stageable(Bits(32 bits))
@@ -98,8 +110,6 @@ case class VexRiscvConfig(pcWidth : Int){
   object SRC_USE_SUB_LESS extends Stageable(Bool)
   object SRC_LESS_UNSIGNED extends Stageable(Bool)
 
-
-  object ALU_RESULT extends Stageable(Bits(32 bits))
 
   object Src1CtrlEnum extends SpinalEnum(binarySequential){
     val RS, IMU, IMZ, IMJB = newElement()
@@ -126,6 +136,7 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
 trait DecoderService{
   def add(key : MaskedLiteral,values : Seq[(Stageable[_ <: Data],Any)])
   def add(encoding :Seq[(MaskedLiteral,Seq[(Stageable[_ <: Data],Any)])])
+  def addDefault(key : Stageable[_ <: Data], value : Any)
 }
 
 class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
@@ -138,6 +149,15 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
     })}
   }
 
+  override def addDefault(key: Stageable[_  <: Data], value: Any): Unit = {
+    require(!defaults.contains(key))
+    defaults(key) = value match{
+      case e : SpinalEnumElement[_] => e()
+      case e : Data => e
+    }
+  }
+
+  val defaults = mutable.HashMap[Stageable[_ <: Data], Data]()
   val encodings = mutable.HashMap[MaskedLiteral,Seq[(Stageable[_ <: Data], Any)]]()
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -145,7 +165,11 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
     import pipeline.config._
 
     val stageables = encodings.flatMap(_._2.map(_._1)).toSet
-    stageables.foreach(e => (insert(e).asInstanceOf[Data] := e().asInstanceOf[Data].getZero))
+    stageables.foreach(e => if(defaults.contains(e.asInstanceOf[Stageable[Data]]))
+      insert(e.asInstanceOf[Stageable[Data]]) := defaults(e.asInstanceOf[Stageable[Data]])
+    else
+      insert(e).assignDontCare())
+
     stageables.foreach(insert(_) match{
       case e : Bits => println(e.getWidth)
       case _ =>
@@ -238,12 +262,131 @@ class IBusSimplePlugin extends Plugin[VexRiscv]{
   }
 }
 
+case class DBusSimpleCmd() extends Bundle{
+  val wr = Bool
+  val address = UInt(32 bits)
+  val data = Bits(32 bit)
+  val size = UInt(2 bit)
+}
+
+case class DBusSimpleRsp() extends Bundle{
+  val data = Bits(32 bit)
+}
+
+class DBusSimplePlugin extends Plugin[VexRiscv]{
+
+  var dCmd  : Stream[DBusSimpleCmd] = null
+  var dRsp  : DBusSimpleRsp = null
+
+  object MemoryCtrlEnum extends SpinalEnum{
+    val WR, RD = newElement()
+  }
+
+  object MEMORY_ENABLE extends Stageable(Bool)
+  object MEMORY_CTRL extends Stageable(MemoryCtrlEnum())
+  object MEMORY_READ_DATA extends Stageable(Bits(32 bits))
+
+  override def setup(pipeline: VexRiscv): Unit = {
+    import pipeline.config._
+    import Riscv._
+
+    val decoderService = pipeline.service(classOf[DecoderService])
+
+    val stdActions = List[(Stageable[_ <: Data],Any)](
+      LEGAL_INSTRUCTION        -> True,
+      SRC1_CTRL                -> Src1CtrlEnum.RS,
+      SRC_USE_SUB_LESS         -> False,
+      BYPASSABLE_EXECUTE_STAGE -> True,
+      BYPASSABLE_MEMORY_STAGE  -> True,
+      MEMORY_ENABLE -> True,
+      SRC1_USE -> True
+    )
+
+    decoderService.addDefault(MEMORY_ENABLE, False)
+    decoderService.add(List(
+      LB  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI,  REGFILE_WRITE_VALID -> True)),
+      LH  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI,  REGFILE_WRITE_VALID -> True)),
+      LW  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI,  REGFILE_WRITE_VALID -> True)),
+      LBU  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI, REGFILE_WRITE_VALID -> True)),
+      LHU  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI, REGFILE_WRITE_VALID -> True)),
+      LWU  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI, REGFILE_WRITE_VALID -> True)),
+      SB   -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMS, SRC2_USE -> True)),
+      SH   -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMS, SRC2_USE -> True)),
+      SW   -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMS, SRC2_USE -> True))
+    ))
+
+  }
+
+  override def build(pipeline: VexRiscv): Unit = {
+    import pipeline._
+    import pipeline.config._
+
+    execute plug new Area{
+      import execute._
+
+      dCmd = master Stream(DBusSimpleCmd())
+      dCmd.valid := input(MEMORY_ENABLE) && arbitration.isFiring
+      dCmd.wr := input(INSTRUCTION)(5)
+      dCmd.address := input(SRC_ADD_SUB).asUInt
+      dCmd.payload.data := input(SRC2)
+      dCmd.size := input(INSTRUCTION)(13 downto 12).asUInt
+      when(input(MEMORY_ENABLE) && !dCmd.ready){
+        arbitration.haltIt := True
+      }
+    }
+
+    memory plug new Area {
+      import memory._
+
+      dRsp = in(DBusSimpleRsp())
+      insert(MEMORY_READ_DATA) := dRsp.data
+      assert(!(input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
+    }
+
+    writeBack plug new Area {
+      import memory._
+
+      dRsp = in(DBusSimpleRsp())
+      val rspFormated = input(INSTRUCTION)(13 downto 12).mux(
+        default -> input(MEMORY_READ_DATA), //W
+        1 -> B((31 downto 8) -> (input(MEMORY_READ_DATA)(7) && !input(INSTRUCTION)(14)),(7 downto 0) -> input(MEMORY_READ_DATA)(7 downto 0)),
+        2 -> B((31 downto 16) -> (input(MEMORY_READ_DATA)(15) && ! input(INSTRUCTION)(14)),(15 downto 0) -> input(MEMORY_READ_DATA)(15 downto 0))
+      )
+
+      when(input(MEMORY_ENABLE)) {
+        input(REGFILE_WRITE_DATA) := rspFormated
+      }
+
+      assert(!(input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
+    }
+  }
+}
+
+
+//class HazardSimplePlugin extends Plugin[VexRiscv] {
+//  import Riscv._
+//  override def build(pipeline: VexRiscv): Unit = {
+//    import pipeline.config._
+//    import pipeline._
+//    val src0Hazard = False
+//    val src1Hazard = False
+//
+//
+//    when(decode.input(INSTRUCTION)(rs1Range) === 0 || !decode.input(SRC1_USE)){
+//      src0Hazard := False
+//    }
+//    when(decode.input(INSTRUCTION)(rs2Range) === 0 || !decode.input(SRC2_USE)){
+//      src1Hazard := False
+//    }
+//  }
+//}
+
 trait RegFileReadKind
 object ASYNC extends RegFileReadKind
 object SYNC extends RegFileReadKind
 
 class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]{
-
+  import Riscv._
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
@@ -276,9 +419,13 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]
       insert(REG2) := Mux(rs2 =/= 0, rs2Data, B(0, 32 bit))
     }
     
-    writeBack plug new Area{
+    writeBack plug new Area {
       import writeBack._
-      //TODO write regfile
+
+      val regFileWrite = global.regFile.writePort
+      regFileWrite.valid := input(REGFILE_WRITE_VALID) && arbitration.isFiring
+      regFileWrite.address := input(INSTRUCTION)(rdRange).asUInt
+      regFileWrite.data := input(REGFILE_WRITE_DATA)
     }
   }
 }
@@ -342,7 +489,8 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       SRC2_CTRL                -> Src2CtrlEnum.IMI,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
-      BYPASSABLE_MEMORY_STAGE  -> True
+      BYPASSABLE_MEMORY_STAGE  -> True,
+      SRC1_USE -> True
     )
 
     val nonImmediateActions = List[(Stageable[_ <: Data],Any)](
@@ -351,7 +499,9 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       SRC2_CTRL                -> Src2CtrlEnum.RS,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
-      BYPASSABLE_MEMORY_STAGE  -> True
+      BYPASSABLE_MEMORY_STAGE  -> True,
+      SRC1_USE -> True,
+      SRC2_USE -> True
     )
 
     pipeline.service(classOf[DecoderService]).add(List(
@@ -383,7 +533,7 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       import execute._
 
       // mux results
-      insert(ALU_RESULT) := input(ALU_CTRL).mux(
+      insert(REGFILE_WRITE_DATA) := input(ALU_CTRL).mux(
         AluCtrlEnum.AND      -> (input(SRC1) & input(SRC2)),
         AluCtrlEnum.OR       -> (input(SRC1) | input(SRC2)),
         AluCtrlEnum.XOR      -> (input(SRC1) ^ input(SRC2)),
@@ -407,6 +557,8 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
     import pipeline.config._
     import Riscv._
 
+
+
     val immediateActions = List[(Stageable[_ <: Data],Any)](
       LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
@@ -425,13 +577,15 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
       BYPASSABLE_MEMORY_STAGE  -> True
     )
 
-    pipeline.service(classOf[DecoderService]).add(List(
+    val decoderService = pipeline.service(classOf[DecoderService])
+    decoderService.addDefault(SHIFT_CTRL, ShiftCtrlEnum.DISABLE)
+    decoderService.add(List(
       SLL  -> (nonImmediateActions ++ List(SHIFT_CTRL -> ShiftCtrlEnum.SLL)),
       SRL  -> (nonImmediateActions ++ List(SHIFT_CTRL -> ShiftCtrlEnum.SRL)),
       SRA  -> (nonImmediateActions ++ List(SHIFT_CTRL -> ShiftCtrlEnum.SRA))
     ))
 
-    pipeline.service(classOf[DecoderService]).add(List(
+    decoderService.add(List(
       SLLI  -> (immediateActions ++ List(SHIFT_CTRL -> ShiftCtrlEnum.SLL)),
       SRLI  -> (immediateActions ++ List(SHIFT_CTRL -> ShiftCtrlEnum.SRL)),
       SRAI  -> (immediateActions ++ List(SHIFT_CTRL -> ShiftCtrlEnum.SRA))
@@ -454,10 +608,10 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
       import memory._
       switch(input(SHIFT_CTRL)){
         is(ShiftCtrlEnum.SLL){
-          output(ALU_RESULT) := Reverse(input(SHIFT_RIGHT))
+          output(REGFILE_WRITE_DATA) := Reverse(input(SHIFT_RIGHT))
         }
         is(ShiftCtrlEnum.SRL,ShiftCtrlEnum.SRA){
-          output(ALU_RESULT) := input(SHIFT_RIGHT)
+          output(REGFILE_WRITE_DATA) := input(SHIFT_RIGHT)
         }
       }
     }
@@ -466,7 +620,7 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
 
 class OutputAluResult extends Plugin[VexRiscv]{
   override def build(pipeline: VexRiscv): Unit = {
-    out(pipeline.writeBack.input(pipeline.config.ALU_RESULT))
+    out(pipeline.writeBack.input(pipeline.config.REGFILE_WRITE_DATA))
   }
 }
 
@@ -486,6 +640,8 @@ object TopLevel {
         new IntAluPlugin,
         new SrcPlugin,
         new FullBarrielShifterPlugin,
+        new DBusSimplePlugin,
+        new HazardSimplePlugin,
         new OutputAluResult
       )
 

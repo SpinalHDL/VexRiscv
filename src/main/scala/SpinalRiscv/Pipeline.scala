@@ -70,9 +70,9 @@ trait Pipeline {
       stage.outputs.keysIterator.foreach(key => inputOutputKeys.getOrElseUpdate(key,new KeyInfo).addOutputStageIndex(stageIndex))
     }
 
-    for((key,info) <- inputOutputKeys){
+    for((key,info) <- inputOutputKeys) {
       //Interconnect inputs -> outputs
-      for(stageIndex <- info.insertStageId to info.lastOutputStageId;
+      for (stageIndex <- info.insertStageId to info.lastOutputStageId;
            stage = stages(stageIndex)) {
         stage.output(key)
         val outputDefault = stage.outputsDefault.getOrElse(key, null)
@@ -82,7 +82,7 @@ trait Pipeline {
       }
 
       //Interconnect outputs -> inputs
-      for(stageIndex <- info.insertStageId  to info.lastInputStageId) {
+      for (stageIndex <- info.insertStageId to info.lastInputStageId) {
         val stage = stages(stageIndex)
         stage.input(key)
         val inputDefault = stage.inputsDefault.getOrElse(key, null)
@@ -95,24 +95,23 @@ trait Pipeline {
           }
         }
       }
+    }
 
-      //Arbitration
-      for(stageIndex <- 0 until stages.length; stage = stages(stageIndex)){
-        stage.arbitration.isStuck := stages.takeRight(stages.length - stageIndex).map(_.arbitration.haltIt).reduce(_ || _)
-        stage.arbitration.isFiring := stage.arbitration.isValid && !stage.arbitration.isStuck && !stage.arbitration.removeIt
+    //Arbitration
+    for(stageIndex <- 0 until stages.length; stage = stages(stageIndex)){
+      stage.arbitration.isStuck := stages.takeRight(stages.length - stageIndex).map(_.arbitration.haltIt).reduce(_ || _)
+      stage.arbitration.isFiring := stage.arbitration.isValid && !stage.arbitration.isStuck && !stage.arbitration.removeIt
+    }
+
+    for(stageIndex <- 1 until stages.length){
+      val stageBefore = stages(stageIndex - 1)
+      val stage = stages(stageIndex)
+
+      when(!stageBefore.arbitration.isStuck) {
+        stage.arbitration.isValid := stage.arbitration.isValid && !stage.arbitration.removeIt
       }
-
-      for(stageIndex <- 1 until stages.length){
-        val stageBefore = stages(stageIndex - 1)
-        val stage = stages(stageIndex)
-
-        stage.arbitration.isStuck := stages.takeRight(stages.length-stageIndex).map(_.arbitration.haltIt).reduce(_ || _)
-        when(!stageBefore.arbitration.isStuck) {
-          stage.arbitration.isValid := stage.arbitration.isValid && !stage.arbitration.removeIt
-        }
-        when(stage.arbitration.removeIt){
-          stage.arbitration.isValid := False
-        }
+      when(stage.arbitration.removeIt){
+        stage.arbitration.isValid := False
       }
     }
   }
