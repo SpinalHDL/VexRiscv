@@ -275,6 +275,12 @@ class NoPredictionBranchPlugin extends Plugin[VexRiscv]{
         BranchCtrlEnum.JALR -> (input(REG1).asUInt + imm.i_sext.asUInt),
         default             -> (input(PC)          + imm.b_sext.asUInt)    //B
       )
+
+      when(jumpInterface.valid){
+        prefetch.arbitration.removeIt := True
+        fetch.arbitration.removeIt    := True
+        decode.arbitration.removeIt   := True
+      }
     }
   }
 }
@@ -809,7 +815,7 @@ class OutputAluResult extends Plugin[VexRiscv]{
 
 object TopLevel {
   def main(args: Array[String]) {
-    SpinalVhdl{
+    SpinalVerilog{
       val config = VexRiscvConfig(
         pcWidth = 32
       )
