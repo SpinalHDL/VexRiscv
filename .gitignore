@@ -34,4 +34,5 @@ bin/
 *.json
 *.vcd
 !tester/src/test/resources/*.vhd
+obj_dir
 

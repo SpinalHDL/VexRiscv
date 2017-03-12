@@ -44,7 +44,7 @@ class Stage() extends Area{
 //  def apply[T <: Data](key : Stageable[T]) : T = ???
 
 
-  val arbitration = new Bundle{
+  val arbitration = new Area{
     val haltIt = False
     val removeIt = False
     val isValid = RegInit(False)

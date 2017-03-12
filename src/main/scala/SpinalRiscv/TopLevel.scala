@@ -322,7 +322,7 @@ class PcManagerSimplePlugin(resetVector : BigInt,fastFetchCmdPcCalculation : Boo
       }
 
       //FetchService hardware implementation
-      val jump = if(jumpInfos.length != 0) {
+      val jump = if(jumpInfos.length != 0) new Area {
         val sortedByStage = jumpInfos.sortWith((a, b) => pipeline.indexOf(a.stage) > pipeline.indexOf(b.stage))
         val valids = sortedByStage.map(_.interface.valid)
         val pcs = sortedByStage.map(_.interface.payload)
@@ -360,11 +360,11 @@ class IBusSimplePlugin extends Plugin[VexRiscv]{
     import pipeline._
     import pipeline.config._
 
-    iCmd = master(Stream(IBusSimpleCmd()))
+    iCmd = master(Stream(IBusSimpleCmd())).setName("iCmd")
     iCmd.valid := prefetch.arbitration.isFiring
     iCmd.pc := prefetch.output(PC)
 
-    iRsp = in(IBusSimpleRsp())
+    iRsp = in(IBusSimpleRsp()).setName("iRsp")
     fetch.insert(INSTRUCTION) := iRsp.inst
   }
 }
@@ -431,7 +431,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
     execute plug new Area{
       import execute._
 
-      dCmd = master Stream(DBusSimpleCmd())
+      dCmd = master(Stream(DBusSimpleCmd())).setName("dCmd")
       dCmd.valid := input(MEMORY_ENABLE) && arbitration.isFiring
       dCmd.wr := input(INSTRUCTION)(5)
       dCmd.address := input(SRC_ADD_SUB).asUInt
@@ -440,12 +440,14 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
       when(input(MEMORY_ENABLE) && !dCmd.ready){
         arbitration.haltIt := True
       }
+
+      dCmd.elements
     }
 
     memory plug new Area {
       import memory._
 
-      dRsp = in(DBusSimpleRsp())
+      dRsp = in(DBusSimpleRsp()).setName("dRsp")
       insert(MEMORY_READ_DATA) := dRsp.data
       assert(!(input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
     }
@@ -453,7 +455,6 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
     writeBack plug new Area {
       import memory._
 
-      dRsp = in(DBusSimpleRsp())
       val rspFormated = input(INSTRUCTION)(13 downto 12).mux(
         default -> input(MEMORY_READ_DATA), //W
         1 -> B((31 downto 8) -> (input(MEMORY_READ_DATA)(7) && !input(INSTRUCTION)(14)),(7 downto 0) -> input(MEMORY_READ_DATA)(7 downto 0)),
@@ -593,7 +594,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]
     writeBack plug new Area {
       import writeBack._
 
-      val regFileWrite = global.regFile.writePort
+      val regFileWrite = global.regFile.writePort.addAttribute("verilator public")
       regFileWrite.valid := input(REGFILE_WRITE_VALID) && arbitration.isFiring
       regFileWrite.address := input(INSTRUCTION)(rdRange).asUInt
       regFileWrite.data := input(REGFILE_WRITE_DATA)
@@ -686,6 +687,7 @@ class IntAluPlugin extends Plugin[VexRiscv]{
 
 
     val decoderService = pipeline.service(classOf[DecoderService])
+    decoderService.addDefault(REGFILE_WRITE_VALID,False)
     decoderService.add(List(
       ADD  -> (nonImmediateActions ++ List(ALU_CTRL -> AluCtrlEnum.ADD_SUB,  SRC_USE_SUB_LESS -> False)),
       SUB  -> (nonImmediateActions ++ List(ALU_CTRL -> AluCtrlEnum.ADD_SUB,  SRC_USE_SUB_LESS -> True)),
@@ -806,11 +808,11 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
   }
 }
 
-class OutputAluResult extends Plugin[VexRiscv]{
-  override def build(pipeline: VexRiscv): Unit = {
-    out(pipeline.writeBack.input(pipeline.config.REGFILE_WRITE_DATA))
-  }
-}
+//class OutputAluResult extends Plugin[VexRiscv]{
+//  override def build(pipeline: VexRiscv): Unit = {
+//    out(pipeline.writeBack.input(pipeline.config.REGFILE_WRITE_DATA))
+//  }
+//}
 
 
 object TopLevel {
@@ -829,13 +831,19 @@ object TopLevel {
         new SrcPlugin,
         new FullBarrielShifterPlugin,
         new DBusSimplePlugin,
-        new HazardSimplePlugin(true,true,true,true),
-//        new HazardSimplePlugin(false,false,false,false),
-        new NoPredictionBranchPlugin,
-        new OutputAluResult
+//        new HazardSimplePlugin(true,true,true,true),
+        new HazardSimplePlugin(false,false,false,false),
+        new NoPredictionBranchPlugin
+//        new OutputAluResult
       )
 
-      new VexRiscv(config)
+      val toplevel = new VexRiscv(config)
+
+//      val iBus = toplevel.service(classOf[IBusSimplePlugin])
+//      val dBus = toplevel.service(classOf[DBusSimplePlugin])
+
+
+      toplevel
     }
   }
 }

@@ -1,0 +1,57 @@
+[*]
+[*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
+[*] Sun Mar 12 18:21:04 2017
+[*]
+[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/sim.vcd"
+[dumpfile_mtime] "Sun Mar 12 18:18:56 2017"
+[dumpfile_size] 105148
+[savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/yolo.gtkw"
+[timestart] 156
+[size] 1776 953
+[pos] -1 -1
+*-4.022038 200 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[sst_width] 487
+[signals_width] 559
+[sst_expanded] 1
+[sst_vpaned_height] 279
+@28
+TOP.VexRiscv.decode_BRANCH_CTRL[1:0]
+TOP.VexRiscv.execute_BRANCH_SOLVED[1:0]
+TOP.VexRiscv.execute_input_BRANCH_CTRL[1:0]
+TOP.VexRiscv.execute_input_BRANCH_SOLVED[1:0]
+TOP.VexRiscv.decode_arbitration_isValid
+TOP.VexRiscv.decode_arbitration_isStuck
+@22
+TOP.VexRiscv.decode_input_INSTRUCTION[31:0]
+TOP.VexRiscv.decode_input_PC[31:0]
+TOP.VexRiscv.iCmd_payload_pc[31:0]
+@28
+TOP.VexRiscv.iCmd_ready
+TOP.VexRiscv.iCmd_valid
+@22
+TOP.VexRiscv.iRsp_inst[31:0]
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_jump_pcLoad_payload[31:0]
+@28
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_jump_pcLoad_valid
+TOP.VexRiscv.prefetch_arbitration_isValid
+TOP.VexRiscv.fetch_arbitration_isValid
+TOP.VexRiscv.decode_arbitration_isValid
+TOP.VexRiscv.execute_arbitration_isValid
+TOP.VexRiscv.memory_arbitration_isValid
+TOP.VexRiscv.writeBack_arbitration_isValid
+TOP.VexRiscv.prefetch_arbitration_removeIt
+TOP.VexRiscv.fetch_arbitration_removeIt
+TOP.VexRiscv.decode_arbitration_removeIt
+TOP.VexRiscv.execute_arbitration_removeIt
+TOP.VexRiscv.memory_arbitration_removeIt
+TOP.VexRiscv.writeBack_arbitration_removeIt
+@29
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_valid
+@22
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_payload_address[4:0]
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_payload_data[31:0]
+@28
+TOP.VexRiscv.clk
+[pattern_trace] 1
+[pattern_trace] 0

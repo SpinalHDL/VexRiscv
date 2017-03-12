@@ -1,11 +1,12 @@
 #include "VVexRiscv.h"
 #include "verilated.h"
 #include "verilated_vcd_c.h"
-
+#include <stdio.h>
 
 int main(int argc, char **argv, char **env) {
   int i;
   int clk;
+  printf("start\n");
   Verilated::commandArgs(argc, argv);
   // init top verilog instance
   VVexRiscv* top = new VVexRiscv;
@@ -34,5 +35,6 @@ int main(int argc, char **argv, char **env) {
     if (Verilated::gotFinish())  exit(0);
   }
   tfp->close();
+  printf("done\n");
   exit(0);
 }
