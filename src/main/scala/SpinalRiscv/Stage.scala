@@ -6,7 +6,7 @@ import spinal.lib._
 import scala.collection.mutable
 
 
-class Stageable[T <: Data](dataType : T) extends HardType[T](dataType) with Nameable{
+class Stageable[T <: Data](val dataType : T) extends HardType[T](dataType) with Nameable{
   setWeakName(this.getClass.getSimpleName.replace("$",""))
 }
 

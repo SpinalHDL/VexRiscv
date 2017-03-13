@@ -3,6 +3,7 @@
 #include "verilated.h"
 #include "verilated_vcd_c.h"
 #include <stdio.h>
+#include <iostream>
 #include <stdlib.h>
 #include <stdint.h>
 
@@ -85,10 +86,12 @@ uint32_t regFileWriteRefArray[][2] = {
 
 #define assertEq(x,ref) if(x != ref) {\
 	printf("\n*** %s is %d but should be %d ***\n\n",TEXTIFY(x),x,ref);\
-	error = 1;\
+	error = 1; \
+	throw std::exception();\
 }
 
 int main(int argc, char **argv, char **env) {
+	Verilated::randReset(2);
 	int i;
 	int clk;
 	int error = 0;
@@ -105,58 +108,64 @@ int main(int argc, char **argv, char **env) {
 
 	// Reset
 	top->clk = 1;
-	top->reset = 1;
+	top->reset = 0;
 	top->iCmd_ready = 1;
 	top->dCmd_ready = 1;
-	for (uint32_t i = 0; i < 16; i++) {
-		tfp->dump(i);
-		top->eval();
-	}
+	top->eval();
+	top->reset = 1;
+	top->eval();
+	tfp->dump(0);
 	top->reset = 0;
+	top->eval();
 
-	// run simulation for 100 clock periods
-	for (i = 16; i < 600; i+=2) {
 
-		uint32_t iRsp_inst_next = top->iRsp_inst;
-		if (top->iCmd_valid) {
-			assert((top->iCmd_payload_pc & 3) == 0);
-			uint8_t* ptr = memory + top->iCmd_payload_pc;
-			iRsp_inst_next = (ptr[0] << 0) | (ptr[1] << 8) | (ptr[2] << 16) | (ptr[3] << 24);
-		}
+	try {
+		// run simulation for 100 clock periods
+		for (i = 16; i < 600; i+=2) {
 
-		if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
-			assertEq(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address, regFileWriteRefArray[regFileWriteRefIndex][0]);
-			assertEq(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data, regFileWriteRefArray[regFileWriteRefIndex][1]);
-			printf("%d\n",i);
-
-			regFileWriteRefIndex++;
-			if(regFileWriteRefIndex == sizeof(regFileWriteRefArray)/sizeof(regFileWriteRefArray[0])){
-				tfp->dump(i);
-				tfp->dump(i+1);
-				printf("SUCCESS\n");
-				break;
+			uint32_t iRsp_inst_next = top->iRsp_inst;
+			if (top->iCmd_valid) {
+				assertEq(top->iCmd_payload_pc & 3,0);
+				//printf("%d\n",top->iCmd_payload_pc);
+				uint8_t* ptr = memory + top->iCmd_payload_pc;
+				iRsp_inst_next = (ptr[0] << 0) | (ptr[1] << 8) | (ptr[2] << 16) | (ptr[3] << 24);
 			}
+
+			if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
+				assertEq(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address, regFileWriteRefArray[regFileWriteRefIndex][0]);
+				assertEq(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data, regFileWriteRefArray[regFileWriteRefIndex][1]);
+				printf("%d\n",i);
+
+				regFileWriteRefIndex++;
+				if(regFileWriteRefIndex == sizeof(regFileWriteRefArray)/sizeof(regFileWriteRefArray[0])){
+					tfp->dump(i);
+					tfp->dump(i+1);
+					printf("SUCCESS\n");
+					break;
+				}
+			}
+
+
+			// dump variables into VCD file and toggle clock
+			for (clk = 0; clk < 2; clk++) {
+				tfp->dump(i+ clk);
+				top->clk = !top->clk;
+
+				top->eval();
+			}
+
+			top->iRsp_inst = iRsp_inst_next;
+
+			if (Verilated::gotFinish())
+				exit(0);
 		}
-
-		if(error) {
-			tfp->dump(i);
-			tfp->dump(i+1);
-			break;
-		}
-		// dump variables into VCD file and toggle clock
-		for (clk = 0; clk < 2; clk++) {
-			tfp->dump(i+ clk);
-			top->clk = !top->clk;
-
-			top->eval();
-		}
-
-		top->iRsp_inst = iRsp_inst_next;
-
-		if (Verilated::gotFinish())
-			exit(0);
+	} catch (const std::exception& e) {
+		std::cout << e.what();
 	}
 
+	if(error)
+		tfp->dump(i);
+	tfp->dump(i+1);
 	tfp->close();
 	printf("done\n");
 	exit(0);

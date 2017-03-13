@@ -146,61 +146,103 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
 
 
 trait DecoderService{
-  def add(key : MaskedLiteral,values : Seq[(Stageable[_ <: Data],Any)])
-  def add(encoding :Seq[(MaskedLiteral,Seq[(Stageable[_ <: Data],Any)])])
-  def addDefault(key : Stageable[_ <: Data], value : Any)
+  def add(key : MaskedLiteral,values : Seq[(Stageable[_ <: BaseType],Any)])
+  def add(encoding :Seq[(MaskedLiteral,Seq[(Stageable[_ <: BaseType],Any)])])
+  def addDefault(key : Stageable[_ <: BaseType], value : Any)
 }
 
 
-case class Node(val value : BigInt,val careAbout : BigInt){
+case class Masked(value : BigInt,care : BigInt){
 
 }
 
 class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
-  override def add(encoding: Seq[(MaskedLiteral, Seq[(Stageable[_ <: Data], Any)])]): Unit = encoding.foreach(e => this.add(e._1,e._2))
-  override def add(key: MaskedLiteral, values: Seq[(Stageable[_ <: Data], Any)]): Unit = {
+  override def add(encoding: Seq[(MaskedLiteral, Seq[(Stageable[_ <: BaseType], Any)])]): Unit = encoding.foreach(e => this.add(e._1,e._2))
+  override def add(key: MaskedLiteral, values: Seq[(Stageable[_ <: BaseType], Any)]): Unit = {
     require(!encodings.contains(key))
     encodings(key) = values.map{case (a,b) => (a,b match{
       case e : SpinalEnumElement[_] => e()
-      case e => e
+      case e : BaseType => e
     })}
   }
 
-  override def addDefault(key: Stageable[_  <: Data], value: Any): Unit = {
+  override def addDefault(key: Stageable[_  <: BaseType], value: Any): Unit = {
     require(!defaults.contains(key))
     defaults(key) = value match{
       case e : SpinalEnumElement[_] => e()
-      case e : Data => e
+      case e : BaseType => e
     }
   }
 
-  val defaults = mutable.HashMap[Stageable[_ <: Data], Data]()
-  val encodings = mutable.HashMap[MaskedLiteral,Seq[(Stageable[_ <: Data], Any)]]()
+  val defaults = mutable.HashMap[Stageable[_ <: BaseType], BaseType]()
+  val encodings = mutable.HashMap[MaskedLiteral,Seq[(Stageable[_ <: BaseType], BaseType)]]()
 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline.decode._
     import pipeline.config._
 
-    val stageables = encodings.flatMap(_._2.map(_._1)).toSet
+    val stageables = (encodings.flatMap(_._2.map(_._1)) ++ defaults.map(_._1)).toSet.toList
 
-    
+    var offset = 0
+    var defaultValue, defaultCare = BigInt(0)
+    val offsetOf = mutable.HashMap[Stageable[_ <: BaseType],Int]()
 
-    stageables.foreach(e => if(defaults.contains(e.asInstanceOf[Stageable[Data]]))
-      insert(e.asInstanceOf[Stageable[Data]]) := defaults(e.asInstanceOf[Stageable[Data]])
-    else
-      insert(e).assignDontCare())
+    //Build defaults value and field offset map
+    stageables.foreach(e => {
+      defaults.get(e) match {
+        case Some(value) => {
+          value.input match {
+            case literal: EnumLiteral[_] => literal.fixEncoding(e.dataType.asInstanceOf[SpinalEnumCraft[_]].getEncoding)
+            case _ =>
+          }
+          defaultValue += value.input.asInstanceOf[Literal].getValue << offset
+          defaultCare += ((BigInt(1) << e.dataType.getBitsWidth) - 1) << offset
 
-    stageables.foreach(insert(_) match{
-      case e : Bits => println(e.getWidth)
-      case _ =>
-    })
-    for((key,values) <- encodings){
-      when(input(INSTRUCTION) === key){
-        for((stageable,value) <- values){
-          insert(stageable).assignFrom(value.asInstanceOf[AnyRef],false)
         }
+        case _ =>
       }
+      offsetOf(e) = offset
+      offset += e.dataType.getBitsWidth
+    })
+
+    //Build spec
+    val spec = encodings.map { case (key, values) =>
+      var decodedValue, decodedCare = BigInt(0)
+      for((e, literal) <- values){
+        literal.input match{
+          case literal : EnumLiteral[_] => literal.fixEncoding(e.dataType.asInstanceOf[SpinalEnumCraft[_]].getEncoding)
+          case _ =>
+        }
+        val offset = offsetOf(e)
+        decodedValue += literal.input.asInstanceOf[Literal].getValue << offset
+        decodedCare += ((BigInt(1) << e.dataType.getBitsWidth)-1) << offset
+      }
+      (Masked(key.value,key.careAbout),Masked(decodedValue,decodedCare))
     }
+
+
+
+    // logic implementation
+    val decodedBits = Bits(stageables.foldLeft(0)(_ + _.dataType.getBitsWidth) bits)
+    val defaultBits = cloneOf(decodedBits)
+
+//    require(defaultValue == 0)
+    for(i <- decodedBits.range)
+//      if(defaultCare.testBit(i))
+        defaultBits(i) := Bool(defaultValue.testBit(i))
+//      else
+//        defaultBits(i).assignDontCare()
+
+    val localAnds = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
+
+    decodedBits := localAnds.foldLeft(defaultBits)(_ | _)
+
+    //Unpack decodedBits and insert fields in the pipeline
+    offset = 0
+    stageables.foreach(e => {
+      insert(e).assignFromBits(decodedBits(offset, e.dataType.getBitsWidth bits))
+      offset += e.dataType.getBitsWidth
+    })
   }
 
   def bench(toplevel : VexRiscv): Unit ={
@@ -231,7 +273,7 @@ class NoPredictionBranchPlugin extends Plugin[VexRiscv]{
 
     val decoderService = pipeline.service(classOf[DecoderService])
 
-    val bActions = List[(Stageable[_ <: Data],Any)](
+    val bActions = List[(Stageable[_ <: BaseType],Any)](
       LEGAL_INSTRUCTION -> True,
       SRC1_CTRL         -> Src1CtrlEnum.RS,
       SRC2_CTRL         -> Src2CtrlEnum.RS,
@@ -240,7 +282,7 @@ class NoPredictionBranchPlugin extends Plugin[VexRiscv]{
       SRC2_USE          -> True
     )
 
-    val jActions = List[(Stageable[_ <: Data],Any)](
+    val jActions = List[(Stageable[_ <: BaseType],Any)](
       LEGAL_INSTRUCTION   -> True,
       SRC1_CTRL           -> Src1CtrlEnum.FOUR,
       SRC2_CTRL           -> Src2CtrlEnum.PC,
@@ -418,7 +460,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
 
     val decoderService = pipeline.service(classOf[DecoderService])
 
-    val stdActions = List[(Stageable[_ <: Data],Any)](
+    val stdActions = List[(Stageable[_ <: BaseType],Any)](
       LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC_USE_SUB_LESS         -> False,
@@ -675,7 +717,7 @@ class IntAluPlugin extends Plugin[VexRiscv]{
     import pipeline.config._
     import Riscv._
 
-    val immediateActions = List[(Stageable[_ <: Data],Any)](
+    val immediateActions = List[(Stageable[_ <: BaseType],Any)](
       LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.IMI,
@@ -685,7 +727,7 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       SRC1_USE -> True
     )
 
-    val nonImmediateActions = List[(Stageable[_ <: Data],Any)](
+    val nonImmediateActions = List[(Stageable[_ <: BaseType],Any)](
       LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
@@ -768,7 +810,7 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
 
 
 
-    val immediateActions = List[(Stageable[_ <: Data],Any)](
+    val immediateActions = List[(Stageable[_ <: BaseType],Any)](
       LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.IMI,
@@ -777,7 +819,7 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
       BYPASSABLE_MEMORY_STAGE  -> True
     )
 
-    val nonImmediateActions = List[(Stageable[_ <: Data],Any)](
+    val nonImmediateActions = List[(Stageable[_ <: BaseType],Any)](
       LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
