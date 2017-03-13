@@ -103,9 +103,10 @@ case class VexRiscvConfig(pcWidth : Int){
   //Default Stageables
   object BYPASSABLE_EXECUTE_STAGE   extends Stageable(Bool)
   object BYPASSABLE_MEMORY_STAGE   extends Stageable(Bool)
-  object Execute1Bypass   extends Stageable(Bool)
   object REG1   extends Stageable(Bits(32 bits))
   object REG2   extends Stageable(Bits(32 bits))
+  object REG1_USE extends Stageable(Bool)
+  object REG2_USE extends Stageable(Bool)
   object RESULT extends Stageable(UInt(32 bits))
   object PC extends Stageable(UInt(pcWidth bits))
   object INSTRUCTION extends Stageable(Bits(32 bits))
@@ -113,8 +114,8 @@ case class VexRiscvConfig(pcWidth : Int){
   object REGFILE_WRITE_VALID extends Stageable(Bool)
   object REGFILE_WRITE_DATA extends Stageable(Bits(32 bits))
 
-  object SRC1_USE extends Stageable(Bool)
-  object SRC2_USE extends Stageable(Bool)
+  val SRC1_USE = REG1_USE
+  val SRC2_USE = REG2_USE
   object SRC1   extends Stageable(Bits(32 bits))
   object SRC2   extends Stageable(Bits(32 bits))
   object SRC_ADD_SUB extends Stageable(Bits(32 bits))
@@ -138,6 +139,7 @@ case class VexRiscvConfig(pcWidth : Int){
 
 class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   type  T = VexRiscv
+  import config._
 
   stages ++= List.fill(6)(new Stage())
   val prefetch :: fetch :: decode :: execute :: memory :: writeBack :: Nil = stages.toList
@@ -176,6 +178,10 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
 
   val defaults = mutable.HashMap[Stageable[_ <: BaseType], BaseType]()
   val encodings = mutable.HashMap[MaskedLiteral,Seq[(Stageable[_ <: BaseType], BaseType)]]()
+  override def setup(pipeline: VexRiscv): Unit = {
+    import pipeline.config._
+    addDefault(LEGAL_INSTRUCTION, False)
+  }
 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline.decode._
@@ -226,16 +232,23 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
     val decodedBits = Bits(stageables.foldLeft(0)(_ + _.dataType.getBitsWidth) bits)
     val defaultBits = cloneOf(decodedBits)
 
-//    require(defaultValue == 0)
+
     for(i <- decodedBits.range)
-//      if(defaultCare.testBit(i))
         defaultBits(i) := Bool(defaultValue.testBit(i))
+    val logicOr = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
+    decodedBits := logicOr.foldLeft(defaultBits)(_ | _)
+
+
+//    for(i <- decodedBits.range)
+//      if(defaultCare.testBit(i))
+//        defaultBits(i) := Bool(defaultValue.testBit(i))
 //      else
 //        defaultBits(i).assignDontCare()
 
-    val localAnds = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
+//    val logicOr = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
+//    val logicAnd = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(~mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
+//    decodedBits :=  (defaultBits | logicOr.foldLeft(B(0, decodedBits.getWidth bits))(_ | _)) & ~logicAnd.foldLeft(B(0, decodedBits.getWidth bits))(_ | _)
 
-    decodedBits := localAnds.foldLeft(defaultBits)(_ | _)
 
     //Unpack decodedBits and insert fields in the pipeline
     offset = 0
@@ -597,14 +610,14 @@ class HazardSimplePlugin(bypassExecute : Boolean,bypassMemory: Boolean,bypassWri
     }
 
     trackHazardWithStage(writeBack,bypassWriteBack,null)
-    trackHazardWithStage(memory,bypassMemory,BYPASSABLE_MEMORY_STAGE)
-    trackHazardWithStage(execute,bypassExecute,BYPASSABLE_EXECUTE_STAGE)
+    trackHazardWithStage(memory   ,bypassMemory   ,BYPASSABLE_MEMORY_STAGE)
+    trackHazardWithStage(execute  ,bypassExecute  ,BYPASSABLE_EXECUTE_STAGE)
 
 
-    when(decode.input(INSTRUCTION)(rs1Range) === 0 || !decode.input(SRC1_USE)){
+    when(decode.input(INSTRUCTION)(rs1Range) === 0 || !decode.input(REG1_USE)){
       src0Hazard := False
     }
-    when(decode.input(INSTRUCTION)(rs2Range) === 0 || !decode.input(SRC2_USE)){
+    when(decode.input(INSTRUCTION)(rs2Range) === 0 || !decode.input(REG2_USE)){
       src1Hazard := False
     }
 
@@ -620,7 +633,15 @@ object SYNC extends RegFileReadKind
 
 class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]{
   import Riscv._
-  override def build(pipeline: VexRiscv): Unit = {
+
+  override def setup(pipeline: VexRiscv): Unit = {
+    import pipeline.config._
+    val decoderService = pipeline.service(classOf[DecoderService])
+    decoderService.addDefault(REG1_USE,False)
+    decoderService.addDefault(REG2_USE,False)
+  }
+
+    override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
 
@@ -869,11 +890,6 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
   }
 }
 
-//class OutputAluResult extends Plugin[VexRiscv]{
-//  override def build(pipeline: VexRiscv): Unit = {
-//    out(pipeline.writeBack.input(pipeline.config.REGFILE_WRITE_DATA))
-//  }
-//}
 
 
 object TopLevel {
@@ -895,7 +911,6 @@ object TopLevel {
         //        new HazardSimplePlugin(true,true,true,true),
         new HazardSimplePlugin(false, false, false, false),
         new NoPredictionBranchPlugin
-        //        new OutputAluResult
       )
 
       val toplevel = new VexRiscv(config)

@@ -1,0 +1,111 @@
+
+rv32ui-p-lui:     file format elf32-littleriscv
+
+
+Disassembly of section .text.init:
+
+80000000 <_start>:
+80000000:	04c0006f          	j	8000004c <reset_vector>
+
+80000004 <trap_vector>:
+80000004:	34202f73          	csrr	t5,mcause
+80000008:	00800f93          	li	t6,8
+8000000c:	03ff0a63          	beq	t5,t6,80000040 <write_tohost>
+80000010:	00900f93          	li	t6,9
+80000014:	03ff0663          	beq	t5,t6,80000040 <write_tohost>
+80000018:	00b00f93          	li	t6,11
+8000001c:	03ff0263          	beq	t5,t6,80000040 <write_tohost>
+80000020:	80000f17          	auipc	t5,0x80000
+80000024:	fe0f0f13          	addi	t5,t5,-32 # 0 <_start-0x80000000>
+80000028:	000f0463          	beqz	t5,80000030 <trap_vector+0x2c>
+8000002c:	000f0067          	jr	t5
+80000030:	34202f73          	csrr	t5,mcause
+80000034:	000f5463          	bgez	t5,8000003c <handle_exception>
+80000038:	0040006f          	j	8000003c <handle_exception>
+
+8000003c <handle_exception>:
+8000003c:	539e6e13          	ori	t3,t3,1337
+
+80000040 <write_tohost>:
+80000040:	00001f17          	auipc	t5,0x1
+80000044:	fdcf2023          	sw	t3,-64(t5) # 80001000 <tohost>
+80000048:	ff9ff06f          	j	80000040 <write_tohost>
+
+8000004c <reset_vector>:
+8000004c:	f1402573          	csrr	a0,mhartid
+80000050:	00051063          	bnez	a0,80000050 <reset_vector+0x4>
+80000054:	30102573          	csrr	a0,misa
+80000058:	00055863          	bgez	a0,80000068 <reset_vector+0x1c>
+8000005c:	0ff0000f          	fence
+80000060:	00100e13          	li	t3,1
+80000064:	00000073          	ecall
+80000068:	00000e13          	li	t3,0
+8000006c:	00000297          	auipc	t0,0x0
+80000070:	f9828293          	addi	t0,t0,-104 # 80000004 <trap_vector>
+80000074:	30529073          	csrw	mtvec,t0
+80000078:	30205073          	csrwi	medeleg,0
+8000007c:	30305073          	csrwi	mideleg,0
+80000080:	30405073          	csrwi	mie,0
+80000084:	80000297          	auipc	t0,0x80000
+80000088:	f7c28293          	addi	t0,t0,-132 # 0 <_start-0x80000000>
+8000008c:	00028c63          	beqz	t0,800000a4 <reset_vector+0x58>
+80000090:	10529073          	csrw	stvec,t0
+80000094:	1ab00293          	li	t0,427
+80000098:	30229073          	csrw	medeleg,t0
+8000009c:	30202373          	csrr	t1,medeleg
+800000a0:	f8629ee3          	bne	t0,t1,8000003c <handle_exception>
+800000a4:	30005073          	csrwi	mstatus,0
+800000a8:	00000297          	auipc	t0,0x0
+800000ac:	01428293          	addi	t0,t0,20 # 800000bc <test_2>
+800000b0:	34129073          	csrw	mepc,t0
+800000b4:	f1402573          	csrr	a0,mhartid
+800000b8:	30200073          	mret
+
+800000bc <test_2>:
+800000bc:	000000b7          	lui	ra,0x0
+800000c0:	00000e93          	li	t4,0
+800000c4:	00200e13          	li	t3,2
+800000c8:	05d09a63          	bne	ra,t4,8000011c <fail>
+
+800000cc <test_3>:
+800000cc:	fffff0b7          	lui	ra,0xfffff
+800000d0:	4010d093          	srai	ra,ra,0x1
+800000d4:	80000e93          	li	t4,-2048
+800000d8:	00300e13          	li	t3,3
+800000dc:	05d09063          	bne	ra,t4,8000011c <fail>
+
+800000e0 <test_4>:
+800000e0:	7ffff0b7          	lui	ra,0x7ffff
+800000e4:	4140d093          	srai	ra,ra,0x14
+800000e8:	7ff00e93          	li	t4,2047
+800000ec:	00400e13          	li	t3,4
+800000f0:	03d09663          	bne	ra,t4,8000011c <fail>
+
+800000f4 <test_5>:
+800000f4:	800000b7          	lui	ra,0x80000
+800000f8:	4140d093          	srai	ra,ra,0x14
+800000fc:	80000e93          	li	t4,-2048
+80000100:	00500e13          	li	t3,5
+80000104:	01d09c63          	bne	ra,t4,8000011c <fail>
+
+80000108 <test_6>:
+80000108:	80000037          	lui	zero,0x80000
+8000010c:	00000e93          	li	t4,0
+80000110:	00600e13          	li	t3,6
+80000114:	01d01463          	bne	zero,t4,8000011c <fail>
+80000118:	01c01c63          	bne	zero,t3,80000130 <pass>
+
+8000011c <fail>:
+8000011c:	0ff0000f          	fence
+80000120:	000e0063          	beqz	t3,80000120 <fail+0x4>
+80000124:	001e1e13          	slli	t3,t3,0x1
+80000128:	001e6e13          	ori	t3,t3,1
+8000012c:	00000073          	ecall
+
+80000130 <pass>:
+80000130:	0ff0000f          	fence
+80000134:	00100e13          	li	t3,1
+80000138:	00000073          	ecall
+8000013c:	c0001073          	unimp
+80000140:	0000                	unimp
+80000142:	0000                	unimp
