@@ -1,4 +1,0 @@
-
-
-verilator -cc  ../VexRiscv.v --trace -Wno-WIDTH --exe tester.cpp
-make -j -C obj_dir/ -f VVexRiscv.mk VVexRiscv

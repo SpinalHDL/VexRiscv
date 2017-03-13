@@ -93,7 +93,7 @@ int main(int argc, char **argv, char **env) {
 	int clk;
 	int error = 0;
 	printf("start\n");
-	loadHex("testA.hex");
+	loadHex("../../hex/testA.hex");
 	Verilated::commandArgs(argc, argv);
 	// init top verilog instance
 	VVexRiscv* top = new VVexRiscv;

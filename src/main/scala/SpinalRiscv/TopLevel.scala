@@ -151,6 +151,11 @@ trait DecoderService{
   def addDefault(key : Stageable[_ <: Data], value : Any)
 }
 
+
+case class Node(val value : BigInt,val careAbout : BigInt){
+
+}
+
 class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
   override def add(encoding: Seq[(MaskedLiteral, Seq[(Stageable[_ <: Data], Any)])]): Unit = encoding.foreach(e => this.add(e._1,e._2))
   override def add(key: MaskedLiteral, values: Seq[(Stageable[_ <: Data], Any)]): Unit = {
@@ -177,6 +182,9 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
     import pipeline.config._
 
     val stageables = encodings.flatMap(_._2.map(_._1)).toSet
+
+    
+
     stageables.foreach(e => if(defaults.contains(e.asInstanceOf[Stageable[Data]]))
       insert(e.asInstanceOf[Stageable[Data]]) := defaults(e.asInstanceOf[Stageable[Data]])
     else
@@ -192,6 +200,17 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
           insert(stageable).assignFrom(value.asInstanceOf[AnyRef],false)
         }
       }
+    }
+  }
+
+  def bench(toplevel : VexRiscv): Unit ={
+    toplevel.rework{
+      import toplevel.config._
+      toplevel.getAllIo.toList.foreach(_.asDirectionLess())
+      toplevel.decode.input(INSTRUCTION) := Delay((in Bits(32 bits)).setName("instruction"),2)
+      val stageables = encodings.flatMap(_._2.map(_._1)).toSet
+      stageables.foreach(e => out(Delay(toplevel.decode.insert(e),2)).setName(e.getName))
+      toplevel.getAdditionalNodesRoot.clear()
     }
   }
 }
@@ -817,13 +836,13 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
 
 object TopLevel {
   def main(args: Array[String]) {
-    SpinalVerilog{
+    SpinalVerilog {
       val config = VexRiscvConfig(
         pcWidth = 32
       )
 
       config.plugins ++= List(
-        new PcManagerSimplePlugin(0,true),
+        new PcManagerSimplePlugin(0, true),
         new IBusSimplePlugin,
         new DecoderSimplePlugin,
         new RegFilePlugin(SYNC),
@@ -831,16 +850,15 @@ object TopLevel {
         new SrcPlugin,
         new FullBarrielShifterPlugin,
         new DBusSimplePlugin,
-//        new HazardSimplePlugin(true,true,true,true),
-        new HazardSimplePlugin(false,false,false,false),
+        //        new HazardSimplePlugin(true,true,true,true),
+        new HazardSimplePlugin(false, false, false, false),
         new NoPredictionBranchPlugin
-//        new OutputAluResult
+        //        new OutputAluResult
       )
 
       val toplevel = new VexRiscv(config)
 
-//      val iBus = toplevel.service(classOf[IBusSimplePlugin])
-//      val dBus = toplevel.service(classOf[DBusSimplePlugin])
+//      toplevel.service(classOf[DecoderSimplePlugin]).bench(toplevel)
 
 
       toplevel
