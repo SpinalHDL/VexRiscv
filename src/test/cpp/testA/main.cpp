@@ -9,7 +9,32 @@
 #include <cstring>
 #include <string.h>
 
-uint8_t memory[1024 * 1024];
+class Memory{
+public:
+	uint8_t* mem[1 << 12];
+
+	Memory(){
+		for(uint32_t i = 0;i < (1 << 12);i++) mem[i] = NULL;
+	}
+	~Memory(){
+		for(uint32_t i = 0;i < (1 << 12);i++) if(mem[i]) delete mem[i];
+	}
+
+	uint8_t* get(uint32_t address){
+		if(mem[address >> 20] == NULL) mem[address >> 20] = new uint8_t[1024*1024];
+		return &mem[address >> 20][address & 0xFFFFF];
+	}
+
+	uint8_t& operator [](uint32_t address) {
+		return *get(address);
+	}
+
+	/*T operator [](uint32_t address) const {
+		return get(address);
+	}*/
+};
+
+//uint8_t memory[1024 * 1024];
 
 uint32_t hti(char c) {
 	if (c >= 'A' && c <= 'F')
@@ -27,7 +52,7 @@ uint32_t hToI(char *c, uint32_t size) {
 	return value;
 }
 
-void loadHexImpl(string path) {
+void loadHexImpl(string path,Memory* mem) {
 	FILE *fp = fopen(&path[0], "r");
 	fseek(fp, 0, SEEK_END);
 	uint32_t size = ftell(fp);
@@ -46,7 +71,7 @@ void loadHexImpl(string path) {
 			switch (key) {
 			case 0:
 				for (uint32_t i = 0; i < byteCount; i++) {
-					memory[nextAddr + i] = hToI(line + 9 + i * 2, 2);
+					*(mem->get(nextAddr + i)) = hToI(line + 9 + i * 2, 2);
 					//printf("%x %x %c%c\n",nextAddr + i,hToI(line + 9 + i*2,2),line[9 + i * 2],line[9 + i * 2+1]);
 				}
 				break;
@@ -88,7 +113,6 @@ uint32_t regFileWriteRefArray[][2] = {
 
 #define assertEq(x,ref) if(x != ref) {\
 	printf("\n*** %s is %d but should be %d ***\n\n",TEXTIFY(x),x,ref);\
-	error = 1; \
 	throw std::exception();\
 }
 
@@ -97,14 +121,12 @@ class success : public std::exception { };
 class Workspace{
 public:
 
-
+	Memory mem;
 	string name;
 	VVexRiscv* top;
 	int i;
-	int error;
 
 	Workspace(string name){
-		error = 0;
 		this->name = name;
 		top = new VVexRiscv;
 	}
@@ -114,15 +136,17 @@ public:
 	}
 
 	Workspace* loadHex(string path){
-		loadHexImpl(path);
+		loadHexImpl(path,&mem);
 		return this;
 	}
 
+	virtual void postReset() {}
 	virtual void checks(){}
 	void pass(){ throw success();}
+	void fail(){ throw std::exception();}
 
-	Workspace* run(uint32_t timeout = 1000){
-		cout << "Start " << name << endl;
+	Workspace* run(uint32_t timeout = 5000){
+//		cout << "Start " << name << endl;
 
 		// init trace dump
 		Verilated::traceEverOn(true);
@@ -142,6 +166,7 @@ public:
 		top->reset = 0;
 		top->eval();
 
+		postReset();
 
 		try {
 			// run simulation for 100 clock periods
@@ -151,8 +176,11 @@ public:
 				if (top->iCmd_valid) {
 					assertEq(top->iCmd_payload_pc & 3,0);
 					//printf("%d\n",top->iCmd_payload_pc);
-					uint8_t* ptr = memory + top->iCmd_payload_pc;
-					iRsp_inst_next = (ptr[0] << 0) | (ptr[1] << 8) | (ptr[2] << 16) | (ptr[3] << 24);
+
+					iRsp_inst_next =  (mem[top->iCmd_payload_pc + 0] << 0)
+									| (mem[top->iCmd_payload_pc + 1] << 8)
+									| (mem[top->iCmd_payload_pc + 2] << 16)
+									| (mem[top->iCmd_payload_pc + 3] << 24);
 				}
 
 				checks();
@@ -172,10 +200,12 @@ public:
 				if (Verilated::gotFinish())
 					exit(0);
 			}
+			cout << "timeout" << endl;
+			fail();
 		} catch (const success e) {
-			printf("SUCCESS\n");
+			cout <<"SUCCESS " << name <<  endl;
 		} catch (const std::exception& e) {
-			std::cout << e.what();
+			cout << "FAIL " <<  name << endl;
 		}
 
 
@@ -213,53 +243,68 @@ public:
 		loadHex("../../resources/hex/" + name + ".hex");
 	}
 
-	virtual void checks(){
+	virtual void postReset() {
+		top->VexRiscv->prefetch_PcManagerSimplePlugin_pc = 0x800000bcu;
+	}
 
+	virtual void checks(){
+		if(top->VexRiscv->writeBack_arbitration_isValid == 1 && top->VexRiscv->writeBack_input_INSTRUCTION == 0x00000073){
+			uint32_t code = top->VexRiscv->RegFilePlugin_regFile[28];
+			if((code & 1) == 0){
+				cout << "Wrong error code"<< endl;
+				fail();
+			}
+			if(code == 1){
+				pass();
+			}else{
+				cout << "Error code " << code/2 << endl;
+				fail();
+			}
+		}
 	}
 };
 
 
 string riscvTestMain[] = {
-	"rv32ui-p-add.hex",
-	"rv32ui-p-addi.hex",
-	"rv32ui-p-and.hex",
-	"rv32ui-p-andi.hex",
-	"rv32ui-p-auipc.hex",
-	"rv32ui-p-beq.hex",
-	"rv32ui-p-bge.hex",
-	"rv32ui-p-bgeu.hex",
-	"rv32ui-p-blt.hex",
-	"rv32ui-p-bltu.hex",
-	"rv32ui-p-bne.hex",
-	"rv32ui-p-j.hex",
-	"rv32ui-p-jal.hex",
-	"rv32ui-p-jalr.hex",
-	"rv32ui-p-or.hex",
-	"rv32ui-p-ori.hex",
-	"rv32ui-p-simple.hex",
-	"rv32ui-p-sll.hex",
-	"rv32ui-p-slli.hex",
-	"rv32ui-p-slt.hex",
-	"rv32ui-p-slti.hex",
-	"rv32ui-p-sra.hex",
-	"rv32ui-p-srai.hex",
-	"rv32ui-p-srl.hex",
-	"rv32ui-p-srli.hex",
-	"rv32ui-p-sub.hex",
-	"rv32ui-p-xor.hex",
-	"rv32ui-p-xori.hex"
+	"rv32ui-p-simple",
+	"rv32ui-p-lui",
+	"rv32ui-p-auipc",
+	"rv32ui-p-jal",
+	"rv32ui-p-jalr",
+	"rv32ui-p-beq",
+	"rv32ui-p-bge",
+	"rv32ui-p-bgeu",
+	"rv32ui-p-blt",
+	"rv32ui-p-bltu",
+	"rv32ui-p-bne",
+	"rv32ui-p-add",
+	"rv32ui-p-addi",
+	"rv32ui-p-and",
+	"rv32ui-p-andi",
+	"rv32ui-p-or",
+	"rv32ui-p-ori",
+	"rv32ui-p-sll",
+	"rv32ui-p-slli",
+	"rv32ui-p-slt",
+	"rv32ui-p-slti",
+	"rv32ui-p-sra",
+	"rv32ui-p-srai",
+	"rv32ui-p-srl",
+	"rv32ui-p-srli",
+	"rv32ui-p-sub",
+	"rv32ui-p-xor",
+	"rv32ui-p-xori"
 };
 
 string riscvTestMemory[] = {
-	"rv32ui-p-lb.hex",
-	"rv32ui-p-lbu.hex",
-	"rv32ui-p-lh.hex",
-	"rv32ui-p-lhu.hex",
-	"rv32ui-p-lui.hex",
-	"rv32ui-p-lw.hex",
-	"rv32ui-p-sb.hex",
-	"rv32ui-p-sh.hex",
-	"rv32ui-p-sw.hex"
+	"rv32ui-p-lb",
+	"rv32ui-p-lbu",
+	"rv32ui-p-lh",
+	"rv32ui-p-lhu",
+	"rv32ui-p-lw",
+	"rv32ui-p-sb",
+	"rv32ui-p-sh",
+	"rv32ui-p-sw"
 };
 
 

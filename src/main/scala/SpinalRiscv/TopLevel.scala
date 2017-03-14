@@ -114,8 +114,6 @@ case class VexRiscvConfig(pcWidth : Int){
   object REGFILE_WRITE_VALID extends Stageable(Bool)
   object REGFILE_WRITE_DATA extends Stageable(Bits(32 bits))
 
-  val SRC1_USE = REG1_USE
-  val SRC2_USE = REG2_USE
   object SRC1   extends Stageable(Bits(32 bits))
   object SRC2   extends Stageable(Bits(32 bits))
   object SRC_ADD_SUB extends Stageable(Bits(32 bits))
@@ -144,6 +142,11 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   stages ++= List.fill(6)(new Stage())
   val prefetch :: fetch :: decode :: execute :: memory :: writeBack :: Nil = stages.toList
   plugins ++= config.plugins
+
+  //regression usage
+  writeBack.input(config.INSTRUCTION) keep() addAttribute("verilator public")
+  writeBack.input(config.PC) keep() addAttribute("verilator public")
+  writeBack.arbitration.isValid keep() addAttribute("verilator public")
 }
 
 
@@ -232,9 +235,9 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
     val decodedBits = Bits(stageables.foldLeft(0)(_ + _.dataType.getBitsWidth) bits)
     val defaultBits = cloneOf(decodedBits)
 
+    assert(defaultValue == 0)
+    defaultBits := defaultValue
 
-    for(i <- decodedBits.range)
-        defaultBits(i) := Bool(defaultValue.testBit(i))
     val logicOr = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
     decodedBits := logicOr.foldLeft(defaultBits)(_ | _)
 
@@ -291,8 +294,8 @@ class NoPredictionBranchPlugin extends Plugin[VexRiscv]{
       SRC1_CTRL         -> Src1CtrlEnum.RS,
       SRC2_CTRL         -> Src2CtrlEnum.RS,
       SRC_USE_SUB_LESS  -> True,
-      SRC1_USE          -> True,
-      SRC2_USE          -> True
+      REG1_USE          -> True,
+      REG2_USE          -> True
     )
 
     val jActions = List[(Stageable[_ <: BaseType],Any)](
@@ -300,14 +303,13 @@ class NoPredictionBranchPlugin extends Plugin[VexRiscv]{
       SRC1_CTRL           -> Src1CtrlEnum.FOUR,
       SRC2_CTRL           -> Src2CtrlEnum.PC,
       SRC_USE_SUB_LESS    -> False,
-      REGFILE_WRITE_VALID -> True,
-      SRC2_USE            -> True
+      REGFILE_WRITE_VALID -> True
     )
 
     decoderService.addDefault(BRANCH_CTRL, BranchCtrlEnum.INC)
     decoderService.add(List(
       JAL  -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JAL)),
-      JALR -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JALR)),
+      JALR -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JALR, REG1_USE -> True)),
       BEQ  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
       BNE  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
       BLT  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
@@ -388,7 +390,7 @@ class PcManagerSimplePlugin(resetVector : BigInt,fastFetchCmdPcCalculation : Boo
       arbitration.isValid := True
 
       //PC calculation without Jump
-      val pc = Reg(UInt(pcWidth bits)) init(resetVector)
+      val pc = Reg(UInt(pcWidth bits)) init(resetVector) addAttribute("verilator public")
       when(arbitration.isValid && !arbitration.isStuck){
         val pcPlus4 = pc + 4
         if(fastFetchCmdPcCalculation) pcPlus4.addAttribute("keep") //Disallow to use the carry in as enable
@@ -480,7 +482,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,
       MEMORY_ENABLE -> True,
-      SRC1_USE -> True
+      REG1_USE -> True
     )
 
     decoderService.addDefault(MEMORY_ENABLE, False)
@@ -491,9 +493,9 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
       LBU  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI, REGFILE_WRITE_VALID -> True)),
       LHU  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI, REGFILE_WRITE_VALID -> True)),
       LWU  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI, REGFILE_WRITE_VALID -> True)),
-      SB   -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMS, SRC2_USE -> True)),
-      SH   -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMS, SRC2_USE -> True)),
-      SW   -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMS, SRC2_USE -> True))
+      SB   -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMS, REG2_USE -> True)),
+      SH   -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMS, REG2_USE -> True)),
+      SW   -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMS, REG2_USE -> True))
     ))
 
   }
@@ -646,7 +648,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]
     import pipeline.config._
 
     val global = pipeline plug new Area{
-      val regFile = Mem(Bits(32 bits),32)
+      val regFile = Mem(Bits(32 bits),32) addAttribute("verilator public")
     }
 
     decode plug new Area{
@@ -745,7 +747,7 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,
-      SRC1_USE -> True
+      REG1_USE -> True
     )
 
     val nonImmediateActions = List[(Stageable[_ <: BaseType],Any)](
@@ -755,11 +757,11 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,
-      SRC1_USE -> True,
-      SRC2_USE -> True
+      REG1_USE -> True,
+      REG2_USE -> True
     )
 
-    val otherAction = List(
+    val otherAction = List[(Stageable[_ <: BaseType],Any)](
       LEGAL_INSTRUCTION        -> True,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
@@ -790,7 +792,7 @@ class IntAluPlugin extends Plugin[VexRiscv]{
     ))
 
     decoderService.add(List(
-      LUI   -> (otherAction ++ List(ALU_CTRL -> AluCtrlEnum.SRC1)),
+      LUI   -> (otherAction ++ List(ALU_CTRL -> AluCtrlEnum.SRC1, SRC1_CTRL -> Src1CtrlEnum.IMU)),
       AUIPC -> (otherAction ++ List(ALU_CTRL -> AluCtrlEnum.ADD_SUB, SRC_USE_SUB_LESS -> False, SRC1_CTRL -> Src1CtrlEnum.IMU, SRC2_CTRL -> Src2CtrlEnum.PC))
     ))
   }
@@ -837,7 +839,8 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
       SRC2_CTRL                -> Src2CtrlEnum.IMI,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
-      BYPASSABLE_MEMORY_STAGE  -> True
+      BYPASSABLE_MEMORY_STAGE  -> True,
+      REG1_USE                 -> True
     )
 
     val nonImmediateActions = List[(Stageable[_ <: BaseType],Any)](
@@ -846,7 +849,9 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
       SRC2_CTRL                -> Src2CtrlEnum.RS,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
-      BYPASSABLE_MEMORY_STAGE  -> True
+      BYPASSABLE_MEMORY_STAGE  -> True,
+      REG1_USE                 -> True,
+      REG2_USE                 -> True
     )
 
     val decoderService = pipeline.service(classOf[DecoderService])
@@ -900,7 +905,7 @@ object TopLevel {
       )
 
       config.plugins ++= List(
-        new PcManagerSimplePlugin(0, true),
+        new PcManagerSimplePlugin(0, false),
         new IBusSimplePlugin,
         new DecoderSimplePlugin,
         new RegFilePlugin(SYNC),
@@ -914,6 +919,8 @@ object TopLevel {
       )
 
       val toplevel = new VexRiscv(config)
+
+
 
 //      toplevel.service(classOf[DecoderSimplePlugin]).bench(toplevel)
 
