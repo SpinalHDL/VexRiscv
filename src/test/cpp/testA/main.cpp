@@ -120,7 +120,7 @@ class success : public std::exception { };
 
 class Workspace{
 public:
-
+	static uint32_t cycles;
 	Memory mem;
 	string name;
 	VVexRiscv* top;
@@ -215,6 +215,7 @@ public:
 
 					top->eval();
 				}
+				cycles += 1;
 
 				top->iRsp_inst = iRsp_inst_next;
 				top->dRsp_data = dRsp_inst_next;
@@ -238,6 +239,7 @@ public:
 		return this;
 	}
 };
+uint32_t Workspace::cycles = 0;
 
 class TestA : public Workspace{
 public:
@@ -341,10 +343,27 @@ string riscvTestMemory[] = {
 //                  "rv32ui-p-remu.hex"]
 
 
+#include <time.h>
+
+struct timespec timer_start(){
+    struct timespec start_time;
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
+    return start_time;
+}
+
+long timer_end(struct timespec start_time){
+    struct timespec end_time;
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
+    long diffInNanos = end_time.tv_nsec - start_time.tv_nsec;
+    return diffInNanos;
+}
+
 int main(int argc, char **argv, char **env) {
 	Verilated::randReset(2);
 	Verilated::commandArgs(argc, argv);
 	printf("BOOT\n");
+	timespec startedAt = timer_start();
+
 	TestA().run();
 
 	for(const string &name : riscvTestMain){
@@ -353,6 +372,9 @@ int main(int argc, char **argv, char **env) {
 	for(const string &name : riscvTestMemory){
 		RiscvTest(name).run();
 	}
+
+	long duration = timer_end(startedAt);
+	cout << "Had simulate " << Workspace::cycles << " clock cycles in " << duration*1e-9 << " s (" << Workspace::cycles / (duration*1e-9) << " Khz)" << endl;
 	printf("exit\n");
 	exit(0);
 }
