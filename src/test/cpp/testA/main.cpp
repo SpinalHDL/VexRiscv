@@ -173,6 +173,8 @@ public:
 			for (i = 16; i < timeout*2; i+=2) {
 
 				uint32_t iRsp_inst_next = top->iRsp_inst;
+				uint32_t dRsp_inst_next = VL_RANDOM_I(32);
+
 				if (top->iCmd_valid) {
 					assertEq(top->iCmd_payload_pc & 3,0);
 					//printf("%d\n",top->iCmd_payload_pc);
@@ -181,6 +183,25 @@ public:
 									| (mem[top->iCmd_payload_pc + 1] << 8)
 									| (mem[top->iCmd_payload_pc + 2] << 16)
 									| (mem[top->iCmd_payload_pc + 3] << 24);
+				}
+
+				if (top->dCmd_valid) {
+//					assertEq(top->iCmd_payload_pc & 3,0);
+					//printf("%d\n",top->iCmd_payload_pc);
+
+					uint32_t addr = top->dCmd_payload_address;
+					if(top->dCmd_payload_wr){
+						for(uint32_t b = 0;b < (1 << top->dCmd_payload_size);b++){
+							uint32_t offset = (addr+b)&0x3;
+							*mem.get(addr + b) = top->dCmd_payload_data >> (offset*8);
+						}
+					}else{
+						for(uint32_t b = 0;b < (1 << top->dCmd_payload_size);b++){
+							uint32_t offset = (addr+b)&0x3;
+							dRsp_inst_next &= ~(0xFF << (offset*8));
+							dRsp_inst_next |= mem[addr + b] << (offset*8);
+						}
+					}
 				}
 
 				checks();
@@ -196,6 +217,7 @@ public:
 				}
 
 				top->iRsp_inst = iRsp_inst_next;
+				top->dRsp_data = dRsp_inst_next;
 
 				if (Verilated::gotFinish())
 					exit(0);
@@ -328,7 +350,9 @@ int main(int argc, char **argv, char **env) {
 	for(const string &name : riscvTestMain){
 		RiscvTest(name).run();
 	}
-
+	for(const string &name : riscvTestMemory){
+		RiscvTest(name).run();
+	}
 	printf("exit\n");
 	exit(0);
 }

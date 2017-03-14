@@ -428,7 +428,7 @@ case class IBusSimpleRsp() extends Bundle{
   val inst = Bits(32 bits)
 }
 
-class IBusSimplePlugin extends Plugin[VexRiscv]{
+class IBusSimplePlugin(interfaceKeepData : Boolean) extends Plugin[VexRiscv]{
   var iCmd  : Stream[IBusSimpleCmd] = null
   var iRsp  : IBusSimpleRsp = null
 
@@ -436,6 +436,7 @@ class IBusSimplePlugin extends Plugin[VexRiscv]{
     import pipeline._
     import pipeline.config._
 
+    require(interfaceKeepData)
     iCmd = master(Stream(IBusSimpleCmd())).setName("iCmd")
     iCmd.valid := prefetch.arbitration.isFiring
     iCmd.pc := prefetch.output(PC)
@@ -468,6 +469,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
   object MEMORY_ENABLE extends Stageable(Bool)
   object MEMORY_CTRL extends Stageable(MemoryCtrlEnum())
   object MEMORY_READ_DATA extends Stageable(Bits(32 bits))
+  object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -479,23 +481,33 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
       LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC_USE_SUB_LESS         -> False,
-      BYPASSABLE_EXECUTE_STAGE -> True,
-      BYPASSABLE_MEMORY_STAGE  -> True,
       MEMORY_ENABLE -> True,
       REG1_USE -> True
     )
 
+    val loadActions = stdActions ++ List(
+      SRC2_CTRL -> Src2CtrlEnum.IMI,
+      REGFILE_WRITE_VALID -> True,
+      BYPASSABLE_EXECUTE_STAGE -> False,
+      BYPASSABLE_MEMORY_STAGE  -> False
+    )
+
+    val storeActions = stdActions ++ List(
+      SRC2_CTRL -> Src2CtrlEnum.IMS,
+      REG2_USE -> True
+    )
+
     decoderService.addDefault(MEMORY_ENABLE, False)
     decoderService.add(List(
-      LB  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI,  REGFILE_WRITE_VALID -> True)),
-      LH  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI,  REGFILE_WRITE_VALID -> True)),
-      LW  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI,  REGFILE_WRITE_VALID -> True)),
-      LBU  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI, REGFILE_WRITE_VALID -> True)),
-      LHU  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI, REGFILE_WRITE_VALID -> True)),
-      LWU  -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMI, REGFILE_WRITE_VALID -> True)),
-      SB   -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMS, REG2_USE -> True)),
-      SH   -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMS, REG2_USE -> True)),
-      SW   -> (stdActions ++ List(SRC2_CTRL -> Src2CtrlEnum.IMS, REG2_USE -> True))
+      LB   -> (loadActions),
+      LH   -> (loadActions),
+      LW   -> (loadActions),
+      LBU  -> (loadActions),
+      LHU  -> (loadActions),
+      LWU  -> (loadActions),
+      SB   -> (storeActions),
+      SH   -> (storeActions),
+      SW   -> (storeActions)
     ))
 
   }
@@ -511,13 +523,17 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
       dCmd.valid := input(MEMORY_ENABLE) && arbitration.isFiring
       dCmd.wr := input(INSTRUCTION)(5)
       dCmd.address := input(SRC_ADD_SUB).asUInt
-      dCmd.payload.data := input(SRC2)
       dCmd.size := input(INSTRUCTION)(13 downto 12).asUInt
+      dCmd.payload.data := dCmd.size.mux (
+        U(0) -> input(REG2)(7 downto 0) ## input(REG2)(7 downto 0) ## input(REG2)(7 downto 0) ## input(REG2)(7 downto 0),
+        U(1) -> input(REG2)(15 downto 0) ## input(REG2)(15 downto 0),
+        default -> input(REG2)(31 downto 0)
+      )
       when(input(MEMORY_ENABLE) && !dCmd.ready){
         arbitration.haltIt := True
       }
 
-      dCmd.elements
+      insert(MEMORY_ADDRESS_LOW) := dCmd.address(1 downto 0)
     }
 
     memory plug new Area {
@@ -529,12 +545,21 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
     }
 
     writeBack plug new Area {
-      import memory._
+      import writeBack._
+
+//      val rspShifted = input(MEMORY_READ_DATA) //TODO uncoment it (combloop)
+      val rspShifted = MEMORY_READ_DATA()
+      rspShifted := input(MEMORY_READ_DATA)
+      switch(input(MEMORY_ADDRESS_LOW)){
+        is(1){rspShifted(7 downto 0) := input(MEMORY_READ_DATA)(15 downto 8)}
+        is(2){rspShifted(15 downto 0) := input(MEMORY_READ_DATA)(31 downto 16)}
+        is(3){rspShifted(7 downto 0) := input(MEMORY_READ_DATA)(31 downto 24)}
+      }
 
       val rspFormated = input(INSTRUCTION)(13 downto 12).mux(
-        default -> input(MEMORY_READ_DATA), //W
-        1 -> B((31 downto 8) -> (input(MEMORY_READ_DATA)(7) && !input(INSTRUCTION)(14)),(7 downto 0) -> input(MEMORY_READ_DATA)(7 downto 0)),
-        2 -> B((31 downto 16) -> (input(MEMORY_READ_DATA)(15) && ! input(INSTRUCTION)(14)),(15 downto 0) -> input(MEMORY_READ_DATA)(15 downto 0))
+        0 -> B((31 downto 8) -> (rspShifted(7) && !input(INSTRUCTION)(14)),(7 downto 0) -> rspShifted(7 downto 0)),
+        1 -> B((31 downto 16) -> (rspShifted(15) && ! input(INSTRUCTION)(14)),(15 downto 0) -> rspShifted(15 downto 0)),
+        default -> rspShifted //W
       )
 
       when(input(MEMORY_ENABLE)) {
@@ -906,7 +931,7 @@ object TopLevel {
 
       config.plugins ++= List(
         new PcManagerSimplePlugin(0, false),
-        new IBusSimplePlugin,
+        new IBusSimplePlugin(true),
         new DecoderSimplePlugin,
         new RegFilePlugin(SYNC),
         new IntAluPlugin,
