@@ -361,7 +361,7 @@ class NoPredictionBranchPlugin(earlyBranch : Boolean) extends Plugin[VexRiscv]{
       jumpInterface.payload := input(BRANCH_CALC)
 
       when(jumpInterface.valid) {
-        prefetch.arbitration.removeIt := True
+        //prefetch.arbitration.removeIt := True
         fetch.arbitration.removeIt := True
         decode.arbitration.removeIt := True
         if(!earlyBranch) execute.arbitration.removeIt := True
@@ -376,7 +376,7 @@ trait PcManagerService{
   def createJumpInterface(stage : Stage) : Flow[UInt]
 }
 
-class PcManagerSimplePlugin(resetVector : BigInt,fastFetchCmdPcCalculation : Boolean) extends Plugin[VexRiscv] with PcManagerService{
+class PcManagerSimplePlugin(resetVector : BigInt,fastPcCalculation : Boolean) extends Plugin[VexRiscv] with PcManagerService{
 
 
   //FetchService interface
@@ -400,11 +400,16 @@ class PcManagerSimplePlugin(resetVector : BigInt,fastFetchCmdPcCalculation : Boo
 
       //PC calculation without Jump
       val pc = Reg(UInt(pcWidth bits)) init(resetVector) addAttribute("verilator public")
-      when(arbitration.isFiring){
-        val pcPlus4 = pc + 4
-        if(fastFetchCmdPcCalculation) pcPlus4.addAttribute("keep") //Disallow to use the carry in as enable
-        pc := pcPlus4
+      val inc = RegInit(False)
+      val pcNext = if(fastPcCalculation){
+        val pcPlus4 = pc + U(4)
+        pcPlus4.addAttribute("keep")
+        Mux(inc,pcPlus4,pc)
+      }else{
+        pc + Mux(inc,U(4),U(0))
       }
+
+      val samplePcNext = False
 
       //FetchService hardware implementation
       val jump = if(jumpInfos.length != 0) new Area {
@@ -418,12 +423,21 @@ class PcManagerSimplePlugin(resetVector : BigInt,fastFetchCmdPcCalculation : Boo
 
         //Register managments
         when(pcLoad.valid) {
-          pc := pcLoad.payload
+          inc := False
+          samplePcNext := True
+          pcNext := pcLoad.payload
         }
       }
 
+      when(arbitration.isFiring){
+        inc := True
+        samplePcNext := True
+      }
+
+      when(samplePcNext) { pc := pcNext }
+
       //Pipeline insertions
-      insert(PC) := pc
+      insert(PC) := pcNext
     }
   }
 }
@@ -589,6 +603,11 @@ class HazardSimplePlugin(bypassExecute : Boolean,bypassMemory: Boolean,bypassWri
     val src0Hazard = False
     val src1Hazard = False
 
+    //Disable rd0 write in decoding stage
+    when(decode.input(INSTRUCTION)(rdRange) === 0) {
+      decode.input(REGFILE_WRITE_VALID) := False
+    }
+
     def trackHazardWithStage(stage : Stage,bypassable : Boolean, runtimeBypassable : Stageable[Bool]): Unit ={
       val runtimeBypassableValue = if(runtimeBypassable != null) stage.input(runtimeBypassable) else True
       val addr0Match = stage.input(INSTRUCTION)(rdRange) === decode.input(INSTRUCTION)(rs1Range)
@@ -630,10 +649,10 @@ class HazardSimplePlugin(bypassExecute : Boolean,bypassMemory: Boolean,bypassWri
     when(writeBackBuffer.valid) {
       if (bypassWriteBackBuffer) {
         when(addr0Match) {
-          decode.input(REG1) := writeBackWrites.data
+          decode.input(REG1) := writeBackBuffer.data
         }
         when(addr1Match) {
-          decode.input(REG2) := writeBackWrites.data
+          decode.input(REG2) := writeBackBuffer.data
         }
       } else {
         when(addr0Match) {
@@ -657,7 +676,7 @@ class HazardSimplePlugin(bypassExecute : Boolean,bypassMemory: Boolean,bypassWri
       src1Hazard := False
     }
 
-    when(src0Hazard || src1Hazard){
+    when(decode.arbitration.isValid && (src0Hazard || src1Hazard)){
       decode.arbitration.haltIt := True
     }
   }
@@ -939,7 +958,7 @@ object TopLevel {
       )
 
       config.plugins ++= List(
-        new PcManagerSimplePlugin(0, false),
+        new PcManagerSimplePlugin(0, true),
         new IBusSimplePlugin(true),
         new DecoderSimplePlugin,
         new RegFilePlugin(SYNC),
@@ -947,8 +966,8 @@ object TopLevel {
         new SrcPlugin,
         new FullBarrielShifterPlugin,
         new DBusSimplePlugin,
-        //        new HazardSimplePlugin(true,true,true,true),
-        new HazardSimplePlugin(false, false, false, false),
+        new HazardSimplePlugin(true,true,true,true),
+//        new HazardSimplePlugin(false, false, false, false),
         new NoPredictionBranchPlugin(false)
       )
 
