@@ -49,6 +49,7 @@ class Stage() extends Area{
     val removeIt = False
     val isValid = RegInit(False)
     val isStuck = Bool
+    val isStuckByOthers = Bool
     val isFiring = Bool
   }
 

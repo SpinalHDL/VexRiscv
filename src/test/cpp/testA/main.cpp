@@ -99,15 +99,6 @@ void loadHexImpl(string path,Memory* mem) {
 }
 
 
-#define testA1ReagFileWriteRef {1,10},{2,20},{3,40},{4,60}
-#define testA2ReagFileWriteRef {5,1},{7,3}
-uint32_t regFileWriteRefIndex = 0;
-uint32_t regFileWriteRefArray[][2] = {
-	testA1ReagFileWriteRef,
-	testA1ReagFileWriteRef,
-	testA2ReagFileWriteRef,
-	testA2ReagFileWriteRef
-};
 
 #define TEXTIFY(A) #A
 
@@ -118,6 +109,8 @@ uint32_t regFileWriteRefArray[][2] = {
 
 class success : public std::exception { };
 
+uint32_t testsCounter = 0, successCounter = 0;
+
 class Workspace{
 public:
 	static uint32_t cycles;
@@ -127,6 +120,7 @@ public:
 	int i;
 
 	Workspace(string name){
+		testsCounter++;
 		this->name = name;
 		top = new VVexRiscv;
 	}
@@ -175,7 +169,8 @@ public:
 				uint32_t iRsp_inst_next = top->iRsp_inst;
 				uint32_t dRsp_inst_next = VL_RANDOM_I(32);
 
-				if (top->iCmd_valid) {
+
+				if (top->iCmd_valid && top->iCmd_ready) {
 					assertEq(top->iCmd_payload_pc & 3,0);
 					//printf("%d\n",top->iCmd_payload_pc);
 
@@ -185,7 +180,7 @@ public:
 									| (mem[top->iCmd_payload_pc + 3] << 24);
 				}
 
-				if (top->dCmd_valid) {
+				if (top->dCmd_valid && top->dCmd_ready) {
 //					assertEq(top->iCmd_payload_pc & 3,0);
 					//printf("%d\n",top->iCmd_payload_pc);
 
@@ -214,8 +209,13 @@ public:
 					top->clk = !top->clk;
 
 					top->eval();
+					if(top->clk == 0){
+						top->iCmd_ready = VL_RANDOM_I(1);
+						top->dCmd_ready = VL_RANDOM_I(1);
+					}
 				}
 				cycles += 1;
+
 
 				top->iRsp_inst = iRsp_inst_next;
 				top->dRsp_data = dRsp_inst_next;
@@ -227,6 +227,7 @@ public:
 			fail();
 		} catch (const success e) {
 			cout <<"SUCCESS " << name <<  endl;
+			successCounter++;
 		} catch (const std::exception& e) {
 			cout << "FAIL " <<  name << endl;
 		}
@@ -241,8 +242,21 @@ public:
 };
 uint32_t Workspace::cycles = 0;
 
+#define testA1ReagFileWriteRef {1,10},{2,20},{3,40},{4,60}
+#define testA2ReagFileWriteRef {5,1},{7,3}
+uint32_t regFileWriteRefArray[][2] = {
+	testA1ReagFileWriteRef,
+	testA1ReagFileWriteRef,
+	testA2ReagFileWriteRef,
+	testA2ReagFileWriteRef
+};
+
 class TestA : public Workspace{
 public:
+
+
+	uint32_t regFileWriteRefIndex = 0;
+
 	TestA() : Workspace("testA") {
 		loadHex("../../resources/hex/testA.hex");
 	}
@@ -354,7 +368,7 @@ struct timespec timer_start(){
 long timer_end(struct timespec start_time){
     struct timespec end_time;
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
-    long diffInNanos = end_time.tv_nsec - start_time.tv_nsec;
+    uint64_t diffInNanos = end_time.tv_sec*1e9 + end_time.tv_nsec -  start_time.tv_sec*1e9 - start_time.tv_nsec;
     return diffInNanos;
 }
 
@@ -364,17 +378,23 @@ int main(int argc, char **argv, char **env) {
 	printf("BOOT\n");
 	timespec startedAt = timer_start();
 
-	TestA().run();
-
-	for(const string &name : riscvTestMain){
-		RiscvTest(name).run();
+	for(int idx = 0;idx < 2;idx++){
+		TestA().run();
+		for(const string &name : riscvTestMain){
+			RiscvTest(name).run();
+		}
+		for(const string &name : riscvTestMemory){
+			RiscvTest(name).run();
+		}
 	}
-	for(const string &name : riscvTestMemory){
-		RiscvTest(name).run();
-	}
 
-	long duration = timer_end(startedAt);
+	uint64_t duration = timer_end(startedAt);
 	cout << "Had simulate " << Workspace::cycles << " clock cycles in " << duration*1e-9 << " s (" << Workspace::cycles / (duration*1e-9) << " Khz)" << endl;
-	printf("exit\n");
+	if(successCounter == testsCounter)
+		cout << "Success " << successCounter << "/" << testsCounter << endl;
+	else
+		cout << "Failure " << testsCounter - successCounter << "/"  << testsCounter << endl;
+
+
 	exit(0);
 }

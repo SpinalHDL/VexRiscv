@@ -391,7 +391,7 @@ class PcManagerSimplePlugin(resetVector : BigInt,fastFetchCmdPcCalculation : Boo
 
       //PC calculation without Jump
       val pc = Reg(UInt(pcWidth bits)) init(resetVector) addAttribute("verilator public")
-      when(arbitration.isValid && !arbitration.isStuck){
+      when(arbitration.isFiring){
         val pcPlus4 = pc + 4
         if(fastFetchCmdPcCalculation) pcPlus4.addAttribute("keep") //Disallow to use the carry in as enable
         pc := pcPlus4
@@ -410,7 +410,6 @@ class PcManagerSimplePlugin(resetVector : BigInt,fastFetchCmdPcCalculation : Boo
         //Register managments
         when(pcLoad.valid) {
           pc := pcLoad.payload
-          arbitration.removeIt := True
         }
       }
 
@@ -438,8 +437,9 @@ class IBusSimplePlugin(interfaceKeepData : Boolean) extends Plugin[VexRiscv]{
 
     require(interfaceKeepData)
     iCmd = master(Stream(IBusSimpleCmd())).setName("iCmd")
-    iCmd.valid := prefetch.arbitration.isFiring
+    iCmd.valid := prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
     iCmd.pc := prefetch.output(PC)
+    prefetch.arbitration.haltIt setWhen(!iCmd.ready)
 
     iRsp = in(IBusSimpleRsp()).setName("iRsp")
     fetch.insert(INSTRUCTION) := iRsp.inst
@@ -520,7 +520,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
       import execute._
 
       dCmd = master(Stream(DBusSimpleCmd())).setName("dCmd")
-      dCmd.valid := input(MEMORY_ENABLE) && arbitration.isFiring
+      dCmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers
       dCmd.wr := input(INSTRUCTION)(5)
       dCmd.address := input(SRC_ADD_SUB).asUInt
       dCmd.size := input(INSTRUCTION)(13 downto 12).asUInt
@@ -529,7 +529,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
         U(1) -> input(REG2)(15 downto 0) ## input(REG2)(15 downto 0),
         default -> input(REG2)(31 downto 0)
       )
-      when(input(MEMORY_ENABLE) && !dCmd.ready){
+      when(arbitration.isValid && input(MEMORY_ENABLE) && !dCmd.ready){
         arbitration.haltIt := True
       }
 
@@ -547,7 +547,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
     writeBack plug new Area {
       import writeBack._
 
-//      val rspShifted = input(MEMORY_READ_DATA) //TODO uncoment it (combloop)
+
       val rspShifted = MEMORY_READ_DATA()
       rspShifted := input(MEMORY_READ_DATA)
       switch(input(MEMORY_ADDRESS_LOW)){
