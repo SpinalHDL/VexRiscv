@@ -257,6 +257,7 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
     offset = 0
     stageables.foreach(e => {
       insert(e).assignFromBits(decodedBits(offset, e.dataType.getBitsWidth bits))
+//      insert(e).assignFromBits(RegNext(decodedBits(offset, e.dataType.getBitsWidth bits)))
       offset += e.dataType.getBitsWidth
     })
   }
@@ -273,13 +274,14 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
   }
 }
 
-class NoPredictionBranchPlugin extends Plugin[VexRiscv]{
+class NoPredictionBranchPlugin(earlyBranch : Boolean) extends Plugin[VexRiscv]{
   object BranchCtrlEnum extends SpinalEnum(binarySequential){
     val INC,B,JAL,JALR = newElement()
   }
 
   object BRANCH_CTRL extends Stageable(BranchCtrlEnum())
   object BRANCH_SOLVED extends Stageable(BranchCtrlEnum())
+  object BRANCH_CALC extends Stageable(UInt(32 bits))
 
   var jumpInterface : Flow[UInt] = null
 
@@ -345,17 +347,24 @@ class NoPredictionBranchPlugin extends Plugin[VexRiscv]{
       )
 
       val imm = IMM(input(INSTRUCTION))
-      jumpInterface.valid := arbitration.isFiring && input(BRANCH_SOLVED) =/= BranchCtrlEnum.INC
-      jumpInterface.payload := input(BRANCH_SOLVED).mux(
+      insert(BRANCH_CALC) := input(BRANCH_SOLVED).mux(
         BranchCtrlEnum.JAL  -> (input(PC)          + imm.j_sext.asUInt),
         BranchCtrlEnum.JALR -> (input(REG1).asUInt + imm.i_sext.asUInt),
         default             -> (input(PC)          + imm.b_sext.asUInt)    //B
       )
+    }
 
-      when(jumpInterface.valid){
+    val branchStage = if(earlyBranch) execute else memory
+    branchStage plug new Area {
+      import branchStage._
+      jumpInterface.valid := arbitration.isFiring && input(BRANCH_SOLVED) =/= BranchCtrlEnum.INC
+      jumpInterface.payload := input(BRANCH_CALC)
+
+      when(jumpInterface.valid) {
         prefetch.arbitration.removeIt := True
-        fetch.arbitration.removeIt    := True
-        decode.arbitration.removeIt   := True
+        fetch.arbitration.removeIt := True
+        decode.arbitration.removeIt := True
+        if(!earlyBranch) execute.arbitration.removeIt := True
       }
     }
   }
@@ -940,7 +949,7 @@ object TopLevel {
         new DBusSimplePlugin,
         //        new HazardSimplePlugin(true,true,true,true),
         new HazardSimplePlugin(false, false, false, false),
-        new NoPredictionBranchPlugin
+        new NoPredictionBranchPlugin(false)
       )
 
       val toplevel = new VexRiscv(config)

@@ -108,14 +108,11 @@ trait Pipeline {
       val stageBefore = stages(stageIndex - 1)
       val stage = stages(stageIndex)
 
-      when(!stage.arbitration.isStuck) {
+      when(!stage.arbitration.isStuck || stage.arbitration.removeIt) {
         stage.arbitration.isValid := False
       }
       when(!stageBefore.arbitration.isStuck && !stageBefore.arbitration.removeIt) {
         stage.arbitration.isValid := stageBefore.arbitration.isValid
-      }
-      when(stage.arbitration.removeIt){
-        stage.arbitration.isValid := False
       }
     }
   }
