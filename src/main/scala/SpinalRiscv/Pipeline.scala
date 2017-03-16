@@ -1,5 +1,6 @@
 package SpinalRiscv
 
+import SpinalRiscv.Plugin.Plugin
 import spinal.core._
 
 import scala.collection.mutable

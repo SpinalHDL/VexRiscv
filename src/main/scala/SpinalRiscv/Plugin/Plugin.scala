@@ -1,5 +1,6 @@
-package SpinalRiscv
+package SpinalRiscv.Plugin
 
+import SpinalRiscv.{Pipeline, Stage}
 import spinal.core.Area
 
 /**
