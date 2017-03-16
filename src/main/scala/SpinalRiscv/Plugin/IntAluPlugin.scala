@@ -2,15 +2,17 @@ package SpinalRiscv.Plugin
 
 import SpinalRiscv._
 import spinal.core._
-
-
-class IntAluPlugin extends Plugin[VexRiscv]{
-
+object IntAluPlugin{
   object AluCtrlEnum extends SpinalEnum(binarySequential){
     val ADD_SUB, SLT_SLTU, XOR, OR, AND, SRC1 = newElement()
   }
 
   object ALU_CTRL extends Stageable(AluCtrlEnum())
+}
+
+class IntAluPlugin extends Plugin[VexRiscv]{
+  import IntAluPlugin._
+
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._

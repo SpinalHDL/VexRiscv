@@ -92,7 +92,7 @@ trait Pipeline {
             inputDefault := stage.inserts(key)
           } else {
             val stageBefore = stages(stageIndex - 1)
-            inputDefault := RegNextWhen(stageBefore.output(key), !stageBefore.arbitration.isStuck) //!stage.input.valid || stage.input.ready
+            inputDefault := RegNextWhen(stageBefore.output(key), !stage.arbitration.isStuck) //!stage.input.valid || stage.input.ready
           }
         }
       }
