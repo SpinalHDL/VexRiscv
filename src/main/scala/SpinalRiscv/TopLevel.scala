@@ -37,11 +37,13 @@ object TopLevel {
         new RegFilePlugin(Plugin.SYNC),
         new IntAluPlugin,
         new SrcPlugin,
-//        new FullBarrielShifterPlugin,
-        new LightShifterPlugin,
+        new FullBarrielShifterPlugin,
+//        new LightShifterPlugin,
         new DBusSimplePlugin,
-        new HazardSimplePlugin(false, true, false, true),
-        //        new HazardSimplePlugin(false, false, false, false),
+//        new HazardSimplePlugin(false, true, false, true),
+        new HazardSimplePlugin(false, false, false, false),
+        new MulPlugin,
+        new DivPlugin,
         new NoPredictionBranchPlugin(false)
       )
 

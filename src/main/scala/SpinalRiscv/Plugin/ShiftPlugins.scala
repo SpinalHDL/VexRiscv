@@ -167,6 +167,9 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
           }
         }
       }
+      when(arbitration.removeIt){
+        isActive := False
+      }
     }
   }
 }

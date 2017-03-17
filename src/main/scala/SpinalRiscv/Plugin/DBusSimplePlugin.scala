@@ -100,7 +100,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
 
       dRsp = in(DBusSimpleRsp()).setName("dRsp")
       insert(MEMORY_READ_DATA) := dRsp.data
-      assert(!(input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
+      assert(!(input(MEMORY_ENABLE) && (!input(INSTRUCTION)(5)) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
     }
 
     writeBack plug new Area {

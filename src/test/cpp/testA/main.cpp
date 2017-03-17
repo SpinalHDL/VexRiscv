@@ -111,6 +111,12 @@ class success : public std::exception { };
 
 uint32_t testsCounter = 0, successCounter = 0;
 
+double currentTime = 22;
+double sc_time_stamp(){
+	return currentTime;
+}
+
+
 class Workspace{
 public:
 	static uint32_t cycles;
@@ -141,7 +147,7 @@ public:
 
 	Workspace* run(uint32_t timeout = 5000){
 //		cout << "Start " << name << endl;
-
+		currentTime = 4;
 		// init trace dump
 		Verilated::traceEverOn(true);
 		VerilatedVcdC* tfp = new VerilatedVcdC;
@@ -149,23 +155,24 @@ public:
 		tfp->open((string(name)+ ".vcd").c_str());
 
 		// Reset
-		top->clk = 1;
+		top->clk = 0;
 		top->reset = 0;
 		top->iCmd_ready = 1;
 		top->dCmd_ready = 1;
-		top->eval();
+		top->eval(); currentTime = 3;
 		top->reset = 1;
 		top->eval();
 		tfp->dump(0);
 		top->reset = 0;
-		top->eval();
+		top->eval(); currentTime = 2;
+		top->clk = 1;
 
 		postReset();
 
 		try {
 			// run simulation for 100 clock periods
 			for (i = 16; i < timeout*2; i+=2) {
-
+				currentTime = 55;
 				uint32_t iRsp_inst_next = top->iRsp_inst;
 				uint32_t dRsp_inst_next = VL_RANDOM_I(32);
 
@@ -347,15 +354,20 @@ string riscvTestMemory[] = {
 
 
 
-//isaTestsMulDiv = ["rv32ui-p-mul.hex",
-//                  "rv32ui-p-mulh.hex",
-//                  "rv32ui-p-mulhsu.hex",
-//                  "rv32ui-p-mulhu.hex",
-//                  "rv32ui-p-div.hex",
-//                  "rv32ui-p-divu.hex",
-//                  "rv32ui-p-rem.hex",
-//                  "rv32ui-p-remu.hex"]
 
+string riscvTestMul[] = {
+	"rv32um-p-mul",
+	"rv32um-p-mulh",
+	"rv32um-p-mulhsu",
+	"rv32um-p-mulhu"
+};
+
+string riscvTestDiv[] = {
+	"rv32um-p-div",
+	"rv32um-p-divu",
+	"rv32um-p-rem",
+	"rv32um-p-remu"
+};
 
 #include <time.h>
 
@@ -384,6 +396,12 @@ int main(int argc, char **argv, char **env) {
 			RiscvTest(name).run();
 		}
 		for(const string &name : riscvTestMemory){
+			RiscvTest(name).run();
+		}
+		for(const string &name : riscvTestMul){
+			RiscvTest(name).run();
+		}
+		for(const string &name : riscvTestDiv){
 			RiscvTest(name).run();
 		}
 	}
