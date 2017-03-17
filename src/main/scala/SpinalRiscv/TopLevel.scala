@@ -41,7 +41,7 @@ object TopLevel {
 //        new LightShifterPlugin,
         new DBusSimplePlugin,
 //        new HazardSimplePlugin(false, true, false, true),
-        new HazardSimplePlugin(false, false, false, false),
+        new HazardSimplePlugin(true, true, true, true),
         new MulPlugin,
         new DivPlugin,
         new NoPredictionBranchPlugin(false)

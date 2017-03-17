@@ -1,0 +1,40 @@
+[*]
+[*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
+[*] Fri Mar 17 18:05:14 2017
+[*]
+[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/DhrystoneRef.vcd"
+[dumpfile_mtime] "Fri Mar 17 18:03:52 2017"
+[dumpfile_size] 1483111421
+[savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/refDiff.gtkw"
+[timestart] 36700
+[size] 1774 451
+[pos] -775 -353
+*-2.000000 36713 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.VexRiscv.
+[sst_width] 201
+[signals_width] 583
+[sst_expanded] 1
+[sst_vpaned_height] 68
+@22
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_payload_address[4:0]
+@24
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_payload_data[31:0]
+@28
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_valid
+TOP.VexRiscv.writeBack_arbitration_isValid
+TOP.VexRiscv.clk
+@22
+TOP.VexRiscv.core.writeBack_inInst_payload_instruction[31:0]
+TOP.VexRiscv.core.writeBack_inInst_payload_pcPlus4[31:0]
+TOP.dCmd_payload_address[31:0]
+TOP.dCmd_payload_data[31:0]
+@28
+TOP.dCmd_payload_size[1:0]
+TOP.dCmd_payload_wr
+TOP.dCmd_ready
+TOP.dCmd_valid
+@25
+TOP.dRsp_data[31:0]
+[pattern_trace] 1
+[pattern_trace] 0

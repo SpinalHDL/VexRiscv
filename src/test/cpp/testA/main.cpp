@@ -8,6 +8,10 @@
 #include <stdint.h>
 #include <cstring>
 #include <string.h>
+#include <iostream>
+#include <fstream>
+
+//#define REF
 
 class Memory{
 public:
@@ -21,7 +25,11 @@ public:
 	}
 
 	uint8_t* get(uint32_t address){
-		if(mem[address >> 20] == NULL) mem[address >> 20] = new uint8_t[1024*1024];
+		if(mem[address >> 20] == NULL) {
+			uint8_t* ptr = new uint8_t[1024*1024];
+			for(uint32_t i = 0;i < 1024*1024;i++) ptr[i] = 0xFF;
+			mem[address >> 20] = ptr;
+		}
 		return &mem[address >> 20][address & 0xFFFFF];
 	}
 
@@ -67,7 +75,7 @@ void loadHexImpl(string path,Memory* mem) {
 			uint32_t byteCount = hToI(line + 1, 2);
 			uint32_t nextAddr = hToI(line + 3, 4) + offset;
 			uint32_t key = hToI(line + 7, 2);
-			//printf("%d %d %d\n", byteCount, nextAddr,key);
+//			printf("%d %d %d\n", byteCount, nextAddr,key);
 			switch (key) {
 			case 0:
 				for (uint32_t i = 0; i < byteCount; i++) {
@@ -76,12 +84,16 @@ void loadHexImpl(string path,Memory* mem) {
 				}
 				break;
 			case 2:
+//				cout << offset << endl;
 				offset = hToI(line + 9, 4) << 4;
 				break;
 			case 4:
+//				cout << offset << endl;
 				offset = hToI(line + 9, 4) << 16;
 				break;
-
+			default:
+//				cout << "??? " << key << endl;
+				break;
 			}
 		}
 
@@ -111,7 +123,7 @@ class success : public std::exception { };
 
 uint32_t testsCounter = 0, successCounter = 0;
 
-double currentTime = 22;
+uint64_t currentTime = 22;
 double sc_time_stamp(){
 	return currentTime;
 }
@@ -125,10 +137,17 @@ public:
 	VVexRiscv* top;
 	int i;
 
+
+	ofstream regTraces;
+	ofstream memTraces;
+
+
 	Workspace(string name){
 		testsCounter++;
 		this->name = name;
 		top = new VVexRiscv;
+		regTraces.open (name + ".regTrace");
+		memTraces.open (name + ".memTrace");
 	}
 
 	virtual ~Workspace(){
@@ -172,7 +191,7 @@ public:
 		try {
 			// run simulation for 100 clock periods
 			for (i = 16; i < timeout*2; i+=2) {
-				currentTime = 55;
+				currentTime = i;
 				uint32_t iRsp_inst_next = top->iRsp_inst;
 				uint32_t dRsp_inst_next = VL_RANDOM_I(32);
 
@@ -193,9 +212,16 @@ public:
 
 					uint32_t addr = top->dCmd_payload_address;
 					if(top->dCmd_payload_wr){
+						memTraces << currentTime << " : WRITE mem" << (1 << top->dCmd_payload_size) << "[" << addr << "] = " << top->dCmd_payload_data << endl;
 						for(uint32_t b = 0;b < (1 << top->dCmd_payload_size);b++){
 							uint32_t offset = (addr+b)&0x3;
 							*mem.get(addr + b) = top->dCmd_payload_data >> (offset*8);
+						}
+
+						switch(addr){
+						case 0xF00FFF00u:
+							cout << mem[0xF00FFF00u];
+							break;
 						}
 					}else{
 						for(uint32_t b = 0;b < (1 << top->dCmd_payload_size);b++){
@@ -203,10 +229,17 @@ public:
 							dRsp_inst_next &= ~(0xFF << (offset*8));
 							dRsp_inst_next |= mem[addr + b] << (offset*8);
 						}
+						switch(addr){
+						case 0xF00FFF10u:
+							dRsp_inst_next = i/2;
+							break;
+						}
+						memTraces << currentTime << " : READ  mem" << (1 << top->dCmd_payload_size) << "[" << addr << "] = " << dRsp_inst_next << endl;
+
 					}
 				}
 
-				checks();
+
 
 
 
@@ -217,8 +250,12 @@ public:
 
 					top->eval();
 					if(top->clk == 0){
-						top->iCmd_ready = VL_RANDOM_I(1);
-						top->dCmd_ready = VL_RANDOM_I(1);
+						top->iCmd_ready = VL_RANDOM_I(1) | 1;
+						top->dCmd_ready = VL_RANDOM_I(1) | 1;
+						if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
+							regTraces << currentTime << " : reg[" << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
+						}
+						checks();
 					}
 				}
 				cycles += 1;
@@ -249,6 +286,7 @@ public:
 };
 uint32_t Workspace::cycles = 0;
 
+#ifndef REF
 #define testA1ReagFileWriteRef {1,10},{2,20},{3,40},{4,60}
 #define testA2ReagFileWriteRef {5,1},{7,3}
 uint32_t regFileWriteRefArray[][2] = {
@@ -306,6 +344,18 @@ public:
 				fail();
 			}
 		}
+	}
+};
+#endif
+class Dhrystone : public Workspace{
+public:
+
+	Dhrystone() : Workspace("Dhrystone") {
+		loadHex("../../resources/hex/dhrystoneO3M.hex");
+	}
+
+	virtual void checks(){
+
 	}
 };
 
@@ -390,7 +440,8 @@ int main(int argc, char **argv, char **env) {
 	printf("BOOT\n");
 	timespec startedAt = timer_start();
 
-	for(int idx = 0;idx < 2;idx++){
+	for(int idx = 0;idx < 1;idx++){
+		#ifndef  REF
 		TestA().run();
 		for(const string &name : riscvTestMain){
 			RiscvTest(name).run();
@@ -404,6 +455,8 @@ int main(int argc, char **argv, char **env) {
 		for(const string &name : riscvTestDiv){
 			RiscvTest(name).run();
 		}
+		#endif
+		Dhrystone().run(0.3e6);
 	}
 
 	uint64_t duration = timer_end(startedAt);

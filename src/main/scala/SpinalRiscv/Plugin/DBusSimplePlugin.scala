@@ -79,7 +79,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
       import execute._
 
       dCmd = master(Stream(DBusSimpleCmd())).setName("dCmd")
-      dCmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers
+      dCmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers && !arbitration.removeIt
       dCmd.wr := input(INSTRUCTION)(5)
       dCmd.address := input(SRC_ADD_SUB).asUInt
       dCmd.size := input(INSTRUCTION)(13 downto 12).asUInt
