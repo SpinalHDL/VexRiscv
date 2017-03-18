@@ -89,7 +89,7 @@ class MulPlugin extends Plugin[VexRiscv]{
       val result = input(MUL_LOW) + (input(MUL_HH) << 32)
 
 
-      when(input(IS_MUL)){
+      when(arbitration.isValid && input(IS_MUL)){
         switch(input(INSTRUCTION)(13 downto 12)){
           is(B"00"){
             input(REGFILE_WRITE_DATA) := input(MUL_LOW)(31 downto 0).asBits

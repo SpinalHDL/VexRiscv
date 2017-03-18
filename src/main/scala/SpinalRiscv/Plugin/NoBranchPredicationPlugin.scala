@@ -5,8 +5,12 @@ import SpinalRiscv._
 import spinal.core._
 import spinal.lib._
 
+trait BranchPrediction
+object DISABLE extends BranchPrediction
+object STATIC  extends BranchPrediction
+object DYNAMIC extends BranchPrediction
 
-class NoPredictionBranchPlugin(earlyBranch : Boolean) extends Plugin[VexRiscv]{
+class NoPredictionBranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction) extends Plugin[VexRiscv]{
   object BranchCtrlEnum extends SpinalEnum(binarySequential){
     val INC,B,JAL,JALR = newElement()
   }
@@ -79,11 +83,13 @@ class NoPredictionBranchPlugin(earlyBranch : Boolean) extends Plugin[VexRiscv]{
       )
 
       val imm = IMM(input(INSTRUCTION))
-      insert(BRANCH_CALC) := input(BRANCH_SOLVED).mux(
-        BranchCtrlEnum.JAL  -> (input(PC)          + imm.j_sext.asUInt),
-        BranchCtrlEnum.JALR -> (input(REG1).asUInt + imm.i_sext.asUInt),
-        default             -> (input(PC)          + imm.b_sext.asUInt)    //B
-      )
+      val branch_src1 = (input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? input(REG1).asUInt | input(PC)
+      val branch_src2 = input(BRANCH_CTRL).mux(
+        BranchCtrlEnum.JAL  -> imm.j_sext,
+        BranchCtrlEnum.JALR -> imm.i_sext,
+        default             -> imm.b_sext    //B
+      ).asUInt
+      insert(BRANCH_CALC) := branch_src1 + branch_src2
     }
 
     val branchStage = if(earlyBranch) execute else memory

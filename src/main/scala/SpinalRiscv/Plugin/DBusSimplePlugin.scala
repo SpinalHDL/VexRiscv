@@ -121,7 +121,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
         default -> rspShifted //W
       )
 
-      when(input(MEMORY_ENABLE)) {
+      when(arbitration.isValid && input(MEMORY_ENABLE)) {
         input(REGFILE_WRITE_DATA) := rspFormated
       }
 

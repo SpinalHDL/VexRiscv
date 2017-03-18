@@ -13,11 +13,6 @@ class HazardSimplePlugin(bypassExecute : Boolean,bypassMemory: Boolean,bypassWri
     val src0Hazard = False
     val src1Hazard = False
 
-    //Disable rd0 write in decoding stage
-    when(decode.input(INSTRUCTION)(rdRange) === 0) {
-      decode.input(REGFILE_WRITE_VALID) := False
-    }
-
     def trackHazardWithStage(stage : Stage,bypassable : Boolean, runtimeBypassable : Stageable[Bool]): Unit ={
       val runtimeBypassableValue = if(runtimeBypassable != null) stage.input(runtimeBypassable) else True
       val addr0Match = stage.input(INSTRUCTION)(rdRange) === decode.input(INSTRUCTION)(rs1Range)

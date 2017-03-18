@@ -371,8 +371,8 @@ public:
 class Dhrystone : public Workspace{
 public:
 
-	Dhrystone() : Workspace("Dhrystone") {
-		loadHex("../../resources/hex/dhrystoneO3M.hex");
+	Dhrystone(string name) : Workspace(name) {
+		loadHex("../../resources/hex/" + name + ".hex");
 	}
 
 	virtual void checks(){
@@ -380,7 +380,7 @@ public:
 	}
 
 	virtual void pass(){
-		FILE *refFile = fopen("Dhrystone.logRef", "r");
+		FILE *refFile = fopen((name + ".logRef").c_str(), "r");
     	fseek(refFile, 0, SEEK_END);
     	uint32_t refSize = ftell(refFile);
     	fseek(refFile, 0, SEEK_SET);
@@ -389,7 +389,7 @@ public:
     	
 
     	logTraces.flush();
-		FILE *logFile = fopen("Dhrystone.logTrace", "r");
+		FILE *logFile = fopen((name + ".logTrace").c_str(), "r");
     	fseek(logFile, 0, SEEK_END);
     	uint32_t logSize = ftell(logFile);
     	fseek(logFile, 0, SEEK_SET);
@@ -500,7 +500,8 @@ int main(int argc, char **argv, char **env) {
 			RiscvTest(name).run();
 		}
 		#endif
-		Dhrystone().run(0.8e6);
+		Dhrystone("dhrystoneO3").run(1e6);
+		Dhrystone("dhrystoneO3M").run(0.8e6);
 	}
 
 	uint64_t duration = timer_end(startedAt);

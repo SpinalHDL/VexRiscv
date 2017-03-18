@@ -1,6 +1,6 @@
 package SpinalRiscv.Plugin
 
-import SpinalRiscv.{DecoderService, Riscv, VexRiscv}
+import SpinalRiscv.{Stageable, DecoderService, Riscv, VexRiscv}
 import spinal.core._
 import spinal.lib._
 
@@ -30,6 +30,11 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]
     decode plug new Area{
       import decode._
 
+      //Disable rd0 write in decoding stage
+      when(decode.input(INSTRUCTION)(rdRange) === 0) {
+        decode.input(REGFILE_WRITE_VALID) := False
+      }
+
       val rs1 = input(INSTRUCTION)(Riscv.rs1Range).asUInt
       val rs2 = input(INSTRUCTION)(Riscv.rs2Range).asUInt
 
@@ -47,8 +52,8 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]
         case `SYNC` =>  (global.regFile.readSync(regFileReadAddress1),global.regFile.readSync(regFileReadAddress2))
       }
 
-      insert(REG1) := Mux(rs1 =/= 0, rs1Data, B(0, 32 bit))
-      insert(REG2) := Mux(rs2 =/= 0, rs2Data, B(0, 32 bit))
+      insert(REG1) := rs1Data
+      insert(REG2) := rs2Data
     }
 
     writeBack plug new Area {
@@ -58,6 +63,11 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]
       regFileWrite.valid := input(REGFILE_WRITE_VALID) && arbitration.isFiring
       regFileWrite.address := input(INSTRUCTION)(rdRange).asUInt
       regFileWrite.data := input(REGFILE_WRITE_DATA)
+
+      //CPU will write constant register zero in the first cycle
+      regFileWrite.valid setWhen(RegNext(False) init(True))
+      inputInit[Bits](REGFILE_WRITE_DATA, 0)
+      inputInit[Bits](INSTRUCTION, 0)
     }
   }
 }

@@ -61,6 +61,9 @@ class Stage() extends Area{
 
   val inputsDefault   = mutable.HashMap[Stageable[Data],Data]()
   val outputsDefault  = mutable.HashMap[Stageable[Data],Data]()
+
+  def inputInit[T <: BaseType](stageable : Stageable[T],initValue : T) =
+    Component.current.addPrePopTask(() => inputsDefault(stageable.asInstanceOf[Stageable[Data]]).asInstanceOf[T].getDrivingReg.init(initValue))
 }
 
 
