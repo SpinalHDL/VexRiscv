@@ -92,7 +92,7 @@ trait Pipeline {
             inputDefault := stage.inserts(key)
           } else {
             val stageBefore = stages(stageIndex - 1)
-            inputDefault := RegNextWhen(stageBefore.output(key), !stage.arbitration.isStuck) //!stage.input.valid || stage.input.ready
+            inputDefault := RegNextWhen(stageBefore.output(key), !stage.arbitration.isStuck || stage.arbitration.removeIt)
           }
         }
       }
@@ -100,7 +100,7 @@ trait Pipeline {
 
     //Arbitration
     for(stageIndex <- 0 until stages.length; stage = stages(stageIndex)){
-      stage.arbitration.isStuckByOthers := stages.takeRight(stages.length - stageIndex - 1).map(_.arbitration.haltIt).foldLeft(False)(_ || _)
+      stage.arbitration.isStuckByOthers := stages.takeRight(stages.length - stageIndex - 1).map(s => s.arbitration.haltIt && !s.arbitration.removeIt).foldLeft(False)(_ || _)
       stage.arbitration.isStuck := stage.arbitration.haltIt || stage.arbitration.isStuckByOthers
       stage.arbitration.isFiring := stage.arbitration.isValid && !stage.arbitration.isStuck && !stage.arbitration.removeIt
     }

@@ -1,0 +1,62 @@
+[*]
+[*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
+[*] Sat Mar 18 09:49:22 2017
+[*]
+[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/DhrystoneWrong.vcd"
+[dumpfile_mtime] "Sat Mar 18 08:08:53 2017"
+[dumpfile_size] 1450277049
+[savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/wrongDiff.gtkw"
+[timestart] 37402
+[size] 1774 476
+[pos] -1 475
+*-2.000000 37407 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.VexRiscv.
+[sst_width] 201
+[signals_width] 583
+[sst_expanded] 1
+[sst_vpaned_height] 112
+@28
+TOP.VexRiscv.fetch_arbitration_isStuck
+TOP.VexRiscv.decode_arbitration_isStuck
+TOP.VexRiscv.execute_arbitration_isStuck
+TOP.VexRiscv.memory_arbitration_isStuck
+TOP.VexRiscv.writeBack_arbitration_isStuck
+TOP.VexRiscv.prefetch_arbitration_isValid
+TOP.VexRiscv.fetch_arbitration_isValid
+@29
+TOP.VexRiscv.decode_arbitration_isValid
+@28
+TOP.VexRiscv.execute_arbitration_isValid
+TOP.VexRiscv.memory_arbitration_isValid
+TOP.VexRiscv.writeBack_arbitration_isValid
+@22
+TOP.VexRiscv.writeBack_input_PC[31:0]
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_payload_address[4:0]
+@24
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_payload_data[31:0]
+@28
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_valid
+TOP.VexRiscv.writeBack_arbitration_isValid
+TOP.VexRiscv.clk
+TOP.dCmd_valid
+TOP.dCmd_ready
+TOP.dCmd_payload_wr
+TOP.dCmd_payload_size[1:0]
+@22
+TOP.dCmd_payload_address[31:0]
+TOP.dCmd_payload_data[31:0]
+@24
+TOP.dRsp_data[31:0]
+@22
+TOP.VexRiscv.execute_input_PC[31:0]
+TOP.VexRiscv.execute_input_INSTRUCTION[31:0]
+@28
+TOP.VexRiscv.fetch_arbitration_removeIt
+TOP.VexRiscv.decode_arbitration_removeIt
+TOP.VexRiscv.execute_arbitration_removeIt
+TOP.VexRiscv.memory_arbitration_removeIt
+TOP.VexRiscv.writeBack_arbitration_removeIt
+TOP.VexRiscv.execute_arbitration_isValid
+[pattern_trace] 1
+[pattern_trace] 0

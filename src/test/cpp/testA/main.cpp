@@ -212,7 +212,11 @@ public:
 
 					uint32_t addr = top->dCmd_payload_address;
 					if(top->dCmd_payload_wr){
-						memTraces << currentTime << " : WRITE mem" << (1 << top->dCmd_payload_size) << "[" << addr << "] = " << top->dCmd_payload_data << endl;
+						memTraces << (currentTime
+						#ifdef REF
+						-2
+						 #endif
+						 ) << " : WRITE mem" << (1 << top->dCmd_payload_size) << "[" << addr << "] = " << top->dCmd_payload_data << endl;
 						for(uint32_t b = 0;b < (1 << top->dCmd_payload_size);b++){
 							uint32_t offset = (addr+b)&0x3;
 							*mem.get(addr + b) = top->dCmd_payload_data >> (offset*8);
@@ -234,7 +238,11 @@ public:
 							dRsp_inst_next = i/2;
 							break;
 						}
-						memTraces << currentTime << " : READ  mem" << (1 << top->dCmd_payload_size) << "[" << addr << "] = " << dRsp_inst_next << endl;
+						memTraces << (currentTime
+						#ifdef REF
+						-2
+						#endif
+						) << " : READ  mem" << (1 << top->dCmd_payload_size) << "[" << addr << "] = " << dRsp_inst_next << endl;
 
 					}
 				}
