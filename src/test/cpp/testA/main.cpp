@@ -165,15 +165,21 @@ public:
 	virtual void checks(){}
 	virtual void pass(){ throw success();}
 	virtual void fail(){ throw std::exception();}
-
+	void dump(long i){
+		#ifdef TRACE
+		tfp->dump(i);
+		#endif
+	}
 	Workspace* run(uint32_t timeout = 5000){
 //		cout << "Start " << name << endl;
 		currentTime = 4;
 		// init trace dump
 		Verilated::traceEverOn(true);
+		#ifdef TRACE
 		VerilatedVcdC* tfp = new VerilatedVcdC;
 		top->trace(tfp, 99);
 		tfp->open((string(name)+ ".vcd").c_str());
+		#endif
 
 		// Reset
 		top->clk = 0;
@@ -183,7 +189,7 @@ public:
 		top->eval(); currentTime = 3;
 		top->reset = 1;
 		top->eval();
-		tfp->dump(0);
+		dump(0);
 		top->reset = 0;
 		top->eval(); currentTime = 2;
 		top->clk = 1;
@@ -258,7 +264,7 @@ public:
 
 				// dump variables into VCD file and toggle clock
 				for (uint32_t clk = 0; clk < 2; clk++) {
-					tfp->dump(i+ clk);
+					dump(i+ clk);
 					top->clk = !top->clk;
 
 					top->eval();
@@ -291,9 +297,11 @@ public:
 
 
 
-		tfp->dump(i);
-		tfp->dump(i+1);
+		dump(i);
+		dump(i+1);
+		#ifdef TRACE
 		tfp->close();
+		#endif
 		return this;
 	}
 };
