@@ -108,7 +108,7 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
     offset = 0
     stageables.foreach(e => {
       insert(e).assignFromBits(decodedBits(offset, e.dataType.getBitsWidth bits))
-      //      insert(e).assignFromBits(RegNext(decodedBits(offset, e.dataType.getBitsWidth bits)))
+//            insert(e).assignFromBits(RegNext(decodedBits(offset, e.dataType.getBitsWidth bits)))
       offset += e.dataType.getBitsWidth
     })
   }

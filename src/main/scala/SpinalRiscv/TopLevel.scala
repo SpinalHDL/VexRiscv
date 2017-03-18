@@ -40,8 +40,9 @@ object TopLevel {
         new FullBarrielShifterPlugin,
 //        new LightShifterPlugin,
         new DBusSimplePlugin,
-//        new HazardSimplePlugin(false, true, false, true),
-        new HazardSimplePlugin(true, true, true, true),
+        new HazardSimplePlugin(false, true, false, true),
+//        new HazardSimplePlugin(true, true, true, true),
+//        new HazardSimplePlugin(false, false, false, false),
         new MulPlugin,
         new DivPlugin,
         new NoPredictionBranchPlugin(false)

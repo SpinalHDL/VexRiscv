@@ -35,4 +35,7 @@ bin/
 *.vcd
 !tester/src/test/resources/*.vhd
 obj_dir
+*.logTrace
+*.memTrace
+*.regTrace
 

@@ -140,6 +140,7 @@ public:
 
 	ofstream regTraces;
 	ofstream memTraces;
+	ofstream logTraces;
 
 
 	Workspace(string name){
@@ -148,6 +149,7 @@ public:
 		top = new VVexRiscv;
 		regTraces.open (name + ".regTrace");
 		memTraces.open (name + ".memTrace");
+		logTraces.open (name + ".logTrace");
 	}
 
 	virtual ~Workspace(){
@@ -161,8 +163,8 @@ public:
 
 	virtual void postReset() {}
 	virtual void checks(){}
-	void pass(){ throw success();}
-	void fail(){ throw std::exception();}
+	virtual void pass(){ throw success();}
+	virtual void fail(){ throw std::exception();}
 
 	Workspace* run(uint32_t timeout = 5000){
 //		cout << "Start " << name << endl;
@@ -223,9 +225,12 @@ public:
 						}
 
 						switch(addr){
-						case 0xF00FFF00u:
+						case 0xF00FFF00u: {
 							cout << mem[0xF00FFF00u];
+							logTraces << (char)mem[0xF00FFF00u];
 							break;
+						}
+						case 0xF00FFF20u: pass(); break;
 						}
 					}else{
 						for(uint32_t b = 0;b < (1 << top->dCmd_payload_size);b++){
@@ -258,8 +263,8 @@ public:
 
 					top->eval();
 					if(top->clk == 0){
-						top->iCmd_ready = VL_RANDOM_I(1) | 1;
-						top->dCmd_ready = VL_RANDOM_I(1) | 1;
+						top->iCmd_ready = VL_RANDOM_I(1) | 0;
+						top->dCmd_ready = VL_RANDOM_I(1) | 0;
 						if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
 							regTraces << currentTime << " : reg[" << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
 						}
@@ -365,6 +370,29 @@ public:
 	virtual void checks(){
 
 	}
+
+	virtual void pass(){
+		FILE *refFile = fopen("Dhrystone.logRef", "r");
+    	fseek(refFile, 0, SEEK_END);
+    	uint32_t refSize = ftell(refFile);
+    	fseek(refFile, 0, SEEK_SET);
+    	char* ref = new char[refSize];
+    	fread(ref, 1, refSize, refFile);
+    	
+
+    	logTraces.flush();
+		FILE *logFile = fopen("Dhrystone.logTrace", "r");
+    	fseek(logFile, 0, SEEK_END);
+    	uint32_t logSize = ftell(logFile);
+    	fseek(logFile, 0, SEEK_SET);
+    	char* log = new char[logSize];
+    	fread(log, 1, logSize, logFile);
+    	
+    	if(refSize > logSize || memcmp(log,ref,refSize))
+    		fail();
+		else
+			Workspace::pass();
+	}
 };
 
 
@@ -464,7 +492,7 @@ int main(int argc, char **argv, char **env) {
 			RiscvTest(name).run();
 		}
 		#endif
-		Dhrystone().run(0.3e6);
+		Dhrystone().run(0.8e6);
 	}
 
 	uint64_t duration = timer_end(startedAt);
