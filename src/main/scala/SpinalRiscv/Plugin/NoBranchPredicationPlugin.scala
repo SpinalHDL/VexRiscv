@@ -16,10 +16,11 @@ class NoPredictionBranchPlugin(earlyBranch : Boolean,prediction : BranchPredicti
   }
 
   object BRANCH_CTRL extends Stageable(BranchCtrlEnum())
-  object BRANCH_SOLVED extends Stageable(BranchCtrlEnum())
   object BRANCH_CALC extends Stageable(UInt(32 bits))
+  object BRANCH_DO extends Stageable(Bool)
 
   var jumpInterface : Flow[UInt] = null
+  var predictionJumpInterface : Flow[UInt] = null
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -56,11 +57,17 @@ class NoPredictionBranchPlugin(earlyBranch : Boolean,prediction : BranchPredicti
       BGEU -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> True))
     ))
 
-    jumpInterface = pipeline.service(classOf[PcManagerService]).createJumpInterface(pipeline.execute)
+    val  pcManagerService = pipeline.service(classOf[PcManagerService])
+    jumpInterface = pcManagerService.createJumpInterface(pipeline.execute)
+    if(prediction != DISABLE) predictionJumpInterface = pcManagerService.createJumpInterface(pipeline.decode)
+  }
+  override def build(pipeline: VexRiscv): Unit = prediction match {
+    case `DISABLE` => buildWithoutPrediction(pipeline)
+    case `STATIC` => buildWithPrediction(pipeline)
+    case `DYNAMIC` => buildWithPrediction(pipeline)
   }
 
-
-  override def build(pipeline: VexRiscv): Unit = {
+  def buildWithoutPrediction(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
 
@@ -70,15 +77,15 @@ class NoPredictionBranchPlugin(earlyBranch : Boolean,prediction : BranchPredicti
       val less = input(SRC_LESS)
       val eq = input(SRC1) === input(SRC2)
 
-      insert(BRANCH_SOLVED) := input(BRANCH_CTRL).mux[BranchCtrlEnum.C](
-        BranchCtrlEnum.INC  -> BranchCtrlEnum.INC,
-        BranchCtrlEnum.JAL  -> BranchCtrlEnum.JAL,
-        BranchCtrlEnum.JALR -> BranchCtrlEnum.JALR,
+      insert(BRANCH_DO) := input(BRANCH_CTRL).mux(
+        BranchCtrlEnum.INC  -> False,
+        BranchCtrlEnum.JAL  -> True,
+        BranchCtrlEnum.JALR -> True,
         BranchCtrlEnum.B    -> input(INSTRUCTION)(14 downto 12).mux(
-          B"000"  -> Mux( eq  , BranchCtrlEnum.B, BranchCtrlEnum.INC),
-          B"001"  -> Mux(!eq  , BranchCtrlEnum.B, BranchCtrlEnum.INC),
-          M"1-1"  -> Mux(!less, BranchCtrlEnum.B, BranchCtrlEnum.INC),
-          default -> Mux( less, BranchCtrlEnum.B, BranchCtrlEnum.INC)
+          B"000"  -> eq  ,
+          B"001"  -> !eq  ,
+          M"1-1"  -> !less,
+          default -> less
         )
       )
 
@@ -87,7 +94,7 @@ class NoPredictionBranchPlugin(earlyBranch : Boolean,prediction : BranchPredicti
       val branch_src2 = input(BRANCH_CTRL).mux(
         BranchCtrlEnum.JAL  -> imm.j_sext,
         BranchCtrlEnum.JALR -> imm.i_sext,
-        default             -> imm.b_sext    //B
+        default             -> imm.b_sext
       ).asUInt
       insert(BRANCH_CALC) := branch_src1 + branch_src2
     }
@@ -95,11 +102,83 @@ class NoPredictionBranchPlugin(earlyBranch : Boolean,prediction : BranchPredicti
     val branchStage = if(earlyBranch) execute else memory
     branchStage plug new Area {
       import branchStage._
-      jumpInterface.valid := arbitration.isFiring && input(BRANCH_SOLVED) =/= BranchCtrlEnum.INC
+      jumpInterface.valid := arbitration.isFiring && input(BRANCH_DO)
       jumpInterface.payload := input(BRANCH_CALC)
 
       when(jumpInterface.valid) {
         //prefetch.arbitration.removeIt := True
+        fetch.arbitration.removeIt := True
+        decode.arbitration.removeIt := True
+        if(!earlyBranch) execute.arbitration.removeIt := True
+      }
+    }
+  }
+
+  object PREDICTION_HAD_BRANCHED extends Stageable(Bool)
+
+  def buildWithPrediction(pipeline: VexRiscv): Unit = {
+    import pipeline._
+    import pipeline.config._
+
+    decode plug new Area{
+      import decode._
+      val imm = IMM(input(INSTRUCTION))
+
+      // branch prediction
+      val staticBranchPrediction = (imm.b_sext.msb && input(BRANCH_CTRL) === BranchCtrlEnum.B) || input(BRANCH_CTRL) === BranchCtrlEnum.JAL
+      insert(PREDICTION_HAD_BRANCHED) := (prediction match {
+        case `STATIC` =>
+          staticBranchPrediction
+      })
+
+
+      predictionJumpInterface.valid := input(PREDICTION_HAD_BRANCHED) && arbitration.isFiring //TODO OH Doublon de priorité
+      predictionJumpInterface.payload := input(PC) + ((input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
+      when(predictionJumpInterface.valid) {
+        fetch.arbitration.removeIt := True
+      }
+    }
+
+    execute plug new Area {
+      import execute._
+
+      val less = input(SRC_LESS)
+      val eq = input(SRC1) === input(SRC2)
+
+      insert(BRANCH_DO) := input(PREDICTION_HAD_BRANCHED) =/= input(BRANCH_CTRL).mux(
+        BranchCtrlEnum.INC  -> False,
+        BranchCtrlEnum.JAL  -> True,
+        BranchCtrlEnum.JALR -> True,
+        BranchCtrlEnum.B    -> input(INSTRUCTION)(14 downto 12).mux(
+          B"000"  -> eq  ,
+          B"001"  -> !eq  ,
+          M"1-1"  -> !less,
+          default -> less
+        )
+      )
+
+      val imm = IMM(input(INSTRUCTION))
+      val branch_src1,branch_src2 = UInt(32 bits)
+      switch(input(BRANCH_CTRL)){
+        is(BranchCtrlEnum.JALR){
+          branch_src1 := input(REG1).asUInt
+          branch_src2 := imm.i_sext.asUInt
+        }
+        default{
+          branch_src1 := input(PC)
+          branch_src2 := (input(PREDICTION_HAD_BRANCHED) ? B(4) | imm.b_sext).asUInt
+        }
+      }
+      insert(BRANCH_CALC) := branch_src1 + branch_src2
+    }
+
+    val branchStage = if(earlyBranch) execute else memory
+    branchStage plug new Area {
+      import branchStage._
+      jumpInterface.valid := input(BRANCH_DO) && arbitration.isFiring
+      jumpInterface.payload := input(BRANCH_CALC)
+
+      when(jumpInterface.valid) {
         fetch.arbitration.removeIt := True
         decode.arbitration.removeIt := True
         if(!earlyBranch) execute.arbitration.removeIt := True

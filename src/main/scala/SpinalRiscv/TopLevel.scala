@@ -37,15 +37,15 @@ object TopLevel {
         new RegFilePlugin(Plugin.SYNC),
         new IntAluPlugin,
         new SrcPlugin,
-//        new FullBarrielShifterPlugin,
-        new LightShifterPlugin,
+        new FullBarrielShifterPlugin,
+//        new LightShifterPlugin,
         new DBusSimplePlugin,
 //        new HazardSimplePlugin(false, true, false, true),
-//        new HazardSimplePlugin(true, true, true, true),
-        new HazardSimplePlugin(false, false, false, false),
+        new HazardSimplePlugin(true, true, true, true),
+//        new HazardSimplePlugin(false, false, false, false),
         new MulPlugin,
         new DivPlugin,
-        new NoPredictionBranchPlugin(false, DISABLE)
+        new NoPredictionBranchPlugin(true, STATIC)
       )
 
       val toplevel = new VexRiscv(config)

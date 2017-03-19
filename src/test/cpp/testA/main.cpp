@@ -136,7 +136,10 @@ public:
 	string name;
 	VVexRiscv* top;
 	int i;
+	uint32_t iStall = 1,dStall = 1;
 
+	void setIStall(bool enable) { iStall = enable; }
+	void setDStall(bool enable) { dStall = enable; }
 
 	ofstream regTraces;
 	ofstream memTraces;
@@ -269,8 +272,8 @@ public:
 
 					top->eval();
 					if(top->clk == 0){
-						top->iCmd_ready = VL_RANDOM_I(1) | 0;
-						top->dCmd_ready = VL_RANDOM_I(1) | 0;
+						if(iStall) top->iCmd_ready = VL_RANDOM_I(1);
+						if(dStall) top->dCmd_ready = VL_RANDOM_I(1);
 						if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
 							regTraces << currentTime << " : reg[" << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
 						}
@@ -371,7 +374,9 @@ public:
 class Dhrystone : public Workspace{
 public:
 
-	Dhrystone(string name) : Workspace(name) {
+	Dhrystone(string name,bool iStall, bool dStall) : Workspace(name) {
+		setIStall(iStall);
+		setDStall(dStall);
 		loadHex("../../resources/hex/" + name + ".hex");
 	}
 
@@ -500,8 +505,9 @@ int main(int argc, char **argv, char **env) {
 			RiscvTest(name).run();
 		}
 		#endif
-		Dhrystone("dhrystoneO3").run(1e6);
-		Dhrystone("dhrystoneO3M").run(0.8e6);
+		Dhrystone("dhrystoneO3",true,true).run(1e6);
+		Dhrystone("dhrystoneO3M",true,true).run(0.8e6);
+		Dhrystone("dhrystoneO3M",false,false).run(0.8e6);
 	}
 
 	uint64_t duration = timer_end(startedAt);
