@@ -12,6 +12,7 @@
 #include <fstream>
 
 //#define REF
+//#define TRACE
 
 class Memory{
 public:
@@ -137,6 +138,9 @@ public:
 	VVexRiscv* top;
 	int i;
 	uint32_t iStall = 1,dStall = 1;
+	#ifdef TRACE
+	VerilatedVcdC* tfp;
+	#endif
 
 	void setIStall(bool enable) { iStall = enable; }
 	void setDStall(bool enable) { dStall = enable; }
@@ -157,6 +161,9 @@ public:
 
 	virtual ~Workspace(){
 		delete top;
+		#ifdef TRACE
+		delete tfp;
+		#endif
 	}
 
 	Workspace* loadHex(string path){
@@ -168,7 +175,7 @@ public:
 	virtual void checks(){}
 	virtual void pass(){ throw success();}
 	virtual void fail(){ throw std::exception();}
-	void dump(long i){
+	void dump(int i){
 		#ifdef TRACE
 		tfp->dump(i);
 		#endif
@@ -179,7 +186,7 @@ public:
 		// init trace dump
 		Verilated::traceEverOn(true);
 		#ifdef TRACE
-		VerilatedVcdC* tfp = new VerilatedVcdC;
+		tfp = new VerilatedVcdC;
 		top->trace(tfp, 99);
 		tfp->open((string(name)+ ".vcd").c_str());
 		#endif
@@ -508,6 +515,8 @@ int main(int argc, char **argv, char **env) {
 		Dhrystone("dhrystoneO3",true,true).run(1e6);
 		Dhrystone("dhrystoneO3M",true,true).run(0.8e6);
 		Dhrystone("dhrystoneO3M",false,false).run(0.8e6);
+//		Dhrystone("dhrystoneO3ML",false,false).run(8e6);
+//		Dhrystone("dhrystoneO3MLL",false,false).run(80e6);
 	}
 
 	uint64_t duration = timer_end(startedAt);

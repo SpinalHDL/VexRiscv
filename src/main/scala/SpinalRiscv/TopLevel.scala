@@ -45,7 +45,7 @@ object TopLevel {
 //        new HazardSimplePlugin(false, false, false, false),
         new MulPlugin,
         new DivPlugin,
-        new NoPredictionBranchPlugin(true, STATIC)
+        new BranchPlugin(false, DYNAMIC)
       )
 
       val toplevel = new VexRiscv(config)

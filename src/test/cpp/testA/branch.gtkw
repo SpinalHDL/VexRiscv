@@ -1,0 +1,31 @@
+[*]
+[*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
+[*] Mon Mar 20 10:40:36 2017
+[*]
+[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/dhrystoneO3M.vcd"
+[dumpfile_mtime] "Mon Mar 20 10:40:36 2017"
+[dumpfile_size] 1149914709
+[savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/branch.gtkw"
+[timestart] 68
+[size] 1776 953
+[pos] -775 -1
+*-4.000000 87 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[sst_width] 432
+[signals_width] 520
+[sst_expanded] 1
+[sst_vpaned_height] 279
+@28
+TOP.VexRiscv.execute_input_HISTORY_LINE_history[1:0]
+TOP.VexRiscv.fetch_HISTORY_LINE_history[1:0]
+TOP.VexRiscv.memory_input_HISTORY_LINE_history[1:0]
+TOP.VexRiscv.decode_arbitration_isValid
+TOP.VexRiscv.decode_arbitration_isFiring
+@22
+TOP.VexRiscv.decode_input_PC[31:0]
+@28
+TOP.VexRiscv.decode_input_HISTORY_LINE_history[1:0]
+@29
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_jump_pcLoad_valid
+[pattern_trace] 1
+[pattern_trace] 0
