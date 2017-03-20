@@ -21,12 +21,14 @@ class IBusSimplePlugin(interfaceKeepData : Boolean) extends Plugin[VexRiscv]{
     import pipeline._
     import pipeline.config._
 
+    //Emit iCmd request
     require(interfaceKeepData)
     iCmd = master(Stream(IBusSimpleCmd())).setName("iCmd")
     iCmd.valid := prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
     iCmd.pc := prefetch.output(PC)
     prefetch.arbitration.haltIt setWhen(!iCmd.ready)
 
+    //Insert iRsp into INSTRUCTION
     iRsp = in(IBusSimpleRsp()).setName("iRsp")
     fetch.insert(INSTRUCTION) := iRsp.inst
   }

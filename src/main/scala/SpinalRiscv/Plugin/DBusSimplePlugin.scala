@@ -75,6 +75,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
     import pipeline._
     import pipeline.config._
 
+    //Emit dCmd request
     execute plug new Area{
       import execute._
 
@@ -95,6 +96,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
       insert(MEMORY_ADDRESS_LOW) := dCmd.address(1 downto 0)
     }
 
+    //Collect dRsp read responses
     memory plug new Area {
       import memory._
 
@@ -103,6 +105,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
       assert(!(input(MEMORY_ENABLE) && (!input(INSTRUCTION)(5)) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
     }
 
+    //Reformat read responses, REGFILE_WRITE_DATA overriding
     writeBack plug new Area {
       import writeBack._
 

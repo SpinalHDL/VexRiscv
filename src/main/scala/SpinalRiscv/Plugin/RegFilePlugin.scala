@@ -27,6 +27,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]
       val regFile = Mem(Bits(32 bits),32) addAttribute("verilator public")
     }
 
+    //Read register file
     decode plug new Area{
       import decode._
 
@@ -34,9 +35,6 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]
       when(decode.input(INSTRUCTION)(rdRange) === 0) {
         decode.input(REGFILE_WRITE_VALID) := False
       }
-
-      val rs1 = input(INSTRUCTION)(Riscv.rs1Range).asUInt
-      val rs2 = input(INSTRUCTION)(Riscv.rs2Range).asUInt
 
       //read register file
       val srcInstruction = regFileReadyKind match{
@@ -56,6 +54,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]
       insert(REG2) := rs2Data
     }
 
+    //Write register file
     writeBack plug new Area {
       import writeBack._
 
@@ -64,7 +63,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]
       regFileWrite.address := input(INSTRUCTION)(rdRange).asUInt
       regFileWrite.data := input(REGFILE_WRITE_DATA)
 
-      //CPU will write constant register zero in the first cycle
+      //CPU will initialise constant register zero in the first cycle
       regFileWrite.valid setWhen(RegNext(False) init(True))
       inputInit[Bits](REGFILE_WRITE_DATA, 0)
       inputInit[Bits](INSTRUCTION, 0)

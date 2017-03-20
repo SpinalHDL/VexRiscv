@@ -43,7 +43,7 @@ class MulPlugin extends Plugin[VexRiscv]{
     import pipeline.config._
 
 
-
+    //Do partial multiplication, four times 16 bits * 16 bits
     execute plug new Area {
       import execute._
       val aSigned,bSigned = Bool
@@ -78,12 +78,13 @@ class MulPlugin extends Plugin[VexRiscv]{
       insert(MUL_HH) := aHigh * bHigh
     }
 
-
+    //First aggregation of partial multiplication
     memory plug new Area {
       import memory._
       insert(MUL_LOW) := S(0, MUL_HL.dataType.getWidth + 16 + 2 bit) + (False ## input(MUL_LL)).asSInt + (input(MUL_LH) << 16) + (input(MUL_HL) << 16)
     }
 
+    //Final aggregation of partial multiplications, REGFILE_WRITE_DATA overriding
     writeBack plug new Area {
       import writeBack._
       val result = input(MUL_LOW) + (input(MUL_HH) << 32)

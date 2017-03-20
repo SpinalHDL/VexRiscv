@@ -6,7 +6,7 @@ import spinal.core._
 import spinal.lib._
 
 trait BranchPrediction
-object DISABLE extends BranchPrediction
+object NONE extends BranchPrediction
 object STATIC  extends BranchPrediction
 object DYNAMIC extends BranchPrediction
 
@@ -58,13 +58,13 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
       BGEU -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> True))
     ))
 
-    val  pcManagerService = pipeline.service(classOf[PcManagerService])
+    val  pcManagerService = pipeline.service(classOf[JumpService])
     jumpInterface = pcManagerService.createJumpInterface(pipeline.execute)
-    if(prediction != DISABLE) predictionJumpInterface = pcManagerService.createJumpInterface(pipeline.decode)
+    if(prediction != NONE) predictionJumpInterface = pcManagerService.createJumpInterface(pipeline.decode)
   }
 
   override def build(pipeline: VexRiscv): Unit = prediction match {
-    case `DISABLE` => buildWithoutPrediction(pipeline)
+    case NONE => buildWithoutPrediction(pipeline)
     case `STATIC` => buildWithPrediction(pipeline)
     case `DYNAMIC` => buildWithPrediction(pipeline)
   }
@@ -73,6 +73,7 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
     import pipeline._
     import pipeline.config._
 
+    //Do branch calculations (conditions + target PC)
     execute plug new Area {
       import execute._
 
@@ -101,6 +102,7 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
       insert(BRANCH_CALC) := branch_src1 + branch_src2
     }
 
+    //Apply branchs (JAL,JALR, Bxx)
     val branchStage = if(earlyBranch) execute else memory
     branchStage plug new Area {
       import branchStage._
@@ -140,7 +142,8 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
         fetch.insert(HISTORY_LINE) := writePortReg.data
       }
     }
-    
+
+    //Branch JAL, predict Bxx and branch it
     decode plug new Area{
       import decode._
       val imm = IMM(input(INSTRUCTION))
@@ -158,6 +161,7 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
       }
     }
 
+    //Do real branch calculation
     execute plug new Area {
       import execute._
 
@@ -194,9 +198,9 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
       insert(BRANCH_CALC) := branch_src1 + branch_src2
     }
 
-    val branchStage = if(earlyBranch) execute else memory
 
-    // Apply branch corrections
+    // branch JALR or JAL/Bxx prediction miss corrections
+    val branchStage = if(earlyBranch) execute else memory
     branchStage plug new Area {
       import branchStage._
       jumpInterface.valid := input(BRANCH_DO) && arbitration.isFiring

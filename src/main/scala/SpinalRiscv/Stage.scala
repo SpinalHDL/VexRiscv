@@ -65,24 +65,3 @@ class Stage() extends Area{
   def inputInit[T <: BaseType](stageable : Stageable[T],initValue : T) =
     Component.current.addPrePopTask(() => inputsDefault(stageable.asInstanceOf[Stageable[Data]]).asInstanceOf[T].getDrivingReg.init(initValue))
 }
-
-
-//object StageMain{
-//
-//  object OpEnum extends SpinalEnum{
-//    val AND,OR = newElement()
-//  }
-//  object OP  extends Stageable(OpEnum())
-//  object SRC1  extends Stageable(Bits(32 bits))
-//  object SRC2  extends Stageable(Bits(32 bits))
-//  object RESULT extends Stageable(Bits(32 bits))
-//  def main(args: Array[String]) {
-//    val E = List.fill(2)(new Stage(9))
-//    val E0 = E(0)
-//    import E0._
-//    output(RESULT) := E(0).input(OP).mux(
-//      OpEnum.AND -> (E(0).input(SRC1) & E(0).input(SRC2)),
-//      OpEnum.OR  -> (E(0).input(SRC1) | E(0).input(SRC2))
-//    )
-//  }
-//}

@@ -358,7 +358,7 @@ public:
 	}
 
 	virtual void postReset() {
-		top->VexRiscv->prefetch_PcManagerSimplePlugin_pc = 0x800000bcu;
+		top->VexRiscv->prefetch_PcManagerSimplePlugin_pcReg = 0x800000bcu;
 	}
 
 	virtual void checks(){

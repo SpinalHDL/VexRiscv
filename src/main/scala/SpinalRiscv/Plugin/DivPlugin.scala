@@ -37,6 +37,7 @@ class DivPlugin extends Plugin[VexRiscv]{
 
      val divider = new MixedDivider(32, 32, true) //cmd >-> rsp
 
+     //Send request to the divider component
      execute plug new Area {
        import execute._
 
@@ -51,6 +52,7 @@ class DivPlugin extends Plugin[VexRiscv]{
        }
      }
 
+     //Collect response from the divider component, REGFILE_WRITE_DATA overriding
      memory plug new Area{
        import memory._
 

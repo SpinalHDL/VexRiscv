@@ -3,7 +3,7 @@ package SpinalRiscv
 import spinal.core._
 import spinal.lib._
 
-trait PcManagerService{
+trait JumpService{
   def createJumpInterface(stage : Stage) : Flow[UInt]
 }
 
