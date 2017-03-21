@@ -490,6 +490,8 @@ long timer_end(struct timespec start_time){
     return diffInNanos;
 }
 
+#define redo(count,that) for(uint32_t xxx = 0;xxx < count;xxx++) that
+
 int main(int argc, char **argv, char **env) {
 	Verilated::randReset(2);
 	Verilated::commandArgs(argc, argv);
@@ -500,16 +502,16 @@ int main(int argc, char **argv, char **env) {
 		#ifndef  REF
 		TestA().run();
 		for(const string &name : riscvTestMain){
-			RiscvTest(name).run();
+			redo(5,RiscvTest(name).run();)
 		}
 		for(const string &name : riscvTestMemory){
-			RiscvTest(name).run();
+			redo(5,RiscvTest(name).run();)
 		}
 		for(const string &name : riscvTestMul){
-			RiscvTest(name).run();
+			redo(5,RiscvTest(name).run();)
 		}
 		for(const string &name : riscvTestDiv){
-			RiscvTest(name).run();
+			redo(5,RiscvTest(name).run();)
 		}
 		#endif
 		Dhrystone("dhrystoneO3",true,true).run(1e6);

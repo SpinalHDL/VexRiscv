@@ -86,22 +86,23 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
     val decodedBits = Bits(stageables.foldLeft(0)(_ + _.dataType.getBitsWidth) bits)
     val defaultBits = cloneOf(decodedBits)
 
-    assert(defaultValue == 0)
-    defaultBits := defaultValue
+//    assert(defaultValue == 0)
+//    defaultBits := defaultValue
+//
+//    val logicOr = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
+//    decodedBits := logicOr.foldLeft(defaultBits)(_ | _)
+
+
+    for(i <- decodedBits.range)
+      if(defaultCare.testBit(i))
+        defaultBits(i) := Bool(defaultValue.testBit(i))
+      else
+        defaultBits(i).assignDontCare()
+
 
     val logicOr = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
-    decodedBits := logicOr.foldLeft(defaultBits)(_ | _)
-
-
-    //    for(i <- decodedBits.range)
-    //      if(defaultCare.testBit(i))
-    //        defaultBits(i) := Bool(defaultValue.testBit(i))
-    //      else
-    //        defaultBits(i).assignDontCare()
-
-    //    val logicOr = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
-    //    val logicAnd = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(~mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
-    //    decodedBits :=  (defaultBits | logicOr.foldLeft(B(0, decodedBits.getWidth bits))(_ | _)) & ~logicAnd.foldLeft(B(0, decodedBits.getWidth bits))(_ | _)
+    val logicAnd = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(~mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
+    decodedBits :=  (defaultBits | logicOr.foldLeft(B(0, decodedBits.getWidth bits))(_ | _)) & ~logicAnd.foldLeft(B(0, decodedBits.getWidth bits))(_ | _)
 
 
     //Unpack decodedBits and insert fields in the pipeline

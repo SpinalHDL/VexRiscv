@@ -46,10 +46,12 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
       REGFILE_WRITE_VALID -> True
     )
 
+    import IntAluPlugin._
+
     decoderService.addDefault(BRANCH_CTRL, BranchCtrlEnum.INC)
     decoderService.add(List(
-      JAL  -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JAL)),
-      JALR -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JALR, REG1_USE -> True)),
+      JAL  -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JAL , ALU_CTRL -> AluCtrlEnum.ADD_SUB)),
+      JALR -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JALR, ALU_CTRL -> AluCtrlEnum.ADD_SUB, REG1_USE -> True)),
       BEQ  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
       BNE  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
       BLT  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
