@@ -159,7 +159,7 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
       predictionJumpInterface.valid := input(PREDICTION_HAD_BRANCHED) && arbitration.isFiring //TODO OH Doublon de priorité
       predictionJumpInterface.payload := input(PC) + ((input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
       when(predictionJumpInterface.valid) {
-        fetch.arbitration.removeIt := True
+        fetch.arbitration.flushIt := True
       }
     }
 
@@ -209,9 +209,10 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
       jumpInterface.payload := input(BRANCH_CALC)
 
       when(jumpInterface.valid) {
-        fetch.arbitration.removeIt := True
-        decode.arbitration.removeIt := True
-        if(!earlyBranch) execute.arbitration.removeIt := True
+        stages(indexOf(branchStage) - 1).arbitration.flushIt := True
+//        fetch.arbitration.removeIt := True
+//        decode.arbitration.removeIt := True
+//        if(!earlyBranch) execute.arbitration.removeIt := True
       }
     }
 

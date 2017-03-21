@@ -522,11 +522,13 @@ int main(int argc, char **argv, char **env) {
 	}
 
 	uint64_t duration = timer_end(startedAt);
+	cout << endl << "****************************************************************" << endl;
 	cout << "Had simulate " << Workspace::cycles << " clock cycles in " << duration*1e-9 << " s (" << Workspace::cycles / (duration*1e-9) << " Khz)" << endl;
 	if(successCounter == testsCounter)
-		cout << "Success " << successCounter << "/" << testsCounter << endl;
+		cout << "SUCCESS " << successCounter << "/" << testsCounter << endl;
 	else
-		cout << "Failure " << testsCounter - successCounter << "/"  << testsCounter << endl;
+		cout<< "FAILURE " << testsCounter - successCounter << "/"  << testsCounter << endl;
+	cout << "****************************************************************" << endl << endl;
 
 
 	exit(0);

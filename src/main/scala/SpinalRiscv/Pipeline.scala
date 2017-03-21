@@ -1,7 +1,8 @@
 package SpinalRiscv
 
-import SpinalRiscv.Plugin.Plugin
+import SpinalRiscv.Plugin._
 import spinal.core._
+import spinal.lib._
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -11,6 +12,7 @@ trait Pipeline {
   type T <: Pipeline
   val plugins = ArrayBuffer[Plugin[T]]()
   var stages = ArrayBuffer[Stage]()
+  var unremovableStages = mutable.Set[Stage]()
 //  val services = ArrayBuffer[Any]()
 
   def indexOf(stage : Stage) = stages.indexOf(stage)
@@ -99,6 +101,14 @@ trait Pipeline {
     }
 
     //Arbitration
+    for(stageIndex <- 0 until stages.length; stage = stages(stageIndex)) {
+      if(!unremovableStages.contains(stage))
+        stage.arbitration.removeIt setWhen stages.drop(stageIndex).map(_.arbitration.flushIt).orR
+      else
+        assert(stage.arbitration.removeIt === False,"removeIt should never be asserted on this stage")
+
+    }
+
     for(stageIndex <- 0 until stages.length; stage = stages(stageIndex)){
       stage.arbitration.isStuckByOthers := stages.takeRight(stages.length - stageIndex - 1).map(s => s.arbitration.haltIt && !s.arbitration.removeIt).foldLeft(False)(_ || _)
       stage.arbitration.isStuck := stage.arbitration.haltIt || stage.arbitration.isStuckByOthers

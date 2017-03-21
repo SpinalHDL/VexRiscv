@@ -12,3 +12,7 @@ trait DecoderService{
   def add(encoding :Seq[(MaskedLiteral,Seq[(Stageable[_ <: BaseType],Any)])])
   def addDefault(key : Stageable[_ <: BaseType], value : Any)
 }
+
+trait ExceptionService{
+  def newExceptionPort(stage : Stage) : Flow[UInt]
+}

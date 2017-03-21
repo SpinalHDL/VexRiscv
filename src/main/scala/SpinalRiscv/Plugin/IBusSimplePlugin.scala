@@ -24,7 +24,7 @@ class IBusSimplePlugin(interfaceKeepData : Boolean) extends Plugin[VexRiscv]{
     //Emit iCmd request
     require(interfaceKeepData)
     iCmd = master(Stream(IBusSimpleCmd())).setName("iCmd")
-    iCmd.valid := prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
+    iCmd.valid := prefetch.arbitration.isFiring //prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
     iCmd.pc := prefetch.output(PC)
     prefetch.arbitration.haltIt setWhen(!iCmd.ready)
 

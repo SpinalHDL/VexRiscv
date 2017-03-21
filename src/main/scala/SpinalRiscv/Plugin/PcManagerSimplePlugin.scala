@@ -18,6 +18,10 @@ class PcManagerSimplePlugin(resetVector : BigInt,fastPcCalculation : Boolean) ex
     interface
   }
 
+  override def setup(pipeline: VexRiscv): Unit = {
+    pipeline.unremovableStages += pipeline.prefetch
+  }
+
 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -31,13 +35,17 @@ class PcManagerSimplePlugin(resetVector : BigInt,fastPcCalculation : Boolean) ex
       //PC calculation without Jump
       val pcReg = Reg(UInt(pcWidth bits)) init(resetVector) addAttribute("verilator public")
       val inc = RegInit(False)
-      val pc = if(fastPcCalculation){
+      val pcBeforeJumps = if(fastPcCalculation){
         val pcPlus4 = pcReg + U(4)
         pcPlus4.addAttribute("keep")
         Mux(inc,pcPlus4,pcReg)
       }else{
         pcReg + Mux[UInt](inc,4,0)
       }
+
+      insert(PC_CALC_WITHOUT_JUMP) := pcBeforeJumps
+      val pc = UInt(pcWidth bits)
+      pc := input(PC_CALC_WITHOUT_JUMP)
 
       val samplePcNext = False
 
@@ -48,8 +56,8 @@ class PcManagerSimplePlugin(resetVector : BigInt,fastPcCalculation : Boolean) ex
         val pcs = sortedByStage.map(_.interface.payload)
 
         val pcLoad = Flow(UInt(pcWidth bits))
-        pcLoad.valid := jumpInfos.foldLeft(False)(_ || _.interface.valid)
-        pcLoad.payload := MuxOH(valids, pcs)
+        pcLoad.valid := jumpInfos.map(_.interface.valid).orR
+        pcLoad.payload := MuxOH(OHMasking.first(valids.asBits), pcs)
 
         //application of the selected jump request
         when(pcLoad.valid) {
