@@ -502,23 +502,25 @@ int main(int argc, char **argv, char **env) {
 		#ifndef  REF
 		TestA().run();
 		for(const string &name : riscvTestMain){
-			redo(5,RiscvTest(name).run();)
+			redo(REDO,RiscvTest(name).run();)
 		}
 		for(const string &name : riscvTestMemory){
-			redo(5,RiscvTest(name).run();)
+			redo(REDO,RiscvTest(name).run();)
 		}
 		for(const string &name : riscvTestMul){
-			redo(5,RiscvTest(name).run();)
+			redo(REDO,RiscvTest(name).run();)
 		}
 		for(const string &name : riscvTestDiv){
-			redo(5,RiscvTest(name).run();)
+			redo(REDO,RiscvTest(name).run();)
 		}
 		#endif
+		#ifdef DHRYSTONE
 		Dhrystone("dhrystoneO3",true,true).run(1e6);
 		Dhrystone("dhrystoneO3M",true,true).run(0.8e6);
 		Dhrystone("dhrystoneO3M",false,false).run(0.8e6);
 //		Dhrystone("dhrystoneO3ML",false,false).run(8e6);
 //		Dhrystone("dhrystoneO3MLL",false,false).run(80e6);
+		#endif
 	}
 
 	uint64_t duration = timer_end(startedAt);

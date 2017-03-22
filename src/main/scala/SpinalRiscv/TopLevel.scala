@@ -30,8 +30,25 @@ object TopLevel {
         pcWidth = 32
       )
 
+
+      import CsrAccess._
+      val csrConfig = MachineCsrConfig(
+        mvendorid      = 11,
+        marchid        = 22,
+        mimpid         = 33,
+        mhartid        = 44,
+        misaExtensions = 66,
+        misaAccess     = READ_WRITE,
+        mtvecAccess    = READ_WRITE,
+        mtvecInit      = 0x80000004l,
+        mepcAccess     = READ_WRITE,
+        mscratchGen    = true,
+        mcauseAccess   = READ_WRITE,
+        mbadaddrAccess = READ_WRITE
+      )
+
       config.plugins ++= List(
-        new PcManagerSimplePlugin(0, false),
+        new PcManagerSimplePlugin(0x00000000l, false),
         new IBusSimplePlugin(true),
         new DecoderSimplePlugin,
         new RegFilePlugin(Plugin.SYNC),
@@ -45,6 +62,7 @@ object TopLevel {
 //        new HazardSimplePlugin(false, false, false, false),
         new MulPlugin,
         new DivPlugin,
+        new MachineCsr(csrConfig),
         new BranchPlugin(false, DYNAMIC)
       )
 

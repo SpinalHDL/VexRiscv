@@ -9,6 +9,7 @@ object Riscv{
   def funct3Range = 14 downto 12
   def rs1Range = 19 downto 15
   def rs2Range = 24 downto 20
+  def csrRange = 31 downto 20
 
   case class IMM(instruction  : Bits) extends Area{
     // immediates
@@ -82,4 +83,22 @@ object Riscv{
   def ECALL              = M"00000000000000000000000001110011"
   def EBREAK             = M"00000000000100000000000001110011"
   def MRET               = M"00110000001000000000000001110011"
+
+  object CSR{
+    def MVENDORID = 0xF11 // MRO Vendor ID.
+    def MARCHID   = 0xF12 // MRO Architecture ID.
+    def MIMPID    = 0xF13 // MRO Implementation ID.
+    def MHARTID   = 0xF14 // MRO Hardware thread ID.Machine Trap Setup
+    def MSTATUS   = 0x300 // MRW Machine status register.
+    def MISA      = 0x301 // MRW ISA and extensions
+    def MEDELEG   = 0x302 // MRW Machine exception delegation register.
+    def MIDELEG   = 0x303 // MRW Machine interrupt delegation register.
+    def MIE       = 0x304 // MRW Machine interrupt-enable register.
+    def MTVEC     = 0x305 // MRW Machine trap-handler base address. Machine Trap Handling
+    def MSCRATCH  = 0x340 // MRW Scratch register for machine trap handlers.
+    def MEPC      = 0x341 // MRW Machine exception program counter.
+    def MCAUSE    = 0x342 // MRW Machine trap cause.
+    def MBADADDR  = 0x343 // MRW Machine bad address.
+    def MIP       = 0x344 // MRW Machine interrupt pending.
+  }
 }

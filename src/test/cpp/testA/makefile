@@ -1,4 +1,11 @@
 TRACE=no
+DHRYSTONE=yes
+REDO=5
+
+ADDCFLAGS += -CFLAGS -DREDO=${REDO}
+ifeq ($(DHRYSTONE),yes)
+	ADDCFLAGS += -CFLAGS -DDHRYSTONE
+endif
 
 ifeq ($(TRACE),yes)
 	VERILATOR_ARGS += --trace

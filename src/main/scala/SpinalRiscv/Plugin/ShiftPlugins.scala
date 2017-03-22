@@ -151,7 +151,7 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
 
 
       when(arbitration.isValid && isShift && input(SRC2)(4 downto 0) =/= 0){
-        insert(REGFILE_WRITE_DATA) := input(SHIFT_CTRL).mux(
+        output(REGFILE_WRITE_DATA) := input(SHIFT_CTRL).mux(
           ShiftCtrlEnum.SLL -> (shiftInput |<<  1),
           default -> (((input(SHIFT_CTRL) === ShiftCtrlEnum.SRA && shiftInput.msb) ## shiftInput).asSInt >> 1).asBits  //ALU.SRL,ALU.SRA
         )
