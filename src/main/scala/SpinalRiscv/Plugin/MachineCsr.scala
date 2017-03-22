@@ -33,8 +33,9 @@ case class MachineCsrConfig(
   mepcAccess          : CsrAccess,
   mscratchGen         : Boolean,
   mcauseAccess        : CsrAccess,
-  mbadaddrAccess      : CsrAccess
-
+  mbadaddrAccess      : CsrAccess,
+  mcycleAccess           : CsrAccess,
+  minstretAccess         : CsrAccess
 )
 
 
@@ -54,11 +55,6 @@ case class CsrMapping(){
   def r [T <: Data](csrAddress : Int, thats : (Int, Data)*) : Unit = for(that <- thats) r(csrAddress,that._1, that._2)
   def rw[T <: Data](csrAddress : Int, that : T): Unit = rw(csrAddress,0,that)
   def r [T <: Data](csrAddress : Int, that : T): Unit = r(csrAddress,0,that)
-  def rx [T <: Data](csrAddress : Int, thats : (Int, Data)*)(writable : Boolean) : Unit =
-    if(writable)
-      for(that <- thats) rw(csrAddress,that._1, that._2)
-    else
-      for(that <- thats) r(csrAddress,that._1, that._2)
 }
 
 
@@ -135,6 +131,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
     pluginExceptionPort.valid := False
     pluginExceptionPort.payload.assignDontCare()
   }
+
   def xlen = 32
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
@@ -147,7 +144,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
     }
 
     pipeline plug new Area{
-      //Define CSR registers
+      //Define CSR mapping utilities
       val csrMapping = new CsrMapping()
       implicit class CsrAccessPimper(csrAccess : CsrAccess){
         def apply(csrAddress : Int, thats : (Int, Data)*) : Unit = csrAccess match{
@@ -159,6 +156,8 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
           case `READ_ONLY`  | `READ_WRITE` => csrMapping.r(csrAddress, 0, that)
         }
       }
+
+
 
       //Define CSR registers
       val mtvec = RegInit(U(mtvecInit,xlen bits))
@@ -178,6 +177,10 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         val exceptionCode = Reg(UInt(exceptionCodeWidth bits))
       }
       val mbadaddr = Reg(UInt(xlen bits))
+      val mcycle = Reg(UInt(64 bits)) randBoot()
+      val minstret = Reg(UInt(64 bits)) randBoot()
+
+
 
       //Define CSR registers accessibility
       if(mvendorid != null) READ_ONLY(CSR.MVENDORID, U(mvendorid))
@@ -195,6 +198,18 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
       if(mscratchGen) READ_WRITE(CSR.MSCRATCH, mscratch)
       mcauseAccess(CSR.MCAUSE, xlen-1 -> mcause.interrupt, 0 -> mcause.exceptionCode)
       mbadaddrAccess(CSR.MBADADDR, mbadaddr)
+      mcycleAccess(CSR.MCYCLE, mcycle(31 downto 0))
+      mcycleAccess(CSR.MCYCLEH, mcycle(63 downto 32))
+      minstretAccess(CSR.MINSTRET, minstret(31 downto 0))
+      minstretAccess(CSR.MINSTRETH, minstret(63 downto 32))
+
+
+
+      //Manage counters
+      mcycle := mcycle + 1
+      when(writeBack.arbitration.isFiring) {
+        minstret := minstret + 1
+      }
 
 
 

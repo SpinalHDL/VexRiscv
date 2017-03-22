@@ -44,7 +44,9 @@ object TopLevel {
         mepcAccess     = READ_WRITE,
         mscratchGen    = true,
         mcauseAccess   = READ_WRITE,
-        mbadaddrAccess = READ_WRITE
+        mbadaddrAccess = READ_WRITE,
+        mcycleAccess   = READ_WRITE,
+        minstretAccess = READ_WRITE
       )
 
       config.plugins ++= List(

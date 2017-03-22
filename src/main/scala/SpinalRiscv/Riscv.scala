@@ -100,5 +100,15 @@ object Riscv{
     def MCAUSE    = 0x342 // MRW Machine trap cause.
     def MBADADDR  = 0x343 // MRW Machine bad address.
     def MIP       = 0x344 // MRW Machine interrupt pending.
+    def MBASE     = 0x380 // MRW Base register.
+    def MBOUND    = 0x381 // MRW Bound register.
+    def MIBASE    = 0x382 // MRW Instruction base register.
+    def MIBOUND   = 0x383 // MRW Instruction bound register.
+    def MDBASE    = 0x384 // MRW Data base register.
+    def MDBOUND   = 0x385 // MRW Data bound register.
+    def MCYCLE    = 0xB00 // MRW Machine cycle counter.
+    def MINSTRET  = 0xB02 // MRW Machine instructions-retired counter.
+    def MCYCLEH   = 0xB80 // MRW Upper 32 bits of mcycle, RV32I only.
+    def MINSTRETH = 0xB82 // MRW Upper 32 bits of minstret, RV32I only.
   }
 }
