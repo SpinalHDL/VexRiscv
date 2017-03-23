@@ -26,7 +26,7 @@ case class MachineCsrConfig(
   marchid             : BigInt,
   mimpid              : BigInt,
   mhartid             : BigInt,
-  misaExtensions      : Int,
+  misaExtensionsInit      : Int,
   misaAccess          : CsrAccess,
   mtvecAccess         : CsrAccess,
   mtvecInit           : BigInt,
@@ -151,18 +151,22 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
       //Define CSR mapping utilities
       val csrMapping = new CsrMapping()
       implicit class CsrAccessPimper(csrAccess : CsrAccess){
-        def apply(csrAddress : Int, thats : (Int, Data)*) : Unit = csrAccess match{
-          case `WRITE_ONLY` | `READ_WRITE` => for(that <- thats) csrMapping.w(csrAddress,that._1, that._2)
-          case `READ_ONLY`  | `READ_WRITE` => for(that <- thats) csrMapping.r(csrAddress,that._1, that._2)
+        def apply(csrAddress : Int, thats : (Int, Data)*) : Unit = {
+          if(csrAccess == `WRITE_ONLY` || csrAccess ==  `READ_WRITE`) for(that <- thats) csrMapping.w(csrAddress,that._1, that._2)
+          if(csrAccess == `READ_ONLY`  || csrAccess ==  `READ_WRITE`) for(that <- thats) csrMapping.r(csrAddress,that._1, that._2)
         }
-        def apply(csrAddress : Int, that : Data) : Unit = csrAccess match{
-          case `WRITE_ONLY` | `READ_WRITE` => csrMapping.w(csrAddress, 0, that)
-          case `READ_ONLY`  | `READ_WRITE` => csrMapping.r(csrAddress, 0, that)
+        def apply(csrAddress : Int, that : Data) : Unit = {
+          if(csrAccess == `WRITE_ONLY` || csrAccess ==  `READ_WRITE`) csrMapping.w(csrAddress, 0, that)
+          if(csrAccess == `READ_ONLY`  || csrAccess ==  `READ_WRITE`) csrMapping.r(csrAddress, 0, that)
         }
       }
 
 
       //Define CSR registers
+      val misa = new Area{
+        val base = Reg(UInt(2 bits)) init(U"01")
+        val extensions = Reg(Bits(26 bits)) init(misaExtensionsInit)
+      }
       val mtvec = RegInit(U(mtvecInit,xlen bits))
       val mepc = Reg(UInt(xlen bits))
       val mstatus = new Area{
@@ -182,7 +186,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         val exceptionCode = Reg(UInt(exceptionCodeWidth bits))
       }
       val mbadaddr = Reg(UInt(xlen bits))
-      val mcycle = Reg(UInt(64 bits)) randBoot()
+      val mcycle   = Reg(UInt(64 bits)) randBoot()
       val minstret = Reg(UInt(64 bits)) randBoot()
 
 
@@ -193,14 +197,14 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
       if(mimpid    != null) READ_ONLY(CSR.MIMPID   , U(mimpid   ))
       if(mhartid   != null) READ_ONLY(CSR.MHARTID  , U(mhartid  ))
 
-      misaAccess(CSR.MISA, xlen-2 -> U"01" , 0 -> U(misaExtensions))
+      misaAccess(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
       READ_ONLY(CSR.MIP, 11 -> mip.MEIP, 7 -> mip.MTIP)
       READ_WRITE(CSR.MIP, 3 -> mip.MSIP)
       READ_WRITE(CSR.MIE, 11 -> mie.MEIE, 7 -> mie.MTIE, 3 -> mie.MSIE)
 
       mtvecAccess(CSR.MTVEC, mtvec)
       mepcAccess(CSR.MEPC, mepc)
-      READ_ONLY(CSR.MSTATUS, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
+      READ_WRITE(CSR.MSTATUS, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
       if(mscratchGen) READ_WRITE(CSR.MSCRATCH, mscratch)
       mcauseAccess(CSR.MCAUSE, xlen-1 -> mcause.interrupt, 0 -> mcause.exceptionCode)
       mbadaddrAccess(CSR.MBADADDR, mbadaddr)
@@ -222,7 +226,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
       //Used to make the pipeline empty softly (for interrupts)
       val pipelineLiberator = new Area{
         val enable = False
-        decode.arbitration.haltIt setWhen(enable)
+        prefetch.arbitration.haltIt setWhen(enable)
         val done = ! List(fetch, decode, execute, memory, writeBack).map(_.arbitration.isValid).orR
       }
 
@@ -295,6 +299,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
       when(memory.arbitration.isFiring && memory.input(ENV_CTRL) === EnvCtrlEnum.MRET){
         jumpInterface.valid := True
         jumpInterface.payload := mepc
+        execute.arbitration.flushIt := True
         mstatus.MIE := mstatus.MPIE
       }
 
@@ -305,40 +310,38 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
 
         val imm = IMM(input(INSTRUCTION))
 
-        val writeEnable = !((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
-                         || (input(INSTRUCTION)(14 downto 13) === "10" && imm.z === 0))
-        val readEnable = input(INSTRUCTION)(rdRange) =/= 0
+        val writeEnable = arbitration.isValid && !arbitration.isStuckByOthers && input(IS_CSR) &&
+                          (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
+                          || (input(INSTRUCTION)(14 downto 13) === "10" && imm.z === 0)))
+
 
         val writeSrc = input(INSTRUCTION)(14) ? imm.z.asBits.resized | input(SRC1)
         val readData = B(0, 32 bits)
-        val writeData = input(INSTRUCTION)(12).mux(
+        val writeData = input(INSTRUCTION)(13).mux(
           False -> writeSrc,
-          True -> Mux(input(INSTRUCTION)(13), readData & ~writeSrc, readData | writeSrc)
+          True -> Mux(input(INSTRUCTION)(12), readData & ~writeSrc, readData | writeSrc)
         )
 
         when(arbitration.isValid && input(IS_CSR)) {
-          when(writeEnable) {
-            output(REGFILE_WRITE_DATA) := writeData
-          }
+          output(REGFILE_WRITE_DATA) := readData
         }
 
 
         //Translation of the csrMapping into real logic
         val csrAddress = input(INSTRUCTION)(csrRange)
-        when(arbitration.isValid && input(IS_CSR)) {
-          for ((address, jobs) <- csrMapping.mapping) {
-            when(csrAddress === address) {
-              when(writeEnable) {
-                for (element <- jobs) element match {
-                  case element: CsrWrite => element.that.assignFromBits(writeData(element.bitOffset, element.that.getBitsWidth bits))
-                  case _ =>
-                }
-              }
 
+        for ((address, jobs) <- csrMapping.mapping) {
+          when(csrAddress === address) {
+            when(writeEnable) {
               for (element <- jobs) element match {
-                case element: CsrRead => readData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
+                case element: CsrWrite => element.that.assignFromBits(writeData(element.bitOffset, element.that.getBitsWidth bits))
                 case _ =>
               }
+            }
+
+            for (element <- jobs) element match {
+              case element: CsrRead => readData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
+              case _ =>
             }
           }
         }

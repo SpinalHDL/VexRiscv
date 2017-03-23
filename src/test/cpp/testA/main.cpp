@@ -351,6 +351,32 @@ public:
 	}
 };
 
+class TestX28 : public Workspace{
+public:
+	uint32_t refIndex = 0;
+	uint32_t *ref;
+	uint32_t refSize;
+
+	TestX28(string name, uint32_t *ref, uint32_t refSize) : Workspace(name) {
+		this->ref = ref;
+		this->refSize = refSize;
+		loadHex("../../resources/hex/" + name + ".hex");
+	}
+
+	virtual void checks(){
+		if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address == 28){
+			assertEq(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data, ref[refIndex]);
+			//printf("%d\n",i);
+
+			refIndex++;
+			if(refIndex == refSize){
+				pass();
+			}
+		}
+	}
+};
+
+
 class RiscvTest : public Workspace{
 public:
 	RiscvTest(string name) : Workspace(name) {
@@ -362,7 +388,7 @@ public:
 	}
 
 	virtual void checks(){
-		if(top->VexRiscv->writeBack_arbitration_isValid == 1 && top->VexRiscv->writeBack_input_INSTRUCTION == 0x00000073){
+		if(top->VexRiscv->writeBack_arbitration_isValid == 1 && top->VexRiscv->writeBack_INSTRUCTION == 0x00000073){
 			uint32_t code = top->VexRiscv->RegFilePlugin_regFile[28];
 			if((code & 1) == 0){
 				cout << "Wrong error code"<< endl;
@@ -521,6 +547,11 @@ int main(int argc, char **argv, char **env) {
 //		Dhrystone("dhrystoneO3ML",false,false).run(8e6);
 //		Dhrystone("dhrystoneO3MLL",false,false).run(80e6);
 		#endif
+		#ifdef CSR
+		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3};
+		TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).run(2e3);
+		#endif
+
 	}
 
 	uint64_t duration = timer_end(startedAt);

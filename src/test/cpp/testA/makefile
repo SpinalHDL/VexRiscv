@@ -1,6 +1,7 @@
-TRACE=no
-DHRYSTONE=yes
-REDO=5
+TRACE=yes
+CSR=yes
+DHRYSTONE=no
+REDO=1
 
 ADDCFLAGS += -CFLAGS -DREDO=${REDO}
 ifeq ($(DHRYSTONE),yes)
@@ -10,6 +11,10 @@ endif
 ifeq ($(TRACE),yes)
 	VERILATOR_ARGS += --trace
 	ADDCFLAGS += -CFLAGS -DTRACE
+endif
+
+ifeq ($(CSR),yes)
+	ADDCFLAGS += -CFLAGS -DCSR
 endif
 
 run: compile

@@ -27,7 +27,7 @@ class Stage() extends Area{
       val input,inputDefault = key()
       inputsDefault(key.asInstanceOf[Stageable[Data]]) = inputDefault
       input := inputDefault
-      input.setPartialName(this,"input_" + key.getName())
+      input.setPartialName(this, key.getName())
     }).asInstanceOf[T]
   }
 
@@ -36,11 +36,11 @@ class Stage() extends Area{
       val output,outputDefault = key()
       outputsDefault(key.asInstanceOf[Stageable[Data]]) = outputDefault
       output := outputDefault
-      output.setPartialName(this,"output_" + key.getName())
+      output //.setPartialName(this,"output_" + key.getName())
     }).asInstanceOf[T]
   }
 
-  def insert[T <: Data](key : Stageable[T]) : T = inserts.getOrElseUpdate(key.asInstanceOf[Stageable[Data]],outsideCondScope(key())).asInstanceOf[T].setPartialName(this,key.getName())
+  def insert[T <: Data](key : Stageable[T]) : T = inserts.getOrElseUpdate(key.asInstanceOf[Stageable[Data]],outsideCondScope(key())).asInstanceOf[T] //.setPartialName(this,key.getName())
 //  def apply[T <: Data](key : Stageable[T]) : T = ???
 
 
