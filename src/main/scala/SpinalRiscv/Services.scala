@@ -13,6 +13,10 @@ trait DecoderService{
   def addDefault(key : Stageable[_ <: BaseType], value : Any)
 }
 
+case class ExceptionCause() extends Bundle{
+  val exceptionCode = UInt(4 bits)
+}
+
 trait ExceptionService{
-  def newExceptionPort(stage : Stage) : Flow[UInt]
+  def newExceptionPort(stage : Stage) : Flow[ExceptionCause]
 }

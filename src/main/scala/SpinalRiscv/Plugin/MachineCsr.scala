@@ -20,7 +20,7 @@ object CsrAccess {
   object NONE extends CsrAccess
 }
 
-case class ExceptionPortInfo(port : Flow[UInt],stage : Stage)
+case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage)
 case class MachineCsrConfig(
   mvendorid           : BigInt,
   marchid             : BigInt,
@@ -59,21 +59,26 @@ case class CsrMapping(){
 
 
 
+
 class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with ExceptionService {
   import config._
   import CsrAccess._
+
+  def xlen = 32
 
   //Mannage ExceptionService calls
   val exceptionPortsInfos = ArrayBuffer[ExceptionPortInfo]()
   def exceptionCodeWidth = 4
   override def newExceptionPort(stage : Stage) = {
-    val interface = Flow(UInt(exceptionCodeWidth bits))
+    val interface = Flow(ExceptionCause())
     exceptionPortsInfos += ExceptionPortInfo(interface,stage)
     interface
   }
 
   var jumpInterface : Flow[UInt] = null
-  var pluginExceptionPort : Flow[UInt] = null
+  var pluginExceptionPort : Flow[ExceptionCause] = null
+  var timerInterrupt : Bool = null
+  var externalInterrupt : Bool = null
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
     val NONE, EBREAK, ECALL, MRET = newElement()
@@ -82,6 +87,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
   object ENV_CTRL extends Stageable(EnvCtrlEnum())
   object EXCEPTION extends Stageable(Bool)
   object IS_CSR extends Stageable(Bool)
+  object EXCEPTION_CAUSE extends Stageable(ExceptionCause())
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -130,18 +136,16 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
     pluginExceptionPort = newExceptionPort(pipeline.execute)
     pluginExceptionPort.valid := False
     pluginExceptionPort.payload.assignDontCare()
+
+    timerInterrupt    = in Bool()
+    externalInterrupt = in Bool()
   }
 
-  def xlen = 32
+
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
 
-    //Manage ECALL instructions
-    when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.ECALL){
-      pluginExceptionPort.valid := True
-      pluginExceptionPort.payload := 3
-    }
 
     pipeline plug new Area{
       //Define CSR mapping utilities
@@ -158,7 +162,6 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
       }
 
 
-
       //Define CSR registers
       val mtvec = RegInit(U(mtvecInit,xlen bits))
       val mepc = Reg(UInt(xlen bits))
@@ -166,7 +169,9 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         val MIE, MPIE = RegInit(False)
       }
       val mip = new Area{
-        val MEIP, MTIP, MSIP = False //TODO
+        val MEIP = RegNext(externalInterrupt) init(False)
+        val MTIP = RegNext(timerInterrupt) init(False)
+        val MSIP = RegInit(False)
       }
       val mie = new Area{
         val MEIE, MTIE, MSIE = RegInit(False)
@@ -189,11 +194,12 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
       if(mhartid   != null) READ_ONLY(CSR.MHARTID  , U(mhartid  ))
 
       misaAccess(CSR.MISA, xlen-2 -> U"01" , 0 -> U(misaExtensions))
-      READ_ONLY(CSR.MIP, 11 -> mip.MEIP, 7 -> mip.MTIP, 3 -> mip.MSIP)
+      READ_ONLY(CSR.MIP, 11 -> mip.MEIP, 7 -> mip.MTIP)
+      READ_WRITE(CSR.MIP, 3 -> mip.MSIP)
       READ_WRITE(CSR.MIE, 11 -> mie.MEIE, 7 -> mie.MTIE, 3 -> mie.MSIE)
 
-      mtvecAccess(CSR.MTVEC  , mtvec)
-      mepcAccess(CSR.MEPC   , mepc)
+      mtvecAccess(CSR.MTVEC, mtvec)
+      mepcAccess(CSR.MEPC, mepc)
       READ_ONLY(CSR.MSTATUS, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
       if(mscratchGen) READ_WRITE(CSR.MSCRATCH, mscratch)
       mcauseAccess(CSR.MCAUSE, xlen-1 -> mcause.interrupt, 0 -> mcause.exceptionCode)
@@ -220,6 +226,14 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         val done = ! List(fetch, decode, execute, memory, writeBack).map(_.arbitration.isValid).orR
       }
 
+
+      //Manage ECALL instructions
+      when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.ECALL){
+        pluginExceptionPort.valid := True
+        pluginExceptionPort.exceptionCode := 11
+      }
+
+
       //Aggregate all exception port and remove required instructions
       val exceptionPortCtrl = if(exceptionPortsInfos.nonEmpty) new Area{
         val firstStageIndexWithExceptionPort = exceptionPortsInfos.map(i => indexOf(i.stage)).min
@@ -231,7 +245,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
           val stagePort = stagePortsInfos.length match{
             case 1 => stagePortsInfos.head.port
             case _ => {
-              val groupedPort = Flow(UInt(exceptionCodeWidth bits))
+              val groupedPort = Flow(ExceptionCause())
               val valids = stagePortsInfos.map(_.port.valid)
               val codes = stagePortsInfos.map(_.port.payload)
               groupedPort.valid := valids.orR
@@ -244,31 +258,40 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         val sortedByStage = groupedByStage.sortWith((a, b) => pipeline.indexOf(a.stage) > pipeline.indexOf(b.stage))
 
         sortedByStage.head.stage.insert(EXCEPTION) := False
+        sortedByStage.head.stage.insert(EXCEPTION_CAUSE).assignDontCare()
         for(portInfo <- sortedByStage; port = portInfo.port ; stage = portInfo.stage){
           when(port.valid){
             stages(indexOf(stage) - 1).arbitration.flushIt := True
             stage.input(EXCEPTION) := True
+            stage.input(EXCEPTION_CAUSE) := port.payload
           }
         }
       } else null
 
-      val interrupt = False
-      val exception = if(exceptionPortsInfos.nonEmpty)
-        writeBack.arbitration.isValid && writeBack.input(EXCEPTION)
-      else
-        False
 
-      when(mstatus.MIE){
-        pipelineLiberator.enable := interrupt
-        when(exception || (interrupt && pipelineLiberator.done)){
-          jumpInterface.valid := True
-          jumpInterface.payload := mtvec
-          mstatus.MIE := False
-          mstatus.MPIE := mstatus.MIE
-          mepc := exception ? writeBack.input(PC) | prefetch.input(PC_CALC_WITHOUT_JUMP)
-        }
+
+      val interrupt = ((mip.MSIP && mie.MSIE) || (mip.MEIP && mie.MEIE) || (mip.MTIP && mie.MTIE)) && mstatus.MIE
+      val exception = if(exceptionPortsInfos.nonEmpty) writeBack.arbitration.isValid && writeBack.input(EXCEPTION) else False
+
+
+      //Interrupt/Exception entry logic
+      pipelineLiberator.enable setWhen interrupt
+      when(exception || (interrupt && pipelineLiberator.done)){
+        jumpInterface.valid := True
+        jumpInterface.payload := mtvec
+        mstatus.MIE := False
+        mstatus.MPIE := mstatus.MIE
+        mepc := exception ? writeBack.input(PC) | prefetch.input(PC_CALC_WITHOUT_JUMP)
+
+        mcause.interrupt := interrupt
+        mcause.exceptionCode := interrupt.mux(
+          True  -> ((mip.MEIP && mie.MEIE) ? U(11) | ((mip.MSIP && mie.MSIE) ? U(3) | U(7))),
+          False -> writeBack.input(EXCEPTION_CAUSE).exceptionCode
+        )
       }
 
+
+      //Interrupt/Exception exit logic
       when(memory.arbitration.isFiring && memory.input(ENV_CTRL) === EnvCtrlEnum.MRET){
         jumpInterface.valid := True
         jumpInterface.payload := mepc
@@ -276,15 +299,14 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
       }
 
 
-
+      //CSR read/write instructions management
       execute plug new Area {
-
         import execute._
 
         val imm = IMM(input(INSTRUCTION))
 
         val writeEnable = !((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
-          || (input(INSTRUCTION)(14 downto 13) === "10" && imm.z === 0))
+                         || (input(INSTRUCTION)(14 downto 13) === "10" && imm.z === 0))
         val readEnable = input(INSTRUCTION)(rdRange) =/= 0
 
         val writeSrc = input(INSTRUCTION)(14) ? imm.z.asBits.resized | input(SRC1)
@@ -301,6 +323,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         }
 
 
+        //Translation of the csrMapping into real logic
         val csrAddress = input(INSTRUCTION)(csrRange)
         when(arbitration.isValid && input(IS_CSR)) {
           for ((address, jobs) <- csrMapping.mapping) {
@@ -308,14 +331,12 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
               when(writeEnable) {
                 for (element <- jobs) element match {
                   case element: CsrWrite => element.that.assignFromBits(writeData(element.bitOffset, element.that.getBitsWidth bits))
-                  //                case element: BusSlaveFactoryOnWriteAtAddress => element.doThat()
                   case _ =>
                 }
               }
 
               for (element <- jobs) element match {
                 case element: CsrRead => readData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
-                //              case element: BusSlaveFactoryOnReadAtAddress => when(readEnable) { element.doThat() }
                 case _ =>
               }
             }
