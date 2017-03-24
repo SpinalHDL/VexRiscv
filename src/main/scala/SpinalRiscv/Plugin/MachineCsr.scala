@@ -137,8 +137,8 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
     pluginExceptionPort.valid := False
     pluginExceptionPort.payload.assignDontCare()
 
-    timerInterrupt    = in Bool()
-    externalInterrupt = in Bool()
+    timerInterrupt    = in Bool() setName("timerInterrupt")
+    externalInterrupt = in Bool() setName("externalInterrupt")
   }
 
 
@@ -310,9 +310,9 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
 
         val imm = IMM(input(INSTRUCTION))
 
-        val writeEnable = arbitration.isValid && !arbitration.isStuckByOthers && input(IS_CSR) &&
+        val writeEnable = arbitration.isValid && !arbitration.isStuckByOthers && !arbitration.removeIt && input(IS_CSR) &&
                           (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
-                          || (input(INSTRUCTION)(14 downto 13) === "10" && imm.z === 0)))
+                          || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
 
 
         val writeSrc = input(INSTRUCTION)(14) ? imm.z.asBits.resized | input(SRC1)
@@ -340,7 +340,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
             }
 
             for (element <- jobs) element match {
-              case element: CsrRead => readData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
+              case element: CsrRead if element.that.getBitsWidth != 0 => readData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
               case _ =>
             }
           }

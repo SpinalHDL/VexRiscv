@@ -199,6 +199,10 @@ public:
 		top->eval(); currentTime = 3;
 		top->reset = 1;
 		top->eval();
+		#ifdef CSR
+		top->timerInterrupt = 1;
+		top->externalInterrupt = 1;
+		#endif
 		dump(0);
 		top->reset = 0;
 		top->eval(); currentTime = 2;
@@ -384,7 +388,11 @@ public:
 	}
 
 	virtual void postReset() {
+//		#ifdef CSR
+//		top->VexRiscv->prefetch_PcManagerSimplePlugin_pcReg = 0x80000000u;
+//		#else
 		top->VexRiscv->prefetch_PcManagerSimplePlugin_pcReg = 0x800000bcu;
+//		#endif
 	}
 
 	virtual void checks(){
@@ -540,6 +548,12 @@ int main(int argc, char **argv, char **env) {
 			redo(REDO,RiscvTest(name).run();)
 		}
 		#endif
+
+		#ifdef CSR
+		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5};
+		redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).run(2e3);)
+		#endif
+
 		#ifdef DHRYSTONE
 		Dhrystone("dhrystoneO3",true,true).run(1e6);
 		Dhrystone("dhrystoneO3M",true,true).run(0.8e6);
@@ -547,10 +561,7 @@ int main(int argc, char **argv, char **env) {
 //		Dhrystone("dhrystoneO3ML",false,false).run(8e6);
 //		Dhrystone("dhrystoneO3MLL",false,false).run(80e6);
 		#endif
-		#ifdef CSR
-		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3};
-		TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).run(2e3);
-		#endif
+
 
 	}
 

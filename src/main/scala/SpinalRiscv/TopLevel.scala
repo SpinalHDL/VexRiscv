@@ -36,7 +36,7 @@ object TopLevel {
         mvendorid      = 11,
         marchid        = 22,
         mimpid         = 33,
-        mhartid        = 44,
+        mhartid        = 0,
         misaExtensionsInit = 66,
         misaAccess     = READ_WRITE,
         mtvecAccess    = READ_WRITE,
