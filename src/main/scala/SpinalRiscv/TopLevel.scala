@@ -31,23 +31,41 @@ object TopLevel {
       )
 
 
-      import CsrAccess._
       val csrConfig = MachineCsrConfig(
         mvendorid      = 11,
         marchid        = 22,
         mimpid         = 33,
         mhartid        = 0,
         misaExtensionsInit = 66,
-        misaAccess     = READ_WRITE,
-        mtvecAccess    = READ_WRITE,
+        misaAccess     = CsrAccess.READ_WRITE,
+        mtvecAccess    = CsrAccess.READ_WRITE,
         mtvecInit      = 0x00000020l,
-        mepcAccess     = READ_WRITE,
+        mepcAccess     = CsrAccess.READ_WRITE,
         mscratchGen    = true,
-        mcauseAccess   = READ_WRITE,
-        mbadaddrAccess = READ_WRITE,
-        mcycleAccess   = READ_WRITE,
-        minstretAccess = READ_WRITE
+        mcauseAccess   = CsrAccess.READ_WRITE,
+        mbadaddrAccess = CsrAccess.READ_WRITE,
+        mcycleAccess   = CsrAccess.READ_WRITE,
+        minstretAccess = CsrAccess.READ_WRITE,
+        ecallGen       = false,
+        wfiGen         = false
       )
+
+//      val csrConfig = MachineCsrConfig(
+//        mvendorid      = null,
+//        marchid        = null,
+//        mimpid         = null,
+//        mhartid        = null,
+//        misaExtensionsInit = 66,
+//        misaAccess     = CsrAccess.NONE,
+//        mtvecAccess    = CsrAccess.NONE,
+//        mtvecInit      = 0x00000020l,
+//        mepcAccess     = CsrAccess.READ_ONLY,
+//        mscratchGen    = false,
+//        mcauseAccess   = CsrAccess.READ_ONLY,
+//        mbadaddrAccess = CsrAccess.NONE,
+//        mcycleAccess   = CsrAccess.NONE,
+//        minstretAccess = CsrAccess.NONE
+//      )
 
       config.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, false),

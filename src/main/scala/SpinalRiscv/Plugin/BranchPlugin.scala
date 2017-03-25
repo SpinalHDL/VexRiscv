@@ -112,9 +112,7 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
       jumpInterface.payload := input(BRANCH_CALC)
 
       when(jumpInterface.valid) {
-        fetch.arbitration.removeIt := True
-        decode.arbitration.removeIt := True
-        if(!earlyBranch) execute.arbitration.removeIt := True
+        stages(indexOf(branchStage) - 1).arbitration.flushIt := True
       }
     }
   }
@@ -210,9 +208,6 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
 
       when(jumpInterface.valid) {
         stages(indexOf(branchStage) - 1).arbitration.flushIt := True
-//        fetch.arbitration.removeIt := True
-//        decode.arbitration.removeIt := True
-//        if(!earlyBranch) execute.arbitration.removeIt := True
       }
     }
 

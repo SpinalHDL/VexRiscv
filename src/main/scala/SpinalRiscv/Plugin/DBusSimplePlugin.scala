@@ -30,6 +30,8 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
   object MEMORY_READ_DATA extends Stageable(Bits(32 bits))
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
 
+
+
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
     import pipeline.config._
@@ -69,6 +71,9 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
       SW   -> (storeActions)
     ))
 
+
+//    val exceptionService = pipeline.service(classOf[ExceptionService])
+//    executeExceptionPort = exceptionService.newExceptionPort(pipeline.execute)
   }
 
   override def build(pipeline: VexRiscv): Unit = {

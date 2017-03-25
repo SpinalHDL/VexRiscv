@@ -1,0 +1,100 @@
+[*]
+[*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
+[*] Sat Mar 25 13:21:38 2017
+[*]
+[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/machineCsr.vcd"
+[dumpfile_mtime] "Sat Mar 25 13:21:31 2017"
+[dumpfile_size] 2048473
+[savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/default.gtkw"
+[timestart] 0
+[size] 1776 953
+[pos] -1 -1
+*-9.770813 718 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.VexRiscv.
+[sst_width] 294
+[signals_width] 597
+[sst_expanded] 1
+[sst_vpaned_height] 593
+@28
+TOP.VexRiscv.writeBack_arbitration_isValid
+@22
+TOP.VexRiscv.writeBack_PC[31:0]
+TOP.VexRiscv.writeBack_INSTRUCTION[31:0]
+TOP.VexRiscv.RegFilePlugin_regFile(10)[31:0]
+TOP.VexRiscv.RegFilePlugin_regFile(11)[31:0]
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_pcBeforeJumps[31:0]
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_pc[31:0]
+TOP.VexRiscv.MachineCsr_mepc[31:0]
+@28
+TOP.VexRiscv.timerInterrupt
+TOP.VexRiscv.execute_arbitration_isValid
+@22
+TOP.VexRiscv.execute_PC[31:0]
+@28
+TOP.VexRiscv.MachineCsr_mie_MEIE
+TOP.VexRiscv.MachineCsr_mie_MSIE
+TOP.VexRiscv.MachineCsr_mie_MTIE
+TOP.VexRiscv.MachineCsr_mstatus_MIE
+TOP.VexRiscv.MachineCsr_mip_MEIP
+TOP.VexRiscv.MachineCsr_mip_MSIP
+TOP.VexRiscv.MachineCsr_mip_MTIP
+TOP.VexRiscv.MachineCsr_interrupt
+TOP.VexRiscv.MachineCsr_writeBackWfi
+TOP.VexRiscv.writeBack_arbitration_isValid
+TOP.VexRiscv.writeBack_ENV_CTRL[2:0]
+TOP.VexRiscv.execute_EXCEPTION
+TOP.VexRiscv.memory_EXCEPTION
+TOP.VexRiscv.writeBack_EXCEPTION
+TOP.VexRiscv.prefetch_arbitration_isValid
+TOP.VexRiscv.fetch_arbitration_isValid
+TOP.VexRiscv.decode_arbitration_isValid
+TOP.VexRiscv.execute_arbitration_isValid
+TOP.VexRiscv.memory_arbitration_isValid
+TOP.VexRiscv.writeBack_arbitration_isValid
+TOP.VexRiscv.prefetch_arbitration_removeIt
+TOP.VexRiscv.fetch_arbitration_removeIt
+@29
+TOP.VexRiscv.decode_arbitration_removeIt
+@28
+TOP.VexRiscv.execute_arbitration_removeIt
+TOP.VexRiscv.memory_arbitration_removeIt
+TOP.VexRiscv.writeBack_arbitration_removeIt
+TOP.VexRiscv.prefetch_arbitration_isStuck
+TOP.VexRiscv.fetch_arbitration_isStuck
+TOP.VexRiscv.decode_arbitration_isStuck
+TOP.VexRiscv.execute_arbitration_isStuck
+TOP.VexRiscv.memory_arbitration_isStuck
+TOP.VexRiscv.writeBack_arbitration_isStuck
+@22
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_jump_pcLoad_payload[31:0]
+@28
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_jump_pcLoad_valid
+@22
+TOP.VexRiscv.MachineCsr_mepc[31:0]
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_pcReg[31:0]
+TOP.VexRiscv.prefetch_PC_CALC_WITHOUT_JUMP[31:0]
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_pc[31:0]
+TOP.VexRiscv.prefetch_PC[31:0]
+TOP.VexRiscv.fetch_PC[31:0]
+TOP.VexRiscv.decode_PC[31:0]
+TOP.VexRiscv.execute_PC[31:0]
+TOP.VexRiscv.memory_PC[31:0]
+TOP.VexRiscv.writeBack_PC[31:0]
+@28
+TOP.VexRiscv.prefetch_arbitration_isStuckByOthers
+TOP.VexRiscv.fetch_arbitration_isStuckByOthers
+TOP.VexRiscv.decode_arbitration_isStuckByOthers
+TOP.VexRiscv.execute_arbitration_isStuckByOthers
+TOP.VexRiscv.memory_arbitration_isStuckByOthers
+TOP.VexRiscv.writeBack_arbitration_isStuckByOthers
+TOP.VexRiscv.prefetch_arbitration_haltIt
+TOP.VexRiscv.fetch_arbitration_haltIt
+TOP.VexRiscv.decode_arbitration_haltIt
+TOP.VexRiscv.execute_arbitration_haltIt
+TOP.VexRiscv.memory_arbitration_haltIt
+TOP.VexRiscv.writeBack_arbitration_haltIt
+TOP.VexRiscv.MachineCsr_mie_MTIE
+TOP.VexRiscv.MachineCsr_mip_MTIP
+[pattern_trace] 1
+[pattern_trace] 0

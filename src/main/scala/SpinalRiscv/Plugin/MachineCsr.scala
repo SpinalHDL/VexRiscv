@@ -26,7 +26,7 @@ case class MachineCsrConfig(
   marchid             : BigInt,
   mimpid              : BigInt,
   mhartid             : BigInt,
-  misaExtensionsInit      : Int,
+  misaExtensionsInit   : Int,
   misaAccess          : CsrAccess,
   mtvecAccess         : CsrAccess,
   mtvecInit           : BigInt,
@@ -34,8 +34,10 @@ case class MachineCsrConfig(
   mscratchGen         : Boolean,
   mcauseAccess        : CsrAccess,
   mbadaddrAccess      : CsrAccess,
-  mcycleAccess           : CsrAccess,
-  minstretAccess         : CsrAccess
+  mcycleAccess        : CsrAccess,
+  minstretAccess      : CsrAccess,
+  wfiGen              : Boolean,
+  ecallGen            : Boolean
 )
 
 
@@ -81,7 +83,9 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
   var externalInterrupt : Bool = null
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
-    val NONE, EBREAK, ECALL, MRET = newElement()
+    val NONE, EBREAK, MRET= newElement()
+    val WFI = if(wfiGen) newElement() else null
+    val ECALL = if(ecallGen) newElement() else null
   }
 
   object ENV_CTRL extends Stageable(EnvCtrlEnum())
@@ -122,20 +126,22 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
       CSRRWI -> immediatActions,
       CSRRSI -> immediatActions,
       CSRRCI -> immediatActions,
-      ECALL  -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.ECALL)),
-      EBREAK -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.EBREAK)),
+     // EBREAK -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.EBREAK)), //TODO
       MRET   -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.MRET))
     ))
-
+    if(wfiGen)   decoderService.add(WFI,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.WFI))
+    if(ecallGen) decoderService.add(ECALL,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.ECALL))
 
     val  pcManagerService = pipeline.service(classOf[JumpService])
     jumpInterface = pcManagerService.createJumpInterface(pipeline.execute)
     jumpInterface.valid := False
     jumpInterface.payload.assignDontCare()
 
-    pluginExceptionPort = newExceptionPort(pipeline.execute)
-    pluginExceptionPort.valid := False
-    pluginExceptionPort.payload.assignDontCare()
+    if(ecallGen) {
+      pluginExceptionPort = newExceptionPort(pipeline.execute)
+      pluginExceptionPort.valid := False
+      pluginExceptionPort.payload.assignDontCare()
+    }
 
     timerInterrupt    = in Bool() setName("timerInterrupt")
     externalInterrupt = in Bool() setName("externalInterrupt")
@@ -227,15 +233,9 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
       val pipelineLiberator = new Area{
         val enable = False
         prefetch.arbitration.haltIt setWhen(enable)
-        val done = ! List(fetch, decode, execute, memory, writeBack).map(_.arbitration.isValid).orR
+        val done = ! List(fetch, decode, execute, memory).map(_.arbitration.isValid).orR
       }
 
-
-      //Manage ECALL instructions
-      when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.ECALL){
-        pluginExceptionPort.valid := True
-        pluginExceptionPort.exceptionCode := 11
-      }
 
 
       //Aggregate all exception port and remove required instructions
@@ -245,6 +245,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         decode.arbitration.haltIt setWhen(pipelineHasException)
 
         val groupedByStage = exceptionPortsInfos.map(_.stage).distinct.map(s => {
+          assert(s != writeBack)
           val stagePortsInfos = exceptionPortsInfos.filter(_.stage == s)
           val stagePort = stagePortsInfos.length match{
             case 1 => stagePortsInfos.head.port
@@ -276,7 +277,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
 
       val interrupt = ((mip.MSIP && mie.MSIE) || (mip.MEIP && mie.MEIE) || (mip.MTIP && mie.MTIE)) && mstatus.MIE
       val exception = if(exceptionPortsInfos.nonEmpty) writeBack.arbitration.isValid && writeBack.input(EXCEPTION) else False
-
+      val writeBackWfi = if(wfiGen) writeBack.arbitration.isValid && writeBack.input(ENV_CTRL) === EnvCtrlEnum.WFI else False
 
       //Interrupt/Exception entry logic
       pipelineLiberator.enable setWhen interrupt
@@ -285,17 +286,20 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         jumpInterface.payload := mtvec
         mstatus.MIE := False
         mstatus.MPIE := mstatus.MIE
-        mepc := exception ? writeBack.input(PC) | prefetch.input(PC_CALC_WITHOUT_JUMP)
+        mepc := exception mux(
+          True  -> writeBack.input(PC),
+          False -> (writeBackWfi ? (writeBack.input(PC) + 4) | prefetch.input(PC_CALC_WITHOUT_JUMP)) //TODO ? WFI could emulate J PC + 4
+        )
 
         mcause.interrupt := interrupt
         mcause.exceptionCode := interrupt.mux(
           True  -> ((mip.MEIP && mie.MEIE) ? U(11) | ((mip.MSIP && mie.MSIE) ? U(3) | U(7))),
-          False -> writeBack.input(EXCEPTION_CAUSE).exceptionCode
+          False -> (if(exceptionPortCtrl != null) writeBack.input(EXCEPTION_CAUSE).exceptionCode else U(0))
         )
       }
 
 
-      //Interrupt/Exception exit logic
+      //Manage MRET instructions
       when(memory.arbitration.isFiring && memory.input(ENV_CTRL) === EnvCtrlEnum.MRET){
         jumpInterface.valid := True
         jumpInterface.payload := mepc
@@ -303,6 +307,19 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         mstatus.MIE := mstatus.MPIE
       }
 
+      //Manage ECALL instructions
+      if(ecallGen) when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.ECALL){
+        pluginExceptionPort.valid := True
+        pluginExceptionPort.exceptionCode := 11
+      }
+
+      //Manage WFI instructions
+      if(wfiGen) when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.WFI){
+        when(!interrupt){
+          execute.arbitration.haltIt := True
+          decode.arbitration.flushIt := True
+        }
+      }
 
       //CSR read/write instructions management
       execute plug new Area {

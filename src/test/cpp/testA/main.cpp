@@ -137,6 +137,7 @@ public:
 	string name;
 	VVexRiscv* top;
 	int i;
+	uint32_t bootPc = -1;
 	uint32_t iStall = 1,dStall = 1;
 	#ifdef TRACE
 	VerilatedVcdC* tfp;
@@ -171,17 +172,21 @@ public:
 		return this;
 	}
 
+    Workspace* bootAt(uint32_t pc) { bootPc = pc;}
+
 	virtual void postReset() {}
 	virtual void checks(){}
 	virtual void pass(){ throw success();}
 	virtual void fail(){ throw std::exception();}
 	void dump(int i){
 		#ifdef TRACE
-		tfp->dump(i);
+		if(i/2 >= TRACE_START) tfp->dump(i);
 		#endif
 	}
 	Workspace* run(uint32_t timeout = 5000){
 //		cout << "Start " << name << endl;
+		uint64_t mTimeCmp = 0;
+		uint64_t mTime = 0;
 		currentTime = 4;
 		// init trace dump
 		Verilated::traceEverOn(true);
@@ -200,7 +205,7 @@ public:
 		top->reset = 1;
 		top->eval();
 		#ifdef CSR
-		top->timerInterrupt = 1;
+		top->timerInterrupt = 0;
 		top->externalInterrupt = 1;
 		#endif
 		dump(0);
@@ -209,10 +214,16 @@ public:
 		top->clk = 1;
 
 		postReset();
+		if(bootPc != -1) top->VexRiscv->prefetch_PcManagerSimplePlugin_pcReg = bootPc;
 
 		try {
 			// run simulation for 100 clock periods
 			for (i = 16; i < timeout*2; i+=2) {
+				mTime = i/2;
+				#ifdef CSR
+				top->timerInterrupt = mTime >= mTimeCmp ? 1 : 0;
+				//if(mTime == mTimeCmp) printf("SIM timer tick\n");
+				#endif
 				currentTime = i;
 				uint32_t iRsp_inst_next = top->iRsp_inst;
 				uint32_t dRsp_inst_next = VL_RANDOM_I(32);
@@ -251,6 +262,8 @@ public:
 							break;
 						}
 						case 0xF00FFF20u: pass(); break;
+						case 0xF00FFF48u: mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | top->dCmd_payload_data;break;
+						case 0xF00FFF4Cu: mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)top->dCmd_payload_data) << 32);  /*cout << "mTimeCmp <= " << mTimeCmp << endl; */break;
 						}
 					}else{
 						for(uint32_t b = 0;b < (1 << top->dCmd_payload_size);b++){
@@ -262,6 +275,10 @@ public:
 						case 0xF00FFF10u:
 							dRsp_inst_next = i/2;
 							break;
+						case 0xF00FFF40u: dRsp_inst_next = mTime;          break;
+						case 0xF00FFF44u: dRsp_inst_next = mTime >> 32;    break;
+						case 0xF00FFF48u: dRsp_inst_next = mTimeCmp;       break;
+						case 0xF00FFF4Cu: dRsp_inst_next = mTimeCmp >> 32; break;
 						}
 						memTraces << (currentTime
 						#ifdef REF
@@ -385,13 +402,13 @@ class RiscvTest : public Workspace{
 public:
 	RiscvTest(string name) : Workspace(name) {
 		loadHex("../../resources/hex/" + name + ".hex");
+		bootAt(0x800000bcu);
 	}
 
 	virtual void postReset() {
 //		#ifdef CSR
 //		top->VexRiscv->prefetch_PcManagerSimplePlugin_pcReg = 0x80000000u;
 //		#else
-		top->VexRiscv->prefetch_PcManagerSimplePlugin_pcReg = 0x800000bcu;
 //		#endif
 	}
 
@@ -550,7 +567,7 @@ int main(int argc, char **argv, char **env) {
 		#endif
 
 		#ifdef CSR
-		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5};
+		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,8};
 		redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).run(2e3);)
 		#endif
 
@@ -563,6 +580,9 @@ int main(int argc, char **argv, char **env) {
 		#endif
 
 
+		#ifdef CSR
+		redo(REDO,Workspace("freeRTOS_demo").loadHex("../../resources/hex/freeRTOS_demo.hex")->bootAt(0x80000000u)->run(100e6);)
+		#endif
 	}
 
 	uint64_t duration = timer_end(startedAt);

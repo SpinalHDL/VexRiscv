@@ -1,7 +1,8 @@
-TRACE=yes
+TRACE=no
+TRACE_START=0
 CSR=yes
-DHRYSTONE=no
-REDO=1
+DHRYSTONE=yes
+REDO=5
 
 ADDCFLAGS += -CFLAGS -DREDO=${REDO}
 ifeq ($(DHRYSTONE),yes)
@@ -16,6 +17,8 @@ endif
 ifeq ($(CSR),yes)
 	ADDCFLAGS += -CFLAGS -DCSR
 endif
+
+ADDCFLAGS += -CFLAGS -DTRACE_START=${TRACE_START}
 
 run: compile
 	./obj_dir/VVexRiscv
