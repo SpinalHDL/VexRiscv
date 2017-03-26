@@ -11,7 +11,7 @@ object STATIC  extends BranchPrediction
 object DYNAMIC extends BranchPrediction
 
 class BranchPlugin(earlyBranch : Boolean,
-                   unalignedExceptionGen : Boolean,
+                   catchUnalignedException : Boolean,
                    prediction : BranchPrediction,
                    historyRamSizeLog2 : Int = 10,
                    historyWidth : Int = 2) extends Plugin[VexRiscv]{
@@ -71,7 +71,7 @@ class BranchPlugin(earlyBranch : Boolean,
     if (prediction != NONE)
       predictionJumpInterface = pcManagerService.createJumpInterface(pipeline.decode)
 
-    if (unalignedExceptionGen) {
+    if (catchUnalignedException) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       branchExceptionPort = exceptionService.newExceptionPort(if (earlyBranch) pipeline.execute else pipeline.memory)
       if (prediction != NONE)
@@ -129,7 +129,7 @@ class BranchPlugin(earlyBranch : Boolean,
         stages(indexOf(branchStage) - 1).arbitration.flushAll := True
       }
 
-      if(unalignedExceptionGen) {
+      if(catchUnalignedException) {
         branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
         branchExceptionPort.code := 0
       }
@@ -179,7 +179,7 @@ class BranchPlugin(earlyBranch : Boolean,
         fetch.arbitration.flushAll := True
       }
 
-      if(unalignedExceptionGen) {
+      if(catchUnalignedException) {
         predictionExceptionPort.valid := input(PREDICTION_HAD_BRANCHED) && arbitration.isValid && predictionJumpInterface.payload(1 downto 0) =/= 0
         predictionExceptionPort.code := 0
       }
@@ -234,7 +234,7 @@ class BranchPlugin(earlyBranch : Boolean,
         stages(indexOf(branchStage) - 1).arbitration.flushAll := True
       }
 
-      if(unalignedExceptionGen) {
+      if(catchUnalignedException) {
         branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
         branchExceptionPort.code := 0
       }

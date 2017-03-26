@@ -16,7 +16,7 @@ case class DBusSimpleRsp() extends Bundle{
   val data = Bits(32 bit)
 }
 
-class DBusSimplePlugin(unalignedExceptionGen : Boolean) extends Plugin[VexRiscv]{
+class DBusSimplePlugin(catchUnalignedException : Boolean) extends Plugin[VexRiscv]{
 
   var dCmd  : Stream[DBusSimpleCmd] = null
   var dRsp  : DBusSimpleRsp = null
@@ -71,7 +71,7 @@ class DBusSimplePlugin(unalignedExceptionGen : Boolean) extends Plugin[VexRiscv]
       SW   -> (storeActions)
     ))
 
-    if(unalignedExceptionGen) {
+    if(catchUnalignedException) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       executeExceptionPort = exceptionService.newExceptionPort(pipeline.execute)
     }
@@ -101,7 +101,7 @@ class DBusSimplePlugin(unalignedExceptionGen : Boolean) extends Plugin[VexRiscv]
 
       insert(MEMORY_ADDRESS_LOW) := dCmd.address(1 downto 0)
 
-      if(unalignedExceptionGen){
+      if(catchUnalignedException){
         executeExceptionPort.code := (dCmd.wr ? U(6) | U(4)).resized
         executeExceptionPort.valid := (arbitration.isValid && input(MEMORY_ENABLE)
           && ((dCmd.size === 2 && dCmd.address(1 downto 0) =/= 0) || (dCmd.size === 1 && dCmd.address(0 downto 0) =/= 0)))

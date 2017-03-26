@@ -12,7 +12,7 @@ case class Masked(value : BigInt,care : BigInt){
 
 }
 
-class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
+class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexRiscv] with DecoderService {
   override def add(encoding: Seq[(MaskedLiteral, Seq[(Stageable[_ <: BaseType], Any)])]): Unit = encoding.foreach(e => this.add(e._1,e._2))
   override def add(key: MaskedLiteral, values: Seq[(Stageable[_ <: BaseType], Any)]): Unit = {
     assert(!encodings.contains(key))
@@ -32,9 +32,17 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
 
   val defaults = mutable.HashMap[Stageable[_ <: BaseType], BaseType]()
   val encodings = mutable.HashMap[MaskedLiteral,Seq[(Stageable[_ <: BaseType], BaseType)]]()
+  var decodeExceptionPort : Flow[ExceptionCause] = null
+
+
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
     addDefault(LEGAL_INSTRUCTION, False)
+
+    if(catchIllegalInstruction) {
+      val exceptionService = pipeline.plugins.filter(_.isInstanceOf[ExceptionService]).head.asInstanceOf[ExceptionService]
+      decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode).setName("decodeExceptionPort")
+    }
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -112,6 +120,12 @@ class DecoderSimplePlugin extends Plugin[VexRiscv] with DecoderService {
 //            insert(e).assignFromBits(RegNext(decodedBits(offset, e.dataType.getBitsWidth bits)))
       offset += e.dataType.getBitsWidth
     })
+
+
+    if(catchIllegalInstruction){
+      decodeExceptionPort.valid := arbitration.isValid && !input(LEGAL_INSTRUCTION)
+      decodeExceptionPort.code := 2
+    }
   }
 
   def bench(toplevel : VexRiscv): Unit ={

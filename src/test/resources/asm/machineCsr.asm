@@ -261,6 +261,10 @@ unalignedPcA:
 
   li x28, 14
  1a4:	00e00e13          	li	t3,14
+  hret  
+ 1a8:	20200073          	hret
+  li x28, 15
+ 1ac:	00f00e13          	li	t3,15
 
 Disassembly of section .text:
 

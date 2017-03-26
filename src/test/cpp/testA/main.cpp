@@ -176,7 +176,7 @@ public:
 	}
 
     Workspace* bootAt(uint32_t pc) { bootPc = pc;}
-
+	virtual uint32_t iRspOverride(uint32_t value) { return value; }
 	virtual void postReset() {}
 	virtual void checks(){}
 	virtual void pass(){ throw success();}
@@ -241,10 +241,12 @@ public:
 					assertEq(top->iCmd_payload_pc & 3,0);
 					//printf("%d\n",top->iCmd_payload_pc);
 
-					iRsp_inst_next =  (mem[top->iCmd_payload_pc + 0] << 0)
-									| (mem[top->iCmd_payload_pc + 1] << 8)
-									| (mem[top->iCmd_payload_pc + 2] << 16)
-									| (mem[top->iCmd_payload_pc + 3] << 24);
+					iRsp_inst_next =  iRspOverride((mem[top->iCmd_payload_pc + 0] << 0)
+									     | (mem[top->iCmd_payload_pc + 1] << 8)
+								         | (mem[top->iCmd_payload_pc + 2] << 16)
+									     | (mem[top->iCmd_payload_pc + 3] << 24));
+
+
 				}
 
 				if (top->dCmd_valid && top->dCmd_ready) {
@@ -447,6 +449,14 @@ public:
 			}
 		}
 	}
+
+
+	virtual uint32_t iRspOverride(uint32_t value) {
+		switch(value){
+			case 0x0ff0000f: return 0x00000013;
+			default: return value;
+		}
+	}
 };
 #endif
 class Dhrystone : public Workspace{
@@ -587,7 +597,7 @@ int main(int argc, char **argv, char **env) {
 
 		#ifdef CSR
 		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
-		8,6,9,6,10,4,11,4,    12,13,0,14};
+		8,6,9,6,10,4,11,4,    12,13,0,   14,2,15 };
 		redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).run(2e3);)
 		#endif
 		#endif

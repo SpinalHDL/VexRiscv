@@ -72,7 +72,9 @@ object TopLevel {
         new IBusSimplePlugin(
           interfaceKeepData = true
         ),
-        new DecoderSimplePlugin,
+        new DecoderSimplePlugin(
+          catchIllegalInstruction = true
+        ),
         new RegFilePlugin(
           regFileReadyKind = Plugin.SYNC,
           zeroBoot = false
@@ -82,7 +84,7 @@ object TopLevel {
         new FullBarrielShifterPlugin,
 //        new LightShifterPlugin,
         new DBusSimplePlugin(
-          unalignedExceptionGen = true
+          catchUnalignedException = true
         ),
         new HazardSimplePlugin(true, true, true, true),
 //        new HazardSimplePlugin(false, true, false, true),
@@ -92,7 +94,7 @@ object TopLevel {
         new MachineCsr(csrConfig),
         new BranchPlugin(
           earlyBranch = false,
-          unalignedExceptionGen = true,
+          catchUnalignedException = true,
           prediction = DYNAMIC
         )
       )
