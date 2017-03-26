@@ -89,9 +89,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
   }
 
   object ENV_CTRL extends Stageable(EnvCtrlEnum())
-//  object EXCEPTION extends Stageable(Bool)
   object IS_CSR extends Stageable(Bool)
-//  object EXCEPTION_CAUSE extends Stageable(ExceptionCause())
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._

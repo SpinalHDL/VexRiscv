@@ -17,7 +17,74 @@ The hardware description of this CPU is done by using an very software oriented 
 - There is an automatic a tool which allow plugins to insert data in the pipeline at a given stage, and allow other plugins to read it in another stages through automatic pipelining.
 - There is an service system which provide a very dynamic framework. As instance, a plugin could provide an exception service which could then be used by others plugins to emit exceptions from the pipeline.
 
+
+## CPU instantiation 
+There is an example of instantiation of the CPU
+
+```scala
+//Define the cpu configuraiton
+val config = VexRiscvConfig(
+    pcWidth = 32
+)
+
+//Define the CSR configuration (riscv-privileged-v1.9.1)
+val csrConfig = MachineCsrConfig(
+    mvendorid      = 11,
+    marchid        = 22,
+    mimpid         = 33,
+    mhartid        = 0,
+    misaExtensionsInit = 66,
+    misaAccess     = CsrAccess.READ_WRITE,
+    mtvecAccess    = CsrAccess.READ_WRITE,
+    mtvecInit      = 0x00000020l,
+    mepcAccess     = CsrAccess.READ_WRITE,
+    mscratchGen    = true,
+    mcauseAccess   = CsrAccess.READ_WRITE,
+    mbadaddrAccess = CsrAccess.READ_WRITE,
+    mcycleAccess   = CsrAccess.READ_WRITE,
+    minstretAccess = CsrAccess.READ_WRITE,
+    ecallGen       = true,
+    wfiGen         = true
+)
+
+//Add plugins into the cpu configuration
+config.plugins ++= List(
+    new PcManagerSimplePlugin(0x00000000l, false),
+    new IBusSimplePlugin(
+        interfaceKeepData = true
+    ),
+    new DecoderSimplePlugin(
+        catchIllegalInstruction = true
+    ),
+    new RegFilePlugin(
+        regFileReadyKind = Plugin.SYNC,
+        zeroBoot = false
+    ),
+    new IntAluPlugin,
+    new SrcPlugin,
+    new FullBarrielShifterPlugin,
+    new DBusSimplePlugin(
+        catchUnalignedException = true
+    ),
+    new HazardSimplePlugin(true, true, true, true),
+    new MulPlugin,
+    new DivPlugin,
+    new MachineCsr(csrConfig),
+    new BranchPlugin(
+        earlyBranch = false,
+        catchUnalignedException = true,
+        prediction = DYNAMIC
+    )
+)
+
+//Instanciate the CPU
+val toplevel = new VexRiscv(config)
+```
+
+
 ## Plugin structure
+
+There is an example of an pseudo ALU plugin :
 
 ```scala
 

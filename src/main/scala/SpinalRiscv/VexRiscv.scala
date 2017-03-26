@@ -7,7 +7,7 @@ import scala.collection.mutable.ArrayBuffer
 
 case class VexRiscvConfig(pcWidth : Int){
   val plugins = ArrayBuffer[Plugin[VexRiscv]]()
-  //TODO apply defaults to decoder
+
   //Default Stageables
   object BYPASSABLE_EXECUTE_STAGE   extends Stageable(Bool)
   object BYPASSABLE_MEMORY_STAGE   extends Stageable(Bool)
