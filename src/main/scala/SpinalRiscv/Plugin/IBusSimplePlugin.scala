@@ -17,6 +17,10 @@ class IBusSimplePlugin(interfaceKeepData : Boolean) extends Plugin[VexRiscv]{
   var iCmd  : Stream[IBusSimpleCmd] = null
   var iRsp  : IBusSimpleRsp = null
 
+  override def setup(pipeline: VexRiscv): Unit = {
+    pipeline.unremovableStages += pipeline.prefetch
+  }
+
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._

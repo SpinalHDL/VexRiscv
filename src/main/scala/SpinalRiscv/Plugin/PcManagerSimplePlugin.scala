@@ -1,12 +1,12 @@
 package SpinalRiscv.Plugin
 
-import SpinalRiscv.{JumpService, Stage, VexRiscv}
+import SpinalRiscv._
 import spinal.core._
 import spinal.lib._
 
 import scala.collection.mutable.ArrayBuffer
 
-class PcManagerSimplePlugin(resetVector : BigInt,fastPcCalculation : Boolean) extends Plugin[VexRiscv] with JumpService{
+class PcManagerSimplePlugin(resetVector : BigInt, fastPcCalculation : Boolean) extends Plugin[VexRiscv] with JumpService{
 
 
   //FetchService interface
@@ -17,7 +17,8 @@ class PcManagerSimplePlugin(resetVector : BigInt,fastPcCalculation : Boolean) ex
     jumpInfos += JumpInfo(interface,stage)
     interface
   }
-
+  var prefetchExceptionPort : Flow[ExceptionCause] = null
+  
   override def setup(pipeline: VexRiscv): Unit = {
     pipeline.unremovableStages += pipeline.prefetch
   }

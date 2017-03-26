@@ -2,7 +2,10 @@ TRACE=no
 TRACE_START=0
 CSR=yes
 DHRYSTONE=yes
-REDO=5
+FREE_RTOS=no
+REDO=10
+REF=no
+TRACE_WITH_TIME=no
 
 ADDCFLAGS += -CFLAGS -DREDO=${REDO}
 ifeq ($(DHRYSTONE),yes)
@@ -18,7 +21,19 @@ ifeq ($(CSR),yes)
 	ADDCFLAGS += -CFLAGS -DCSR
 endif
 
+ifeq ($(TRACE_WITH_TIME),yes)
+	ADDCFLAGS += -CFLAGS -DTRACE_WITH_TIME
+endif
+
+ifeq ($(REF),yes)
+	ADDCFLAGS += -CFLAGS -DREF
+endif
+
 ADDCFLAGS += -CFLAGS -DTRACE_START=${TRACE_START}
+ifeq ($(FREE_RTOS),yes)
+	ADDCFLAGS += -CFLAGS -DFREE_RTOS
+endif
+
 
 run: compile
 	./obj_dir/VVexRiscv

@@ -9,7 +9,7 @@ trait RegFileReadKind
 object ASYNC extends RegFileReadKind
 object SYNC extends RegFileReadKind
 
-class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]{
+class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = false) extends Plugin[VexRiscv]{
   import Riscv._
 
   override def setup(pipeline: VexRiscv): Unit = {
@@ -25,6 +25,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind) extends Plugin[VexRiscv]
 
     val global = pipeline plug new Area{
       val regFile = Mem(Bits(32 bits),32) addAttribute("verilator public")
+      if(zeroBoot) regFile.init(List.fill(32)(B(0, 32 bits)))
     }
 
     //Read register file

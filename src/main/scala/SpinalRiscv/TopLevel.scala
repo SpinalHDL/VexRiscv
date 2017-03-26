@@ -46,8 +46,8 @@ object TopLevel {
         mbadaddrAccess = CsrAccess.READ_WRITE,
         mcycleAccess   = CsrAccess.READ_WRITE,
         minstretAccess = CsrAccess.READ_WRITE,
-        ecallGen       = false,
-        wfiGen         = false
+        ecallGen       = true,
+        wfiGen         = true
       )
 
 //      val csrConfig = MachineCsrConfig(
@@ -69,30 +69,35 @@ object TopLevel {
 
       config.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, false),
-        new IBusSimplePlugin(true),
+        new IBusSimplePlugin(
+          interfaceKeepData = true
+        ),
         new DecoderSimplePlugin,
-        new RegFilePlugin(Plugin.SYNC),
+        new RegFilePlugin(
+          regFileReadyKind = Plugin.SYNC,
+          zeroBoot = false
+        ),
         new IntAluPlugin,
         new SrcPlugin,
         new FullBarrielShifterPlugin,
 //        new LightShifterPlugin,
-        new DBusSimplePlugin,
-//        new HazardSimplePlugin(false, true, false, true),
+        new DBusSimplePlugin(
+          unalignedExceptionGen = true
+        ),
         new HazardSimplePlugin(true, true, true, true),
+//        new HazardSimplePlugin(false, true, false, true),
 //        new HazardSimplePlugin(false, false, false, false),
         new MulPlugin,
         new DivPlugin,
         new MachineCsr(csrConfig),
-        new BranchPlugin(false, DYNAMIC)
+        new BranchPlugin(
+          earlyBranch = false,
+          unalignedExceptionGen = true,
+          prediction = DYNAMIC
+        )
       )
 
       val toplevel = new VexRiscv(config)
-
-
-
-      //      toplevel.service(classOf[DecoderSimplePlugin]).bench(toplevel)
-
-
       toplevel
     }
   }

@@ -1,5 +1,8 @@
 #include "VVexRiscv.h"
 #include "VVexRiscv_VexRiscv.h"
+#ifdef REF
+#include "VVexRiscv_RiscvCore.h"
+#endif
 #include "verilated.h"
 #include "verilated_vcd_c.h"
 #include <stdio.h>
@@ -214,7 +217,12 @@ public:
 		top->clk = 1;
 
 		postReset();
+
+		#ifdef  REF
+		if(bootPc != -1) top->VexRiscv->core->prefetch_pc = bootPc;
+		#else
 		if(bootPc != -1) top->VexRiscv->prefetch_PcManagerSimplePlugin_pcReg = bootPc;
+		#endif
 
 		try {
 			// run simulation for 100 clock periods
@@ -245,11 +253,15 @@ public:
 
 					uint32_t addr = top->dCmd_payload_address;
 					if(top->dCmd_payload_wr){
-						memTraces << (currentTime
+						memTraces <<
+						#ifdef TRACE_WITH_TIME
+						(currentTime
 						#ifdef REF
 						-2
 						 #endif
-						 ) << " : WRITE mem" << (1 << top->dCmd_payload_size) << "[" << addr << "] = " << top->dCmd_payload_data << endl;
+						 ) <<
+						 #endif
+						 " : WRITE mem" << (1 << top->dCmd_payload_size) << "[" << addr << "] = " << top->dCmd_payload_data << endl;
 						for(uint32_t b = 0;b < (1 << top->dCmd_payload_size);b++){
 							uint32_t offset = (addr+b)&0x3;
 							*mem.get(addr + b) = top->dCmd_payload_data >> (offset*8);
@@ -280,11 +292,15 @@ public:
 						case 0xF00FFF48u: dRsp_inst_next = mTimeCmp;       break;
 						case 0xF00FFF4Cu: dRsp_inst_next = mTimeCmp >> 32; break;
 						}
-						memTraces << (currentTime
+						memTraces <<
+						#ifdef TRACE_WITH_TIME
+						(currentTime
 						#ifdef REF
 						-2
-						#endif
-						) << " : READ  mem" << (1 << top->dCmd_payload_size) << "[" << addr << "] = " << dRsp_inst_next << endl;
+						 #endif
+						 ) <<
+						 #endif
+						  " : READ  mem" << (1 << top->dCmd_payload_size) << "[" << addr << "] = " << dRsp_inst_next << endl;
 
 					}
 				}
@@ -303,7 +319,11 @@ public:
 						if(iStall) top->iCmd_ready = VL_RANDOM_I(1);
 						if(dStall) top->dCmd_ready = VL_RANDOM_I(1);
 						if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
-							regTraces << currentTime << " : reg[" << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
+							regTraces <<
+								#ifdef TRACE_WITH_TIME
+								currentTime <<
+								 #endif
+								 " : reg[" << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
 						}
 						checks();
 					}
@@ -413,7 +433,7 @@ public:
 	}
 
 	virtual void checks(){
-		if(top->VexRiscv->writeBack_arbitration_isValid == 1 && top->VexRiscv->writeBack_INSTRUCTION == 0x00000073){
+		if(/*top->VexRiscv->writeBack_arbitration_isValid == 1 && */top->VexRiscv->writeBack_INSTRUCTION == 0x00000073){
 			uint32_t code = top->VexRiscv->RegFilePlugin_regFile[28];
 			if((code & 1) == 0){
 				cout << "Wrong error code"<< endl;
@@ -564,15 +584,19 @@ int main(int argc, char **argv, char **env) {
 		for(const string &name : riscvTestDiv){
 			redo(REDO,RiscvTest(name).run();)
 		}
-		#endif
 
 		#ifdef CSR
-		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,8};
+		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
+		8,6,9,6,10,4,11,4,    12,13,0,14};
 		redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).run(2e3);)
 		#endif
+		#endif
+
+
 
 		#ifdef DHRYSTONE
-		Dhrystone("dhrystoneO3",true,true).run(1e6);
+//		Dhrystone("dhrystoneO3",false,false).run(0.05e6);
+		Dhrystone("dhrystoneO3",true,true).run(1.1e6);
 		Dhrystone("dhrystoneO3M",true,true).run(0.8e6);
 		Dhrystone("dhrystoneO3M",false,false).run(0.8e6);
 //		Dhrystone("dhrystoneO3ML",false,false).run(8e6);
@@ -580,8 +604,8 @@ int main(int argc, char **argv, char **env) {
 		#endif
 
 
-		#ifdef CSR
-		redo(REDO,Workspace("freeRTOS_demo").loadHex("../../resources/hex/freeRTOS_demo.hex")->bootAt(0x80000000u)->run(100e6);)
+		#ifdef FREE_RTOS
+		redo(1,Workspace("freeRTOS_demo").loadHex("../../resources/hex/freeRTOS_demo.hex")->bootAt(0x80000000u)->run(100e6);)
 		#endif
 	}
 

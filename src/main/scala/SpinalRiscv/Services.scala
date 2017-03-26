@@ -14,7 +14,7 @@ trait DecoderService{
 }
 
 case class ExceptionCause() extends Bundle{
-  val exceptionCode = UInt(4 bits)
+  val code = UInt(4 bits)
 }
 
 trait ExceptionService{

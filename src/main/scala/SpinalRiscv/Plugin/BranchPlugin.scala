@@ -10,7 +10,11 @@ object NONE extends BranchPrediction
 object STATIC  extends BranchPrediction
 object DYNAMIC extends BranchPrediction
 
-class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRamSizeLog2 : Int = 10,historyWidth : Int = 2) extends Plugin[VexRiscv]{
+class BranchPlugin(earlyBranch : Boolean,
+                   unalignedExceptionGen : Boolean,
+                   prediction : BranchPrediction,
+                   historyRamSizeLog2 : Int = 10,
+                   historyWidth : Int = 2) extends Plugin[VexRiscv]{
   object BranchCtrlEnum extends SpinalEnum(binarySequential){
     val INC,B,JAL,JALR = newElement()
   }
@@ -22,6 +26,8 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
 
   var jumpInterface : Flow[UInt] = null
   var predictionJumpInterface : Flow[UInt] = null
+  var predictionExceptionPort : Flow[ExceptionCause] = null
+  var branchExceptionPort : Flow[ExceptionCause] = null
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -50,19 +56,27 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
 
     decoderService.addDefault(BRANCH_CTRL, BranchCtrlEnum.INC)
     decoderService.add(List(
-      JAL  -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JAL , ALU_CTRL -> AluCtrlEnum.ADD_SUB)),
+      JAL -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JAL, ALU_CTRL -> AluCtrlEnum.ADD_SUB)),
       JALR -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JALR, ALU_CTRL -> AluCtrlEnum.ADD_SUB, REG1_USE -> True)),
-      BEQ  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
-      BNE  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
-      BLT  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
-      BGE  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
+      BEQ -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
+      BNE -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
+      BLT -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
+      BGE -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
       BLTU -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> True)),
       BGEU -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> True))
     ))
 
-    val  pcManagerService = pipeline.service(classOf[JumpService])
+    val pcManagerService = pipeline.service(classOf[JumpService])
     jumpInterface = pcManagerService.createJumpInterface(pipeline.execute)
-    if(prediction != NONE) predictionJumpInterface = pcManagerService.createJumpInterface(pipeline.decode)
+    if (prediction != NONE)
+      predictionJumpInterface = pcManagerService.createJumpInterface(pipeline.decode)
+
+    if (unalignedExceptionGen) {
+      val exceptionService = pipeline.service(classOf[ExceptionService])
+      branchExceptionPort = exceptionService.newExceptionPort(if (earlyBranch) pipeline.execute else pipeline.memory)
+      if (prediction != NONE)
+        predictionExceptionPort = exceptionService.newExceptionPort(pipeline.decode)
+    }
   }
 
   override def build(pipeline: VexRiscv): Unit = prediction match {
@@ -112,7 +126,12 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
       jumpInterface.payload := input(BRANCH_CALC)
 
       when(jumpInterface.valid) {
-        stages(indexOf(branchStage) - 1).arbitration.flushIt := True
+        stages(indexOf(branchStage) - 1).arbitration.flushAll := True
+      }
+
+      if(unalignedExceptionGen) {
+        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
+        branchExceptionPort.code := 0
       }
     }
   }
@@ -157,7 +176,12 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
       predictionJumpInterface.valid := input(PREDICTION_HAD_BRANCHED) && arbitration.isFiring //TODO OH Doublon de priorité
       predictionJumpInterface.payload := input(PC) + ((input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
       when(predictionJumpInterface.valid) {
-        fetch.arbitration.flushIt := True
+        fetch.arbitration.flushAll := True
+      }
+
+      if(unalignedExceptionGen) {
+        predictionExceptionPort.valid := input(PREDICTION_HAD_BRANCHED) && arbitration.isValid && predictionJumpInterface.payload(1 downto 0) =/= 0
+        predictionExceptionPort.code := 0
       }
     }
 
@@ -207,7 +231,12 @@ class BranchPlugin(earlyBranch : Boolean,prediction : BranchPrediction,historyRa
       jumpInterface.payload := input(BRANCH_CALC)
 
       when(jumpInterface.valid) {
-        stages(indexOf(branchStage) - 1).arbitration.flushIt := True
+        stages(indexOf(branchStage) - 1).arbitration.flushAll := True
+      }
+
+      if(unalignedExceptionGen) {
+        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
+        branchExceptionPort.code := 0
       }
     }
 

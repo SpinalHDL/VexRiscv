@@ -16,7 +16,7 @@ case class DBusSimpleRsp() extends Bundle{
   val data = Bits(32 bit)
 }
 
-class DBusSimplePlugin extends Plugin[VexRiscv]{
+class DBusSimplePlugin(unalignedExceptionGen : Boolean) extends Plugin[VexRiscv]{
 
   var dCmd  : Stream[DBusSimpleCmd] = null
   var dRsp  : DBusSimpleRsp = null
@@ -30,7 +30,7 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
   object MEMORY_READ_DATA extends Stageable(Bits(32 bits))
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
 
-
+  var executeExceptionPort : Flow[ExceptionCause] = null
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -71,9 +71,10 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
       SW   -> (storeActions)
     ))
 
-
-//    val exceptionService = pipeline.service(classOf[ExceptionService])
-//    executeExceptionPort = exceptionService.newExceptionPort(pipeline.execute)
+    if(unalignedExceptionGen) {
+      val exceptionService = pipeline.service(classOf[ExceptionService])
+      executeExceptionPort = exceptionService.newExceptionPort(pipeline.execute)
+    }
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -99,6 +100,12 @@ class DBusSimplePlugin extends Plugin[VexRiscv]{
       }
 
       insert(MEMORY_ADDRESS_LOW) := dCmd.address(1 downto 0)
+
+      if(unalignedExceptionGen){
+        executeExceptionPort.code := (dCmd.wr ? U(6) | U(4)).resized
+        executeExceptionPort.valid := (arbitration.isValid && input(MEMORY_ENABLE)
+          && ((dCmd.size === 2 && dCmd.address(1 downto 0) =/= 0) || (dCmd.size === 1 && dCmd.address(0 downto 0) =/= 0)))
+      }
     }
 
     //Collect dRsp read responses

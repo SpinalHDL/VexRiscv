@@ -89,9 +89,9 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
   }
 
   object ENV_CTRL extends Stageable(EnvCtrlEnum())
-  object EXCEPTION extends Stageable(Bool)
+//  object EXCEPTION extends Stageable(Bool)
   object IS_CSR extends Stageable(Bool)
-  object EXCEPTION_CAUSE extends Stageable(ExceptionCause())
+//  object EXCEPTION_CAUSE extends Stageable(ExceptionCause())
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -241,8 +241,12 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
       //Aggregate all exception port and remove required instructions
       val exceptionPortCtrl = if(exceptionPortsInfos.nonEmpty) new Area{
         val firstStageIndexWithExceptionPort = exceptionPortsInfos.map(i => indexOf(i.stage)).min
-        val pipelineHasException = stages.drop(firstStageIndexWithExceptionPort).map(s => s.arbitration.isValid && s.input(EXCEPTION)).orR
-        decode.arbitration.haltIt setWhen(pipelineHasException)
+        val exceptionValids = Vec(Bool,stages.length)
+        val exceptionValidsRegs = Vec(Reg(Bool) init(False), stages.length)
+        val exceptionContext = Reg(ExceptionCause())
+        val pipelineHasException = exceptionValids.orR
+
+        pipelineLiberator.enable setWhen(pipelineHasException)
 
         val groupedByStage = exceptionPortsInfos.map(_.stage).distinct.map(s => {
           assert(s != writeBack)
@@ -260,27 +264,40 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
           }
           ExceptionPortInfo(stagePort,s)
         })
-        val sortedByStage = groupedByStage.sortWith((a, b) => pipeline.indexOf(a.stage) > pipeline.indexOf(b.stage))
 
-        sortedByStage.head.stage.insert(EXCEPTION) := False
-        sortedByStage.head.stage.insert(EXCEPTION_CAUSE).assignDontCare()
-        for(portInfo <- sortedByStage; port = portInfo.port ; stage = portInfo.stage){
-          when(port.valid){
-            stages(indexOf(stage) - 1).arbitration.flushIt := True
-            stage.input(EXCEPTION) := True
-            stage.input(EXCEPTION_CAUSE) := port.payload
+        val sortedByStage = groupedByStage.sortWith((a, b) => pipeline.indexOf(a.stage) < pipeline.indexOf(b.stage))
+
+        exceptionValids := exceptionValidsRegs
+        for(portInfo <- sortedByStage; port = portInfo.port ; stage = portInfo.stage; stageId = indexOf(portInfo.stage)) {
+          when(port.valid) {
+            stages(indexOf(stage) - 1).arbitration.flushAll := True
+            stage.arbitration.removeIt := True
+            exceptionValids(stageId) := True
+            exceptionContext := port.payload
           }
         }
+        for(stageId <- firstStageIndexWithExceptionPort until stages.length; stage = stages(stageId) ){
+        when(stage.arbitration.isFlushed){
+            exceptionValids(stageId) := False
+          }
+          when(!stage.arbitration.isStuck){
+            exceptionValidsRegs(stageId) := (if(stageId != firstStageIndexWithExceptionPort) exceptionValids(stageId-1) else False)
+          }otherwise{
+            exceptionValidsRegs(stageId) := exceptionValids(stageId)
+          }
+        }
+
+
       } else null
 
 
 
       val interrupt = ((mip.MSIP && mie.MSIE) || (mip.MEIP && mie.MEIE) || (mip.MTIP && mie.MTIE)) && mstatus.MIE
-      val exception = if(exceptionPortsInfos.nonEmpty) writeBack.arbitration.isValid && writeBack.input(EXCEPTION) else False
+      val exception = if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValids.last else False
       val writeBackWfi = if(wfiGen) writeBack.arbitration.isValid && writeBack.input(ENV_CTRL) === EnvCtrlEnum.WFI else False
 
       //Interrupt/Exception entry logic
-      pipelineLiberator.enable setWhen interrupt
+      pipelineLiberator.enable setWhen(interrupt)
       when(exception || (interrupt && pipelineLiberator.done)){
         jumpInterface.valid := True
         jumpInterface.payload := mtvec
@@ -294,7 +311,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         mcause.interrupt := interrupt
         mcause.exceptionCode := interrupt.mux(
           True  -> ((mip.MEIP && mie.MEIE) ? U(11) | ((mip.MSIP && mie.MSIE) ? U(3) | U(7))),
-          False -> (if(exceptionPortCtrl != null) writeBack.input(EXCEPTION_CAUSE).exceptionCode else U(0))
+          False -> (if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionContext.code else U(0))
         )
       }
 
@@ -303,21 +320,21 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
       when(memory.arbitration.isFiring && memory.input(ENV_CTRL) === EnvCtrlEnum.MRET){
         jumpInterface.valid := True
         jumpInterface.payload := mepc
-        execute.arbitration.flushIt := True
+        execute.arbitration.flushAll := True
         mstatus.MIE := mstatus.MPIE
       }
 
       //Manage ECALL instructions
       if(ecallGen) when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.ECALL){
         pluginExceptionPort.valid := True
-        pluginExceptionPort.exceptionCode := 11
+        pluginExceptionPort.code := 11
       }
 
       //Manage WFI instructions
       if(wfiGen) when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.WFI){
         when(!interrupt){
           execute.arbitration.haltIt := True
-          decode.arbitration.flushIt := True
+          decode.arbitration.flushAll := True
         }
       }
 
