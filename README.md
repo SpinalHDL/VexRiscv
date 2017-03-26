@@ -23,15 +23,14 @@ The hardware description of this CPU is done by using an very software oriented 
 
 //Define an signal name/type which could be used in the pipeline
 object ALU_ENABLE extends Stageable(Bool)
-object ALU_OP     extends Stageable(Bits(2 bits))  // ADD, SUB, AND, OR
+object ALU_OP     extends Stageable(Bits(2  bits))  // ADD, SUB, AND, OR
 object ALU_SRC1   extends Stageable(UInt(32 bits))
 object ALU_SRC2   extends Stageable(UInt(32 bits))
 object ALU_RESULT extends Stageable(UInt(32 bits))
 
 class AluPlugin() extends Plugin[VexRiscv]{
 
-
-
+  //Callback to setup the plugin and ask for different services
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
     //Do some setups as for example specifying some instruction decoding by using the Decoding service
@@ -39,10 +38,13 @@ class AluPlugin() extends Plugin[VexRiscv]{
 
     decoderService.addDefault(ALU_ENABLE,False)
     decodingService.add(List(
-        //.....
+        M"0100----------" -> List(ALU_ENABLE -> True, ALU_OP -> B"01"),
+        M"0110---11-----" -> List(ALU_ENABLE -> True, ...)
     ))
   }
 
+
+  //Callback to build the hardware logic
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
 
