@@ -85,7 +85,7 @@ object TopLevel {
         new FullBarrielShifterPlugin,
 //        new LightShifterPlugin,
         new DBusSimplePlugin(
-          catchUnalignedException = true,
+          catchAddressMisaligned = true,
           catchAccessFault = true
         ),
         new HazardSimplePlugin(true, true, true, true),
@@ -96,7 +96,7 @@ object TopLevel {
         new MachineCsr(csrConfig),
         new BranchPlugin(
           earlyBranch = false,
-          catchUnalignedException = true,
+          catchAddressMisaligned = true,
           prediction = DYNAMIC
         )
       )

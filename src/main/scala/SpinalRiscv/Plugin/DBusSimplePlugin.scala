@@ -18,7 +18,7 @@ case class DBusSimpleRsp() extends Bundle{
   val data = Bits(32 bit)
 }
 
-class DBusSimplePlugin(catchUnalignedException : Boolean, catchAccessFault : Boolean) extends Plugin[VexRiscv]{
+class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Boolean) extends Plugin[VexRiscv]{
 
   var dCmd  : Stream[DBusSimpleCmd] = null
   var dRsp  : DBusSimpleRsp = null
@@ -45,9 +45,8 @@ class DBusSimplePlugin(catchUnalignedException : Boolean, catchAccessFault : Boo
       SRC1_CTRL         -> Src1CtrlEnum.RS,
       SRC_USE_SUB_LESS  -> False,
       MEMORY_ENABLE     -> True,
-      REG1_USE          -> True,
-      IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB //Used for assess fault bad address in memory stage
-    )
+      REG1_USE          -> True
+    ) ++ (if(catchAccessFault) List(IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB) else Nil) //Used for access fault bad address in memory stage
 
     val loadActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMI,
@@ -74,7 +73,7 @@ class DBusSimplePlugin(catchUnalignedException : Boolean, catchAccessFault : Boo
       SW   -> (storeActions)
     ))
 
-    if(catchUnalignedException) {
+    if(catchAddressMisaligned) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       executeExceptionPort = exceptionService.newExceptionPort(pipeline.execute)
     }
@@ -109,7 +108,7 @@ class DBusSimplePlugin(catchUnalignedException : Boolean, catchAccessFault : Boo
 
       insert(MEMORY_ADDRESS_LOW) := dCmd.address(1 downto 0)
 
-      if(catchUnalignedException){
+      if(catchAddressMisaligned){
         executeExceptionPort.code := (dCmd.wr ? U(6) | U(4)).resized
         executeExceptionPort.badAddr := dCmd.address
         executeExceptionPort.valid := (arbitration.isValid && input(MEMORY_ENABLE)
