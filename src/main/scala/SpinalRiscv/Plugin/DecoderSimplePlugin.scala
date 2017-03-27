@@ -125,6 +125,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
     if(catchIllegalInstruction){
       decodeExceptionPort.valid := arbitration.isValid && !input(LEGAL_INSTRUCTION)
       decodeExceptionPort.code := 2
+      decodeExceptionPort.badAddr.assignDontCare()
     }
   }
 

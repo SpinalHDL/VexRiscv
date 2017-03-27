@@ -99,7 +99,42 @@ object TopLevel {
         )
       )
 
+//      config.plugins ++= List(
+//        new PcManagerSimplePlugin(0x00000000l, false),
+//        new IBusSimplePlugin(
+//          interfaceKeepData = true
+//        ),
+//        new DecoderSimplePlugin(
+//          catchIllegalInstruction = false
+//        ),
+//        new RegFilePlugin(
+//          regFileReadyKind = Plugin.SYNC,
+//          zeroBoot = false
+//        ),
+//        new IntAluPlugin,
+//        new SrcPlugin,
+////        new FullBarrielShifterPlugin,
+//        new LightShifterPlugin,
+//        new DBusSimplePlugin(
+//          catchUnalignedException = false
+//        ),
+////        new HazardSimplePlugin(true, true, true, true),
+//        //        new HazardSimplePlugin(false, true, false, true),
+//        new HazardSimplePlugin(false, false, false, false),
+////        new MulPlugin,
+////        new DivPlugin,
+////        new MachineCsr(csrConfig),
+//        new BranchPlugin(
+//          earlyBranch = false,
+//          catchUnalignedException = false,
+//          prediction = NONE
+//        )
+//      )
+
       val toplevel = new VexRiscv(config)
+
+//      toplevel.service(classOf[DecoderSimplePlugin]).bench(toplevel)
+
       toplevel
     }
   }

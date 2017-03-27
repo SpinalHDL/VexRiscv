@@ -608,6 +608,7 @@ int main(int argc, char **argv, char **env) {
 //		Dhrystone("dhrystoneO3",false,false).run(0.05e6);
 		Dhrystone("dhrystoneO3",true,true).run(1.1e6);
 		Dhrystone("dhrystoneO3M",true,true).run(0.8e6);
+		Dhrystone("dhrystoneO3",false,false).run(1.1e6);
 		Dhrystone("dhrystoneO3M",false,false).run(0.8e6);
 //		Dhrystone("dhrystoneO3ML",false,false).run(8e6);
 //		Dhrystone("dhrystoneO3MLL",false,false).run(80e6);

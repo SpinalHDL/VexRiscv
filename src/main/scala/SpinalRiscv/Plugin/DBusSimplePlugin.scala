@@ -103,6 +103,7 @@ class DBusSimplePlugin(catchUnalignedException : Boolean) extends Plugin[VexRisc
 
       if(catchUnalignedException){
         executeExceptionPort.code := (dCmd.wr ? U(6) | U(4)).resized
+        executeExceptionPort.badAddr := dCmd.address
         executeExceptionPort.valid := (arbitration.isValid && input(MEMORY_ENABLE)
           && ((dCmd.size === 2 && dCmd.address(1 downto 0) =/= 0) || (dCmd.size === 1 && dCmd.address(0 downto 0) =/= 0)))
       }

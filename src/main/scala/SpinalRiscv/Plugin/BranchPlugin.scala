@@ -74,8 +74,9 @@ class BranchPlugin(earlyBranch : Boolean,
     if (catchUnalignedException) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       branchExceptionPort = exceptionService.newExceptionPort(if (earlyBranch) pipeline.execute else pipeline.memory)
-      if (prediction != NONE)
+      if (prediction != NONE) {
         predictionExceptionPort = exceptionService.newExceptionPort(pipeline.decode)
+      }
     }
   }
 
@@ -132,6 +133,7 @@ class BranchPlugin(earlyBranch : Boolean,
       if(catchUnalignedException) {
         branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
         branchExceptionPort.code := 0
+        branchExceptionPort.badAddr := jumpInterface.payload
       }
     }
   }
@@ -182,6 +184,7 @@ class BranchPlugin(earlyBranch : Boolean,
       if(catchUnalignedException) {
         predictionExceptionPort.valid := input(PREDICTION_HAD_BRANCHED) && arbitration.isValid && predictionJumpInterface.payload(1 downto 0) =/= 0
         predictionExceptionPort.code := 0
+        predictionExceptionPort.badAddr := predictionJumpInterface.payload
       }
     }
 
@@ -237,6 +240,7 @@ class BranchPlugin(earlyBranch : Boolean,
       if(catchUnalignedException) {
         branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
         branchExceptionPort.code := 0
+        branchExceptionPort.badAddr := jumpInterface.payload
       }
     }
 
