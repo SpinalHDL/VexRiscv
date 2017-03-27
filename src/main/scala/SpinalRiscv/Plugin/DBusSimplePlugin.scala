@@ -13,10 +13,12 @@ case class DBusSimpleCmd() extends Bundle{
 }
 
 case class DBusSimpleRsp() extends Bundle{
+  val ready = Bool
+  val error = Bool
   val data = Bits(32 bit)
 }
 
-class DBusSimplePlugin(catchUnalignedException : Boolean) extends Plugin[VexRiscv]{
+class DBusSimplePlugin(catchUnalignedException : Boolean, catchAccessFault : Boolean) extends Plugin[VexRiscv]{
 
   var dCmd  : Stream[DBusSimpleCmd] = null
   var dRsp  : DBusSimpleRsp = null
@@ -31,7 +33,7 @@ class DBusSimplePlugin(catchUnalignedException : Boolean) extends Plugin[VexRisc
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
 
   var executeExceptionPort : Flow[ExceptionCause] = null
-
+  var memoryExceptionPort : Flow[ExceptionCause] = null
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
     import pipeline.config._
@@ -39,11 +41,12 @@ class DBusSimplePlugin(catchUnalignedException : Boolean) extends Plugin[VexRisc
     val decoderService = pipeline.service(classOf[DecoderService])
 
     val stdActions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION        -> True,
-      SRC1_CTRL                -> Src1CtrlEnum.RS,
-      SRC_USE_SUB_LESS         -> False,
-      MEMORY_ENABLE -> True,
-      REG1_USE -> True
+      LEGAL_INSTRUCTION -> True,
+      SRC1_CTRL         -> Src1CtrlEnum.RS,
+      SRC_USE_SUB_LESS  -> False,
+      MEMORY_ENABLE     -> True,
+      REG1_USE          -> True,
+      IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB //Used for assess fault bad address in memory stage
     )
 
     val loadActions = stdActions ++ List(
@@ -74,6 +77,11 @@ class DBusSimplePlugin(catchUnalignedException : Boolean) extends Plugin[VexRisc
     if(catchUnalignedException) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       executeExceptionPort = exceptionService.newExceptionPort(pipeline.execute)
+    }
+
+    if(catchAccessFault) {
+      val exceptionService = pipeline.service(classOf[ExceptionService])
+      memoryExceptionPort = exceptionService.newExceptionPort(pipeline.memory)
     }
   }
 
@@ -115,7 +123,15 @@ class DBusSimplePlugin(catchUnalignedException : Boolean) extends Plugin[VexRisc
 
       dRsp = in(DBusSimpleRsp()).setName("dRsp")
       insert(MEMORY_READ_DATA) := dRsp.data
-      assert(!(input(MEMORY_ENABLE) && (!input(INSTRUCTION)(5)) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
+      arbitration.haltIt setWhen(arbitration.isValid && input(MEMORY_ENABLE) && !dRsp.ready)
+
+      if(catchAccessFault){
+        memoryExceptionPort.valid := arbitration.isValid && input(MEMORY_ENABLE) && dRsp.ready && dRsp.error
+        memoryExceptionPort.code  := 5
+        memoryExceptionPort.badAddr := input(REGFILE_WRITE_DATA).asUInt  //Drived by IntAluPlugin
+      }
+
+      assert(!(dRsp.ready && input(MEMORY_ENABLE) && arbitration.isValid && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
     }
 
     //Reformat read responses, REGFILE_WRITE_DATA overriding

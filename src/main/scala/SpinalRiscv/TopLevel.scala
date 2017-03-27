@@ -70,7 +70,8 @@ object TopLevel {
       config.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, false),
         new IBusSimplePlugin(
-          interfaceKeepData = true
+          interfaceKeepData = true,
+          catchAccessFault = true
         ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = true
@@ -84,7 +85,8 @@ object TopLevel {
         new FullBarrielShifterPlugin,
 //        new LightShifterPlugin,
         new DBusSimplePlugin(
-          catchUnalignedException = true
+          catchUnalignedException = true,
+          catchAccessFault = true
         ),
         new HazardSimplePlugin(true, true, true, true),
 //        new HazardSimplePlugin(false, true, false, true),

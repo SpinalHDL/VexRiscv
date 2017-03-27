@@ -204,6 +204,11 @@ public:
 		top->reset = 0;
 		top->iCmd_ready = 1;
 		top->dCmd_ready = 1;
+		top->iRsp_ready = 1;
+		top->dRsp_ready = 1;
+		top->iRsp_error = 0;
+		top->dRsp_error = 0;
+
 		top->eval(); currentTime = 3;
 		top->reset = 1;
 		top->eval();
@@ -214,7 +219,7 @@ public:
 		dump(0);
 		top->reset = 0;
 		top->eval(); currentTime = 2;
-		top->clk = 1;
+
 
 		postReset();
 
@@ -226,6 +231,9 @@ public:
 
 		try {
 			// run simulation for 100 clock periods
+			uint32_t iRsp_inst_next = top->iRsp_inst;
+			uint32_t dRsp_inst_next = VL_RANDOM_I(32);
+			bool iRsp_ready_pending = false, dRsp_ready_pending = false;
 			for (i = 16; i < timeout*2; i+=2) {
 				mTime = i/2;
 				#ifdef CSR
@@ -233,12 +241,21 @@ public:
 				//if(mTime == mTimeCmp) printf("SIM timer tick\n");
 				#endif
 				currentTime = i;
-				uint32_t iRsp_inst_next = top->iRsp_inst;
-				uint32_t dRsp_inst_next = VL_RANDOM_I(32);
 
 
-				if (top->iCmd_valid && top->iCmd_ready) {
+
+
+				// dump variables into VCD file and toggle clock
+
+				dump(i);
+				top->clk = 0;
+				top->eval(); top->eval();top->eval();
+
+
+				dump(i + 1);
+				if (top->iCmd_valid && top->iCmd_ready && !iRsp_ready_pending) {
 					assertEq(top->iCmd_payload_pc & 3,0);
+					iRsp_ready_pending = true;
 					//printf("%d\n",top->iCmd_payload_pc);
 
 					iRsp_inst_next =  iRspOverride((mem[top->iCmd_payload_pc + 0] << 0)
@@ -246,11 +263,12 @@ public:
 								         | (mem[top->iCmd_payload_pc + 2] << 16)
 									     | (mem[top->iCmd_payload_pc + 3] << 24));
 
-
 				}
 
-				if (top->dCmd_valid && top->dCmd_ready) {
+				if (top->dCmd_valid && top->dCmd_ready && ! dRsp_ready_pending) {
 //					assertEq(top->iCmd_payload_pc & 3,0);
+					dRsp_ready_pending = true;
+					dRsp_inst_next = VL_RANDOM_I(32);
 					//printf("%d\n",top->iCmd_payload_pc);
 
 					uint32_t addr = top->dCmd_payload_address;
@@ -307,34 +325,37 @@ public:
 					}
 				}
 
-
-
-
-
-				// dump variables into VCD file and toggle clock
-				for (uint32_t clk = 0; clk < 2; clk++) {
-					dump(i+ clk);
-					top->clk = !top->clk;
-
-					top->eval();
-					if(top->clk == 0){
-						if(iStall) top->iCmd_ready = VL_RANDOM_I(1);
-						if(dStall) top->dCmd_ready = VL_RANDOM_I(1);
-						if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
-							regTraces <<
-								#ifdef TRACE_WITH_TIME
-								currentTime <<
-								 #endif
-								 " : reg[" << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
-						}
-						checks();
-					}
+				if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
+					regTraces <<
+						#ifdef TRACE_WITH_TIME
+						currentTime <<
+						 #endif
+						 " : reg[" << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
 				}
+
+				checks();
+				top->clk = 1;
+				top->eval(); top->eval();
+
 				cycles += 1;
+				top->iRsp_ready = !iRsp_ready_pending;
+				top->dRsp_ready = 0;
+				if(iRsp_ready_pending && (!iStall || VL_RANDOM_I(8) < 100)){
+					top->iRsp_inst = iRsp_inst_next;
+					iRsp_ready_pending = false;
+					top->iRsp_ready = 1;
+				}
+				if(dRsp_ready_pending && (!dStall || VL_RANDOM_I(8) < 100)){
+					top->dRsp_data = dRsp_inst_next;
+					dRsp_ready_pending = false;
+					top->dRsp_ready = 1;
+				} else{
+					top->dRsp_data = VL_RANDOM_I(32);
+				}
 
+				if(iStall) top->iCmd_ready = VL_RANDOM_I(8) < 100 && !iRsp_ready_pending;
+				if(dStall) top->dCmd_ready = VL_RANDOM_I(8) < 100 && !dRsp_ready_pending;
 
-				top->iRsp_inst = iRsp_inst_next;
-				top->dRsp_data = dRsp_inst_next;
 
 				if (Verilated::gotFinish())
 					exit(0);
@@ -598,7 +619,7 @@ int main(int argc, char **argv, char **env) {
 		#ifdef CSR
 		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 		8,6,9,6,10,4,11,4,    12,13,0,   14,2,15 };
-		redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).run(2e3);)
+		redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).run(4e3);)
 		#endif
 		#endif
 
