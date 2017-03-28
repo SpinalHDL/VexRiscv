@@ -266,6 +266,21 @@ unalignedPcA:
   li x28, 15
  1ac:	00f00e13          	li	t3,15
 
+
+  li x1, 0xF00FFF60
+ 1b0:	f01000b7          	lui	ra,0xf0100
+ 1b4:	f6008093          	addi	ra,ra,-160 # f00fff60 <_bss_end+0xb00f38d8>
+  lw x2, 0(x1)
+ 1b8:	0000a103          	lw	sp,0(ra)
+  li x28, 16
+ 1bc:	01000e13          	li	t3,16
+  sw x2, 0(x1)
+ 1c0:	0020a023          	sw	sp,0(ra)
+  li x28, 17
+ 1c4:	01100e13          	li	t3,17
+  jr  x1
+ 1c8:	00008067          	ret
+
 Disassembly of section .text:
 
 40000000 <fstat>:

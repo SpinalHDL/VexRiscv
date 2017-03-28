@@ -20,7 +20,7 @@ object CsrAccess {
   object NONE extends CsrAccess
 }
 
-case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage)
+case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage, priority : Int)
 case class MachineCsrConfig(
   mvendorid           : BigInt,
   marchid             : BigInt,
@@ -71,9 +71,9 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
   //Mannage ExceptionService calls
   val exceptionPortsInfos = ArrayBuffer[ExceptionPortInfo]()
   def exceptionCodeWidth = 4
-  override def newExceptionPort(stage : Stage) = {
+  override def newExceptionPort(stage : Stage, priority : Int = 0) = {
     val interface = Flow(ExceptionCause())
-    exceptionPortsInfos += ExceptionPortInfo(interface,stage)
+    exceptionPortsInfos += ExceptionPortInfo(interface,stage,priority)
     interface
   }
 
@@ -248,7 +248,7 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
 
         val groupedByStage = exceptionPortsInfos.map(_.stage).distinct.map(s => {
           assert(s != writeBack)
-          val stagePortsInfos = exceptionPortsInfos.filter(_.stage == s)
+          val stagePortsInfos = exceptionPortsInfos.filter(_.stage == s).sortWith(_.priority > _.priority)
           val stagePort = stagePortsInfos.length match{
             case 1 => stagePortsInfos.head.port
             case _ => {
@@ -256,11 +256,11 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
               val valids = stagePortsInfos.map(_.port.valid)
               val codes = stagePortsInfos.map(_.port.payload)
               groupedPort.valid := valids.orR
-              groupedPort.payload := MuxOH(stagePortsInfos.map(_.port.valid), codes)
+              groupedPort.payload := MuxOH(OHMasking.first(stagePortsInfos.map(_.port.valid).asBits), codes)
               groupedPort
             }
           }
-          ExceptionPortInfo(stagePort,s)
+          ExceptionPortInfo(stagePort,s,0)
         })
 
         val sortedByStage = groupedByStage.sortWith((a, b) => pipeline.indexOf(a.stage) < pipeline.indexOf(b.stage))

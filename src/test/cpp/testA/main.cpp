@@ -177,6 +177,7 @@ public:
 
     Workspace* bootAt(uint32_t pc) { bootPc = pc;}
 	virtual uint32_t iRspOverride(uint32_t value) { return value; }
+	virtual bool isAccessError(uint32_t addr) { return addr == 0xF00FFF60u; }
 	virtual void postReset() {}
 	virtual void checks(){}
 	virtual void pass(){ throw success();}
@@ -233,6 +234,7 @@ public:
 			// run simulation for 100 clock periods
 			uint32_t iRsp_inst_next = top->iRsp_inst;
 			uint32_t dRsp_inst_next = VL_RANDOM_I(32);
+			bool iRsp_error_next = false, dRsp_error_next = false;
 			bool iRsp_ready_pending = false, dRsp_ready_pending = false;
 			for (i = 16; i < timeout*2; i+=2) {
 				mTime = i/2;
@@ -262,16 +264,15 @@ public:
 									     | (mem[top->iCmd_payload_pc + 1] << 8)
 								         | (mem[top->iCmd_payload_pc + 2] << 16)
 									     | (mem[top->iCmd_payload_pc + 3] << 24));
-
+					iRsp_error_next = isAccessError(top->iCmd_payload_pc);
 				}
 
 				if (top->dCmd_valid && top->dCmd_ready && ! dRsp_ready_pending) {
-//					assertEq(top->iCmd_payload_pc & 3,0);
 					dRsp_ready_pending = true;
 					dRsp_inst_next = VL_RANDOM_I(32);
 					//printf("%d\n",top->iCmd_payload_pc);
-
 					uint32_t addr = top->dCmd_payload_address;
+					dRsp_error_next = isAccessError(addr);
 					if(top->dCmd_payload_wr){
 						memTraces <<
 						#ifdef TRACE_WITH_TIME
@@ -344,11 +345,13 @@ public:
 					top->iRsp_inst = iRsp_inst_next;
 					iRsp_ready_pending = false;
 					top->iRsp_ready = 1;
+					top->iRsp_error = iRsp_error_next;
 				}
 				if(dRsp_ready_pending && (!dStall || VL_RANDOM_I(8) < 100)){
 					top->dRsp_data = dRsp_inst_next;
 					dRsp_ready_pending = false;
 					top->dRsp_ready = 1;
+					top->dRsp_error = dRsp_error_next;
 				} else{
 					top->dRsp_data = VL_RANDOM_I(32);
 				}
@@ -618,7 +621,7 @@ int main(int argc, char **argv, char **env) {
 
 		#ifdef CSR
 		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
-		8,6,9,6,10,4,11,4,    12,13,0,   14,2,15 };
+		8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,5,17,1 };
 		redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).run(4e3);)
 		#endif
 		#endif
@@ -628,9 +631,9 @@ int main(int argc, char **argv, char **env) {
 		#ifdef DHRYSTONE
 //		Dhrystone("dhrystoneO3",false,false).run(0.05e6);
 		Dhrystone("dhrystoneO3",true,true).run(1.1e6);
-		Dhrystone("dhrystoneO3M",true,true).run(0.8e6);
-		Dhrystone("dhrystoneO3",false,false).run(1.1e6);
-		Dhrystone("dhrystoneO3M",false,false).run(0.8e6);
+		Dhrystone("dhrystoneO3M",true,true).run(1.5e6);
+		Dhrystone("dhrystoneO3",false,false).run(1.5e6);
+		Dhrystone("dhrystoneO3M",false,false).run(1.2e6);
 //		Dhrystone("dhrystoneO3ML",false,false).run(8e6);
 //		Dhrystone("dhrystoneO3MLL",false,false).run(80e6);
 		#endif

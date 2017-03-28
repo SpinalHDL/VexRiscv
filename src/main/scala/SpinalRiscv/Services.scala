@@ -19,5 +19,5 @@ case class ExceptionCause() extends Bundle{
 }
 
 trait ExceptionService{
-  def newExceptionPort(stage : Stage) : Flow[ExceptionCause]
+  def newExceptionPort(stage : Stage, priority : Int = 0) : Flow[ExceptionCause]
 }

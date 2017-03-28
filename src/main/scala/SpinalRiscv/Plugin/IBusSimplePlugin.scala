@@ -26,7 +26,7 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) 
 
     if(catchAccessFault) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
-      decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode)
+      decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1)
     }
   }
 
