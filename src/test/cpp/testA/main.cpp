@@ -342,6 +342,14 @@ public:
 				}
 
 				for(SimElement* simElement : simElements) simElement->preCycle();
+
+				if(top->VexRiscv->decode_arbitration_isValid){
+					uint32_t expectedData;
+					bool dummy;
+					iBusAccess(top->VexRiscv->decode_PC, &expectedData, &dummy);
+					assertEq(top->VexRiscv->decode_INSTRUCTION,expectedData);
+				}
+
 				checks();
 				top->clk = 1;
 				top->eval();
@@ -459,10 +467,11 @@ public:
 	}
 
 	virtual void postCycle(){
-		bool dummy;
+		bool error;
 		top->iBus_rsp_valid = 0;
 		if(pendingCount != 0 && (!ws->iStall || VL_RANDOM_I(8) < 100)){
-			ws->iBusAccess(address,&top->iBus_rsp_payload_data,&dummy);
+			ws->iBusAccess(address,&top->iBus_rsp_payload_data,&error);
+			top->iBus_rsp_payload_error = error;
 			pendingCount--;
 			address = (address & ~0x1F) + ((address + 4) & 0x1F);
 			top->iBus_rsp_valid = 1;

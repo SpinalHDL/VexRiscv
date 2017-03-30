@@ -11,7 +11,8 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    wrappedMemAccess : Boolean,
                                    addressWidth : Int,
                                    cpuDataWidth : Int,
-                                   memDataWidth : Int){
+                                   memDataWidth : Int,
+                                   catchAccessFault : Boolean){
   def burstSize = bytePerLine*8/memDataWidth
 }
 
@@ -36,9 +37,6 @@ class IBusCachedPlugin(catchAccessFault : Boolean, cacheConfig : InstructionCach
     import pipeline._
     import pipeline.config._
 
-    assert(catchAccessFault == false) //unimplemented
-
-
     val cache = new InstructionCache(cacheConfig)
     iBus = master(new InstructionCacheMemBus(cacheConfig)).setName("iBus")
     iBus <> cache.io.mem
@@ -59,13 +57,14 @@ class IBusCachedPlugin(catchAccessFault : Boolean, cacheConfig : InstructionCach
 
     cache.io.flush.cmd.valid := False
 
-//    fetch.insert(IBUS_ACCESS_ERROR) := iRsp.error
 
-//    if(catchAccessFault){
-//      decodeExceptionPort.valid   := decode.arbitration.isValid && decode.input(IBUS_ACCESS_ERROR)
-//      decodeExceptionPort.code    := 1
-//      decodeExceptionPort.badAddr := decode.input(PC)
-//    }
+    if(catchAccessFault){
+      fetch.insert(IBUS_ACCESS_ERROR) := cache.io.cpu.rsp.error
+
+      decodeExceptionPort.valid   := decode.arbitration.isValid && decode.input(IBUS_ACCESS_ERROR)
+      decodeExceptionPort.code    := 1
+      decodeExceptionPort.badAddr := decode.input(PC)
+    }
   }
 }
 
@@ -84,15 +83,17 @@ case class InstructionCacheCpuCmd(p : InstructionCacheConfig) extends Bundle wit
 }
 
 case class InstructionCacheCpuRsp(p : InstructionCacheConfig) extends Bundle with IMasterSlave {
-  val isValid   = Bool
+  val isValid = Bool
   val haltIt  = Bool
-  val isStuck  = Bool
+  val isStuck = Bool
   val address = UInt(p.addressWidth bit)
   val data    = Bits(32 bit)
+  val error   = if(p.catchAccessFault) Bool else null
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, address)
     in(haltIt, data)
+    if(p.catchAccessFault) in(error)
   }
 }
 
@@ -107,12 +108,24 @@ case class InstructionCacheCpuBus(p : InstructionCacheConfig) extends Bundle wit
   }
 }
 
+case class InstructionCacheTranslationBus(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
+  val virtualAddress  = UInt(32 bits)
+  val physicalAddress = UInt(32 bits)
+  val error           = if(p.catchAccessFault) Bool else null
+
+  override def asMaster(): Unit = {
+    out(virtualAddress)
+    in(physicalAddress)
+    if(p.catchAccessFault) in(error)
+  }
+}
 
 case class InstructionCacheMemCmd(p : InstructionCacheConfig) extends Bundle{
   val address = UInt(p.addressWidth bit)
 }
 case class InstructionCacheMemRsp(p : InstructionCacheConfig) extends Bundle{
   val data = Bits(32 bit)
+  val error = if(p.catchAccessFault) Bool else null
 }
 
 case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
@@ -141,6 +154,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
   assert(cpuDataWidth == memDataWidth)
   val io = new Bundle{
     val flush = slave(InstructionCacheFlushBus())
+//    val translator = master(InstructionCacheTranslationBus(p))
     val cpu = slave(InstructionCacheCpuBus(p))
     val mem = master(InstructionCacheMemBus(p))
   }
@@ -158,16 +172,22 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
   val tagRange = addressWidth-1 downto log2Up(wayLineCount*bytePerLine)
   val lineRange = tagRange.low-1 downto log2Up(bytePerLine)
   val wordRange = log2Up(bytePerLine)-1 downto log2Up(bytePerWord)
+  val tagLineRange = tagRange.high downto lineRange.low
 
-
-  class LineInfo() extends Bundle{
+  class LineInfo extends Bundle{
     val valid = Bool
+    val error = if(catchAccessFault) Bool else null
     val address = UInt(tagRange.length bit)
   }
 
+//  class LineWord extends Bundle{
+//    val data  = Bits(wordWidth bits)
+//    val error = Bool
+//  }
+
   val ways = Array.fill(wayCount)(new Area{
     val tags = Mem(new LineInfo(),wayLineCount)
-    val datas = Mem(Bits(wordWidth bit),wayWordCount)
+    val datas = Mem(Bits(wordWidth bits),wayWordCount)
   })
 
 
@@ -175,7 +195,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
   val lineLoader = new Area{
     val requestIn = Stream(wrap(new Bundle{
-      val addr = UInt(addressWidth bit)
+      val addr = UInt(addressWidth bits)
     }))
 
 
@@ -204,46 +224,61 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
     io.flush.rsp := flushCounter.msb.rise && flushFromInterface
 
-    val lineInfoWrite = new LineInfo()
-    lineInfoWrite.valid := flushCounter.msb
-    lineInfoWrite.address := requestIn.addr(tagRange)
-    when(requestIn.fire || !flushCounter.msb){
-      val tagsAddress = Mux(flushCounter.msb,requestIn.addr(lineRange),flushCounter(flushCounter.high-1 downto 0))
-      ways(0).tags(tagsAddress) := lineInfoWrite  //TODO
-    }
+    val loadingWithErrorReg = if(catchAccessFault) RegInit(False) else null
+    val loadingWithError    = if(catchAccessFault) loadingWithErrorReg else null
+    if(catchAccessFault) loadingWithErrorReg := loadingWithError
+
 
 
     val request = requestIn.haltWhen(!io.mem.cmd.ready).stage()
+
+    val lineInfoWrite = new LineInfo()
+    lineInfoWrite.valid := flushCounter.msb
+    lineInfoWrite.address := request.addr(tagRange)
+    if(catchAccessFault) lineInfoWrite.error := loadingWithError
+
+
     io.mem.cmd.valid := requestIn.valid && !request.isStall
     val wordIndex = Reg(UInt(log2Up(wordPerLine) bit))
     val loadedWordsNext = Bits(wordPerLine bit)
     val loadedWords = RegNext(loadedWordsNext)
     val loadedWordsReadable = RegNext(loadedWords)
     loadedWordsNext := loadedWords
-    when(io.mem.rsp.fire){
+    when(io.mem.rsp.valid){
       wordIndex := wordIndex + 1
       loadedWordsNext(wordIndex) := True
       ways(0).datas(request.addr(lineRange) @@ wordIndex) := io.mem.rsp.data   //TODO
+      if(catchAccessFault) loadingWithError setWhen io.mem.rsp.error
     }
 
+    val memRspLast = loadedWordsNext === B(loadedWordsNext.range -> true)
+
     val readyDelay = Reg(UInt(1 bit))
-    when(loadedWordsNext === B(loadedWordsNext.range -> true)){
+    when(memRspLast){
       readyDelay := readyDelay + 1
     }
     request.ready := readyDelay === 1
+
+
+    when((request.valid && memRspLast) || !flushCounter.msb){
+      val tagsAddress = Mux(flushCounter.msb,request.addr(lineRange),flushCounter(flushCounter.high-1 downto 0))
+      ways(0).tags(tagsAddress) := lineInfoWrite  //TODO
+    }
 
     when(requestIn.ready){
       wordIndex := io.mem.cmd.address(wordRange)
       loadedWords := 0
       loadedWordsReadable := 0
       readyDelay := 0
+      if(catchAccessFault) loadingWithErrorReg := False
     }
   }
 
   val task = new Area{
     val waysHitValid = False
+    val waysHitError = Bool.assignDontCare()
     val waysHitWord = Bits(wordWidth bit)
-    waysHitWord.assignDontCare()
+//    waysHitWord.assignDontCare()
 
     val waysRead = for(way <- ways) yield new Area{
       val readAddress = Mux(io.cpu.rsp.isStuck,io.cpu.rsp.address,io.cpu.cmd.address)
@@ -254,18 +289,25 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       //      val data = way.datas.readAsync(readAddress(lineRange.high downto wordRange.low))
       //      way.tags.add(new AttributeString("ramstyle","no_rw_check"))
       //      way.datas.add(new AttributeString("ramstyle","no_rw_check"))
+      waysHitWord := data //Not applicable to multi way
       when(tag.valid && tag.address === io.cpu.rsp.address(tagRange)) {
         waysHitValid := True
-        waysHitWord := data
+        if(catchAccessFault) waysHitError := tag.error
+      }
+
+      when(lineLoader.request.valid && lineLoader.request.addr(lineRange) === io.cpu.rsp.address(lineRange)){
+        waysHitValid := False //Not applicable to multi way
       }
     }
 
-    val loaderHitValid = lineLoader.request.valid && lineLoader.request.addr(tagRange) === io.cpu.rsp.address(tagRange)
+
+    val loaderHitValid = lineLoader.request.valid && lineLoader.request.addr(tagLineRange) === io.cpu.rsp.address(tagLineRange)
     val loaderHitReady = lineLoader.loadedWordsReadable(io.cpu.rsp.address(wordRange))
 
 
-    io.cpu.rsp.haltIt := io.cpu.rsp.isValid && !( waysHitValid && !(loaderHitValid && !loaderHitReady))
+    io.cpu.rsp.haltIt := io.cpu.rsp.isValid && !(waysHitValid || (loaderHitValid && loaderHitReady))
     io.cpu.rsp.data := waysHitWord //TODO
+    if(catchAccessFault) io.cpu.rsp.error := (waysHitValid && waysHitError) ||  (loaderHitValid && loaderHitReady && lineLoader.loadingWithErrorReg)
     lineLoader.requestIn.valid := io.cpu.rsp.isValid && ! waysHitValid
     lineLoader.requestIn.addr := io.cpu.rsp.address
   }
@@ -274,30 +316,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 }
 
 object InstructionCacheMain{
-  class TopLevel extends Component{
-    implicit val p = InstructionCacheConfig(
-      cacheSize =4096,
-      bytePerLine =32,
-      wayCount = 1,
-      wrappedMemAccess = true,
-      addressWidth = 32,
-      cpuDataWidth = 32,
-      memDataWidth = 32)
-//    val io = new Bundle{
-//      val cpu = slave(InstructionCacheCpuBus())
-//      val mem = master(InstructionCacheMemBus())
-//    }
-    val cache = new InstructionCache(p)
 
-//    cache.io.cpu.cmd <-< io.cpu.cmd
-//    cache.io.mem.cmd >-> io.mem.cmd
-//    cache.io.mem.rsp <-< io.mem.rsp
-//    cache.io.cpu.rsp >-> io.cpu.rsp
-    //    when(cache.io.cpu.rsp.valid){
-    //      cache.io.cpu.cmd.valid := RegNext(cache.io.cpu.cmd.valid)
-    //      cache.io.cpu.cmd.address := RegNext(cache.io.cpu.cmd.address)
-    //    }
-  }
   def main(args: Array[String]) {
     implicit val p = InstructionCacheConfig(
       cacheSize =4096,
@@ -306,7 +325,8 @@ object InstructionCacheMain{
       wrappedMemAccess = true,
       addressWidth = 32,
       cpuDataWidth = 32,
-      memDataWidth = 32)
+      memDataWidth = 32,
+      catchAccessFault = true)
     //    val io = new Bundle{
     //      val cpu = slave(InstructionCacheCpuBus())
     //      val mem = master(InstructionCacheMemBus())

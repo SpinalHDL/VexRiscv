@@ -84,7 +84,7 @@ object TopLevel {
 //          catchAccessFault = true
 //        ),
         new IBusCachedPlugin(
-          catchAccessFault = false,
+          catchAccessFault = true,//DUPLICATION
           cacheConfig = InstructionCacheConfig(
             cacheSize =4096,
             bytePerLine =32,
@@ -92,7 +92,8 @@ object TopLevel {
             wrappedMemAccess = true,
             addressWidth = 32,
             cpuDataWidth = 32,
-            memDataWidth = 32
+            memDataWidth = 32,
+            catchAccessFault = true //DUPLICATION
           )
         ),
         new DecoderSimplePlugin(
@@ -156,7 +157,9 @@ object TopLevel {
 //      )
 
       val toplevel = new VexRiscv(config)
-
+      toplevel.decode.input(config.INSTRUCTION).addAttribute("verilator public")
+      toplevel.decode.input(config.PC).addAttribute("verilator public")
+      toplevel.decode.arbitration.isValid.addAttribute("verilator public")
 //      toplevel.service(classOf[DecoderSimplePlugin]).bench(toplevel)
 
       toplevel
