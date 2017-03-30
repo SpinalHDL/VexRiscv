@@ -30,6 +30,16 @@ object TopLevel {
         pcWidth = 32
       )
 
+//      val iCacheConfig = InstructionCacheConfig(
+//        cacheSize =4096,
+//        bytePerLine =32,
+//        wayCount = 1,
+//        wrappedMemAccess = true,
+//        addressWidth = 32,
+//        cpuDataWidth = 32,
+//        memDataWidth = 32
+//      )
+
 
       val csrConfig = MachineCsrConfig(
         mvendorid      = 11,
@@ -69,9 +79,21 @@ object TopLevel {
 
       config.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, false),
-        new IBusSimplePlugin(
-          interfaceKeepData = true,
-          catchAccessFault = true
+//        new IBusSimplePlugin(
+//          interfaceKeepData = true,
+//          catchAccessFault = true
+//        ),
+        new IBusCachedPlugin(
+          catchAccessFault = false,
+          cacheConfig = InstructionCacheConfig(
+            cacheSize =4096,
+            bytePerLine =32,
+            wayCount = 1,
+            wrappedMemAccess = true,
+            addressWidth = 32,
+            cpuDataWidth = 32,
+            memDataWidth = 32
+          )
         ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = true

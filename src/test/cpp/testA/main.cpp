@@ -13,9 +13,9 @@
 #include <string.h>
 #include <iostream>
 #include <fstream>
+#include <vector>
 
-//#define REF
-//#define TRACE
+
 
 class Memory{
 public:
@@ -133,9 +133,21 @@ double sc_time_stamp(){
 }
 
 
+class SimElement{
+public:
+	virtual void onReset(){}
+	virtual void preCycle(){}
+	virtual void postCycle(){}
+};
+
+
+class Workspace;
+void fillSimELements(Workspace *ws);
+
 class Workspace{
 public:
 	static uint32_t cycles;
+	vector<SimElement*> simElements;
 	Memory mem;
 	string name;
 	VVexRiscv* top;
@@ -161,6 +173,7 @@ public:
 		regTraces.open (name + ".regTrace");
 		memTraces.open (name + ".memTrace");
 		logTraces.open (name + ".logTrace");
+		fillSimELements(this);
 	}
 
 	virtual ~Workspace(){
@@ -176,8 +189,16 @@ public:
 	}
 
     Workspace* bootAt(uint32_t pc) { bootPc = pc;}
-	virtual uint32_t iRspOverride(uint32_t value) { return value; }
+
 	virtual bool isAccessError(uint32_t addr) { return addr == 0xF00FFF60u; }
+	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
+		assert(addr % 4 == 0);
+		*data =     (  (mem[addr + 0] << 0)
+					 | (mem[addr + 1] << 8)
+					 | (mem[addr + 2] << 16)
+					 | (mem[addr + 3] << 24));
+		*error = addr == 0xF00FFF60u;
+	}
 	virtual void postReset() {}
 	virtual void checks(){}
 	virtual void pass(){ throw success();}
@@ -203,12 +224,10 @@ public:
 		// Reset
 		top->clk = 0;
 		top->reset = 0;
-		top->iCmd_ready = 1;
 		top->dCmd_ready = 1;
-		top->iRsp_ready = 1;
 		top->dRsp_ready = 1;
-		top->iRsp_error = 0;
-		top->dRsp_error = 0;
+
+		for(SimElement* simElement : simElements) simElement->onReset();
 
 		top->eval(); currentTime = 3;
 		top->reset = 1;
@@ -232,10 +251,9 @@ public:
 
 		try {
 			// run simulation for 100 clock periods
-			uint32_t iRsp_inst_next = top->iRsp_inst;
 			uint32_t dRsp_inst_next = VL_RANDOM_I(32);
-			bool iRsp_error_next = false, dRsp_error_next = false;
-			bool iRsp_ready_pending = false, dRsp_ready_pending = false;
+			bool dRsp_error_next = false;
+			bool dRsp_ready_pending = false;
 			for (i = 16; i < timeout*2; i+=2) {
 				mTime = i/2;
 				#ifdef CSR
@@ -251,26 +269,15 @@ public:
 
 				dump(i);
 				top->clk = 0;
-				top->eval(); top->eval();top->eval();
+				top->eval();
 
 
 				dump(i + 1);
-				if (top->iCmd_valid && top->iCmd_ready && !iRsp_ready_pending) {
-					assertEq(top->iCmd_payload_pc & 3,0);
-					iRsp_ready_pending = true;
-					//printf("%d\n",top->iCmd_payload_pc);
 
-					iRsp_inst_next =  iRspOverride((mem[top->iCmd_payload_pc + 0] << 0)
-									     | (mem[top->iCmd_payload_pc + 1] << 8)
-								         | (mem[top->iCmd_payload_pc + 2] << 16)
-									     | (mem[top->iCmd_payload_pc + 3] << 24));
-					iRsp_error_next = isAccessError(top->iCmd_payload_pc);
-				}
 
 				if (top->dCmd_valid && top->dCmd_ready && ! dRsp_ready_pending) {
 					dRsp_ready_pending = true;
 					dRsp_inst_next = VL_RANDOM_I(32);
-					//printf("%d\n",top->iCmd_payload_pc);
 					uint32_t addr = top->dCmd_payload_address;
 					dRsp_error_next = isAccessError(addr);
 					if(top->dCmd_payload_wr){
@@ -334,19 +341,16 @@ public:
 						 " : reg[" << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
 				}
 
+				for(SimElement* simElement : simElements) simElement->preCycle();
 				checks();
 				top->clk = 1;
-				top->eval(); top->eval();
+				top->eval();
 
 				cycles += 1;
-				top->iRsp_ready = !iRsp_ready_pending;
+
+				for(SimElement* simElement : simElements) simElement->postCycle();
+
 				top->dRsp_ready = 0;
-				if(iRsp_ready_pending && (!iStall || VL_RANDOM_I(8) < 100)){
-					top->iRsp_inst = iRsp_inst_next;
-					iRsp_ready_pending = false;
-					top->iRsp_ready = 1;
-					top->iRsp_error = iRsp_error_next;
-				}
 				if(dRsp_ready_pending && (!dStall || VL_RANDOM_I(8) < 100)){
 					top->dRsp_data = dRsp_inst_next;
 					dRsp_ready_pending = false;
@@ -356,7 +360,6 @@ public:
 					top->dRsp_data = VL_RANDOM_I(32);
 				}
 
-				if(iStall) top->iCmd_ready = VL_RANDOM_I(8) < 100 && !iRsp_ready_pending;
 				if(dStall) top->dCmd_ready = VL_RANDOM_I(8) < 100 && !dRsp_ready_pending;
 
 
@@ -382,6 +385,104 @@ public:
 		return this;
 	}
 };
+
+
+
+#ifdef IBUS_SIMPLE
+class IBusSimple : public SimElement{
+public:
+	uint32_t inst_next = VL_RANDOM_I(32);
+	bool error_next = false;
+	bool pending = false;
+
+	Workspace *ws;
+	VVexRiscv* top;
+	IBusSimple(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+		top->iCmd_ready = 1;
+		top->iRsp_ready = 1;
+	}
+
+	virtual void preCycle(){
+		if (top->iCmd_valid && top->iCmd_ready && !pending) {
+			assertEq(top->iCmd_payload_pc & 3,0);
+			pending = true;
+			ws->iBusAccess(top->iCmd_payload_pc,&inst_next,&error_next);
+		}
+	}
+
+	virtual void postCycle(){
+		top->iRsp_ready = !pending;
+		if(pending && (!ws->iStall || VL_RANDOM_I(8) < 100)){
+			top->iRsp_inst = inst_next;
+			pending = false;
+			top->iRsp_ready = 1;
+			top->iRsp_error = error_next;
+		}
+		if(ws->iStall) top->iCmd_ready = VL_RANDOM_I(8) < 100 && !pending;
+	}
+};
+#endif
+
+
+#ifdef IBUS_CACHED
+class IBusCached : public SimElement{
+public:
+	uint32_t inst_next = VL_RANDOM_I(32);
+	bool error_next = false;
+	uint32_t pendingCount = 0;
+	uint32_t address;
+
+	Workspace *ws;
+	VVexRiscv* top;
+	IBusCached(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+
+	virtual void onReset(){
+		top->iBus_cmd_ready = 1;
+		top->iBus_rsp_valid = 0;
+	}
+
+	virtual void preCycle(){
+		if (top->iBus_cmd_valid && top->iBus_cmd_ready && pendingCount == 0) {
+			assertEq(top->iBus_cmd_payload_address & 3,0);
+			pendingCount = 8;
+			address = top->iBus_cmd_payload_address;
+		}
+	}
+
+	virtual void postCycle(){
+		bool dummy;
+		top->iBus_rsp_valid = 0;
+		if(pendingCount != 0 && (!ws->iStall || VL_RANDOM_I(8) < 100)){
+			ws->iBusAccess(address,&top->iBus_rsp_payload_data,&dummy);
+			pendingCount--;
+			address = (address & ~0x1F) + ((address + 4) & 0x1F);
+			top->iBus_rsp_valid = 1;
+		}
+		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(8) < 100 && pendingCount == 0;
+	}
+};
+#endif
+
+void fillSimELements(Workspace *ws){
+
+	#ifdef IBUS_SIMPLE
+		ws->simElements.push_back(new IBusSimple(ws));
+	#endif
+	#ifdef IBUS_CACHED
+		ws->simElements.push_back(new IBusCached(ws));
+	#endif
+}
+
+
 uint32_t Workspace::cycles = 0;
 
 #ifndef REF
@@ -474,12 +575,9 @@ public:
 		}
 	}
 
-
-	virtual uint32_t iRspOverride(uint32_t value) {
-		switch(value){
-			case 0x0ff0000f: return 0x00000013;
-			default: return value;
-		}
+	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error){
+		Workspace::iBusAccess(addr,data,error);
+		if(*data == 0x0ff0000f) *data = 0x00000013;
 	}
 };
 #endif
@@ -600,6 +698,7 @@ long timer_end(struct timespec start_time){
 int main(int argc, char **argv, char **env) {
 	Verilated::randReset(2);
 	Verilated::commandArgs(argc, argv);
+
 	printf("BOOT\n");
 	timespec startedAt = timer_start();
 

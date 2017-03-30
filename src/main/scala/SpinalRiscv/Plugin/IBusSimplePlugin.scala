@@ -44,8 +44,8 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) 
     //Insert iRsp into INSTRUCTION
     iRsp = in(IBusSimpleRsp()).setName("iRsp")
     fetch.insert(INSTRUCTION) := iRsp.inst
-    fetch.arbitration.haltIt setWhen(fetch.arbitration.isValid && !iRsp.ready)
     fetch.insert(IBUS_ACCESS_ERROR) := iRsp.error
+    fetch.arbitration.haltIt setWhen(fetch.arbitration.isValid && !iRsp.ready)
 
     if(catchAccessFault){
       decodeExceptionPort.valid := decode.arbitration.isValid && decode.input(IBUS_ACCESS_ERROR)
