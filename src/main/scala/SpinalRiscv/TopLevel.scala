@@ -84,8 +84,7 @@ object TopLevel {
 //          catchAccessFault = true
 //        ),
         new IBusCachedPlugin(
-          catchAccessFault = true,//DUPLICATION
-          cacheConfig = InstructionCacheConfig(
+          config = InstructionCacheConfig(
             cacheSize =4096,
             bytePerLine =32,
             wayCount = 1,
@@ -93,7 +92,7 @@ object TopLevel {
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 32,
-            catchAccessFault = true //DUPLICATION
+            catchAccessFault = true
           )
         ),
         new DecoderSimplePlugin(

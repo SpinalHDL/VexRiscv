@@ -18,8 +18,8 @@ case class InstructionCacheConfig( cacheSize : Int,
 
 
 
-
-class IBusCachedPlugin(catchAccessFault : Boolean, cacheConfig : InstructionCacheConfig) extends Plugin[VexRiscv]{
+class IBusCachedPlugin(config : InstructionCacheConfig) extends Plugin[VexRiscv]{
+  import config._
   var iBus  : InstructionCacheMemBus = null
 
   object IBUS_ACCESS_ERROR extends Stageable(Bool)
@@ -37,29 +37,29 @@ class IBusCachedPlugin(catchAccessFault : Boolean, cacheConfig : InstructionCach
     import pipeline._
     import pipeline.config._
 
-    val cache = new InstructionCache(cacheConfig)
-    iBus = master(new InstructionCacheMemBus(cacheConfig)).setName("iBus")
+    val cache = new InstructionCache(this.config)
+    iBus = master(new InstructionCacheMemBus(this.config)).setName("iBus")
     iBus <> cache.io.mem
 
 
     //Connect prefetch cache side
-    cache.io.cpu.cmd.isValid := prefetch.arbitration.isValid
-    cache.io.cpu.cmd.isFiring := prefetch.arbitration.isFiring
-    cache.io.cpu.cmd.address := prefetch.output(PC)
-    prefetch.arbitration.haltIt setWhen(cache.io.cpu.cmd.haltIt)
+    cache.io.cpu.prefetch.isValid := prefetch.arbitration.isValid
+    cache.io.cpu.prefetch.isFiring := prefetch.arbitration.isFiring
+    cache.io.cpu.prefetch.address := prefetch.output(PC)
+    prefetch.arbitration.haltIt setWhen(cache.io.cpu.prefetch.haltIt)
 
     //Connect fetch cache side
-    cache.io.cpu.rsp.isValid  := fetch.arbitration.isValid
-    cache.io.cpu.rsp.isStuck  := fetch.arbitration.isStuck
-    cache.io.cpu.rsp.address  := fetch.output(PC)
-    fetch.arbitration.haltIt setWhen(cache.io.cpu.rsp.haltIt)
-    fetch.insert(INSTRUCTION) := cache.io.cpu.rsp.data
+    cache.io.cpu.fetch.isValid  := fetch.arbitration.isValid
+    cache.io.cpu.fetch.isStuck  := fetch.arbitration.isStuck
+    cache.io.cpu.fetch.address  := fetch.output(PC)
+    fetch.arbitration.haltIt setWhen(cache.io.cpu.fetch.haltIt)
+    fetch.insert(INSTRUCTION) := cache.io.cpu.fetch.data
 
     cache.io.flush.cmd.valid := False
 
 
     if(catchAccessFault){
-      fetch.insert(IBUS_ACCESS_ERROR) := cache.io.cpu.rsp.error
+      fetch.insert(IBUS_ACCESS_ERROR) := cache.io.cpu.fetch.error
 
       decodeExceptionPort.valid   := decode.arbitration.isValid && decode.input(IBUS_ACCESS_ERROR)
       decodeExceptionPort.code    := 1
@@ -99,12 +99,12 @@ case class InstructionCacheCpuRsp(p : InstructionCacheConfig) extends Bundle wit
 
 
 case class InstructionCacheCpuBus(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
-  val cmd = InstructionCacheCpuCmd(p)
-  val rsp = InstructionCacheCpuRsp(p)
+  val prefetch = InstructionCacheCpuCmd(p)
+  val fetch = InstructionCacheCpuRsp(p)
 
   override def asMaster(): Unit = {
-    master(cmd)
-    master(rsp)
+    master(prefetch)
+    master(fetch)
   }
 }
 
@@ -191,7 +191,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
   })
 
 
-  io.cpu.cmd.haltIt := False
+  io.cpu.prefetch.haltIt := False
 
   val lineLoader = new Area{
     val requestIn = Stream(wrap(new Bundle{
@@ -207,15 +207,15 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
     val flushCounter = Reg(UInt(log2Up(wayLineCount) + 1 bit)) init(0)
     when(!flushCounter.msb){
-      io.cpu.cmd.haltIt := True
+      io.cpu.prefetch.haltIt := True
       flushCounter := flushCounter + 1
     }
     when(!RegNext(flushCounter.msb)){
-      io.cpu.cmd.haltIt := True
+      io.cpu.prefetch.haltIt := True
     }
     val flushFromInterface = RegInit(False)
     when(io.flush.cmd.valid){
-      io.cpu.cmd.haltIt := True
+      io.cpu.prefetch.haltIt := True
       when(io.flush.cmd.ready){
         flushCounter := 0
         flushFromInterface := True
@@ -281,7 +281,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 //    waysHitWord.assignDontCare()
 
     val waysRead = for(way <- ways) yield new Area{
-      val readAddress = Mux(io.cpu.rsp.isStuck,io.cpu.rsp.address,io.cpu.cmd.address)
+      val readAddress = Mux(io.cpu.fetch.isStuck,io.cpu.fetch.address,io.cpu.prefetch.address)
       val tag = way.tags.readSync(readAddress(lineRange))
       val data = way.datas.readSync(readAddress(lineRange.high downto wordRange.low))
       //      val readAddress = request.address
@@ -290,29 +290,29 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       //      way.tags.add(new AttributeString("ramstyle","no_rw_check"))
       //      way.datas.add(new AttributeString("ramstyle","no_rw_check"))
       waysHitWord := data //Not applicable to multi way
-      when(tag.valid && tag.address === io.cpu.rsp.address(tagRange)) {
+      when(tag.valid && tag.address === io.cpu.fetch.address(tagRange)) {
         waysHitValid := True
         if(catchAccessFault) waysHitError := tag.error
       }
 
-      when(lineLoader.request.valid && lineLoader.request.addr(lineRange) === io.cpu.rsp.address(lineRange)){
+      when(lineLoader.request.valid && lineLoader.request.addr(lineRange) === io.cpu.fetch.address(lineRange)){
         waysHitValid := False //Not applicable to multi way
       }
     }
 
 
-    val loaderHitValid = lineLoader.request.valid && lineLoader.request.addr(tagLineRange) === io.cpu.rsp.address(tagLineRange)
-    val loaderHitReady = lineLoader.loadedWordsReadable(io.cpu.rsp.address(wordRange))
+    val loaderHitValid = lineLoader.request.valid && lineLoader.request.addr(tagLineRange) === io.cpu.fetch.address(tagLineRange)
+    val loaderHitReady = lineLoader.loadedWordsReadable(io.cpu.fetch.address(wordRange))
 
 
-    io.cpu.rsp.haltIt := io.cpu.rsp.isValid && !(waysHitValid || (loaderHitValid && loaderHitReady))
-    io.cpu.rsp.data := waysHitWord //TODO
-    if(catchAccessFault) io.cpu.rsp.error := (waysHitValid && waysHitError) ||  (loaderHitValid && loaderHitReady && lineLoader.loadingWithErrorReg)
-    lineLoader.requestIn.valid := io.cpu.rsp.isValid && ! waysHitValid
-    lineLoader.requestIn.addr := io.cpu.rsp.address
+    io.cpu.fetch.haltIt := io.cpu.fetch.isValid && !(waysHitValid || (loaderHitValid && loaderHitReady))
+    io.cpu.fetch.data := waysHitWord //TODO
+    if(catchAccessFault) io.cpu.fetch.error := (waysHitValid && waysHitError) ||  (loaderHitValid && loaderHitReady && lineLoader.loadingWithErrorReg)
+    lineLoader.requestIn.valid := io.cpu.fetch.isValid && ! waysHitValid
+    lineLoader.requestIn.addr := io.cpu.fetch.address
   }
 
-  io.flush.cmd.ready := !(lineLoader.request.valid || io.cpu.rsp.isValid)
+  io.flush.cmd.ready := !(lineLoader.request.valid || io.cpu.fetch.isValid)
 }
 
 object InstructionCacheMain{
