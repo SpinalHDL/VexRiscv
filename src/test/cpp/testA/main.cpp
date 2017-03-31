@@ -141,8 +141,7 @@ public:
 };
 
 
-class Workspace;
-void fillSimELements(Workspace *ws);
+
 
 class Workspace{
 public:
@@ -150,6 +149,8 @@ public:
 	vector<SimElement*> simElements;
 	Memory mem;
 	string name;
+	uint64_t mTimeCmp = 0;
+	uint64_t mTime = 0;
 	VVexRiscv* top;
 	int i;
 	uint32_t bootPc = -1;
@@ -173,7 +174,7 @@ public:
 		regTraces.open (name + ".regTrace");
 		memTraces.open (name + ".memTrace");
 		logTraces.open (name + ".logTrace");
-		fillSimELements(this);
+		fillSimELements();
 	}
 
 	virtual ~Workspace(){
@@ -190,7 +191,7 @@ public:
 
     Workspace* bootAt(uint32_t pc) { bootPc = pc;}
 
-	virtual bool isAccessError(uint32_t addr) { return addr == 0xF00FFF60u; }
+
 	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
 		assert(addr % 4 == 0);
 		*data =     (  (mem[addr + 0] << 0)
@@ -199,10 +200,66 @@ public:
 					 | (mem[addr + 3] << 24));
 		*error = addr == 0xF00FFF60u;
 	}
+	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size, uint32_t *data, bool *error) {
+		*error = addr == 0xF00FFF60u;
+		if(wr){
+			memTraces <<
+			#ifdef TRACE_WITH_TIME
+			(currentTime
+			#ifdef REF
+			-2
+			 #endif
+			 ) <<
+			 #endif
+			 " : WRITE mem" << (1 << size) << "[" << addr << "] = " << *data << endl;
+			for(uint32_t b = 0;b < (1 << size);b++){
+				uint32_t offset = (addr+b)&0x3;
+				*mem.get(addr + b) = *data >> (offset*8);
+			}
+
+			switch(addr){
+			case 0xF00FFF00u: {
+				cout << mem[0xF00FFF00u];
+				logTraces << (char)mem[0xF00FFF00u];
+				break;
+			}
+			case 0xF00FFF20u: pass(); break;
+			case 0xF00FFF48u: mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data;break;
+			case 0xF00FFF4Cu: mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32);  /*cout << "mTimeCmp <= " << mTimeCmp << endl; */break;
+			}
+		}else{
+			*data = VL_RANDOM_I(32);
+			for(uint32_t b = 0;b < (1 << size);b++){
+				uint32_t offset = (addr+b)&0x3;
+				*data &= ~(0xFF << (offset*8));
+				*data |= mem[addr + b] << (offset*8);
+			}
+			switch(addr){
+			case 0xF00FFF10u:
+				*data = i/2;
+				break;
+			case 0xF00FFF40u: *data = mTime;          break;
+			case 0xF00FFF44u: *data = mTime >> 32;    break;
+			case 0xF00FFF48u: *data = mTimeCmp;       break;
+			case 0xF00FFF4Cu: *data = mTimeCmp >> 32; break;
+			}
+			memTraces <<
+			#ifdef TRACE_WITH_TIME
+			(currentTime
+			#ifdef REF
+			-2
+			 #endif
+			 ) <<
+			 #endif
+			  " : READ  mem" << (1 << size) << "[" << addr << "] = " << *data << endl;
+
+		}
+	}
 	virtual void postReset() {}
 	virtual void checks(){}
 	virtual void pass(){ throw success();}
 	virtual void fail(){ throw std::exception();}
+    virtual void fillSimELements();
 	void dump(int i){
 		#ifdef TRACE
 		if(i/2 >= TRACE_START) tfp->dump(i);
@@ -210,8 +267,7 @@ public:
 	}
 	Workspace* run(uint32_t timeout = 5000){
 //		cout << "Start " << name << endl;
-		uint64_t mTimeCmp = 0;
-		uint64_t mTime = 0;
+
 		currentTime = 4;
 		// init trace dump
 		Verilated::traceEverOn(true);
@@ -224,8 +280,6 @@ public:
 		// Reset
 		top->clk = 0;
 		top->reset = 0;
-		top->dCmd_ready = 1;
-		top->dRsp_ready = 1;
 
 		for(SimElement* simElement : simElements) simElement->onReset();
 
@@ -251,9 +305,6 @@ public:
 
 		try {
 			// run simulation for 100 clock periods
-			uint32_t dRsp_inst_next = VL_RANDOM_I(32);
-			bool dRsp_error_next = false;
-			bool dRsp_ready_pending = false;
 			for (i = 16; i < timeout*2; i+=2) {
 				mTime = i/2;
 				#ifdef CSR
@@ -275,63 +326,6 @@ public:
 				dump(i + 1);
 
 
-				if (top->dCmd_valid && top->dCmd_ready && ! dRsp_ready_pending) {
-					dRsp_ready_pending = true;
-					dRsp_inst_next = VL_RANDOM_I(32);
-					uint32_t addr = top->dCmd_payload_address;
-					dRsp_error_next = isAccessError(addr);
-					if(top->dCmd_payload_wr){
-						memTraces <<
-						#ifdef TRACE_WITH_TIME
-						(currentTime
-						#ifdef REF
-						-2
-						 #endif
-						 ) <<
-						 #endif
-						 " : WRITE mem" << (1 << top->dCmd_payload_size) << "[" << addr << "] = " << top->dCmd_payload_data << endl;
-						for(uint32_t b = 0;b < (1 << top->dCmd_payload_size);b++){
-							uint32_t offset = (addr+b)&0x3;
-							*mem.get(addr + b) = top->dCmd_payload_data >> (offset*8);
-						}
-
-						switch(addr){
-						case 0xF00FFF00u: {
-							cout << mem[0xF00FFF00u];
-							logTraces << (char)mem[0xF00FFF00u];
-							break;
-						}
-						case 0xF00FFF20u: pass(); break;
-						case 0xF00FFF48u: mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | top->dCmd_payload_data;break;
-						case 0xF00FFF4Cu: mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)top->dCmd_payload_data) << 32);  /*cout << "mTimeCmp <= " << mTimeCmp << endl; */break;
-						}
-					}else{
-						for(uint32_t b = 0;b < (1 << top->dCmd_payload_size);b++){
-							uint32_t offset = (addr+b)&0x3;
-							dRsp_inst_next &= ~(0xFF << (offset*8));
-							dRsp_inst_next |= mem[addr + b] << (offset*8);
-						}
-						switch(addr){
-						case 0xF00FFF10u:
-							dRsp_inst_next = i/2;
-							break;
-						case 0xF00FFF40u: dRsp_inst_next = mTime;          break;
-						case 0xF00FFF44u: dRsp_inst_next = mTime >> 32;    break;
-						case 0xF00FFF48u: dRsp_inst_next = mTimeCmp;       break;
-						case 0xF00FFF4Cu: dRsp_inst_next = mTimeCmp >> 32; break;
-						}
-						memTraces <<
-						#ifdef TRACE_WITH_TIME
-						(currentTime
-						#ifdef REF
-						-2
-						 #endif
-						 ) <<
-						 #endif
-						  " : READ  mem" << (1 << top->dCmd_payload_size) << "[" << addr << "] = " << dRsp_inst_next << endl;
-
-					}
-				}
 
 				if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
 					regTraces <<
@@ -358,17 +352,6 @@ public:
 
 				for(SimElement* simElement : simElements) simElement->postCycle();
 
-				top->dRsp_ready = 0;
-				if(dRsp_ready_pending && (!dStall || VL_RANDOM_I(8) < 100)){
-					top->dRsp_data = dRsp_inst_next;
-					dRsp_ready_pending = false;
-					top->dRsp_ready = 1;
-					top->dRsp_error = dRsp_error_next;
-				} else{
-					top->dRsp_data = VL_RANDOM_I(32);
-				}
-
-				if(dStall) top->dCmd_ready = VL_RANDOM_I(8) < 100 && !dRsp_ready_pending;
 
 
 				if (Verilated::gotFinish())
@@ -411,27 +394,27 @@ public:
 	}
 
 	virtual void onReset(){
-		top->iCmd_ready = 1;
-		top->iRsp_ready = 1;
+		top->iBus_cmd_ready = 1;
+		top->iBus_rsp_ready = 1;
 	}
 
 	virtual void preCycle(){
-		if (top->iCmd_valid && top->iCmd_ready && !pending) {
-			assertEq(top->iCmd_payload_pc & 3,0);
+		if (top->iBus_cmd_valid && top->iBus_cmd_ready && !pending) {
+			assertEq(top->iBus_cmd_payload_pc & 3,0);
 			pending = true;
-			ws->iBusAccess(top->iCmd_payload_pc,&inst_next,&error_next);
+			ws->iBusAccess(top->iBus_cmd_payload_pc,&inst_next,&error_next);
 		}
 	}
 
 	virtual void postCycle(){
-		top->iRsp_ready = !pending;
-		if(pending && (!ws->iStall || VL_RANDOM_I(8) < 100)){
-			top->iRsp_inst = inst_next;
+		top->iBus_rsp_ready = !pending;
+		if(pending && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+			top->iBus_rsp_inst = inst_next;
 			pending = false;
-			top->iRsp_ready = 1;
-			top->iRsp_error = error_next;
+			top->iBus_rsp_ready = 1;
+			top->iBus_rsp_error = error_next;
 		}
-		if(ws->iStall) top->iCmd_ready = VL_RANDOM_I(8) < 100 && !pending;
+		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100 && !pending;
 	}
 };
 #endif
@@ -469,25 +452,72 @@ public:
 	virtual void postCycle(){
 		bool error;
 		top->iBus_rsp_valid = 0;
-		if(pendingCount != 0 && (!ws->iStall || VL_RANDOM_I(8) < 100)){
+		if(pendingCount != 0 && (!ws->iStall || VL_RANDOM_I(7) < 100)){
 			ws->iBusAccess(address,&top->iBus_rsp_payload_data,&error);
 			top->iBus_rsp_payload_error = error;
 			pendingCount--;
 			address = (address & ~0x1F) + ((address + 4) & 0x1F);
 			top->iBus_rsp_valid = 1;
 		}
-		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(8) < 100 && pendingCount == 0;
+		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100 && pendingCount == 0;
 	}
 };
 #endif
 
-void fillSimELements(Workspace *ws){
+#ifdef DBUS_SIMPLE
+class DBusSimple : public SimElement{
+public:
+	uint32_t data_next = VL_RANDOM_I(32);
+	bool error_next = false;
+	bool pending = false;
+
+	Workspace *ws;
+	VVexRiscv* top;
+	DBusSimple(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+		top->dBus_cmd_ready = 1;
+		top->dBus_rsp_ready = 1;
+	}
+
+	virtual void preCycle(){
+		if (top->dBus_cmd_valid && top->dBus_cmd_ready && !pending) {
+			pending = true;
+			data_next = top->dBus_cmd_payload_data;
+			ws->dBusAccess(top->dBus_cmd_payload_address,top->dBus_cmd_payload_wr,top->dBus_cmd_payload_size,&data_next,&error_next);
+		}
+	}
+
+	virtual void postCycle(){
+		top->dBus_rsp_ready = 0;
+		if(pending && (!ws->dStall || VL_RANDOM_I(7) < 100)){
+			pending = false;
+			top->dBus_rsp_ready = 1;
+			top->dBus_rsp_data = data_next;
+			top->dBus_rsp_error = error_next;
+		} else{
+			top->dBus_rsp_data = VL_RANDOM_I(32);
+		}
+
+		if(ws->dStall) top->dBus_cmd_ready = VL_RANDOM_I(7) < 100 && !pending;
+	}
+};
+#endif
+
+
+void Workspace::fillSimELements(){
 
 	#ifdef IBUS_SIMPLE
-		ws->simElements.push_back(new IBusSimple(ws));
+		simElements.push_back(new IBusSimple(this));
 	#endif
 	#ifdef IBUS_CACHED
-		ws->simElements.push_back(new IBusCached(ws));
+		simElements.push_back(new IBusCached(this));
+	#endif
+	#ifdef DBUS_SIMPLE
+		simElements.push_back(new DBusSimple(this));
 	#endif
 }
 

@@ -9,15 +9,29 @@ case class IBusSimpleCmd() extends Bundle{
   val pc = UInt(32 bits)
 }
 
-case class IBusSimpleRsp() extends Bundle{
+case class IBusSimpleRsp() extends Bundle with IMasterSlave{
   val ready = Bool
   val error = Bool
   val inst  = Bits(32 bits)
+
+  override def asMaster(): Unit = {
+    out(ready,error,inst)
+  }
+}
+
+
+case class IBusSimpleBus() extends Bundle with IMasterSlave{
+  var cmd = Stream(IBusSimpleCmd())
+  var rsp = IBusSimpleRsp()
+
+  override def asMaster(): Unit = {
+    master(cmd)
+    slave(rsp)
+  }
 }
 
 class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) extends Plugin[VexRiscv]{
-  var iCmd  : Stream[IBusSimpleCmd] = null
-  var iRsp  : IBusSimpleRsp = null
+  var iBus : IBusSimpleBus = null
 
   object IBUS_ACCESS_ERROR extends Stageable(Bool)
   var decodeExceptionPort : Flow[ExceptionCause] = null
@@ -34,18 +48,18 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) 
     import pipeline._
     import pipeline.config._
 
-    //Emit iCmd request
     require(interfaceKeepData)
-    iCmd = master(Stream(IBusSimpleCmd())).setName("iCmd")
-    iCmd.valid := prefetch.arbitration.isFiring //prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
-    iCmd.pc := prefetch.output(PC)
-    prefetch.arbitration.haltIt setWhen(!iCmd.ready)
+    iBus = master(IBusSimpleBus()).setName("iBus")
+    
+    //Emit iBus.cmd request
+    iBus.cmd.valid := prefetch.arbitration.isFiring //prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
+    iBus.cmd.pc := prefetch.output(PC)
+    prefetch.arbitration.haltIt setWhen(!iBus.cmd.ready)
 
-    //Insert iRsp into INSTRUCTION
-    iRsp = in(IBusSimpleRsp()).setName("iRsp")
-    fetch.insert(INSTRUCTION) := iRsp.inst
-    fetch.insert(IBUS_ACCESS_ERROR) := iRsp.error
-    fetch.arbitration.haltIt setWhen(fetch.arbitration.isValid && !iRsp.ready)
+    //Insert iBus.rsp into INSTRUCTION
+    fetch.insert(INSTRUCTION) := iBus.rsp.inst
+    fetch.insert(IBUS_ACCESS_ERROR) := iBus.rsp.error
+    fetch.arbitration.haltIt setWhen(fetch.arbitration.isValid && !iBus.rsp.ready)
 
     if(catchAccessFault){
       decodeExceptionPort.valid := decode.arbitration.isValid && decode.input(IBUS_ACCESS_ERROR)

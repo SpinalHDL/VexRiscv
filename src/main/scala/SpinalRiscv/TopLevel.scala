@@ -79,22 +79,22 @@ object TopLevel {
 
       config.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, false),
-//        new IBusSimplePlugin(
-//          interfaceKeepData = true,
-//          catchAccessFault = true
-//        ),
-        new IBusCachedPlugin(
-          config = InstructionCacheConfig(
-            cacheSize =4096,
-            bytePerLine =32,
-            wayCount = 1,
-            wrappedMemAccess = true,
-            addressWidth = 32,
-            cpuDataWidth = 32,
-            memDataWidth = 32,
-            catchAccessFault = true
-          )
+        new IBusSimplePlugin(
+          interfaceKeepData = true,
+          catchAccessFault = true
         ),
+//        new IBusCachedPlugin(
+//          config = InstructionCacheConfig(
+//            cacheSize =4096,
+//            bytePerLine =32,
+//            wayCount = 1,
+//            wrappedMemAccess = true,
+//            addressWidth = 32,
+//            cpuDataWidth = 32,
+//            memDataWidth = 32,
+//            catchAccessFault = true
+//          )
+//        ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = true
         ),

@@ -12,16 +12,29 @@ case class DBusSimpleCmd() extends Bundle{
   val size = UInt(2 bit)
 }
 
-case class DBusSimpleRsp() extends Bundle{
+case class DBusSimpleRsp() extends Bundle with IMasterSlave{
   val ready = Bool
   val error = Bool
   val data = Bits(32 bit)
+
+  override def asMaster(): Unit = {
+    out(ready,error,data)
+  }
+}
+
+case class DBusSimpleBus() extends Bundle with IMasterSlave{
+  val cmd = Stream(DBusSimpleCmd())
+  val rsp = DBusSimpleRsp()
+
+  override def asMaster(): Unit = {
+    master(cmd)
+    slave(rsp)
+  }
 }
 
 class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Boolean) extends Plugin[VexRiscv]{
 
-  var dCmd  : Stream[DBusSimpleCmd] = null
-  var dRsp  : DBusSimpleRsp = null
+  var dBus  : DBusSimpleBus = null
 
   object MemoryCtrlEnum extends SpinalEnum{
     val WR, RD = newElement()
@@ -88,49 +101,50 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
     import pipeline._
     import pipeline.config._
 
-    //Emit dCmd request
+    dBus = master(DBusSimpleBus()).setName("dBus")
+
+    //Emit dBus.cmd request
     execute plug new Area{
       import execute._
 
-      dCmd = master(Stream(DBusSimpleCmd())).setName("dCmd")
-      dCmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers && !arbitration.removeIt
-      dCmd.wr := input(INSTRUCTION)(5)
-      dCmd.address := input(SRC_ADD_SUB).asUInt
-      dCmd.size := input(INSTRUCTION)(13 downto 12).asUInt
-      dCmd.payload.data := dCmd.size.mux (
+      dBus.cmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers && !arbitration.removeIt
+      dBus.cmd.wr := input(INSTRUCTION)(5)
+      dBus.cmd.address := input(SRC_ADD_SUB).asUInt
+      dBus.cmd.size := input(INSTRUCTION)(13 downto 12).asUInt
+      dBus.cmd.payload.data := dBus.cmd.size.mux (
         U(0) -> input(REG2)(7 downto 0) ## input(REG2)(7 downto 0) ## input(REG2)(7 downto 0) ## input(REG2)(7 downto 0),
         U(1) -> input(REG2)(15 downto 0) ## input(REG2)(15 downto 0),
         default -> input(REG2)(31 downto 0)
       )
-      when(arbitration.isValid && input(MEMORY_ENABLE) && !dCmd.ready){
+      when(arbitration.isValid && input(MEMORY_ENABLE) && !dBus.cmd.ready){
         arbitration.haltIt := True
       }
 
-      insert(MEMORY_ADDRESS_LOW) := dCmd.address(1 downto 0)
+      insert(MEMORY_ADDRESS_LOW) := dBus.cmd.address(1 downto 0)
 
       if(catchAddressMisaligned){
-        executeExceptionPort.code := (dCmd.wr ? U(6) | U(4)).resized
-        executeExceptionPort.badAddr := dCmd.address
+        executeExceptionPort.code := (dBus.cmd.wr ? U(6) | U(4)).resized
+        executeExceptionPort.badAddr := dBus.cmd.address
         executeExceptionPort.valid := (arbitration.isValid && input(MEMORY_ENABLE)
-          && ((dCmd.size === 2 && dCmd.address(1 downto 0) =/= 0) || (dCmd.size === 1 && dCmd.address(0 downto 0) =/= 0)))
+          && ((dBus.cmd.size === 2 && dBus.cmd.address(1 downto 0) =/= 0) || (dBus.cmd.size === 1 && dBus.cmd.address(0 downto 0) =/= 0)))
       }
     }
 
-    //Collect dRsp read responses
+    //Collect dBus.rsp read responses
     memory plug new Area {
       import memory._
 
-      dRsp = in(DBusSimpleRsp()).setName("dRsp")
-      insert(MEMORY_READ_DATA) := dRsp.data
-      arbitration.haltIt setWhen(arbitration.isValid && input(MEMORY_ENABLE) && !dRsp.ready)
+
+      insert(MEMORY_READ_DATA) := dBus.rsp.data
+      arbitration.haltIt setWhen(arbitration.isValid && input(MEMORY_ENABLE) && !dBus.rsp.ready)
 
       if(catchAccessFault){
-        memoryExceptionPort.valid := arbitration.isValid && input(MEMORY_ENABLE) && dRsp.ready && dRsp.error
+        memoryExceptionPort.valid := arbitration.isValid && input(MEMORY_ENABLE) && dBus.rsp.ready && dBus.rsp.error
         memoryExceptionPort.code  := 5
         memoryExceptionPort.badAddr := input(REGFILE_WRITE_DATA).asUInt  //Drived by IntAluPlugin
       }
 
-      assert(!(dRsp.ready && input(MEMORY_ENABLE) && arbitration.isValid && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
+      assert(!(dBus.rsp.ready && input(MEMORY_ENABLE) && arbitration.isValid && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
     }
 
     //Reformat read responses, REGFILE_WRITE_DATA overriding
