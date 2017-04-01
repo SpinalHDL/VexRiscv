@@ -36,12 +36,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
 
   var dBus  : DBusSimpleBus = null
 
-  object MemoryCtrlEnum extends SpinalEnum{
-    val WR, RD = newElement()
-  }
 
   object MEMORY_ENABLE extends Stageable(Bool)
-  object MEMORY_CTRL extends Stageable(MemoryCtrlEnum())
   object MEMORY_READ_DATA extends Stageable(Bits(32 bits))
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
 
@@ -74,17 +70,10 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
     )
 
     decoderService.addDefault(MEMORY_ENABLE, False)
-    decoderService.add(List(
-      LB   -> (loadActions),
-      LH   -> (loadActions),
-      LW   -> (loadActions),
-      LBU  -> (loadActions),
-      LHU  -> (loadActions),
-      LWU  -> (loadActions),
-      SB   -> (storeActions),
-      SH   -> (storeActions),
-      SW   -> (storeActions)
-    ))
+    decoderService.add(
+      List(LB, LH, LW, LBU, LHU, LWU).map(_ -> loadActions) ++
+      List(SB, SH, SW).map(_ -> storeActions)
+    )
 
     if(catchAddressMisaligned) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
@@ -170,7 +159,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
         input(REGFILE_WRITE_DATA) := rspFormated
       }
 
-      assert(!(input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
+      assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
     }
   }
 }

@@ -15,6 +15,7 @@
 #include <fstream>
 #include <vector>
 
+#include <iomanip>
 
 
 class Memory{
@@ -200,7 +201,7 @@ public:
 					 | (mem[addr + 3] << 24));
 		*error = addr == 0xF00FFF60u;
 	}
-	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size, uint32_t *data, bool *error) {
+	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
 		*error = addr == 0xF00FFF60u;
 		if(wr){
 			memTraces <<
@@ -214,7 +215,8 @@ public:
 			 " : WRITE mem" << (1 << size) << "[" << addr << "] = " << *data << endl;
 			for(uint32_t b = 0;b < (1 << size);b++){
 				uint32_t offset = (addr+b)&0x3;
-				*mem.get(addr + b) = *data >> (offset*8);
+				if((mask >> offset) & 1 == 1)
+					*mem.get(addr + b) = *data >> (offset*8);
 			}
 
 			switch(addr){
@@ -332,7 +334,7 @@ public:
 						#ifdef TRACE_WITH_TIME
 						currentTime <<
 						 #endif
-						 " : reg[" << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
+						 " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
 				}
 
 				for(SimElement* simElement : simElements) simElement->preCycle();
@@ -484,10 +486,10 @@ public:
 	}
 
 	virtual void preCycle(){
-		if (top->dBus_cmd_valid && top->dBus_cmd_ready && !pending) {
+		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
 			pending = true;
 			data_next = top->dBus_cmd_payload_data;
-			ws->dBusAccess(top->dBus_cmd_payload_address,top->dBus_cmd_payload_wr,top->dBus_cmd_payload_size,&data_next,&error_next);
+			ws->dBusAccess(top->dBus_cmd_payload_address,top->dBus_cmd_payload_wr,top->dBus_cmd_payload_size,0xF,&data_next,&error_next);
 		}
 	}
 
@@ -507,9 +509,60 @@ public:
 };
 #endif
 
+#ifdef DBUS_CACHED
+class DBusCached : public SimElement{
+public:
+	uint32_t address;
+	bool error_next = false;
+	uint32_t pendingCount = 0;
+	bool wr;
+
+	Workspace *ws;
+	VVexRiscv* top;
+	DBusCached(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+		top->dBus_cmd_ready = 1;
+		top->dBus_rsp_valid = 0;
+	}
+
+	virtual void preCycle(){
+		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
+			if(pendingCount == 0){
+				pendingCount = top->dBus_cmd_payload_length;
+				address = top->dBus_cmd_payload_address;
+				wr = top->dBus_cmd_payload_wr;
+			}
+			if(top->dBus_cmd_payload_wr){
+				ws->dBusAccess(address,top->dBus_cmd_payload_wr,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&error_next);
+				address += 4;
+				pendingCount--;
+			}
+		}
+	}
+
+	virtual void postCycle(){
+		if(pendingCount != 0 && !wr && (!ws->dStall || VL_RANDOM_I(7) < 100)){
+			ws->dBusAccess(address,0,2,0,&top->dBus_rsp_payload_data,&error_next);
+			top->dBus_rsp_valid = 1;
+			address += 4;
+			pendingCount--;
+		} else{
+			top->dBus_rsp_valid = 0;
+			top->dBus_rsp_payload_data = VL_RANDOM_I(32);
+		}
+
+		top->dBus_cmd_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1) && (pendingCount == 0 || wr);
+	}
+};
+#endif
+
+
 
 void Workspace::fillSimELements(){
-
 	#ifdef IBUS_SIMPLE
 		simElements.push_back(new IBusSimple(this));
 	#endif
@@ -518,6 +571,9 @@ void Workspace::fillSimELements(){
 	#endif
 	#ifdef DBUS_SIMPLE
 		simElements.push_back(new DBusSimple(this));
+	#endif
+	#ifdef DBUS_CACHED
+		simElements.push_back(new DBusCached(this));
 	#endif
 }
 
@@ -768,10 +824,12 @@ int main(int argc, char **argv, char **env) {
 
 		#ifdef DHRYSTONE
 //		Dhrystone("dhrystoneO3",false,false).run(0.05e6);
+
 		Dhrystone("dhrystoneO3",true,true).run(1.1e6);
 		Dhrystone("dhrystoneO3M",true,true).run(1.5e6);
 		Dhrystone("dhrystoneO3",false,false).run(1.5e6);
 		Dhrystone("dhrystoneO3M",false,false).run(1.2e6);
+
 //		Dhrystone("dhrystoneO3ML",false,false).run(8e6);
 //		Dhrystone("dhrystoneO3MLL",false,false).run(80e6);
 		#endif

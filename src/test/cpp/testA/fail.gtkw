@@ -1,50 +1,130 @@
 [*]
 [*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
-[*] Thu Mar 30 15:00:10 2017
+[*] Sat Apr  1 14:47:34 2017
 [*]
 [dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/dhrystoneO3.vcd"
-[dumpfile_mtime] "Thu Mar 30 14:59:57 2017"
-[dumpfile_size] 1227579722
+[dumpfile_mtime] "Sat Apr  1 14:46:24 2017"
+[dumpfile_size] 1846070138
 [savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/fail.gtkw"
-[timestart] 555551
+[timestart] 48127
 [size] 1776 953
 [pos] -1 -1
-*-2.000000 555567 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-3.000000 48140 48755 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.VexRiscv.
-[sst_width] 378
-[signals_width] 418
+[sst_width] 313
+[signals_width] 558
 [sst_expanded] 1
-[sst_vpaned_height] 279
+[sst_vpaned_height] 374
+@28
+TOP.clk
+TOP.reset
+@22
+TOP.dBus_cmd_payload_address[31:0]
+TOP.dBus_cmd_payload_data[31:0]
+TOP.dBus_cmd_payload_length[3:0]
+TOP.dBus_cmd_payload_mask[3:0]
+@28
+TOP.dBus_cmd_payload_wr
+TOP.dBus_cmd_ready
+TOP.dBus_cmd_valid
+@22
+TOP.dBus_rsp_payload_data[31:0]
+@28
+TOP.dBus_rsp_valid
+TOP.VexRiscv.dataCache_1.victim_bufferReaded_valid
+TOP.VexRiscv.dataCache_1.io_cpu_execute_isValid
+TOP.VexRiscv.dataCache_1.io_cpu_memory_isValid
+TOP.VexRiscv.dataCache_1.loader_valid
+TOP.VexRiscv.writeBack_arbitration_isValid
+@22
+TOP.VexRiscv.dataCache_1.io_cpu_writeBack_data[31:0]
+@28
+TOP.VexRiscv.dataCache_1.io_cpu_writeBack_haltIt
+TOP.VexRiscv.dataCache_1.io_cpu_memory_haltIt
+TOP.VexRiscv.dataCache_1.io_cpu_memory_isStuck
+TOP.VexRiscv.dataCache_1.io_cpu_memory_isValid
+TOP.VexRiscv.dataCache_1.manager_cpuRsp_payload_fromBypass
+TOP.VexRiscv.dataCache_1.manager_cpuRsp_ready
+TOP.VexRiscv.dataCache_1.manager_cpuRsp_valid
+@22
+TOP.VexRiscv.dataCache_1.ways_0_data_port0_address[9:0]
+TOP.VexRiscv.dataCache_1.ways_0_data_port0_data[31:0]
+@28
+TOP.VexRiscv.dataCache_1.ways_0_data_port0_enable
+@22
+TOP.VexRiscv.dataCache_1.ways_0_data_port0_mask[3:0]
+TOP.VexRiscv.dataCache_1.ways_0_data_port1_address[9:0]
+TOP.VexRiscv.dataCache_1.ways_0_data_port1_data[31:0]
+@28
+TOP.VexRiscv.dataCache_1.ways_0_data_port1_enable
+@22
+TOP.VexRiscv.dataCache_1.dataReadedValue_0[31:0]
+@28
+TOP.VexRiscv.dataCache_1.manager_cpuRsp_payload_fromBypass
+TOP.VexRiscv.dataCache_1.manager_cpuRsp_ready
+TOP.VexRiscv.dataCache_1.manager_cpuRsp_valid
+TOP.VexRiscv.writeBack_REGFILE_WRITE_VALID
+@22
+TOP.VexRiscv.writeBack_REGFILE_WRITE_DATA[31:0]
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_payload_address[4:0]
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_payload_data[31:0]
+@28
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_valid
+@800200
+-cache_mem
+@23
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_address[31:0]
+@22
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_data[31:0]
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_length[3:0]
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_mask[3:0]
+@28
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_wr
+TOP.VexRiscv.dataCache_1.io_mem_cmd_valid
+TOP.VexRiscv.dataCache_1.io_mem_cmd_ready
+@22
+TOP.VexRiscv.dataCache_1.io_mem_rsp_payload_data[31:0]
+@28
+TOP.VexRiscv.dataCache_1.io_mem_rsp_valid
+@1000200
+-cache_mem
 @28
 TOP.VexRiscv.clk
-TOP.VexRiscv.decode_arbitration_isValid
 @22
-TOP.VexRiscv.decode_PC[31:0]
-TOP.VexRiscv.decode_INSTRUCTION[31:0]
+TOP.VexRiscv.writeBack_PC[31:0]
 @28
-TOP.VexRiscv.decode_LEGAL_INSTRUCTION
+TOP.VexRiscv.writeBack_arbitration_isValid
+TOP.VexRiscv.decode_arbitration_haltIt
+TOP.VexRiscv.execute_arbitration_haltIt
+TOP.VexRiscv.fetch_arbitration_haltIt
+TOP.VexRiscv.memory_arbitration_haltIt
+TOP.VexRiscv.prefetch_arbitration_haltIt
+TOP.VexRiscv.writeBack_arbitration_haltIt
+TOP.VexRiscv.MachineCsr_exceptionPortCtrl_pipelineHasException
+@800200
+-cache_cpu
 @22
-TOP.VexRiscv.instructionCache_1.io_cpu_cmd_address[31:0]
+TOP.VexRiscv.execute_PC[31:0]
 @28
-TOP.VexRiscv.instructionCache_1.io_cpu_cmd_haltIt
+TOP.VexRiscv.execute_arbitration_removeIt
 @22
-TOP.VexRiscv.instructionCache_1.io_cpu_rsp_address[31:0]
-TOP.VexRiscv.instructionCache_1.io_cpu_rsp_data[31:0]
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_address[31:0]
 @28
-TOP.VexRiscv.instructionCache_1.io_cpu_rsp_haltIt
-TOP.VexRiscv.instructionCache_1.io_cpu_rsp_isStuck
-TOP.VexRiscv.instructionCache_1.io_cpu_rsp_isValid
-TOP.VexRiscv.instructionCache_1.task_loaderHitReady
-@29
-TOP.VexRiscv.instructionCache_1.task_loaderHitValid
-@28
-TOP.VexRiscv.instructionCache_1.task_waysHitValid
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_all
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_bypass
 @22
-TOP.VexRiscv.instructionCache_1.task_waysHitWord[31:0]
-TOP.VexRiscv.instructionCache_1.lineLoader_request_payload_addr[31:0]
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_data[31:0]
 @28
-TOP.VexRiscv.instructionCache_1.lineLoader_request_ready
-TOP.VexRiscv.instructionCache_1.lineLoader_request_valid
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_kind[1:0]
+@22
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_mask[3:0]
+@28
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_wr
+TOP.VexRiscv.dataCache_1.io_cpu_execute_haltIt
+TOP.VexRiscv.dataCache_1.io_cpu_execute_isStuck
+TOP.VexRiscv.dataCache_1.io_cpu_execute_isValid
+@1000200
+-cache_cpu
 [pattern_trace] 1
 [pattern_trace] 0

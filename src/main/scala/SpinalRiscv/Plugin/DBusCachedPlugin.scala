@@ -1,13 +1,9 @@
 package SpinalRiscv.Plugin
+
+import SpinalRiscv.Riscv._
+import SpinalRiscv.{Stageable, DecoderService, Riscv, VexRiscv}
 import spinal.core._
 import spinal.lib._
-
-
-
-class DBusCachedPlugin {
-
-}
-
 
 
 case class DataCacheConfig( cacheSize : Int,
@@ -15,10 +11,127 @@ case class DataCacheConfig( cacheSize : Int,
                             wayCount : Int,
                             addressWidth : Int,
                             cpuDataWidth : Int,
-                            memDataWidth : Int){
+                            memDataWidth : Int,
+                            catchAccessFault : Boolean = false){
   def burstSize = bytePerLine*8/memDataWidth
   val burstLength = bytePerLine/(memDataWidth/8)
+  assert(catchAccessFault == false)
 }
+
+
+class DBusCachedPlugin(config : DataCacheConfig)  extends Plugin[VexRiscv]{
+  import config._
+  var dBus  : DataCacheMemBus = null
+
+  object MEMORY_ENABLE extends Stageable(Bool)
+  object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
+
+  override def setup(pipeline: VexRiscv): Unit = {
+    import Riscv._
+    import pipeline.config._
+
+    val decoderService = pipeline.service(classOf[DecoderService])
+
+    val stdActions = List[(Stageable[_ <: BaseType],Any)](
+      LEGAL_INSTRUCTION -> True,
+      SRC1_CTRL         -> Src1CtrlEnum.RS,
+      SRC_USE_SUB_LESS  -> False,
+      MEMORY_ENABLE     -> True,
+      REG1_USE          -> True
+    ) ++ (if (catchAccessFault) List(IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB) else Nil) //Used for access fault bad address in memory stage
+
+    val loadActions = stdActions ++ List(
+      SRC2_CTRL -> Src2CtrlEnum.IMI,
+      REGFILE_WRITE_VALID -> True,
+      BYPASSABLE_EXECUTE_STAGE -> False,
+      BYPASSABLE_MEMORY_STAGE -> False
+    )
+
+    val storeActions = stdActions ++ List(
+      SRC2_CTRL -> Src2CtrlEnum.IMS,
+      REG2_USE -> True
+    )
+
+    decoderService.addDefault(MEMORY_ENABLE, False)
+    decoderService.add(
+      List(LB, LH, LW, LBU, LHU, LWU).map(_ -> loadActions) ++
+      List(SB, SH, SW).map(_ -> storeActions)
+    )
+  }
+
+  override def build(pipeline: VexRiscv): Unit = {
+    import pipeline._
+    import pipeline.config._
+
+    dBus = master(DataCacheMemBus(this.config)).setName("dBus")
+
+    val cache = new DataCache(this.config)
+    cache.io.mem <> dBus
+
+    execute plug new Area {
+      import execute._
+      //TODO manage removeIt
+
+      val size = input(INSTRUCTION)(13 downto 12).asUInt
+      cache.io.cpu.execute.isValid := arbitration.isValid && input(MEMORY_ENABLE)
+      cache.io.cpu.execute.isStuck := arbitration.isStuck
+      arbitration.haltIt.setWhen(cache.io.cpu.execute.haltIt)
+      cache.io.cpu.execute.args.wr := input(INSTRUCTION)(5)
+      cache.io.cpu.execute.args.address := input(SRC_ADD_SUB).asUInt
+      cache.io.cpu.execute.args.data := size.mux(
+        U(0)    -> input(REG2)( 7 downto 0) ## input(REG2)( 7 downto 0) ## input(REG2)(7 downto 0) ## input(REG2)(7 downto 0),
+        U(1)    -> input(REG2)(15 downto 0) ## input(REG2)(15 downto 0),
+        default -> input(REG2)(31 downto 0)
+      )
+      cache.io.cpu.execute.args.mask := (size.mux (
+        U(0)    -> B"0001",
+        U(1)    -> B"0011",
+        default -> B"1111"
+      ) << cache.io.cpu.execute.args.address(1 downto 0)).resized
+      cache.io.cpu.execute.args.bypass := cache.io.cpu.execute.args.address(31 downto 28) === 0xF
+      cache.io.cpu.execute.args.all := False
+      cache.io.cpu.execute.args.kind := DataCacheCpuCmdKind.MEMORY
+
+      insert(MEMORY_ADDRESS_LOW) := cache.io.cpu.execute.args.address(1 downto 0)
+    }
+
+    memory plug new Area{
+      import memory._
+      cache.io.cpu.memory.isValid := arbitration.isValid && input(MEMORY_ENABLE)
+      cache.io.cpu.memory.isStuck := arbitration.isStuck
+      arbitration.haltIt.setWhen(cache.io.cpu.memory.haltIt)
+    }
+
+    writeBack plug new Area{
+      import writeBack._
+
+      cache.io.cpu.writeBack.isValid := arbitration.isValid && input(MEMORY_ENABLE)
+      arbitration.haltIt.setWhen(cache.io.cpu.writeBack.haltIt)
+
+      val rspShifted = Bits(32 bits)
+      rspShifted := cache.io.cpu.writeBack.data
+      switch(input(MEMORY_ADDRESS_LOW)){
+        is(1){rspShifted(7 downto 0) := cache.io.cpu.writeBack.data(15 downto 8)}
+        is(2){rspShifted(15 downto 0) := cache.io.cpu.writeBack.data(31 downto 16)}
+        is(3){rspShifted(7 downto 0) := cache.io.cpu.writeBack.data(31 downto 24)}
+      }
+
+      val rspFormated = input(INSTRUCTION)(13 downto 12).mux(
+        0 -> B((31 downto 8) -> (rspShifted(7) && !input(INSTRUCTION)(14)),(7 downto 0) -> rspShifted(7 downto 0)),
+        1 -> B((31 downto 16) -> (rspShifted(15) && ! input(INSTRUCTION)(14)),(15 downto 0) -> rspShifted(15 downto 0)),
+        default -> rspShifted //W
+      )
+
+      when(arbitration.isValid && input(MEMORY_ENABLE)) {
+        input(REGFILE_WRITE_DATA) := rspFormated
+      }
+
+      assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
+    }
+  }
+}
+
+
 
 object DataCacheCpuCmdKind extends SpinalEnum{
   val MEMORY,FLUSH,EVICT = newElement()
@@ -52,11 +165,11 @@ case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
 
 case class DataCacheCpuMemory(p : DataCacheConfig) extends Bundle with IMasterSlave{
   val isValid = Bool
-  val isStall = Bool
+  val isStuck = Bool
   val haltIt = Bool
 
   override def asMaster(): Unit = {
-    out(isValid, isStall)
+    out(isValid, isStuck)
     in(haltIt)
   }
 }
@@ -264,11 +377,10 @@ class DataCache(p : DataCacheConfig) extends Component{
   val manager = new Area {
     io.flushDone := False
 
-    io.cpu.execute.haltIt := False
     val request = RegNextWhen(io.cpu.execute.args, !io.cpu.execute.isStuck)
 
     //Evict the cache after reset
-    val requestValid = io.cpu.memory.isValid || RegNextWhen(False, !io.cpu.memory.isStall, True)
+    val requestValid = io.cpu.memory.isValid || RegNextWhen(False, !io.cpu.memory.isStuck, True)
     request.kind.getDrivingReg.init(DataCacheCpuCmdKind.EVICT)
     request.all.getDrivingReg.init(True)
     request.address.getDrivingReg.init(0)
@@ -281,11 +393,11 @@ class DataCache(p : DataCacheConfig) extends Component{
     val waysHitInfo = new LineInfo().assignDontCare()
 
     //delayedXX are used to relax logic timings in flush and evict modes
-    val delayedValid = RegNext(io.cpu.memory.isStall) init(False)
+    val delayedValid = RegNext(io.cpu.memory.isStuck) init(False)
     val delayedWaysHitValid = RegNext(waysHitValid)
     val delayedWaysHitId = RegNext(waysHitId)
 
-    val waysReadAddress = Mux(io.cpu.memory.isStall, request.address, io.cpu.execute.address)
+    val waysReadAddress = Mux(io.cpu.memory.isStuck, request.address, io.cpu.execute.address)
     tagsReadCmd := waysReadAddress(lineRange)
     dataReadCmd := waysReadAddress(lineRange.high downto wordRange.low)
     when(victim.dataReadCmdOccure){
@@ -322,8 +434,8 @@ class DataCache(p : DataCacheConfig) extends Component{
     val loaderReady = False
     val loadingDone = RegNext(loaderValid && loaderReady) init(False) //one cycle pulse
 
-    val victimSent = RegInit(False)
-    victimSent := (victimSent || victim.requestIn.fire) && io.cpu.memory.isStall
+    val victimSent = RegInit(False) //TODO manage "removeIt"
+    victimSent := (victimSent || victim.requestIn.fire) && io.cpu.memory.isStuck
 
     val flushAllState = RegInit(False) //Used to keep logic timings fast
     val flushAllDone = RegNext(False) init(False)
@@ -458,7 +570,7 @@ class DataCache(p : DataCacheConfig) extends Component{
 
   //The whole life of a loading task, the corresponding manager request is present
   val loader = new Area{
-    val valid = RegNext(manager.loaderValid)
+    val valid = RegNext(manager.loaderValid) init(False)
     val wayId = RegNext(manager.writebackWayId)
     val baseAddress =  manager.request.address
 

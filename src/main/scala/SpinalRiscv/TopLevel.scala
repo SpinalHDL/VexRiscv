@@ -79,37 +79,48 @@ object TopLevel {
 
       config.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, false),
-        new IBusSimplePlugin(
-          interfaceKeepData = true,
-          catchAccessFault = true
-        ),
-//        new IBusCachedPlugin(
-//          config = InstructionCacheConfig(
-//            cacheSize =4096,
-//            bytePerLine =32,
-//            wayCount = 1,
-//            wrappedMemAccess = true,
-//            addressWidth = 32,
-//            cpuDataWidth = 32,
-//            memDataWidth = 32,
-//            catchAccessFault = true
-//          )
+//        new IBusSimplePlugin(
+//          interfaceKeepData = true,
+//          catchAccessFault = true
 //        ),
+        new IBusCachedPlugin(
+          config = InstructionCacheConfig(
+            cacheSize =4096,
+            bytePerLine =32,
+            wayCount = 1,
+            wrappedMemAccess = true,
+            addressWidth = 32,
+            cpuDataWidth = 32,
+            memDataWidth = 32,
+            catchAccessFault = true
+          )
+        ),
+//        new DBusSimplePlugin(
+//          catchAddressMisaligned = true,
+//          catchAccessFault = true
+//        ),
+        new DBusCachedPlugin(
+          config = new DataCacheConfig(
+            cacheSize         = 4096,
+            bytePerLine       = 32,
+            wayCount          = 1,
+            addressWidth      = 32,
+            cpuDataWidth      = 32,
+            memDataWidth      = 32,
+            catchAccessFault  = false
+          )
+        ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = true
         ),
         new RegFilePlugin(
           regFileReadyKind = Plugin.SYNC,
-          zeroBoot = false
+          zeroBoot = true
         ),
         new IntAluPlugin,
         new SrcPlugin,
         new FullBarrielShifterPlugin,
 //        new LightShifterPlugin,
-        new DBusSimplePlugin(
-          catchAddressMisaligned = true,
-          catchAccessFault = true
-        ),
         new HazardSimplePlugin(true, true, true, true),
 //        new HazardSimplePlugin(false, true, false, true),
 //        new HazardSimplePlugin(false, false, false, false),
@@ -159,6 +170,7 @@ object TopLevel {
       toplevel.decode.input(config.INSTRUCTION).addAttribute("verilator public")
       toplevel.decode.input(config.PC).addAttribute("verilator public")
       toplevel.decode.arbitration.isValid.addAttribute("verilator public")
+//      toplevel.writeBack.input(config.PC).addAttribute("verilator public")
 //      toplevel.service(classOf[DecoderSimplePlugin]).bench(toplevel)
 
       toplevel
