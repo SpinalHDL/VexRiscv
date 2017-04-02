@@ -21,7 +21,6 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
 
 
     val immediateActions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.IMI,
       REGFILE_WRITE_VALID      -> True,
@@ -31,7 +30,6 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
     )
 
     val nonImmediateActions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
       REGFILE_WRITE_VALID      -> True,
@@ -97,7 +95,6 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
 
 
     val immediateActions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.IMI,
       ALU_CTRL                 -> AluCtrlEnum.SRC1,
@@ -108,7 +105,6 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
     )
 
     val nonImmediateActions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
       ALU_CTRL                 -> AluCtrlEnum.SRC1,

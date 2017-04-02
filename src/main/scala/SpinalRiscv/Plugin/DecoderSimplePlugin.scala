@@ -4,12 +4,35 @@ import SpinalRiscv._
 import spinal.core._
 import spinal.lib._
 
-import scala.Predef.assert
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 
 case class Masked(value : BigInt,care : BigInt){
+  var isPrime = true
 
+  def intersects(x: Masked) = ((value ^ x.value) & care & x.care) == 0
+
+  def setPrime(value : Boolean) = {
+    isPrime = value
+    this
+  }
+
+  def merge(x: Masked) = {
+    isPrime = false
+    x.isPrime = false
+    val bit = value - x.value
+    new Masked(value &~ bit, care & ~bit)
+  }
+  def similar(x: Masked) = {
+    val diff = value - x.value
+    care == x.care && value > x.value && (diff & diff - 1) == 0
+  }
+
+
+  def === (hard : Bits) : Bool = (hard & care) === (value & care)
+
+  def toString(bitCount : Int) = (0 until bitCount).map(i => if(care.testBit(i)) (if(value.testBit(i)) "1" else "0") else "-").reverseIterator.reduce(_+_)
 }
 
 class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexRiscv] with DecoderService {
@@ -36,9 +59,6 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
 
 
   override def setup(pipeline: VexRiscv): Unit = {
-    import pipeline.config._
-    addDefault(LEGAL_INSTRUCTION, False)
-
     if(catchIllegalInstruction) {
       val exceptionService = pipeline.plugins.filter(_.isInstanceOf[ExceptionService]).head.asInstanceOf[ExceptionService]
       decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode).setName("decodeExceptionPort")
@@ -75,15 +95,16 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
 
     //Build spec
     val spec = encodings.map { case (key, values) =>
-      var decodedValue, decodedCare = BigInt(0)
+      var decodedValue = defaultValue
+      var decodedCare = defaultCare
       for((e, literal) <- values){
         literal.input match{
           case literal : EnumLiteral[_] => literal.fixEncoding(e.dataType.asInstanceOf[SpinalEnumCraft[_]].getEncoding)
           case _ =>
         }
         val offset = offsetOf(e)
-        decodedValue += literal.input.asInstanceOf[Literal].getValue << offset
-        decodedCare += ((BigInt(1) << e.dataType.getBitsWidth)-1) << offset
+        decodedValue |= literal.input.asInstanceOf[Literal].getValue << offset
+        decodedCare  |= ((BigInt(1) << e.dataType.getBitsWidth)-1) << offset
       }
       (Masked(key.value,key.careAbout),Masked(decodedValue,decodedCare))
     }
@@ -92,7 +113,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
 
     // logic implementation
     val decodedBits = Bits(stageables.foldLeft(0)(_ + _.dataType.getBitsWidth) bits)
-    val defaultBits = cloneOf(decodedBits)
+//    val defaultBits = cloneOf(decodedBits)
 
 //    assert(defaultValue == 0)
 //    defaultBits := defaultValue
@@ -101,16 +122,23 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
 //    decodedBits := logicOr.foldLeft(defaultBits)(_ | _)
 
 
-    for(i <- decodedBits.range)
-      if(defaultCare.testBit(i))
-        defaultBits(i) := Bool(defaultValue.testBit(i))
-      else
-        defaultBits(i).assignDontCare()
+//    for(i <- decodedBits.range)
+//      if(defaultCare.testBit(i))
+//        defaultBits(i) := Bool(defaultValue.testBit(i))
+//      else
+//        defaultBits(i).assignDontCare()
 
 
-    val logicOr = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
-    val logicAnd = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(~mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
-    decodedBits :=  (defaultBits | logicOr.foldLeft(B(0, decodedBits.getWidth bits))(_ | _)) & ~logicAnd.foldLeft(B(0, decodedBits.getWidth bits))(_ | _)
+//    val logicOr = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
+//    val logicAnd = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(~mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
+//    decodedBits :=  (defaultBits | logicOr.foldLeft(B(0, decodedBits.getWidth bits))(_ | _)) & ~logicAnd.foldLeft(B(0, decodedBits.getWidth bits))(_ | _)
+//    if(catchIllegalInstruction){
+//      insert(LEGAL_INSTRUCTION) := (for((key, mapping) <- spec) yield ((input(INSTRUCTION) &  key.care) === (key.value & key.care))).reduce(_ || _)
+//    }
+
+
+    decodedBits := Symplify(input(INSTRUCTION),spec, decodedBits.getWidth)
+    if(catchIllegalInstruction) insert(LEGAL_INSTRUCTION) := Symplify.logicOf(input(INSTRUCTION), SymplifyBit.getPrimeImplicants(spec.unzip._1.toSeq, 32))
 
 
     //Unpack decodedBits and insert fields in the pipeline
@@ -135,8 +163,105 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
       toplevel.getAllIo.toList.foreach(_.asDirectionLess())
       toplevel.decode.input(INSTRUCTION) := Delay((in Bits(32 bits)).setName("instruction"),2)
       val stageables = encodings.flatMap(_._2.map(_._1)).toSet
-      stageables.foreach(e => out(Delay(toplevel.decode.insert(e),2)).setName(e.getName))
+      stageables.foreach(e => out(RegNext(RegNext(toplevel.decode.insert(e)).setName(e.getName()))))
+      if(catchIllegalInstruction) out(RegNext(RegNext(toplevel.decode.insert(LEGAL_INSTRUCTION)).setName(LEGAL_INSTRUCTION.getName())))
       toplevel.getAdditionalNodesRoot.clear()
     }
+  }
+}
+
+
+
+object Symplify{
+  val cache = mutable.HashMap[Bits,mutable.HashMap[Masked,Bool]]();
+  def getCache(addr : Bits) = cache.getOrElseUpdate(addr,mutable.HashMap[Masked,Bool]())
+  def logicOf(addr : Bits,terms : Seq[Masked]) = terms.map(t => getCache(addr).getOrElseUpdate(t,t === addr)).asBits.orR
+
+  def apply(addr: Bits, mapping: Iterable[(Masked, Masked)],resultWidth : Int) : Bits = {
+    val addrWidth = widthOf(addr)
+    (for(bitId <- 0 until resultWidth) yield{
+      val trueTerm = mapping.filter { case (k,t) => (t.care.testBit(bitId) && t.value.testBit(bitId))}.map(_._1)
+      val falseTerm = mapping.filter { case (k,t) => (t.care.testBit(bitId) &&  !t.value.testBit(bitId))}.map(_._1)
+      val symplifiedTerms = SymplifyBit.getPrimeImplicants(trueTerm.toSeq, falseTerm.toSeq, addrWidth)
+      logicOf(addr, symplifiedTerms)
+    }).asBits
+  }
+}
+
+object SymplifyBit{
+  def genImplicitDontCare(falseTerms: Seq[Masked], term: Masked, bits: Int, above: Boolean): Masked = {
+    for (i <- 0 until bits; if term.care.testBit(i)) {
+      var t: Masked = null
+      if(above) {
+        if (!term.value.testBit(i))
+          t = Masked(term.value.setBit(i), term.care)
+      } else {
+        if (term.value.testBit(i))
+          t = Masked(term.value.clearBit(i), term.care)
+      }
+      if (t != null && !falseTerms.exists(_.intersects(t)))
+        return t
+    }
+    null
+  }
+
+  def getPrimeImplicants(trueTerms: Seq[Masked],falseTerms: Seq[Masked],inputWidth : Int): Seq[Masked] = {
+    val primes = ArrayBuffer[Masked]()
+    trueTerms.foreach(_.isPrime = true)
+    falseTerms.foreach(_.isPrime = true)
+    val trueTermByCareCount = (inputWidth to 0 by -1).map(b => trueTerms.filter(b == _.care.bitCount))
+    val table = trueTermByCareCount.map(c => (0 to inputWidth).map(b => collection.mutable.Set(c.filter(b == _.value.bitCount): _*)))
+    for (i <- 0 to inputWidth) {
+      for (j <- 0 until inputWidth - i){
+        for(term <- table(i)(j)){
+          table(i+1)(j) ++= table(i)(j+1).filter(_.similar(term)).map(_.merge(term))
+        }
+      }
+      for (j <- 0 until inputWidth-i) {
+        for (a <- table(i)(j).filter(_.isPrime)) {
+          val dc = genImplicitDontCare(falseTerms, a, inputWidth, true)
+          if (dc != null)
+            table(i+1)(j) += dc merge a
+        }
+        for (a <- table(i)(j+1).filter(_.isPrime)) {
+          val dc = genImplicitDontCare(falseTerms, a, inputWidth, false)
+          if (dc != null)
+            table(i+1)(j) += a merge dc
+        }
+      }
+      for (r <- table(i))
+        for (p <- r; if p.isPrime)
+          primes += p
+    }
+    primes
+  }
+  
+  def getPrimeImplicants(trueTerms: Seq[Masked],inputWidth : Int): Seq[Masked] = {
+    val primes = ArrayBuffer[Masked]()
+    trueTerms.foreach(_.isPrime = true)
+    val trueTermByCareCount = (inputWidth to 0 by -1).map(b => trueTerms.filter(b == _.care.bitCount))
+    val table = trueTermByCareCount.map(c => (0 to inputWidth).map(b => collection.mutable.Set(c.filter(b == _.value.bitCount): _*)))
+    for (i <- 0 to inputWidth) {
+      for (j <- 0 until inputWidth - i){
+        for(term <- table(i)(j)){
+          table(i+1)(j) ++= table(i)(j+1).filter(_.similar(term)).map(_.merge(term))
+        }
+      }
+      for (r <- table(i))
+        for (p <- r; if p.isPrime)
+          primes += p
+    }
+    primes
+  }
+
+  def main(args: Array[String]) {
+    val default = Masked(0,0xF)
+    val primeImplicants = List(4,8,10,11,12,15).map(v => Masked(v,0xF))
+    val dcImplicants = List(9,14).map(v => Masked(v,0xF).setPrime(false))
+    val reducedPrimeImplicants = getPrimeImplicants(primeImplicants ++ dcImplicants,4)
+    println("UUT")
+    println(reducedPrimeImplicants.map(_.toString(4)).mkString("\n"))
+    println("REF")
+    println("-100\n10--\n1--0\n1-1-")
   }
 }

@@ -36,7 +36,6 @@ class BranchPlugin(earlyBranch : Boolean,
     val decoderService = pipeline.service(classOf[DecoderService])
 
     val bActions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION -> True,
       SRC1_CTRL         -> Src1CtrlEnum.RS,
       SRC2_CTRL         -> Src2CtrlEnum.RS,
       SRC_USE_SUB_LESS  -> True,
@@ -45,7 +44,6 @@ class BranchPlugin(earlyBranch : Boolean,
     )
 
     val jActions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION   -> True,
       SRC1_CTRL           -> Src1CtrlEnum.FOUR,
       SRC2_CTRL           -> Src2CtrlEnum.PC,
       SRC_USE_SUB_LESS    -> False,
@@ -157,11 +155,11 @@ class BranchPlugin(earlyBranch : Boolean,
       val readAddress = prefetch.output(PC)(2, historyRamSizeLog2 bits)
       fetch.insert(HISTORY_LINE) := historyCache.readSync(readAddress,!prefetch.arbitration.isStuckByOthers)
 
-      //WriteFirst bypass
-      val writePortReg = RegNext(historyCacheWrite)
-      when(writePortReg.valid && writePortReg.address === readAddress){
-        fetch.insert(HISTORY_LINE) := writePortReg.data
-      }
+      //WriteFirst bypass TODO long combinatorial path
+//      val writePortReg = RegNext(historyCacheWrite)
+//      when(writePortReg.valid && writePortReg.address === readAddress){
+//        fetch.insert(HISTORY_LINE) := writePortReg.data
+//      }
     }
 
     //Branch JAL, predict Bxx and branch it

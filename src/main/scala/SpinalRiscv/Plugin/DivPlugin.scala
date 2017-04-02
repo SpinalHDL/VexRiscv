@@ -12,7 +12,6 @@ class DivPlugin extends Plugin[VexRiscv]{
      import pipeline.config._
 
      val actions = List[(Stageable[_ <: BaseType],Any)](
-       LEGAL_INSTRUCTION        -> True,
        SRC1_CTRL                -> Src1CtrlEnum.RS,
        SRC2_CTRL                -> Src2CtrlEnum.RS,
        REGFILE_WRITE_VALID      -> True,

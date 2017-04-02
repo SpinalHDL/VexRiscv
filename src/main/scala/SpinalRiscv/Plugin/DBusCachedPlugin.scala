@@ -33,7 +33,6 @@ class DBusCachedPlugin(config : DataCacheConfig)  extends Plugin[VexRiscv]{
     val decoderService = pipeline.service(classOf[DecoderService])
 
     val stdActions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION -> True,
       SRC1_CTRL         -> Src1CtrlEnum.RS,
       SRC_USE_SUB_LESS  -> False,
       MEMORY_ENABLE     -> True,
@@ -523,8 +522,6 @@ class DataCache(p : DataCacheConfig) extends Component{
               cpuRspIn.fromBypass := True
 
               io.cpu.memory.haltIt.clearWhen(io.mem.cmd.fire)
-            } otherwise {
-              io.cpu.memory.haltIt := True //TODO redondent ?
             }
           } otherwise {
             when(waysHitValid && !loadingDone) { // !loadingDone => don't solve the request directly after loader (data write to read latency)
@@ -547,7 +544,6 @@ class DataCache(p : DataCacheConfig) extends Component{
                 io.cpu.memory.haltIt.clearWhen(cpuRspIn.ready && !victim.dataReadCmdOccureLast) //dataReadCmdOccure to avoid the case where flush,then read will victim use data read
               }
             } otherwise {
-              io.cpu.memory.haltIt := True //Exit this state automaticly (tags read port write first logic)  TODO redondent ?
               loaderValid := !loadingDone && !(!victimSent && victim.request.isStall) //Wait previous victim request to be completed
               when(writebackWayInfo.used && writebackWayInfo.dirty) {
                 victim.requestIn.valid := !victimSent

@@ -19,7 +19,6 @@ class MulPlugin extends Plugin[VexRiscv]{
 
 
     val actions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
       REGFILE_WRITE_VALID      -> True,

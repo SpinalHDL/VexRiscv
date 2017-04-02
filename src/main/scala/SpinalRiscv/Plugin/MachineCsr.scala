@@ -95,11 +95,9 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
     import pipeline.config._
 
     val defaultEnv = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION        -> True
     )
 
     val defaultCsrActions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION        -> True,
       IS_CSR                   -> True,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,

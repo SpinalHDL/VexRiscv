@@ -79,37 +79,37 @@ object TopLevel {
 
       config.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, false),
-//        new IBusSimplePlugin(
-//          interfaceKeepData = true,
-//          catchAccessFault = true
-//        ),
-        new IBusCachedPlugin(
-          config = InstructionCacheConfig(
-            cacheSize =4096,
-            bytePerLine =32,
-            wayCount = 1,
-            wrappedMemAccess = true,
-            addressWidth = 32,
-            cpuDataWidth = 32,
-            memDataWidth = 32,
-            catchAccessFault = true
-          )
+        new IBusSimplePlugin(
+          interfaceKeepData = true,
+          catchAccessFault = true
         ),
-//        new DBusSimplePlugin(
-//          catchAddressMisaligned = true,
-//          catchAccessFault = true
+//        new IBusCachedPlugin(
+//          config = InstructionCacheConfig(
+//            cacheSize =4096,
+//            bytePerLine =32,
+//            wayCount = 1,
+//            wrappedMemAccess = true,
+//            addressWidth = 32,
+//            cpuDataWidth = 32,
+//            memDataWidth = 32,
+//            catchAccessFault = true
+//          )
 //        ),
-        new DBusCachedPlugin(
-          config = new DataCacheConfig(
-            cacheSize         = 4096,
-            bytePerLine       = 32,
-            wayCount          = 1,
-            addressWidth      = 32,
-            cpuDataWidth      = 32,
-            memDataWidth      = 32,
-            catchAccessFault  = false
-          )
+        new DBusSimplePlugin(
+          catchAddressMisaligned = true,
+          catchAccessFault = true
         ),
+//        new DBusCachedPlugin(
+//          config = new DataCacheConfig(
+//            cacheSize         = 4096,
+//            bytePerLine       = 32,
+//            wayCount          = 1,
+//            addressWidth      = 32,
+//            cpuDataWidth      = 32,
+//            memDataWidth      = 32,
+//            catchAccessFault  = false
+//          )
+//        ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = true
         ),

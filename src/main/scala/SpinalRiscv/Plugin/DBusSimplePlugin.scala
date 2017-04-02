@@ -50,7 +50,6 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
     val decoderService = pipeline.service(classOf[DecoderService])
 
     val stdActions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION -> True,
       SRC1_CTRL         -> Src1CtrlEnum.RS,
       SRC_USE_SUB_LESS  -> False,
       MEMORY_ENABLE     -> True,

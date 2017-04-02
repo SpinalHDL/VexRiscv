@@ -19,7 +19,6 @@ class IntAluPlugin extends Plugin[VexRiscv]{
     import pipeline.config._
 
     val immediateActions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.IMI,
       REGFILE_WRITE_VALID      -> True,
@@ -29,7 +28,6 @@ class IntAluPlugin extends Plugin[VexRiscv]{
     )
 
     val nonImmediateActions = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION        -> True,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
       REGFILE_WRITE_VALID      -> True,
@@ -40,7 +38,6 @@ class IntAluPlugin extends Plugin[VexRiscv]{
     )
 
     val otherAction = List[(Stageable[_ <: BaseType],Any)](
-      LEGAL_INSTRUCTION        -> True,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True
