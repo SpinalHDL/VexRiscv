@@ -26,7 +26,7 @@ import spinal.lib._
 object TopLevel {
   def main(args: Array[String]) {
     SpinalVerilog {
-      val config = VexRiscvConfig(
+      val configFull = VexRiscvConfig(
         pcWidth = 32
       )
 
@@ -41,7 +41,7 @@ object TopLevel {
 //      )
 
 
-      val csrConfig = MachineCsrConfig(
+      val csrConfigAll = MachineCsrConfig(
         mvendorid      = 11,
         marchid        = 22,
         mimpid         = 33,
@@ -77,7 +77,7 @@ object TopLevel {
 //        minstretAccess = CsrAccess.NONE
 //      )
 
-      config.plugins ++= List(
+      configFull.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, false),
         new IBusSimplePlugin(
           interfaceKeepData = true,
@@ -126,7 +126,7 @@ object TopLevel {
 //        new HazardSimplePlugin(false, false, false, false),
         new MulPlugin,
         new DivPlugin,
-        new MachineCsr(csrConfig),
+        new MachineCsr(csrConfigAll),
         new BranchPlugin(
           earlyBranch = false,
           catchAddressMisaligned = true,
@@ -134,41 +134,49 @@ object TopLevel {
         )
       )
 
-//      config.plugins ++= List(
-//        new PcManagerSimplePlugin(0x00000000l, false),
-//        new IBusSimplePlugin(
-//          interfaceKeepData = true
-//        ),
-//        new DecoderSimplePlugin(
-//          catchIllegalInstruction = false
-//        ),
-//        new RegFilePlugin(
-//          regFileReadyKind = Plugin.SYNC,
-//          zeroBoot = false
-//        ),
-//        new IntAluPlugin,
-//        new SrcPlugin,
-////        new FullBarrielShifterPlugin,
-//        new LightShifterPlugin,
-//        new DBusSimplePlugin(
-//          catchUnalignedException = false
-//        ),
-////        new HazardSimplePlugin(true, true, true, true),
-//        //        new HazardSimplePlugin(false, true, false, true),
-//        new HazardSimplePlugin(false, false, false, false),
-////        new MulPlugin,
-////        new DivPlugin,
-////        new MachineCsr(csrConfig),
-//        new BranchPlugin(
-//          earlyBranch = false,
-//          catchUnalignedException = false,
-//          prediction = NONE
-//        )
-//      )
+      val configLight = VexRiscvConfig(
+        pcWidth = 32
+      )
 
-      val toplevel = new VexRiscv(config)
-      toplevel.decode.input(config.INSTRUCTION).addAttribute("verilator public")
-      toplevel.decode.input(config.PC).addAttribute("verilator public")
+      configLight.plugins ++= List(
+        new PcManagerSimplePlugin(0x00000000l, false),
+        new IBusSimplePlugin(
+          interfaceKeepData = true,
+          catchAccessFault = false
+        ),
+
+        new DBusSimplePlugin(
+          catchAddressMisaligned = false,
+          catchAccessFault = false
+        ),
+        new DecoderSimplePlugin(
+          catchIllegalInstruction = false
+        ),
+        new RegFilePlugin(
+          regFileReadyKind = Plugin.SYNC,
+          zeroBoot = false
+        ),
+        new IntAluPlugin,
+        new SrcPlugin,
+//        new FullBarrielShifterPlugin,
+        new LightShifterPlugin,
+//        new HazardSimplePlugin(true, true, true, true),
+        //        new HazardSimplePlugin(false, true, false, true),
+        new HazardSimplePlugin(false, false, false, false),
+//        new MulPlugin,
+//        new DivPlugin,
+//        new MachineCsr(csrConfig),
+        new BranchPlugin(
+          earlyBranch = false,
+          catchAddressMisaligned = false,
+          prediction = NONE
+        )
+      )
+
+      val toplevel = new VexRiscv(configFull)
+//      val toplevel = new VexRiscv(configLight)
+      toplevel.decode.input(toplevel.config.INSTRUCTION).addAttribute("verilator public")
+      toplevel.decode.input(toplevel.config.PC).addAttribute("verilator public")
       toplevel.decode.arbitration.isValid.addAttribute("verilator public")
 //      toplevel.writeBack.input(config.PC).addAttribute("verilator public")
 //      toplevel.service(classOf[DecoderSimplePlugin]).bench(toplevel)

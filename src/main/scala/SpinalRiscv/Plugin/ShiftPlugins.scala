@@ -92,8 +92,6 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
     import pipeline.config._
     import IntAluPlugin._
 
-
-
     val immediateActions = List[(Stageable[_ <: BaseType],Any)](
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.IMI,

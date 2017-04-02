@@ -11,7 +11,11 @@ import scala.collection.mutable.ArrayBuffer
 case class Masked(value : BigInt,care : BigInt){
   var isPrime = true
 
+  def < (that: Masked) = value < that.value || value == that.value && ~care < ~that.care
+
   def intersects(x: Masked) = ((value ^ x.value) & care & x.care) == 0
+
+  def covers(x: Masked) = ((value ^ x.value) & care | (~x.care) & care) == 0
 
   def setPrime(value : Boolean) = {
     isPrime = value
@@ -173,22 +177,27 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
 
 
 object Symplify{
-  val cache = mutable.HashMap[Bits,mutable.HashMap[Masked,Bool]]();
+  val cache = mutable.HashMap[Bits,mutable.HashMap[Masked,Bool]]()
   def getCache(addr : Bits) = cache.getOrElseUpdate(addr,mutable.HashMap[Masked,Bool]())
-  def logicOf(addr : Bits,terms : Seq[Masked]) = terms.map(t => getCache(addr).getOrElseUpdate(t,t === addr)).asBits.orR
+  
+  //Generate terms logic for the given input
+  def logicOf(input : Bits,terms : Seq[Masked]) = terms.map(t => getCache(input).getOrElseUpdate(t,t === input)).asBits.orR
 
-  def apply(addr: Bits, mapping: Iterable[(Masked, Masked)],resultWidth : Int) : Bits = {
-    val addrWidth = widthOf(addr)
+  //Decode 'input' b using an mapping[key, decoding] specification
+  def apply(input: Bits, mapping: Iterable[(Masked, Masked)],resultWidth : Int) : Bits = {
+    val addrWidth = widthOf(input)
     (for(bitId <- 0 until resultWidth) yield{
       val trueTerm = mapping.filter { case (k,t) => (t.care.testBit(bitId) && t.value.testBit(bitId))}.map(_._1)
       val falseTerm = mapping.filter { case (k,t) => (t.care.testBit(bitId) &&  !t.value.testBit(bitId))}.map(_._1)
       val symplifiedTerms = SymplifyBit.getPrimeImplicants(trueTerm.toSeq, falseTerm.toSeq, addrWidth)
-      logicOf(addr, symplifiedTerms)
+      logicOf(input, symplifiedTerms)
     }).asBits
   }
 }
 
 object SymplifyBit{
+
+  //Return a new term with only one bit difference with 'term' and not included in falseTerms. above => 0 to 1 dif, else 1 to 0 diff
   def genImplicitDontCare(falseTerms: Seq[Masked], term: Masked, bits: Int, above: Boolean): Masked = {
     for (i <- 0 until bits; if term.care.testBit(i)) {
       var t: Masked = null
@@ -205,6 +214,7 @@ object SymplifyBit{
     null
   }
 
+  //Return primes implicants for the trueTerms, falseTerms spec. Default value is don't care
   def getPrimeImplicants(trueTerms: Seq[Masked],falseTerms: Seq[Masked],inputWidth : Int): Seq[Masked] = {
     val primes = ArrayBuffer[Masked]()
     trueTerms.foreach(_.isPrime = true)
@@ -233,9 +243,18 @@ object SymplifyBit{
         for (p <- r; if p.isPrime)
           primes += p
     }
+
+    verify(primes, trueTerms, falseTerms)
     primes
   }
-  
+
+  //Verify that the 'terms' doesn't violate the trueTerms ++ falseTerms spec
+  def verify(terms : Seq[Masked], trueTerms : Seq[Masked], falseTerms : Seq[Masked]): Unit ={
+    require(trueTerms.forall(trueTerm => terms.exists(_ covers trueTerm)))
+    require(falseTerms.forall(falseTerm => !terms.exists(_ covers falseTerm)))
+  }
+
+  //Return primes implicants for the trueTerms, default value is False
   def getPrimeImplicants(trueTerms: Seq[Masked],inputWidth : Int): Seq[Masked] = {
     val primes = ArrayBuffer[Masked]()
     trueTerms.foreach(_.isPrime = true)
