@@ -194,7 +194,7 @@ public:
 
 
 	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
-		assert(addr % 4 == 0);
+		assertEq(addr % 4, 0);
 		*data =     (  (mem[addr + 0] << 0)
 					 | (mem[addr + 1] << 8)
 					 | (mem[addr + 2] << 16)
@@ -202,6 +202,7 @@ public:
 		*error = addr == 0xF00FFF60u;
 	}
 	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+		assertEq(addr % (1 << size), 0);
 		*error = addr == 0xF00FFF60u;
 		if(wr){
 			memTraces <<

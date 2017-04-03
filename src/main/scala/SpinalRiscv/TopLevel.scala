@@ -118,10 +118,20 @@ object TopLevel {
           zeroBoot = true
         ),
         new IntAluPlugin,
-        new SrcPlugin,
+        new SrcPlugin(
+          separatedAddSub = false
+        ),
         new FullBarrielShifterPlugin,
 //        new LightShifterPlugin,
-        new HazardSimplePlugin(true, true, true, true),
+        new HazardSimplePlugin(
+          bypassExecute           = true,
+          bypassMemory            = true,
+          bypassWriteBack         = true,
+          bypassWriteBackBuffer   = true,
+          pessimisticUseSrc       = false,
+          pessimisticWriteRegFile = false,
+          pessimisticAddressMatch = false
+        ),
 //        new HazardSimplePlugin(false, true, false, true),
 //        new HazardSimplePlugin(false, false, false, false),
         new MulPlugin,
@@ -153,16 +163,26 @@ object TopLevel {
           catchIllegalInstruction = false
         ),
         new RegFilePlugin(
-          regFileReadyKind = Plugin.SYNC,
+          regFileReadyKind = Plugin.ASYNC,
           zeroBoot = false
         ),
         new IntAluPlugin,
-        new SrcPlugin,
+        new SrcPlugin(
+          separatedAddSub = false
+        ),
 //        new FullBarrielShifterPlugin,
         new LightShifterPlugin,
 //        new HazardSimplePlugin(true, true, true, true),
         //        new HazardSimplePlugin(false, true, false, true),
-        new HazardSimplePlugin(false, false, false, false),
+        new HazardSimplePlugin(
+          bypassExecute           = false,
+          bypassMemory            = false,
+          bypassWriteBack         = false,
+          bypassWriteBackBuffer   = false,
+          pessimisticUseSrc       = false,
+          pessimisticWriteRegFile = false,
+          pessimisticAddressMatch = false
+        ),
 //        new MulPlugin,
 //        new DivPlugin,
 //        new MachineCsr(csrConfig),
@@ -173,8 +193,59 @@ object TopLevel {
         )
       )
 
+
+      val configTest = VexRiscvConfig(
+        pcWidth = 32
+      )
+
+      configTest.plugins ++= List(
+        new PcManagerSimplePlugin(0x00000000l, false),
+        new IBusSimplePlugin(
+          interfaceKeepData = true,
+          catchAccessFault = false
+        ),
+
+        new DBusSimplePlugin(
+          catchAddressMisaligned = false,
+          catchAccessFault = false
+        ),
+        new DecoderSimplePlugin(
+          catchIllegalInstruction = false
+        ),
+        new RegFilePlugin(
+          regFileReadyKind = Plugin.ASYNC,
+          zeroBoot = false
+        ),
+        new IntAluPlugin,
+        new SrcPlugin(
+          separatedAddSub = false
+        ),
+        new FullBarrielShifterPlugin,
+//        new LightShifterPlugin,
+        //        new HazardSimplePlugin(true, true, true, true),
+        //        new HazardSimplePlugin(false, true, false, true),
+        new HazardSimplePlugin(
+          bypassExecute           = true,
+          bypassMemory            = true,
+          bypassWriteBack         = true,
+          bypassWriteBackBuffer   = true,
+          pessimisticUseSrc       = false,
+          pessimisticWriteRegFile = false,
+          pessimisticAddressMatch = false
+        ),
+//        new MulPlugin,
+//        new DivPlugin,
+        //        new MachineCsr(csrConfig),
+        new BranchPlugin(
+          earlyBranch = false,
+          catchAddressMisaligned = false,
+          prediction = NONE
+        )
+      )
+
       val toplevel = new VexRiscv(configFull)
 //      val toplevel = new VexRiscv(configLight)
+//      val toplevel = new VexRiscv(configTest)
       toplevel.decode.input(toplevel.config.INSTRUCTION).addAttribute("verilator public")
       toplevel.decode.input(toplevel.config.PC).addAttribute("verilator public")
       toplevel.decode.arbitration.isValid.addAttribute("verilator public")

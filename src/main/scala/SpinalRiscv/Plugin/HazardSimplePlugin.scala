@@ -5,7 +5,13 @@ import spinal.core._
 import spinal.lib._
 
 
-class HazardSimplePlugin(bypassExecute : Boolean,bypassMemory: Boolean,bypassWriteBack: Boolean, bypassWriteBackBuffer : Boolean) extends Plugin[VexRiscv] {
+class HazardSimplePlugin(bypassExecute : Boolean,
+                         bypassMemory: Boolean,
+                         bypassWriteBack: Boolean,
+                         bypassWriteBackBuffer : Boolean,
+                         pessimisticUseSrc : Boolean = false,
+                         pessimisticWriteRegFile : Boolean = false,
+                         pessimisticAddressMatch : Boolean = false) extends Plugin[VexRiscv] {
   import Riscv._
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
@@ -15,8 +21,8 @@ class HazardSimplePlugin(bypassExecute : Boolean,bypassMemory: Boolean,bypassWri
 
     def trackHazardWithStage(stage : Stage,bypassable : Boolean, runtimeBypassable : Stageable[Bool]): Unit ={
       val runtimeBypassableValue = if(runtimeBypassable != null) stage.input(runtimeBypassable) else True
-      val addr0Match = stage.input(INSTRUCTION)(rdRange) === decode.input(INSTRUCTION)(rs1Range)
-      val addr1Match = stage.input(INSTRUCTION)(rdRange) === decode.input(INSTRUCTION)(rs2Range)
+      val addr0Match = if(pessimisticAddressMatch) True else stage.input(INSTRUCTION)(rdRange) === decode.input(INSTRUCTION)(rs1Range)
+      val addr1Match = if(pessimisticAddressMatch) True else stage.input(INSTRUCTION)(rdRange) === decode.input(INSTRUCTION)(rs2Range)
       when(stage.arbitration.isValid && stage.input(REGFILE_WRITE_VALID)) {
         if (bypassable) {
           when(runtimeBypassableValue) {
@@ -28,6 +34,8 @@ class HazardSimplePlugin(bypassExecute : Boolean,bypassMemory: Boolean,bypassWri
             }
           }
         }
+      }
+      when(stage.arbitration.isValid && (if(pessimisticWriteRegFile) True else stage.input(REGFILE_WRITE_VALID))) {
         when((Bool(!bypassable) || !runtimeBypassableValue)) {
           when(addr0Match) {
             src0Hazard := True
@@ -49,8 +57,8 @@ class HazardSimplePlugin(bypassExecute : Boolean,bypassMemory: Boolean,bypassWri
     writeBackWrites.data := writeBack.output(REGFILE_WRITE_DATA)
     val writeBackBuffer = writeBackWrites.stage()
 
-    val addr0Match = writeBackBuffer.address === decode.input(INSTRUCTION)(rs1Range)
-    val addr1Match = writeBackBuffer.address === decode.input(INSTRUCTION)(rs2Range)
+    val addr0Match = if(pessimisticAddressMatch) True else writeBackBuffer.address === decode.input(INSTRUCTION)(rs1Range)
+    val addr1Match = if(pessimisticAddressMatch) True else writeBackBuffer.address === decode.input(INSTRUCTION)(rs2Range)
     when(writeBackBuffer.valid) {
       if (bypassWriteBackBuffer) {
         when(addr0Match) {
@@ -74,10 +82,10 @@ class HazardSimplePlugin(bypassExecute : Boolean,bypassMemory: Boolean,bypassWri
     trackHazardWithStage(execute  ,bypassExecute  ,BYPASSABLE_EXECUTE_STAGE)
 
 
-    when(decode.input(INSTRUCTION)(rs1Range) === 0 || !decode.input(REG1_USE)){
+    when(decode.input(INSTRUCTION)(rs1Range) === 0 || (if(pessimisticUseSrc) False else !decode.input(REG1_USE))){
       src0Hazard := False
     }
-    when(decode.input(INSTRUCTION)(rs2Range) === 0 || !decode.input(REG2_USE)){
+    when(decode.input(INSTRUCTION)(rs2Range) === 0 || (if(pessimisticUseSrc) False else !decode.input(REG2_USE))){
       src1Hazard := False
     }
 
