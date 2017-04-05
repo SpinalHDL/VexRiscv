@@ -48,7 +48,7 @@ class PcManagerSimplePlugin(resetVector : BigInt, fastPcCalculation : Boolean) e
       val pc = UInt(pcWidth bits)
       pc := input(PC_CALC_WITHOUT_JUMP)
 
-      val samplePcNext = False
+      val samplePcNext = False //TODO FMAX
 
       //JumpService hardware implementation
       val jump = if(jumpInfos.length != 0) new Area {

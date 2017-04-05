@@ -282,7 +282,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 //    waysHitWord.assignDontCare()
 
     val waysRead = for(way <- ways) yield new Area{
-      val readAddress = Mux(io.cpu.fetch.isStuck,io.cpu.fetch.address,io.cpu.prefetch.address)
+      val readAddress = Mux(io.cpu.fetch.isStuck,io.cpu.fetch.address,io.cpu.prefetch.address) //TODO FMAX
 //      val readAddress = io.cpu.prefetch.address
       val tag = if(asyncTagMemory)
         way.tags.readAsync(io.cpu.fetch.address(lineRange))

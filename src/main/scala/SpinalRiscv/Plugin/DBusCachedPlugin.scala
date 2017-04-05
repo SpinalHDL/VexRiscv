@@ -74,7 +74,7 @@ class DBusCachedPlugin(config : DataCacheConfig)  extends Plugin[VexRiscv]{
       val size = input(INSTRUCTION)(13 downto 12).asUInt
       cache.io.cpu.execute.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.execute.isStuck := arbitration.isStuck
-      arbitration.haltIt.setWhen(cache.io.cpu.execute.haltIt)
+//      arbitration.haltIt.setWhen(cache.io.cpu.execute.haltIt)
       cache.io.cpu.execute.args.wr := input(INSTRUCTION)(5)
       cache.io.cpu.execute.args.address := input(SRC_ADD_SUB).asUInt
       cache.io.cpu.execute.args.data := size.mux(
@@ -143,12 +143,12 @@ object DataCacheCpuExecute{
 case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterSlave{
   val isValid = Bool
   val isStuck = Bool
-  val haltIt = Bool
+//  val haltIt = Bool
   val args = DataCacheCpuExecuteArgs(p)
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, args)
-    in(haltIt)
+//    in(haltIt)
   }
 }
 
@@ -376,13 +376,19 @@ class DataCache(p : DataCacheConfig) extends Component{
   val manager = new Area {
     io.flushDone := False
 
-    val request = RegNextWhen(io.cpu.execute.args, !io.cpu.execute.isStuck)
+    val request = RegNextWhen(io.cpu.execute.args, !io.cpu.memory.isStuck)
 
     //Evict the cache after reset
     val requestValid = io.cpu.memory.isValid || RegNextWhen(False, !io.cpu.memory.isStuck, True)
-    request.kind.getDrivingReg.init(DataCacheCpuCmdKind.EVICT)
-    request.all.getDrivingReg.init(True)
-    request.address.getDrivingReg.init(0)
+    val requestHazard = RegNext(
+      !io.cpu.memory.isStuck &&
+      io.cpu.execute.address === request.address && requestValid &&
+      request.kind === DataCacheCpuCmdKind.MEMORY && request.wr &&
+      io.cpu.execute.kind === DataCacheCpuCmdKind.MEMORY && !io.cpu.execute.wr
+    ) init(False)
+    request.kind.init(DataCacheCpuCmdKind.EVICT)
+    request.all.init(True)
+    request.address.init(0)
 
     io.cpu.memory.haltIt := requestValid
 
@@ -556,6 +562,8 @@ class DataCache(p : DataCacheConfig) extends Component{
       }
     }
 
+    io.cpu.memory.haltIt.setWhen(requestHazard)
+
 
     val cpuRsp = cpuRspIn.m2sPipe()
     val cpuRspIsWaitingMemRsp = cpuRsp.valid && io.mem.rsp.valid
@@ -611,7 +619,7 @@ class DataCache(p : DataCacheConfig) extends Component{
 
   //Avoid read after write data hazard
   //TODO FIX it to not stall write after read ? , requestValid is pessimistic ?
-  io.cpu.execute.haltIt := io.cpu.execute.address === manager.request.address && manager.requestValid && io.cpu.execute.isValid
+  //io.cpu.execute.haltIt := io.cpu.execute.address === manager.request.address && manager.requestValid && io.cpu.execute.isValid
 }
 
 object DataCacheMain{
