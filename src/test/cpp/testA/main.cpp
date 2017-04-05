@@ -457,7 +457,9 @@ public:
 		top->iBus_rsp_valid = 0;
 		if(pendingCount != 0 && (!ws->iStall || VL_RANDOM_I(7) < 100)){
 			ws->iBusAccess(address,&top->iBus_rsp_payload_data,&error);
+			#ifdef CSR
 			top->iBus_rsp_payload_error = error;
+			#endif
 			pendingCount--;
 			address = (address & ~0x1F) + ((address + 4) & 0x1F);
 			top->iBus_rsp_valid = 1;

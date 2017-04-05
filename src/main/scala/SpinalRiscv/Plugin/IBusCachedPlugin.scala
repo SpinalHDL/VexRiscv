@@ -12,7 +12,8 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    addressWidth : Int,
                                    cpuDataWidth : Int,
                                    memDataWidth : Int,
-                                   catchAccessFault : Boolean){
+                                   catchAccessFault : Boolean,
+                                   asyncTagMemory : Boolean){
   def burstSize = bytePerLine*8/memDataWidth
 }
 
@@ -282,7 +283,12 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
     val waysRead = for(way <- ways) yield new Area{
       val readAddress = Mux(io.cpu.fetch.isStuck,io.cpu.fetch.address,io.cpu.prefetch.address)
-      val tag = way.tags.readSync(readAddress(lineRange))
+//      val readAddress = io.cpu.prefetch.address
+      val tag = if(asyncTagMemory)
+        way.tags.readAsync(io.cpu.fetch.address(lineRange))
+      else
+        way.tags.readSync(readAddress(lineRange))
+
       val data = way.datas.readSync(readAddress(lineRange.high downto wordRange.low))
       //      val readAddress = request.address
       //      val tag = way.tags.readAsync(readAddress(lineRange))
@@ -314,25 +320,25 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
   io.flush.cmd.ready := !(lineLoader.request.valid || io.cpu.fetch.isValid)
 }
-
-object InstructionCacheMain{
-
-  def main(args: Array[String]) {
-    implicit val p = InstructionCacheConfig(
-      cacheSize =4096,
-      bytePerLine =32,
-      wayCount = 1,
-      wrappedMemAccess = true,
-      addressWidth = 32,
-      cpuDataWidth = 32,
-      memDataWidth = 32,
-      catchAccessFault = true)
-    //    val io = new Bundle{
-    //      val cpu = slave(InstructionCacheCpuBus())
-    //      val mem = master(InstructionCacheMemBus())
-    //    }
-
-    SpinalVhdl(new InstructionCache(p))
-  }
-}
-
+//
+//object InstructionCacheMain{
+//
+//  def main(args: Array[String]) {
+//    implicit val p = InstructionCacheConfig(
+//      cacheSize =4096,
+//      bytePerLine =32,
+//      wayCount = 1,
+//      wrappedMemAccess = true,
+//      addressWidth = 32,
+//      cpuDataWidth = 32,
+//      memDataWidth = 32,
+//      catchAccessFault = true)
+//    //    val io = new Bundle{
+//    //      val cpu = slave(InstructionCacheCpuBus())
+//    //      val mem = master(InstructionCacheMemBus())
+//    //    }
+//
+//    SpinalVhdl(new InstructionCache(p))
+//  }
+//}
+//
