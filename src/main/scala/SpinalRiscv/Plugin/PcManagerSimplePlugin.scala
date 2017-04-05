@@ -34,7 +34,7 @@ class PcManagerSimplePlugin(resetVector : BigInt, fastPcCalculation : Boolean) e
       arbitration.isValid := True
 
       //PC calculation without Jump
-      val pcReg = Reg(UInt(pcWidth bits)) init(resetVector) addAttribute("verilator public")
+      val pcReg = Reg(UInt(pcWidth bits)) init(resetVector) addAttribute(Verilator.public)
       val inc = RegInit(False)
       val pcBeforeJumps = if(fastPcCalculation){
         val pcPlus4 = pcReg + U(4)

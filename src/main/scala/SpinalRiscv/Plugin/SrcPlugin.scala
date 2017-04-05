@@ -41,6 +41,8 @@ class SrcPlugin(separatedAddSub : Boolean) extends Plugin[VexRiscv]{
           Mux(input(SRC_LESS_UNSIGNED), input(SRC2).msb, input(SRC1).msb))
 
         insert(SRC_ADD_SUB) := input(SRC_USE_SUB_LESS) ? sub | add
+        insert(SRC_ADD) := add
+        insert(SRC_SUB) := sub
         insert(SRC_LESS) := less
       }
     }else{
@@ -55,6 +57,8 @@ class SrcPlugin(separatedAddSub : Boolean) extends Plugin[VexRiscv]{
           Mux(input(SRC_LESS_UNSIGNED), input(SRC2).msb, input(SRC1).msb))
 
         insert(SRC_ADD_SUB) := addSub
+        insert(SRC_ADD) := addSub
+        insert(SRC_SUB) := addSub
         insert(SRC_LESS) := less
       }
     }

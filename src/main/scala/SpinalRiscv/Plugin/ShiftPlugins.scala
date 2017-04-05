@@ -95,7 +95,8 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
     val immediateActions = List[(Stageable[_ <: BaseType],Any)](
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.IMI,
-      ALU_CTRL                 -> AluCtrlEnum.SRC1,
+      ALU_CTRL                 -> AluCtrlEnum.BITWISE,
+      ALU_BITWISE_CTRL         -> AluBitwiseCtrlEnum.SRC1,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,
@@ -105,7 +106,8 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
     val nonImmediateActions = List[(Stageable[_ <: BaseType],Any)](
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
-      ALU_CTRL                 -> AluCtrlEnum.SRC1,
+      ALU_CTRL                 -> AluCtrlEnum.BITWISE,
+      ALU_BITWISE_CTRL         -> AluBitwiseCtrlEnum.SRC1,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,

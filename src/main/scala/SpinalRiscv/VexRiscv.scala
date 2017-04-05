@@ -26,6 +26,8 @@ case class VexRiscvConfig(pcWidth : Int){
   object SRC1   extends Stageable(Bits(32 bits))
   object SRC2   extends Stageable(Bits(32 bits))
   object SRC_ADD_SUB extends Stageable(Bits(32 bits))
+  object SRC_ADD extends Stageable(Bits(32 bits))
+  object SRC_SUB extends Stageable(Bits(32 bits))
   object SRC_LESS extends Stageable(Bool)
   object SRC_USE_SUB_LESS extends Stageable(Bool)
   object SRC_LESS_UNSIGNED extends Stageable(Bool)
@@ -53,9 +55,9 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   plugins ++= config.plugins
 
   //regression usage
-  writeBack.input(config.INSTRUCTION) keep() addAttribute("verilator public")
-  writeBack.input(config.PC) keep() addAttribute("verilator public")
-  writeBack.arbitration.isValid keep() addAttribute("verilator public")
+  writeBack.input(config.INSTRUCTION) keep() addAttribute(Verilator.public)
+  writeBack.input(config.PC) keep() addAttribute(Verilator.public)
+  writeBack.arbitration.isValid keep() addAttribute(Verilator.public)
 }
 
 

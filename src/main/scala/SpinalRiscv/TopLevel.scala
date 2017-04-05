@@ -199,26 +199,51 @@ object TopLevel {
       )
 
       configTest.plugins ++= List(
-        new PcManagerSimplePlugin(0x00000000l, false),
+        new PcManagerSimplePlugin(0x00000000l, true),
         new IBusSimplePlugin(
           interfaceKeepData = true,
           catchAccessFault = false
         ),
+//        new IBusCachedPlugin(
+//          config = InstructionCacheConfig(
+//            cacheSize = 4096,
+//            bytePerLine =32,
+//            wayCount = 1,
+//            wrappedMemAccess = true,
+//            addressWidth = 32,
+//            cpuDataWidth = 32,
+//            memDataWidth = 32,
+//            catchAccessFault = false,
+//            asyncTagMemory = false
+//          )
+//        ),
 
         new DBusSimplePlugin(
           catchAddressMisaligned = false,
           catchAccessFault = false
         ),
+//        new DBusCachedPlugin(
+//          config = new DataCacheConfig(
+//            cacheSize         = 2048,
+//            bytePerLine       = 32,
+//            wayCount          = 1,
+//            addressWidth      = 32,
+//            cpuDataWidth      = 32,
+//            memDataWidth      = 32,
+//            catchAccessFault  = false
+//          )
+//        ),
+
         new DecoderSimplePlugin(
           catchIllegalInstruction = false
         ),
         new RegFilePlugin(
-          regFileReadyKind = Plugin.ASYNC,
+          regFileReadyKind = Plugin.SYNC,
           zeroBoot = false
         ),
         new IntAluPlugin,
         new SrcPlugin(
-          separatedAddSub = false
+          separatedAddSub = true
         ),
         new FullBarrielShifterPlugin,
 //        new LightShifterPlugin,
@@ -246,10 +271,10 @@ object TopLevel {
       val toplevel = new VexRiscv(configFull)
 //      val toplevel = new VexRiscv(configLight)
 //      val toplevel = new VexRiscv(configTest)
-      toplevel.decode.input(toplevel.config.INSTRUCTION).addAttribute("verilator public")
-      toplevel.decode.input(toplevel.config.PC).addAttribute("verilator public")
-      toplevel.decode.arbitration.isValid.addAttribute("verilator public")
-//      toplevel.writeBack.input(config.PC).addAttribute("verilator public")
+      toplevel.decode.input(toplevel.config.INSTRUCTION).addAttribute(Verilator.public)
+      toplevel.decode.input(toplevel.config.PC).addAttribute(Verilator.public)
+      toplevel.decode.arbitration.isValid.addAttribute(Verilator.public)
+//      toplevel.writeBack.input(config.PC).addAttribute(Verilator.public)
 //      toplevel.service(classOf[DecoderSimplePlugin]).bench(toplevel)
 
       toplevel
@@ -257,3 +282,7 @@ object TopLevel {
   }
 }
 
+//TODO DivPlugin should not used MixedDivider (double twoComplement)
+//TODO DivPlugin should register the twoComplement output before pipeline insertion
+//TODO MulPlugin doesn't fit well on Artix (FMAX)
+//TODO PcReg design is unoptimized by Artix synthesis

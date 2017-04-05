@@ -97,7 +97,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
 
       dBus.cmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers && !arbitration.removeIt
       dBus.cmd.wr := input(INSTRUCTION)(5)
-      dBus.cmd.address := input(SRC_ADD_SUB).asUInt
+      dBus.cmd.address := input(SRC_ADD).asUInt
       dBus.cmd.size := input(INSTRUCTION)(13 downto 12).asUInt
       dBus.cmd.payload.data := dBus.cmd.size.mux (
         U(0) -> input(REG2)(7 downto 0) ## input(REG2)(7 downto 0) ## input(REG2)(7 downto 0) ## input(REG2)(7 downto 0),

@@ -194,7 +194,7 @@ public:
 
 
 	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
-		assertEq(addr % 4, 0);
+		if(addr % 4 != 0) cout << "Warning, unaligned IBusAccess : " << addr << endl;
 		*data =     (  (mem[addr + 0] << 0)
 					 | (mem[addr + 1] << 8)
 					 | (mem[addr + 2] << 16)
@@ -372,7 +372,7 @@ public:
 
 
 		dump(i);
-		dump(i+1);
+		dump(i+10);
 		#ifdef TRACE
 		tfp->close();
 		#endif

@@ -76,7 +76,7 @@ class DBusCachedPlugin(config : DataCacheConfig)  extends Plugin[VexRiscv]{
       cache.io.cpu.execute.isStuck := arbitration.isStuck
 //      arbitration.haltIt.setWhen(cache.io.cpu.execute.haltIt)
       cache.io.cpu.execute.args.wr := input(INSTRUCTION)(5)
-      cache.io.cpu.execute.args.address := input(SRC_ADD_SUB).asUInt
+      cache.io.cpu.execute.args.address := input(SRC_ADD).asUInt
       cache.io.cpu.execute.args.data := size.mux(
         U(0)    -> input(REG2)( 7 downto 0) ## input(REG2)( 7 downto 0) ## input(REG2)(7 downto 0) ## input(REG2)(7 downto 0),
         U(1)    -> input(REG2)(15 downto 0) ## input(REG2)(15 downto 0),

@@ -17,6 +17,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = fals
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(REG1_USE,False)
     decoderService.addDefault(REG2_USE,False)
+    decoderService.addDefault(REGFILE_WRITE_VALID,False)
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -24,7 +25,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = fals
     import pipeline.config._
 
     val global = pipeline plug new Area{
-      val regFile = Mem(Bits(32 bits),32) addAttribute("verilator public")
+      val regFile = Mem(Bits(32 bits),32) addAttribute(Verilator.public)
       if(zeroBoot) regFile.init(List.fill(32)(B(0, 32 bits)))
     }
 
@@ -59,7 +60,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = fals
     writeBack plug new Area {
       import writeBack._
 
-      val regFileWrite = global.regFile.writePort.addAttribute("verilator public")
+      val regFileWrite = global.regFile.writePort.addAttribute(Verilator.public)
       regFileWrite.valid := input(REGFILE_WRITE_VALID) && arbitration.isFiring
       regFileWrite.address := input(INSTRUCTION)(rdRange).asUInt
       regFileWrite.data := input(REGFILE_WRITE_DATA)
