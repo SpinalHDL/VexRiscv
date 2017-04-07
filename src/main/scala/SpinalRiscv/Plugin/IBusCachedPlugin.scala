@@ -200,10 +200,6 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }))
 
 
-    if(wrappedMemAccess)
-      io.mem.cmd.address := requestIn.addr(tagRange.high downto wordRange.low) @@ U(0,wordRange.low bit)
-    else
-      io.mem.cmd.address := requestIn.addr(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
 
 
     val flushCounter = Reg(UInt(log2Up(wayLineCount) + 1 bit)) init(0)
@@ -231,15 +227,21 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
 
 
-    val request = requestIn.haltWhen(!io.mem.cmd.ready).stage()
+    val request = requestIn.stage()
 
     val lineInfoWrite = new LineInfo()
     lineInfoWrite.valid := flushCounter.msb
     lineInfoWrite.address := request.addr(tagRange)
     if(catchAccessFault) lineInfoWrite.error := loadingWithError
 
+    //Send memory requests
+    val memCmdSended = RegInit(False) setWhen(io.mem.cmd.fire)
+    io.mem.cmd.valid := request.valid && !memCmdSended
+    if(wrappedMemAccess)
+      io.mem.cmd.address := request.addr(tagRange.high downto wordRange.low) @@ U(0,wordRange.low bit)
+    else
+      io.mem.cmd.address := request.addr(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
 
-    io.mem.cmd.valid := requestIn.valid && !request.isStall
     val wordIndex = Reg(UInt(log2Up(wordPerLine) bit))
     val loadedWordsNext = Bits(wordPerLine bit)
     val loadedWords = RegNext(loadedWordsNext)
@@ -267,7 +269,8 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }
 
     when(requestIn.ready){
-      wordIndex := io.mem.cmd.address(wordRange)
+      memCmdSended := False
+      wordIndex := requestIn.addr(wordRange)
       loadedWords := 0
       loadedWordsReadable := 0
       readyDelay := 0
