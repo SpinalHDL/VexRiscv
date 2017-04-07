@@ -17,8 +17,6 @@ class SrcPlugin(separatedAddSub : Boolean) extends Plugin[VexRiscv]{
         Src1CtrlEnum.RS   -> output(REG1),
         Src1CtrlEnum.FOUR -> B(4),
         Src1CtrlEnum.IMU  -> imm.u.resized
-        //        Src1CtrlEnum.IMZ -> imm.z.resized,
-        //        Src1CtrlEnum.IMJB -> B(0)
       )
       insert(SRC2) := input(SRC2_CTRL).mux(
         Src2CtrlEnum.RS -> output(REG2),
@@ -33,8 +31,8 @@ class SrcPlugin(separatedAddSub : Boolean) extends Plugin[VexRiscv]{
         import execute._
 
         // ADD, SUB
-        val add = (input(SRC1).asUInt + input(SRC2).asUInt).asBits
-        val sub = (input(SRC1).asUInt - input(SRC2).asUInt).asBits
+        val add = (input(SRC1).asUInt + input(SRC2).asUInt).asBits.addAttribute("keep")
+        val sub = (input(SRC1).asUInt - input(SRC2).asUInt).asBits.addAttribute("keep")
 
         // SLT, SLTU
         val less = Mux(input(SRC1).msb === input(SRC2).msb, sub.msb,

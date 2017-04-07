@@ -279,22 +279,15 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     val waysHitValid = False
     val waysHitError = Bool.assignDontCare()
     val waysHitWord = Bits(wordWidth bit)
-//    waysHitWord.assignDontCare()
 
     val waysRead = for(way <- ways) yield new Area{
       val readAddress = Mux(io.cpu.fetch.isStuck,io.cpu.fetch.address,io.cpu.prefetch.address) //TODO FMAX
-//      val readAddress = io.cpu.prefetch.address
       val tag = if(asyncTagMemory)
         way.tags.readAsync(io.cpu.fetch.address(lineRange))
       else
         way.tags.readSync(readAddress(lineRange))
 
       val data = way.datas.readSync(readAddress(lineRange.high downto wordRange.low))
-      //      val readAddress = request.address
-      //      val tag = way.tags.readAsync(readAddress(lineRange))
-      //      val data = way.datas.readAsync(readAddress(lineRange.high downto wordRange.low))
-      //      way.tags.add(new AttributeString("ramstyle","no_rw_check"))
-      //      way.datas.add(new AttributeString("ramstyle","no_rw_check"))
       waysHitWord := data //Not applicable to multi way
       when(tag.valid && tag.address === io.cpu.fetch.address(tagRange)) {
         waysHitValid := True

@@ -117,30 +117,6 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
 
     // logic implementation
     val decodedBits = Bits(stageables.foldLeft(0)(_ + _.dataType.getBitsWidth) bits)
-//    val defaultBits = cloneOf(decodedBits)
-
-//    assert(defaultValue == 0)
-//    defaultBits := defaultValue
-//
-//    val logicOr = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
-//    decodedBits := logicOr.foldLeft(defaultBits)(_ | _)
-
-
-//    for(i <- decodedBits.range)
-//      if(defaultCare.testBit(i))
-//        defaultBits(i) := Bool(defaultValue.testBit(i))
-//      else
-//        defaultBits(i).assignDontCare()
-
-
-//    val logicOr = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
-//    val logicAnd = for((key, mapping) <- spec) yield Mux[Bits](((input(INSTRUCTION) &  key.care) === (key.value & key.care)), B(~mapping.value & mapping.care, decodedBits.getWidth bits) , B(0, decodedBits.getWidth bits))
-//    decodedBits :=  (defaultBits | logicOr.foldLeft(B(0, decodedBits.getWidth bits))(_ | _)) & ~logicAnd.foldLeft(B(0, decodedBits.getWidth bits))(_ | _)
-//    if(catchIllegalInstruction){
-//      insert(LEGAL_INSTRUCTION) := (for((key, mapping) <- spec) yield ((input(INSTRUCTION) &  key.care) === (key.value & key.care))).reduce(_ || _)
-//    }
-
-
     decodedBits := Symplify(input(INSTRUCTION),spec, decodedBits.getWidth)
     if(catchIllegalInstruction) insert(LEGAL_INSTRUCTION) := Symplify.logicOf(input(INSTRUCTION), SymplifyBit.getPrimeImplicants(spec.unzip._1.toSeq, 32))
 
