@@ -131,7 +131,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
 
 
     if(catchIllegalInstruction){
-      decodeExceptionPort.valid := arbitration.isValid && !input(LEGAL_INSTRUCTION)
+      decodeExceptionPort.valid := arbitration.isValid && arbitration.haltIt && !input(LEGAL_INSTRUCTION) //HalitIt to alow decoder stage to wait valid data from 2 stages cache cache
       decodeExceptionPort.code := 2
       decodeExceptionPort.badAddr.assignDontCare()
     }

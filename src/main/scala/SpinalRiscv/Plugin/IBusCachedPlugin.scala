@@ -13,7 +13,8 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    cpuDataWidth : Int,
                                    memDataWidth : Int,
                                    catchAccessFault : Boolean,
-                                   asyncTagMemory : Boolean){
+                                   asyncTagMemory : Boolean,
+                                   twoStageLogic : Boolean){
   def burstSize = bytePerLine*8/memDataWidth
 }
 
@@ -52,15 +53,24 @@ class IBusCachedPlugin(config : InstructionCacheConfig) extends Plugin[VexRiscv]
     //Connect fetch cache side
     cache.io.cpu.fetch.isValid  := fetch.arbitration.isValid
     cache.io.cpu.fetch.isStuck  := fetch.arbitration.isStuck
+    if(!twoStageLogic) cache.io.cpu.fetch.isStuckByOthers  := fetch.arbitration.isStuckByOthers
     cache.io.cpu.fetch.address  := fetch.output(PC)
-    fetch.arbitration.haltIt setWhen(cache.io.cpu.fetch.haltIt)
-    fetch.insert(INSTRUCTION) := cache.io.cpu.fetch.data
+    if(!twoStageLogic) fetch.arbitration.haltIt setWhen(cache.io.cpu.fetch.haltIt)
+    if(!twoStageLogic) fetch.insert(INSTRUCTION) := cache.io.cpu.fetch.data
 
     cache.io.flush.cmd.valid := False
 
+    if(twoStageLogic){
+      cache.io.cpu.decode.isValid := decode.arbitration.isValid
+      decode.arbitration.haltIt.setWhen(cache.io.cpu.decode.haltIt)
+      cache.io.cpu.decode.isStuck := decode.arbitration.isStuck
+      cache.io.cpu.decode.address := decode.input(PC)
+      decode.insert(INSTRUCTION)  := cache.io.cpu.decode.data
+    }
+
 
     if(catchAccessFault){
-      fetch.insert(IBUS_ACCESS_ERROR) := cache.io.cpu.fetch.error
+      if(!twoStageLogic) fetch.insert(IBUS_ACCESS_ERROR) := cache.io.cpu.fetch.error
 
       decodeExceptionPort.valid   := decode.arbitration.isValid && decode.input(IBUS_ACCESS_ERROR)
       decodeExceptionPort.code    := 1
@@ -71,7 +81,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig) extends Plugin[VexRiscv]
 
 
 
-case class InstructionCacheCpuCmd(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
+case class InstructionCacheCpuPrefetch(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
   val isValid    = Bool
   val isFiring = Bool
   val haltIt   = Bool
@@ -83,7 +93,24 @@ case class InstructionCacheCpuCmd(p : InstructionCacheConfig) extends Bundle wit
   }
 }
 
-case class InstructionCacheCpuRsp(p : InstructionCacheConfig) extends Bundle with IMasterSlave {
+case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle with IMasterSlave {
+  val isValid = Bool
+  val haltIt  = if(!p.twoStageLogic) Bool else null
+  val isStuck = Bool
+  val isStuckByOthers = if(!p.twoStageLogic) Bool else null
+  val address = UInt(p.addressWidth bit)
+  val data    = if(!p.twoStageLogic) Bits(32 bit) else null
+  val error   = if(!p.twoStageLogic && p.catchAccessFault) Bool else null
+
+  override def asMaster(): Unit = {
+    out(isValid, isStuck, address)
+    outWithNull(isStuckByOthers)
+    inWithNull(error,data,haltIt)
+  }
+}
+
+case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle with IMasterSlave {
+  require(p.twoStageLogic)
   val isValid = Bool
   val haltIt  = Bool
   val isStuck = Bool
@@ -98,14 +125,15 @@ case class InstructionCacheCpuRsp(p : InstructionCacheConfig) extends Bundle wit
   }
 }
 
-
 case class InstructionCacheCpuBus(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
-  val prefetch = InstructionCacheCpuCmd(p)
-  val fetch = InstructionCacheCpuRsp(p)
+  val prefetch = InstructionCacheCpuPrefetch(p)
+  val fetch = InstructionCacheCpuFetch(p)
+  val decode = if(p.twoStageLogic) InstructionCacheCpuDecode(p) else null
 
   override def asMaster(): Unit = {
     master(prefetch)
     master(fetch)
+    if(p.twoStageLogic) master(decode)
   }
 }
 
@@ -181,10 +209,6 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     val address = UInt(tagRange.length bit)
   }
 
-//  class LineWord extends Bundle{
-//    val data  = Bits(wordWidth bits)
-//    val error = Bool
-//  }
 
   val ways = Array.fill(wayCount)(new Area{
     val tags = Mem(new LineInfo(),wayLineCount)
@@ -247,10 +271,14 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     val loadedWords = RegNext(loadedWordsNext)
     val loadedWordsReadable = RegNext(loadedWords)
     loadedWordsNext := loadedWords
+
+    val waysWritePort = ways(0).datas.writePort //Not multi ways
+    waysWritePort.valid   := io.mem.rsp.valid
+    waysWritePort.address := request.addr(lineRange) @@ wordIndex
+    waysWritePort.data    := io.mem.rsp.data
     when(io.mem.rsp.valid){
       wordIndex := wordIndex + 1
       loadedWordsNext(wordIndex) := True
-      ways(0).datas(request.addr(lineRange) @@ wordIndex) := io.mem.rsp.data   //TODO
       if(catchAccessFault) loadingWithError setWhen io.mem.rsp.error
     }
 
@@ -278,7 +306,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }
   }
 
-  val task = new Area{
+  val task = if(!twoStageLogic) new Area{
     val waysHitValid = False
     val waysHitError = Bool.assignDontCare()
     val waysHitWord = Bits(wordWidth bit)
@@ -310,13 +338,93 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     io.cpu.fetch.haltIt := io.cpu.fetch.isValid && !(waysHitValid || (loaderHitValid && loaderHitReady))
     io.cpu.fetch.data := waysHitWord //TODO
     if(catchAccessFault) io.cpu.fetch.error := (waysHitValid && waysHitError) ||  (loaderHitValid && loaderHitReady && lineLoader.loadingWithErrorReg)
-    lineLoader.requestIn.valid := io.cpu.fetch.isValid && ! waysHitValid
+    lineLoader.requestIn.valid := io.cpu.fetch.isValid && !io.cpu.fetch.isStuckByOthers && !waysHitValid
     lineLoader.requestIn.addr := io.cpu.fetch.address
+  } else new Area{
+
+    val waysHitValid = False
+    val waysHitError = Bool.assignDontCare()
+    val waysHitWord = Bits(wordWidth bit)
+
+    val waysRead = for(way <- ways) yield new Area{
+      val tag = if(asyncTagMemory)
+          way.tags.readAsync(io.cpu.fetch.address(lineRange))
+        else
+          way.tags.readSync(io.cpu.prefetch.address(lineRange),enable = !io.cpu.fetch.isStuck)
+
+      val data = way.datas.readSync(io.cpu.prefetch.address(lineRange.high downto wordRange.low),enable = !io.cpu.fetch.isStuck)
+      waysHitWord := data //Not applicable to multi way
+      when(tag.valid && tag.address === io.cpu.fetch.address(tagRange)) {
+        waysHitValid := True
+        if(catchAccessFault) waysHitError := tag.error
+      }
+
+      when(lineLoader.request.valid && lineLoader.request.addr(lineRange) === io.cpu.fetch.address(lineRange)){
+        waysHitValid := False //Not applicable to multi way
+      }
+    }
+
+
+
+    val loadedWord = new Area{
+      val valid   = RegNext(lineLoader.waysWritePort.valid)
+      val address = RegNext(lineLoader.request.addr(tagLineRange) @@ lineLoader.wordIndex @@ U"00")
+      val data    = RegNext(lineLoader.waysWritePort.data)
+    }
+
+
+    val fetchInstructionValid = Bool
+    val fetchInstructionValue = Bits(32 bits)
+    val fetchInstructionValidReg = Reg(Bool)
+    val fetchInstructionValueReg = Reg(Bits(32 bits))
+
+    when(fetchInstructionValidReg){
+      fetchInstructionValid := True
+      fetchInstructionValue := fetchInstructionValueReg
+    }.elsewhen(loadedWord.valid && (loadedWord.address >> 2) === (io.cpu.fetch.address >> 2)){
+      fetchInstructionValid := True
+      fetchInstructionValue := loadedWord.data
+    } otherwise{
+      fetchInstructionValid := waysHitValid
+      fetchInstructionValue := waysHitWord
+    }
+
+
+    when(io.cpu.fetch.isStuck){
+      fetchInstructionValidReg := fetchInstructionValid
+      fetchInstructionValueReg := fetchInstructionValue
+    } otherwise {
+      fetchInstructionValidReg := False
+    }
+
+
+    val decodeInstructionValid = Reg(Bool)
+    val decodeInstructionReg = Reg(Bits(32 bits))
+
+    when(!io.cpu.decode.isStuck){
+      decodeInstructionValid := fetchInstructionValid
+      decodeInstructionReg   := fetchInstructionValue
+    }.elsewhen(loadedWord.valid && (loadedWord.address >> 2) === (io.cpu.decode.address >> 2)){
+      decodeInstructionValid := True
+      decodeInstructionReg   := loadedWord.data
+    }
+
+    io.cpu.decode.haltIt       := io.cpu.decode.isValid && !decodeInstructionValid
+    io.cpu.decode.data  := decodeInstructionReg
+
+    lineLoader.requestIn.valid := io.cpu.decode.isValid && !decodeInstructionValid
+    lineLoader.requestIn.addr  := io.cpu.decode.address
+
   }
 
   io.flush.cmd.ready := !(lineLoader.request.valid || io.cpu.fetch.isValid)
 }
-//
+
+
+
+
+
+
 //object InstructionCacheMain{
 //
 //  def main(args: Array[String]) {

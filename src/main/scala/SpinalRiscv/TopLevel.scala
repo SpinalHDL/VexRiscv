@@ -200,23 +200,24 @@ object TopLevel {
 
       configTest.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, true),
-        new IBusSimplePlugin(
-          interfaceKeepData = true,
-          catchAccessFault = false
-        ),
-//        new IBusCachedPlugin(
-//          config = InstructionCacheConfig(
-//            cacheSize = 4096,
-//            bytePerLine =32,
-//            wayCount = 1,
-//            wrappedMemAccess = true,
-//            addressWidth = 32,
-//            cpuDataWidth = 32,
-//            memDataWidth = 32,
-//            catchAccessFault = false,
-//            asyncTagMemory = false
-//          )
+//        new IBusSimplePlugin(
+//          interfaceKeepData = true,
+//          catchAccessFault = false
 //        ),
+        new IBusCachedPlugin(
+          config = InstructionCacheConfig(
+            cacheSize = 4096,
+            bytePerLine =32,
+            wayCount = 1,
+            wrappedMemAccess = true,
+            addressWidth = 32,
+            cpuDataWidth = 32,
+            memDataWidth = 32,
+            catchAccessFault = false,
+            asyncTagMemory = false,
+            twoStageLogic = true
+          )
+        ),
 
         new DBusSimplePlugin(
           catchAddressMisaligned = false,
@@ -238,22 +239,22 @@ object TopLevel {
           catchIllegalInstruction = false
         ),
         new RegFilePlugin(
-          regFileReadyKind = Plugin.SYNC,
+          regFileReadyKind = Plugin.ASYNC,
           zeroBoot = false
         ),
         new IntAluPlugin,
         new SrcPlugin(
-          separatedAddSub = true
+          separatedAddSub = false
         ),
         new FullBarrielShifterPlugin,
 //        new LightShifterPlugin,
         //        new HazardSimplePlugin(true, true, true, true),
         //        new HazardSimplePlugin(false, true, false, true),
         new HazardSimplePlugin(
-          bypassExecute           = true,
-          bypassMemory            = true,
-          bypassWriteBack         = true,
-          bypassWriteBackBuffer   = true,
+          bypassExecute           = false,
+          bypassMemory            = false,
+          bypassWriteBack         = false,
+          bypassWriteBackBuffer   = false,
           pessimisticUseSrc       = false,
           pessimisticWriteRegFile = false,
           pessimisticAddressMatch = false
@@ -268,12 +269,13 @@ object TopLevel {
         )
       )
 
-      val toplevel = new VexRiscv(configFull)
+//      val toplevel = new VexRiscv(configFull)
 //      val toplevel = new VexRiscv(configLight)
-//      val toplevel = new VexRiscv(configTest)
+      val toplevel = new VexRiscv(configTest)
       toplevel.decode.input(toplevel.config.INSTRUCTION).addAttribute(Verilator.public)
       toplevel.decode.input(toplevel.config.PC).addAttribute(Verilator.public)
       toplevel.decode.arbitration.isValid.addAttribute(Verilator.public)
+      toplevel.decode.arbitration.haltIt.addAttribute(Verilator.public)
 //      toplevel.writeBack.input(config.PC).addAttribute(Verilator.public)
 //      toplevel.service(classOf[DecoderSimplePlugin]).bench(toplevel)
 
@@ -286,3 +288,4 @@ object TopLevel {
 //TODO DivPlugin should register the twoComplement output before pipeline insertion
 //TODO MulPlugin doesn't fit well on Artix (FMAX)
 //TODO PcReg design is unoptimized by Artix synthesis
+//TODO FMAX SRC mux + bipass mux prioriti

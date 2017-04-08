@@ -1,42 +1,65 @@
 [*]
 [*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
-[*] Sat Apr  1 15:43:19 2017
+[*] Sat Apr  8 15:08:01 2017
 [*]
-[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/dhrystoneO3.vcd"
-[dumpfile_mtime] "Sat Apr  1 15:42:10 2017"
-[dumpfile_size] 214475745
+[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/rv32ui-p-simple.vcd"
+[dumpfile_mtime] "Sat Apr  8 15:02:54 2017"
+[dumpfile_size] 95378
 [savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/fail.gtkw"
-[timestart] 0
+[timestart] 211
 [size] 1776 953
 [pos] -1 -1
-*-16.000000 553 48755 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-4.422177 320 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.VexRiscv.
-[sst_width] 313
-[signals_width] 558
+[sst_width] 201
+[signals_width] 397
 [sst_expanded] 1
-[sst_vpaned_height] 593
+[sst_vpaned_height] 279
+@800200
+-prefetch
 @28
-TOP.clk
-TOP.reset
+TOP.VexRiscv.instructionCache_1.io_cpu_prefetch_haltIt
 @22
-TOP.VexRiscv.dataCache_1.io_mem_rsp_payload_data[31:0]
+TOP.VexRiscv.instructionCache_1.io_cpu_prefetch_address[31:0]
+@1000200
+-prefetch
+@800200
+-fetch
 @28
-TOP.VexRiscv.dataCache_1.io_mem_rsp_valid
+TOP.VexRiscv.instructionCache_1.io_cpu_fetch_isValid
+TOP.VexRiscv.instructionCache_1.io_cpu_fetch_isStuck
 @22
-TOP.VexRiscv.dataCache_1.io_cpu_writeBack_data[31:0]
+TOP.VexRiscv.instructionCache_1.io_cpu_fetch_address[31:0]
+@1000200
+-fetch
+@800200
+-decode
 @28
-TOP.VexRiscv.writeBack_MEMORY_ENABLE
-TOP.VexRiscv.writeBack_arbitration_isFiring
-TOP.VexRiscv.dataCache_1.ways_0_data_port0_enable
-@22
-TOP.VexRiscv.dataCache_1.ways_0_data_port0_data[31:0]
-@28
-TOP.VexRiscv.dataCache_1.manager_cpuRspIn_ready
+TOP.VexRiscv.instructionCache_1.io_cpu_decode_isValid
 @29
-TOP.VexRiscv.dataCache_1.manager_cpuRspIn_valid
+TOP.VexRiscv.instructionCache_1.io_cpu_decode_haltIt
 @28
-TOP.VexRiscv.dataCache_1.manager_cpuRsp_ready
-TOP.VexRiscv.dataCache_1.manager_cpuRsp_valid
+TOP.VexRiscv.instructionCache_1.io_cpu_decode_isStuck
+@22
+TOP.VexRiscv.instructionCache_1.io_cpu_decode_address[31:0]
+TOP.VexRiscv.instructionCache_1.io_cpu_decode_instruction[31:0]
+@1000200
+-decode
+@800200
+-ibus
+@22
+TOP.VexRiscv.instructionCache_1.io_mem_cmd_payload_address[31:0]
+@28
+TOP.VexRiscv.instructionCache_1.io_mem_cmd_ready
+TOP.VexRiscv.instructionCache_1.io_mem_cmd_valid
+@22
+TOP.VexRiscv.instructionCache_1.io_mem_rsp_payload_data[31:0]
+@28
+TOP.VexRiscv.instructionCache_1.io_mem_rsp_valid
+@1000200
+-ibus
+@28
+TOP.VexRiscv.instructionCache_1.clk
 [pattern_trace] 1
 [pattern_trace] 0
