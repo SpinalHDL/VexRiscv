@@ -370,6 +370,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       val valid   = RegNext(lineLoader.waysWritePort.valid)
       val address = RegNext(lineLoader.request.addr(tagLineRange) @@ lineLoader.wordIndex @@ U"00")
       val data    = RegNext(lineLoader.waysWritePort.data)
+      val wasLoaded = RegNext(lineLoader.loadedWords)
     }
 
 
@@ -385,8 +386,8 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       fetchInstructionValid := True
       fetchInstructionValue := loadedWord.data
     } otherwise{
-      fetchInstructionValid := waysHitValid
-      fetchInstructionValue := waysHitWord
+      fetchInstructionValid := waysHitValid || (loadedWord.address(tagLineRange) === io.cpu.fetch.address(tagLineRange) && loadedWord.wasLoaded(io.cpu.fetch.address(wordRange)))
+      fetchInstructionValue := waysHitWord //Not multi way (wasloaded)
     }
 
 
