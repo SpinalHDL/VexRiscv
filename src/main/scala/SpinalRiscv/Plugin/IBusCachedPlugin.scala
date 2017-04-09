@@ -20,9 +20,11 @@ case class InstructionCacheConfig( cacheSize : Int,
 
 
 
-class IBusCachedPlugin(config : InstructionCacheConfig) extends Plugin[VexRiscv]{
+class IBusCachedPlugin(config : InstructionCacheConfig) extends Plugin[VexRiscv] {
   import config._
   var iBus  : InstructionCacheMemBus = null
+
+
 
   object IBUS_ACCESS_ERROR extends Stageable(Bool)
   var decodeExceptionPort : Flow[ExceptionCause] = null
@@ -55,8 +57,11 @@ class IBusCachedPlugin(config : InstructionCacheConfig) extends Plugin[VexRiscv]
     cache.io.cpu.fetch.isStuck  := fetch.arbitration.isStuck
     if(!twoStageLogic) cache.io.cpu.fetch.isStuckByOthers  := fetch.arbitration.isStuckByOthers
     cache.io.cpu.fetch.address  := fetch.output(PC)
-    if(!twoStageLogic) fetch.arbitration.haltIt setWhen(cache.io.cpu.fetch.haltIt)
-    if(!twoStageLogic) fetch.insert(INSTRUCTION) := cache.io.cpu.fetch.data
+    if(!twoStageLogic) {
+      fetch.arbitration.haltIt setWhen (cache.io.cpu.fetch.haltIt)
+      fetch.insert(INSTRUCTION) := cache.io.cpu.fetch.data
+      decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck,decode.input(INSTRUCTION),fetch.output(INSTRUCTION))
+    }
 
     cache.io.flush.cmd.valid := False
 
@@ -66,6 +71,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig) extends Plugin[VexRiscv]
       cache.io.cpu.decode.isStuck := decode.arbitration.isStuck
       cache.io.cpu.decode.address := decode.input(PC)
       decode.insert(INSTRUCTION)  := cache.io.cpu.decode.data
+      decode.insert(INSTRUCTION_ANTICIPATED) := cache.io.cpu.decode.dataAnticipated
     }
 
 
@@ -99,7 +105,7 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
   val isStuck = Bool
   val isStuckByOthers = if(!p.twoStageLogic) Bool else null
   val address = UInt(p.addressWidth bit)
-  val data    = if(!p.twoStageLogic) Bits(32 bit) else null
+  val data    = Bits(32 bit)  //If twoStageLogic == true, this signal is acurate only when there is the cache doesn't stall decode (Used for Sync regfile)
   val error   = if(!p.twoStageLogic && p.catchAccessFault) Bool else null
 
   override def asMaster(): Unit = {
@@ -116,11 +122,12 @@ case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle 
   val isStuck = Bool
   val address = UInt(p.addressWidth bit)
   val data    = Bits(32 bit)
+  val dataAnticipated = Bits(32 bits)
   val error   = if(p.catchAccessFault) Bool else null
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, address)
-    in(haltIt, data)
+    in(haltIt, data, dataAnticipated)
     if(p.catchAccessFault) in(error)
   }
 }
@@ -398,24 +405,30 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       fetchInstructionValidReg := False
     }
 
+    io.cpu.fetch.data := fetchInstructionValue
+
 
     val decodeInstructionValid = Reg(Bool)
     val decodeInstructionReg = Reg(Bits(32 bits))
+    val decodeInstructionRegIn = (!io.cpu.decode.isStuck) ? fetchInstructionValue | loadedWord.data
 
+    io.cpu.decode.dataAnticipated := decodeInstructionReg
     when(!io.cpu.decode.isStuck){
       decodeInstructionValid := fetchInstructionValid
-      decodeInstructionReg   := fetchInstructionValue
+      decodeInstructionReg   := decodeInstructionRegIn
+      io.cpu.decode.dataAnticipated := decodeInstructionRegIn
     }.elsewhen(loadedWord.valid && (loadedWord.address >> 2) === (io.cpu.decode.address >> 2)){
       decodeInstructionValid := True
-      decodeInstructionReg   := loadedWord.data
+      decodeInstructionReg   := decodeInstructionRegIn
+      io.cpu.decode.dataAnticipated := decodeInstructionRegIn
     }
 
-    io.cpu.decode.haltIt       := io.cpu.decode.isValid && !decodeInstructionValid
-    io.cpu.decode.data  := decodeInstructionReg
+    io.cpu.decode.haltIt  := io.cpu.decode.isValid && !decodeInstructionValid
+    io.cpu.decode.data    := decodeInstructionReg
+
 
     lineLoader.requestIn.valid := io.cpu.decode.isValid && !decodeInstructionValid
     lineLoader.requestIn.addr  := io.cpu.decode.address
-
   }
 
   io.flush.cmd.ready := !(lineLoader.request.valid || io.cpu.fetch.isValid)

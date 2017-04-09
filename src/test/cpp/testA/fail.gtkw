@@ -1,19 +1,19 @@
 [*]
 [*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
-[*] Sat Apr  8 15:08:01 2017
+[*] Sun Apr  9 09:10:08 2017
 [*]
-[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/rv32ui-p-simple.vcd"
-[dumpfile_mtime] "Sat Apr  8 15:02:54 2017"
-[dumpfile_size] 95378
+[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/rv32ui-p-addi.vcd"
+[dumpfile_mtime] "Sun Apr  9 09:08:48 2017"
+[dumpfile_size] 136439
 [savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/fail.gtkw"
-[timestart] 211
+[timestart] 274
 [size] 1776 953
-[pos] -1 -1
-*-4.422177 320 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[pos] -775 -353
+*-2.774728 284 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.VexRiscv.
 [sst_width] 201
-[signals_width] 397
+[signals_width] 453
 [sst_expanded] 1
 [sst_vpaned_height] 279
 @800200
@@ -31,19 +31,18 @@ TOP.VexRiscv.instructionCache_1.io_cpu_fetch_isValid
 TOP.VexRiscv.instructionCache_1.io_cpu_fetch_isStuck
 @22
 TOP.VexRiscv.instructionCache_1.io_cpu_fetch_address[31:0]
+TOP.VexRiscv.instructionCache_1.io_cpu_fetch_data[31:0]
 @1000200
 -fetch
 @800200
 -decode
 @28
 TOP.VexRiscv.instructionCache_1.io_cpu_decode_isValid
-@29
 TOP.VexRiscv.instructionCache_1.io_cpu_decode_haltIt
-@28
 TOP.VexRiscv.instructionCache_1.io_cpu_decode_isStuck
 @22
 TOP.VexRiscv.instructionCache_1.io_cpu_decode_address[31:0]
-TOP.VexRiscv.instructionCache_1.io_cpu_decode_instruction[31:0]
+TOP.VexRiscv.instructionCache_1.io_cpu_decode_data[31:0]
 @1000200
 -decode
 @800200
@@ -61,5 +60,28 @@ TOP.VexRiscv.instructionCache_1.io_mem_rsp_valid
 -ibus
 @28
 TOP.VexRiscv.instructionCache_1.clk
+@22
+TOP.VexRiscv.instructionCache_1.io_cpu_fetch_data[31:0]
+TOP.VexRiscv.decode_RegFilePlugin_srcInstruction[31:0]
+TOP.VexRiscv.instructionCache_1.io_cpu_decode_data[31:0]
+@29
+TOP.VexRiscv.decode_arbitration_isValid
+@28
+TOP.VexRiscv.decode_arbitration_isStuck
+@22
+TOP.VexRiscv.decode_PC[31:0]
+TOP.VexRiscv.decode_REG1[31:0]
+TOP.VexRiscv.decode_REG2[31:0]
+@28
+TOP.VexRiscv.decode_REG1_USE
+TOP.VexRiscv.decode_REG2_USE
+TOP.VexRiscv.decode_arbitration_isValid
+TOP.VexRiscv.decode_arbitration_isStuck
+@22
+TOP.VexRiscv.decode_RegFilePlugin_regFileReadAddress1[4:0]
+TOP.VexRiscv.decode_RegFilePlugin_regFileReadAddress2[4:0]
+TOP.VexRiscv.decode_RegFilePlugin_rs1Data[31:0]
+TOP.VexRiscv.decode_RegFilePlugin_rs2Data[31:0]
+TOP.VexRiscv.decode_RegFilePlugin_srcInstruction[31:0]
 [pattern_trace] 1
 [pattern_trace] 0

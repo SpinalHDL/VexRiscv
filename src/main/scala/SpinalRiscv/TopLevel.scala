@@ -239,7 +239,7 @@ object TopLevel {
           catchIllegalInstruction = false
         ),
         new RegFilePlugin(
-          regFileReadyKind = Plugin.ASYNC,
+          regFileReadyKind = Plugin.SYNC,
           zeroBoot = false
         ),
         new IntAluPlugin,

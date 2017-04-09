@@ -23,6 +23,11 @@ trait Pipeline {
     filtered.head.asInstanceOf[T]
   }
 
+  def serviceExist[T](clazz : Class[T]) = {
+    val filtered = plugins.filter(o => clazz.isAssignableFrom(o.getClass))
+     filtered.length != 0
+  }
+
   def build(): Unit ={
     plugins.foreach(_.setup(this.asInstanceOf[T]))
 

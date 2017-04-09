@@ -1,8 +1,10 @@
 package SpinalRiscv.Plugin
 
-import SpinalRiscv.{Stageable, DecoderService, Riscv, VexRiscv}
+import SpinalRiscv._
 import spinal.core._
 import spinal.lib._
+
+import scala.collection.mutable
 
 
 trait RegFileReadKind
@@ -41,7 +43,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = fals
       //read register file
       val srcInstruction = regFileReadyKind match{
         case `ASYNC` => input(INSTRUCTION)
-        case `SYNC` =>  Mux(arbitration.isStuck,input(INSTRUCTION),fetch.output(INSTRUCTION))
+        case `SYNC` =>  input(INSTRUCTION_ANTICIPATED)
       }
 
       val regFileReadAddress1 = srcInstruction(Riscv.rs1Range).asUInt
