@@ -61,6 +61,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig) extends Plugin[VexRiscv]
       fetch.arbitration.haltIt setWhen (cache.io.cpu.fetch.haltIt)
       fetch.insert(INSTRUCTION) := cache.io.cpu.fetch.data
       decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck,decode.input(INSTRUCTION),fetch.output(INSTRUCTION))
+      decode.insert(INSTRUCTION_READY) := True
     }
 
     cache.io.flush.cmd.valid := False
@@ -72,11 +73,13 @@ class IBusCachedPlugin(config : InstructionCacheConfig) extends Plugin[VexRiscv]
       cache.io.cpu.decode.address := decode.input(PC)
       decode.insert(INSTRUCTION)  := cache.io.cpu.decode.data
       decode.insert(INSTRUCTION_ANTICIPATED) := cache.io.cpu.decode.dataAnticipated
+      decode.insert(INSTRUCTION_READY) := !cache.io.cpu.decode.haltIt
     }
 
 
     if(catchAccessFault){
-      if(!twoStageLogic) fetch.insert(IBUS_ACCESS_ERROR) := cache.io.cpu.fetch.error
+      if(!twoStageLogic) fetch.insert(IBUS_ACCESS_ERROR)  := cache.io.cpu.fetch.error
+      if( twoStageLogic) decode.insert(IBUS_ACCESS_ERROR) := cache.io.cpu.decode.error
 
       decodeExceptionPort.valid   := decode.arbitration.isValid && decode.input(IBUS_ACCESS_ERROR)
       decodeExceptionPort.code    := 1
@@ -105,7 +108,7 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
   val isStuck = Bool
   val isStuckByOthers = if(!p.twoStageLogic) Bool else null
   val address = UInt(p.addressWidth bit)
-  val data    = Bits(32 bit)  //If twoStageLogic == true, this signal is acurate only when there is the cache doesn't stall decode (Used for Sync regfile)
+  val data    = if(!p.twoStageLogic) Bits(32 bit) else null
   val error   = if(!p.twoStageLogic && p.catchAccessFault) Bool else null
 
   override def asMaster(): Unit = {
@@ -209,11 +212,24 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
   val lineRange = tagRange.low-1 downto log2Up(bytePerLine)
   val wordRange = log2Up(bytePerLine)-1 downto log2Up(bytePerWord)
   val tagLineRange = tagRange.high downto lineRange.low
+  val lineWordRange = lineRange.high downto wordRange.low
 
   class LineInfo extends Bundle{
     val valid = Bool
+    val loading = Bool
     val error = if(catchAccessFault) Bool else null
     val address = UInt(tagRange.length bit)
+  }
+
+  class LineInfoWithHit extends LineInfo{
+    val hit = Bool
+  }
+
+  def LineInfoWithHit(lineInfo : LineInfo, testTag : UInt) = {
+    val ret = new LineInfoWithHit()
+    ret.assignSomeByName(lineInfo)
+    ret.hit := lineInfo.valid && lineInfo.address === testTag
+    ret
   }
 
 
@@ -229,7 +245,6 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     val requestIn = Stream(wrap(new Bundle{
       val addr = UInt(addressWidth bits)
     }))
-
 
 
 
@@ -260,10 +275,6 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
     val request = requestIn.stage()
 
-    val lineInfoWrite = new LineInfo()
-    lineInfoWrite.valid := flushCounter.msb
-    lineInfoWrite.address := request.addr(tagRange)
-    if(catchAccessFault) lineInfoWrite.error := loadingWithError
 
     //Send memory requests
     val memCmdSended = RegInit(False) setWhen(io.mem.cmd.fire)
@@ -279,10 +290,10 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     val loadedWordsReadable = RegNext(loadedWords)
     loadedWordsNext := loadedWords
 
-    val waysWritePort = ways(0).datas.writePort //Not multi ways
-    waysWritePort.valid   := io.mem.rsp.valid
-    waysWritePort.address := request.addr(lineRange) @@ wordIndex
-    waysWritePort.data    := io.mem.rsp.data
+    val waysDatasWritePort = ways(0).datas.writePort //Not multi ways
+    waysDatasWritePort.valid   := io.mem.rsp.valid
+    waysDatasWritePort.address := request.addr(lineRange) @@ wordIndex
+    waysDatasWritePort.data    := io.mem.rsp.data
     when(io.mem.rsp.valid){
       wordIndex := wordIndex + 1
       loadedWordsNext(wordIndex) := True
@@ -297,11 +308,14 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }
     request.ready := readyDelay === 1
 
+    val waysTagsWritePort = ways(0).tags.writePort //not multi way
+    waysTagsWritePort.valid := io.mem.rsp.valid || !flushCounter.msb
+    waysTagsWritePort.address := Mux(flushCounter.msb,request.addr(lineRange),flushCounter(flushCounter.high-1 downto 0))
+    waysTagsWritePort.data.valid := flushCounter.msb
+    waysTagsWritePort.data.address := request.addr(tagRange)
+    waysTagsWritePort.data.loading := !memRspLast
+    if(catchAccessFault) waysTagsWritePort.data.error := loadingWithError
 
-    when((request.valid && memRspLast) || !flushCounter.msb){
-      val tagsAddress = Mux(flushCounter.msb,request.addr(lineRange),flushCounter(flushCounter.high-1 downto 0))
-      ways(0).tags(tagsAddress) := lineInfoWrite  //TODO
-    }
 
     when(requestIn.ready){
       memCmdSended := False
@@ -321,9 +335,9 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     val waysRead = for(way <- ways) yield new Area{
       val readAddress = Mux(io.cpu.fetch.isStuck,io.cpu.fetch.address,io.cpu.prefetch.address) //TODO FMAX
       val tag = if(asyncTagMemory)
-        way.tags.readAsync(io.cpu.fetch.address(lineRange))
+        way.tags.readAsync(io.cpu.fetch.address(lineRange),writeFirst)
       else
-        way.tags.readSync(readAddress(lineRange))
+        way.tags.readSync(readAddress(lineRange),readUnderWrite = readFirst)
 
       val data = way.datas.readSync(readAddress(lineRange.high downto wordRange.low))
       waysHitWord := data //Not applicable to multi way
@@ -332,102 +346,128 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
         if(catchAccessFault) waysHitError := tag.error
       }
 
-      when(lineLoader.request.valid && lineLoader.request.addr(lineRange) === io.cpu.fetch.address(lineRange)){
-        waysHitValid := False //Not applicable to multi way
-      }
+//      when(lineLoader.request.valid && lineLoader.request.addr(lineRange) === io.cpu.fetch.address(lineRange)){
+//        waysHitValid := False //Not applicable to multi way
+//      }
     }
 
 
-    val loaderHitValid = lineLoader.request.valid && lineLoader.request.addr(tagLineRange) === io.cpu.fetch.address(tagLineRange)
-    val loaderHitReady = lineLoader.loadedWordsReadable(io.cpu.fetch.address(wordRange))
+    val hit = waysHitValid && !(waysRead(0).tag.loading && !(if(asyncTagMemory) lineLoader.loadedWords else RegNext(lineLoader.loadedWords))(io.cpu.fetch.address(wordRange)))
+    io.cpu.fetch.haltIt := io.cpu.fetch.isValid && !hit
+    io.cpu.fetch.data := waysHitWord
+    if(catchAccessFault) io.cpu.fetch.error := waysRead(0).tag.error
+    lineLoader.requestIn.valid := io.cpu.fetch.isValid && !hit //TODO avoid duplicated request
+    lineLoader.requestIn.addr  := io.cpu.fetch.address
 
-
-    io.cpu.fetch.haltIt := io.cpu.fetch.isValid && !(waysHitValid || (loaderHitValid && loaderHitReady))
-    io.cpu.fetch.data := waysHitWord //TODO
-    if(catchAccessFault) io.cpu.fetch.error := (waysHitValid && waysHitError) ||  (loaderHitValid && loaderHitReady && lineLoader.loadingWithErrorReg)
-    lineLoader.requestIn.valid := io.cpu.fetch.isValid && !io.cpu.fetch.isStuckByOthers && !waysHitValid
-    lineLoader.requestIn.addr := io.cpu.fetch.address
+    //    val loaderHitValid = lineLoader.request.valid && lineLoader.request.addr(tagLineRange) === io.cpu.fetch.address(tagLineRange)
+//    val loaderHitReady = lineLoader.loadedWordsReadable(io.cpu.fetch.address(wordRange))
+//
+//
+//    io.cpu.fetch.haltIt := io.cpu.fetch.isValid && !(waysHitValid || (loaderHitValid && loaderHitReady))
+//    io.cpu.fetch.data := waysHitWord //TODO
+//    if(catchAccessFault) io.cpu.fetch.error := (waysHitValid && waysHitError) ||  (loaderHitValid && loaderHitReady && lineLoader.loadingWithErrorReg)
+//    lineLoader.requestIn.valid := io.cpu.fetch.isValid && !io.cpu.fetch.isStuckByOthers && !waysHitValid
+//    lineLoader.requestIn.addr := io.cpu.fetch.address
   } else new Area{
 
-    val waysHitValid = False
-    val waysHitError = Bool.assignDontCare()
-    val waysHitWord = Bits(wordWidth bit)
+    //Long readValidPath
+//    def writeFirstMemWrap[T <: Data](readValid : Bool, readAddress : UInt, lastAddress : UInt, readData : T,writeValid : Bool, writeAddress : UInt, writeData : T) : T = {
+//      val hit = writeValid && (readValid ? readAddress  | lastAddress) === writeAddress
+//      val overrideValid = RegInit(False) clearWhen(readValid) setWhen(hit)
+//      val overrideValue = RegNextWhen(writeData,hit)
+//      overrideValid ? overrideValue | readData
+//    }
 
-    val waysRead = for(way <- ways) yield new Area{
+    //shot readValid path
+    def writeFirstMemWrap[T <: Data](readValid : Bool, readLastAddress : UInt, readData : T,writeValid : Bool, writeAddress : UInt, writeData : T) : T = {
+      val writeSample     = readValid || (writeValid && writeAddress === readLastAddress)
+      val writeValidReg   = RegNextWhen(writeValid,writeSample)
+      val writeAddressReg = RegNextWhen(writeAddress,writeSample)
+      val writeDataReg    = RegNextWhen(writeData,writeSample)
+      (writeValidReg && writeAddressReg === readLastAddress) ? writeDataReg | readData
+    }
+
+    //Long sample path
+//    def writeFirstRegWrap[T <: Data](sample : Bool, sampleAddress : UInt,lastAddress : UInt, readData : T, writeValid : Bool, writeAddress : UInt, writeData : T) : (T,T) = {
+//      val hit = writeValid && (sample ? sampleAddress | lastAddress) === writeAddress
+//      val bypass = hit ? writeData | readData
+//      val reg = RegNextWhen(bypass,sample || hit)
+//      (reg,bypass)
+//    }
+
+    //Short sample path
+    def writeFirstRegWrap[T <: Data](sample : Bool, sampleAddress : UInt,sampleLastAddress : UInt, readData : T, writeValid : Bool, writeAddress : UInt, writeData : T) = {
+      val preWrite = (writeValid && sampleAddress === writeAddress)
+      val postWrite = (writeValid && sampleLastAddress === writeAddress)
+      val bypass = (!sample || preWrite) ? writeData | readData
+      val regEn = sample || postWrite
+      val reg = RegNextWhen(bypass,regEn)
+      (reg,bypass,regEn,preWrite,postWrite)
+    }
+//    def writeFirstRegWrap[T <: Data](sample : Bool, sampleAddress : UInt,sampleLastAddress : UInt, readData : T, writeValid : Bool, writeAddress : UInt, writeData : T) = {
+//      val bypass = (!sample || (writeValid && sampleAddress === writeAddress)) ? writeData | readData
+//      val regEn = sample || (writeValid && sampleLastAddress === writeAddress)
+//      val reg = RegNextWhen(bypass,regEn)
+//      (reg,bypass,regEn,False,False)
+//    }
+    require(wayCount == 1)
+    val memRead = new Area{
+      val way = ways(0)
       val tag = if(asyncTagMemory)
-          way.tags.readAsync(io.cpu.fetch.address(lineRange))
+          way.tags.readAsync(io.cpu.fetch.address(lineRange),writeFirst)
         else
-          way.tags.readSync(io.cpu.prefetch.address(lineRange),enable = !io.cpu.fetch.isStuck)
+          writeFirstMemWrap(
+            readValid = !io.cpu.fetch.isStuck,
+//            readAddress = io.cpu.prefetch.address(lineRange),
+            readLastAddress = io.cpu.fetch.address(lineRange),
+            readData = way.tags.readSync(io.cpu.prefetch.address(lineRange),enable = !io.cpu.fetch.isStuck),
+            writeValid = lineLoader.waysTagsWritePort.valid,
+            writeAddress = lineLoader.waysTagsWritePort.address,
+            writeData = lineLoader.waysTagsWritePort.data
+          )
 
-      val data = way.datas.readSync(io.cpu.prefetch.address(lineRange.high downto wordRange.low),enable = !io.cpu.fetch.isStuck)
-      waysHitWord := data //Not applicable to multi way
-      when(tag.valid && tag.address === io.cpu.fetch.address(tagRange)) {
-        waysHitValid := True
-        if(catchAccessFault) waysHitError := tag.error
-      }
-
-      when(lineLoader.request.valid && lineLoader.request.addr(lineRange) === io.cpu.fetch.address(lineRange)){
-        waysHitValid := False //Not applicable to multi way
-      }
+      val data = writeFirstMemWrap(
+        readValid = !io.cpu.fetch.isStuck,
+//        readAddress = io.cpu.prefetch.address(lineWordRange),
+        readLastAddress = io.cpu.fetch.address(lineWordRange),
+        readData = way.datas.readSync(io.cpu.prefetch.address(lineWordRange),enable = !io.cpu.fetch.isStuck),
+        writeValid = lineLoader.waysDatasWritePort.valid,
+        writeAddress = lineLoader.waysDatasWritePort.address,
+        writeData = lineLoader.waysDatasWritePort.data
+      )
     }
 
 
+    val tag = writeFirstRegWrap(
+      sample = !io.cpu.decode.isStuck,
+      sampleAddress = io.cpu.fetch.address(lineRange),
+      sampleLastAddress = io.cpu.decode.address(lineRange),
+      readData = LineInfoWithHit(memRead.tag,io.cpu.fetch.address(tagRange)),
+      writeValid = lineLoader.waysTagsWritePort.valid,
+      writeAddress = lineLoader.waysTagsWritePort.address,
+      writeData = LineInfoWithHit(lineLoader.waysTagsWritePort.data,io.cpu.fetch.address(tagRange)) //TODO wrong address src
+    )._1
 
-    val loadedWord = new Area{
-      val valid   = RegNext(lineLoader.waysWritePort.valid)
-      val address = RegNext(lineLoader.request.addr(tagLineRange) @@ lineLoader.wordIndex @@ U"00")
-      val data    = RegNext(lineLoader.waysWritePort.data)
-      val wasLoaded = RegNext(lineLoader.loadedWords)
-    }
+    val (data,dataRegIn,dataRegEn,dataPreWrite,dataPostWrite) = writeFirstRegWrap(
+      sample = !io.cpu.decode.isStuck,
+      sampleAddress = io.cpu.fetch.address(lineWordRange),
+      sampleLastAddress = io.cpu.decode.address(lineWordRange),
+      readData = memRead.data,
+      writeValid = lineLoader.waysDatasWritePort.valid,
+      writeAddress = lineLoader.waysDatasWritePort.address,
+      writeData = lineLoader.waysDatasWritePort.data
+    )
 
+    val hit = tag.valid && tag.address === io.cpu.decode.address(tagRange) && !(tag.loading && !lineLoader.loadedWords(io.cpu.decode.address(wordRange)))
+//    val hit = tag.hit && !(tag.loading && !lineLoader.loadedWords(io.cpu.decode.address(wordRange)))
 
-    val fetchInstructionValid = Bool
-    val fetchInstructionValue = Bits(32 bits)
-    val fetchInstructionValidReg = Reg(Bool)
-    val fetchInstructionValueReg = Reg(Bits(32 bits))
+    io.cpu.decode.haltIt  := io.cpu.decode.isValid && !hit //TODO PERF not halit it when removed, Should probably be applyed in many other places
+    io.cpu.decode.data    := data
+//    io.cpu.decode.dataAnticipated := dataRegEn ? dataRegIn | data
+    io.cpu.decode.dataAnticipated := io.cpu.decode.isStuck ? Mux(dataPostWrite,lineLoader.waysDatasWritePort.data,data) | Mux(dataPreWrite,lineLoader.waysDatasWritePort.data,memRead.data)
+    if(catchAccessFault) io.cpu.decode.error := tag.error
 
-    when(fetchInstructionValidReg){
-      fetchInstructionValid := True
-      fetchInstructionValue := fetchInstructionValueReg
-    }.elsewhen(loadedWord.valid && (loadedWord.address >> 2) === (io.cpu.fetch.address >> 2)){
-      fetchInstructionValid := True
-      fetchInstructionValue := loadedWord.data
-    } otherwise{
-      fetchInstructionValid := waysHitValid || (loadedWord.address(tagLineRange) === io.cpu.fetch.address(tagLineRange) && loadedWord.wasLoaded(io.cpu.fetch.address(wordRange)))
-      fetchInstructionValue := waysHitWord //Not multi way (wasloaded)
-    }
-
-
-    when(io.cpu.fetch.isStuck){
-      fetchInstructionValidReg := fetchInstructionValid
-      fetchInstructionValueReg := fetchInstructionValue
-    } otherwise {
-      fetchInstructionValidReg := False
-    }
-
-    io.cpu.fetch.data := fetchInstructionValue
-
-
-    val decodeInstructionValid = Reg(Bool)
-    val decodeInstructionReg = Reg(Bits(32 bits))
-    val decodeInstructionRegIn = (!io.cpu.decode.isStuck) ? fetchInstructionValue | loadedWord.data
-
-    io.cpu.decode.dataAnticipated := decodeInstructionReg
-    when(!io.cpu.decode.isStuck){
-      decodeInstructionValid := fetchInstructionValid
-      decodeInstructionReg   := decodeInstructionRegIn
-      io.cpu.decode.dataAnticipated := decodeInstructionRegIn
-    }.elsewhen(loadedWord.valid && (loadedWord.address >> 2) === (io.cpu.decode.address >> 2)){
-      decodeInstructionValid := True
-      decodeInstructionReg   := decodeInstructionRegIn
-      io.cpu.decode.dataAnticipated := decodeInstructionRegIn
-    }
-
-    io.cpu.decode.haltIt  := io.cpu.decode.isValid && !decodeInstructionValid
-    io.cpu.decode.data    := decodeInstructionReg
-
-
-    lineLoader.requestIn.valid := io.cpu.decode.isValid && !decodeInstructionValid
+    lineLoader.requestIn.valid := io.cpu.decode.isValid && !hit //TODO avoid duplicated request
     lineLoader.requestIn.addr  := io.cpu.decode.address
   }
 

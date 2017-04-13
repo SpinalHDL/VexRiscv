@@ -82,11 +82,13 @@ class HazardSimplePlugin(bypassExecute : Boolean,
     trackHazardWithStage(execute  ,bypassExecute  ,BYPASSABLE_EXECUTE_STAGE)
 
 
-    when(decode.input(INSTRUCTION)(rs1Range) === 0 || (if(pessimisticUseSrc) False else !decode.input(REG1_USE))){
-      src0Hazard := False
-    }
-    when(decode.input(INSTRUCTION)(rs2Range) === 0 || (if(pessimisticUseSrc) False else !decode.input(REG2_USE))){
-      src1Hazard := False
+    if(!pessimisticUseSrc) {
+      when(!decode.input(REG1_USE)) {
+        src0Hazard := False
+      }
+      when(!decode.input(REG2_USE)) {
+        src1Hazard := False
+      }
     }
 
     when(decode.arbitration.isValid && (src0Hazard || src1Hazard)){

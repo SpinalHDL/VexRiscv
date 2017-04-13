@@ -681,11 +681,12 @@ public:
 #endif
 class Dhrystone : public Workspace{
 public:
-
-	Dhrystone(string name,bool iStall, bool dStall) : Workspace(name) {
+	string hexName;
+	Dhrystone(string name,string hexName,bool iStall, bool dStall) : Workspace(name) {
 		setIStall(iStall);
 		setDStall(dStall);
-		loadHex("../../resources/hex/" + name + ".hex");
+		loadHex("../../resources/hex/" + hexName + ".hex");
+		this->hexName = hexName;
 	}
 
 	virtual void checks(){
@@ -693,7 +694,7 @@ public:
 	}
 
 	virtual void pass(){
-		FILE *refFile = fopen((name + ".logRef").c_str(), "r");
+		FILE *refFile = fopen((hexName + ".logRef").c_str(), "r");
     	fseek(refFile, 0, SEEK_END);
     	uint32_t refSize = ftell(refFile);
     	fseek(refFile, 0, SEEK_SET);
@@ -828,10 +829,10 @@ int main(int argc, char **argv, char **env) {
 		#ifdef DHRYSTONE
 //		Dhrystone("dhrystoneO3",false,false).run(0.05e6);
 
-		Dhrystone("dhrystoneO3",true,true).run(1.1e6);
-		Dhrystone("dhrystoneO3M",true,true).run(1.5e6);
-		Dhrystone("dhrystoneO3",false,false).run(1.5e6);
-		Dhrystone("dhrystoneO3M",false,false).run(1.2e6);
+		Dhrystone("dhrystoneO3_Stall","dhrystoneO3",true,true).run(1.1e6);
+		Dhrystone("dhrystoneO3M_Stall","dhrystoneO3M",true,true).run(1.5e6);
+		Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.5e6);
+		Dhrystone("dhrystoneO3M","dhrystoneO3M",false,false).run(1.2e6);
 
 //		Dhrystone("dhrystoneO3ML",false,false).run(8e6);
 //		Dhrystone("dhrystoneO3MLL",false,false).run(80e6);

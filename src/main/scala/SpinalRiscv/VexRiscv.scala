@@ -19,6 +19,7 @@ case class VexRiscvConfig(pcWidth : Int){
   object PC extends Stageable(UInt(pcWidth bits))
   object PC_CALC_WITHOUT_JUMP extends Stageable(UInt(pcWidth bits))
   object INSTRUCTION extends Stageable(Bits(32 bits))
+  object INSTRUCTION_READY extends Stageable(Bool)
   object INSTRUCTION_ANTICIPATED extends Stageable(Bits(32 bits))
   object LEGAL_INSTRUCTION extends Stageable(Bool)
   object REGFILE_WRITE_VALID extends Stageable(Bool)

@@ -61,6 +61,7 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) 
     fetch.insert(IBUS_ACCESS_ERROR) := iBus.rsp.error
     fetch.arbitration.haltIt setWhen(fetch.arbitration.isValid && !iBus.rsp.ready)
     decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck,decode.input(INSTRUCTION),fetch.output(INSTRUCTION))
+    decode.insert(INSTRUCTION_READY) := True
 
     if(catchAccessFault){
       decodeExceptionPort.valid := decode.arbitration.isValid && decode.input(IBUS_ACCESS_ERROR)

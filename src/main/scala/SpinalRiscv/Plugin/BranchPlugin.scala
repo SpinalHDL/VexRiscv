@@ -128,7 +128,7 @@ class BranchPlugin(earlyBranch : Boolean,
         stages(indexOf(branchStage) - 1).arbitration.flushAll := True
       }
 
-      if(catchAddressMisaligned) {
+      if(catchAddressMisaligned) { //TODO conflict with instruction cache two stage
         branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := jumpInterface.payload
@@ -180,7 +180,7 @@ class BranchPlugin(earlyBranch : Boolean,
       }
 
       if(catchAddressMisaligned) {
-        predictionExceptionPort.valid := input(PREDICTION_HAD_BRANCHED) && arbitration.isValid && predictionJumpInterface.payload(1 downto 0) =/= 0
+        predictionExceptionPort.valid := input(INSTRUCTION_READY) && input(PREDICTION_HAD_BRANCHED) && arbitration.isValid && predictionJumpInterface.payload(1 downto 0) =/= 0
         predictionExceptionPort.code := 0
         predictionExceptionPort.badAddr := predictionJumpInterface.payload
       }
@@ -236,7 +236,7 @@ class BranchPlugin(earlyBranch : Boolean,
       }
 
       if(catchAddressMisaligned) {
-        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
+        branchExceptionPort.valid := input(INSTRUCTION_READY) && arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := jumpInterface.payload
       }
