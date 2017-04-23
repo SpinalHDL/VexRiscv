@@ -79,39 +79,39 @@ object TopLevel {
 
       configFull.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, false),
-//        new IBusSimplePlugin(
-//          interfaceKeepData = true,
-//          catchAccessFault = true
-//        ),
-        new IBusCachedPlugin(
-          config = InstructionCacheConfig(
-            cacheSize = 4096,
-            bytePerLine =32,
-            wayCount = 1,
-            wrappedMemAccess = true,
-            addressWidth = 32,
-            cpuDataWidth = 32,
-            memDataWidth = 32,
-            catchAccessFault = true,
-            asyncTagMemory = false,
-            twoStageLogic = true
-          )
-        ),
-        new DBusSimplePlugin(
-          catchAddressMisaligned = true,
+        new IBusSimplePlugin(
+          interfaceKeepData = true,
           catchAccessFault = true
         ),
-//        new DBusCachedPlugin(
-//          config = new DataCacheConfig(
-//            cacheSize         = 4096,
-//            bytePerLine       = 32,
-//            wayCount          = 1,
-//            addressWidth      = 32,
-//            cpuDataWidth      = 32,
-//            memDataWidth      = 32,
-//            catchAccessFault  = false
+//        new IBusCachedPlugin(
+//          config = InstructionCacheConfig(
+//            cacheSize = 4096,
+//            bytePerLine =32,
+//            wayCount = 1,
+//            wrappedMemAccess = true,
+//            addressWidth = 32,
+//            cpuDataWidth = 32,
+//            memDataWidth = 32,
+//            catchAccessFault = true,
+//            asyncTagMemory = false,
+//            twoStageLogic = true
 //          )
 //        ),
+//        new DBusSimplePlugin(
+//          catchAddressMisaligned = true,
+//          catchAccessFault = true
+//        ),
+        new DBusCachedPlugin(
+          config = new DataCacheConfig(
+            cacheSize         = 4096,
+            bytePerLine       = 32,
+            wayCount          = 1,
+            addressWidth      = 32,
+            cpuDataWidth      = 32,
+            memDataWidth      = 32,
+            catchAccessFault  = false
+          )
+        ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = true
         ),
@@ -176,15 +176,16 @@ object TopLevel {
         new LightShifterPlugin,
 //        new HazardSimplePlugin(true, true, true, true),
         //        new HazardSimplePlugin(false, true, false, true),
-        new HazardSimplePlugin(
-          bypassExecute           = false,
-          bypassMemory            = false,
-          bypassWriteBack         = false,
-          bypassWriteBackBuffer   = false,
-          pessimisticUseSrc       = false,
-          pessimisticWriteRegFile = false,
-          pessimisticAddressMatch = false
-        ),
+//        new HazardSimplePlugin(
+//          bypassExecute           = false,
+//          bypassMemory            = false,
+//          bypassWriteBack         = false,
+//          bypassWriteBackBuffer   = false,
+//          pessimisticUseSrc       = false,
+//          pessimisticWriteRegFile = false,
+//          pessimisticAddressMatch = false
+//        ),
+        new HazardPessimisticPlugin,
 //        new MulPlugin,
 //        new DivPlugin,
 //        new MachineCsr(csrConfig),
@@ -202,29 +203,29 @@ object TopLevel {
 
       configTest.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, true),
-//        new IBusSimplePlugin(
-//          interfaceKeepData = true,
-//          catchAccessFault = false
-//        ),
-        new IBusCachedPlugin(
-          config = InstructionCacheConfig(
-            cacheSize = 4096,
-            bytePerLine =32,
-            wayCount = 1,
-            wrappedMemAccess = true,
-            addressWidth = 32,
-            cpuDataWidth = 32,
-            memDataWidth = 32,
-            catchAccessFault = false,
-            asyncTagMemory = false,
-            twoStageLogic = true
-          )
-        ),
-
-        new DBusSimplePlugin(
-          catchAddressMisaligned = false,
+        new IBusSimplePlugin(
+          interfaceKeepData = true,
           catchAccessFault = false
         ),
+//        new IBusCachedPlugin(
+//          config = InstructionCacheConfig(
+//            cacheSize = 4096,
+//            bytePerLine =32,
+//            wayCount = 1,
+//            wrappedMemAccess = true,
+//            addressWidth = 32,
+//            cpuDataWidth = 32,
+//            memDataWidth = 32,
+//            catchAccessFault = false,
+//            asyncTagMemory = false,
+//            twoStageLogic = true
+//          )
+//        ),
+
+//        new DBusSimplePlugin(
+//          catchAddressMisaligned = false,
+//          catchAccessFault = false
+//        ),
 //        new DBusCachedPlugin(
 //          config = new DataCacheConfig(
 //            cacheSize         = 2048,
@@ -236,13 +237,23 @@ object TopLevel {
 //            catchAccessFault  = false
 //          )
 //        ),
-
+        new DBusCachedPlugin(
+          config = new DataCacheConfig(
+            cacheSize         = 128,
+            bytePerLine       = 32,
+            wayCount          = 1,
+            addressWidth      = 32,
+            cpuDataWidth      = 32,
+            memDataWidth      = 32,
+            catchAccessFault  = false
+          )
+        ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = false
         ),
         new RegFilePlugin(
           regFileReadyKind = Plugin.SYNC,
-          zeroBoot = false
+          zeroBoot = true
         ),
         new IntAluPlugin,
         new SrcPlugin(
@@ -291,3 +302,4 @@ object TopLevel {
 //TODO MulPlugin doesn't fit well on Artix (FMAX)
 //TODO PcReg design is unoptimized by Artix synthesis
 //TODO FMAX SRC mux + bipass mux prioriti
+//TODO FMAX, isFiring is to pesimisstinc in some cases(include removeIt flushed ..)

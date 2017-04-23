@@ -239,9 +239,12 @@ public:
 			}
 			switch(addr){
 			case 0xF00FFF10u:
-				*data = i/2;
+				*data = mTime;
+				#ifdef REF_TIME
+				mTime += 100000;
+				#endif
 				break;
-			case 0xF00FFF40u: *data = mTime;          break;
+			case 0xF00FFF40u: *data = mTime;		  break;
 			case 0xF00FFF44u: *data = mTime >> 32;    break;
 			case 0xF00FFF48u: *data = mTimeCmp;       break;
 			case 0xF00FFF4Cu: *data = mTimeCmp >> 32; break;
@@ -309,7 +312,9 @@ public:
 		try {
 			// run simulation for 100 clock periods
 			for (i = 16; i < timeout*2; i+=2) {
+				#ifndef REF_TIME
 				mTime = i/2;
+				#endif
 				#ifdef CSR
 				top->timerInterrupt = mTime >= mTimeCmp ? 1 : 0;
 				//if(mTime == mTimeCmp) printf("SIM timer tick\n");

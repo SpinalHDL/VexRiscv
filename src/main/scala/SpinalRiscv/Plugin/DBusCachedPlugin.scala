@@ -612,18 +612,22 @@ class DataCache(p : DataCacheConfig) extends Component{
 //        }
         is(MEMORY) {
           when(request.bypass) {
+            val memCmdSent = RegInit(False)
             when(!victim.request.valid) { //Avoid mixing memory request while victim is pending
-              //Can't+rite burst
-              val memCmdValid = RegInit(False) clearWhen(io.mem.cmd.ready) setWhen(!io.cpu.writeBack.isStuck)
-              io.mem.cmd.valid := memCmdValid
               io.mem.cmd.wr := request.wr
               io.mem.cmd.address := request.address(tagRange.high downto wordRange.low) @@ U(0,wordRange.low bit)
               io.mem.cmd.mask := request.mask
               io.mem.cmd.data := request.data
               io.mem.cmd.length := 1
 
-              io.cpu.writeBack.haltIt.clearWhen(io.mem.rsp.fire || (!memCmdValid && request.wr)) //Cut mem.cmd.ready path but insert one cycle stall when write
+              when(!memCmdSent) {
+                io.mem.cmd.valid := True
+                memCmdSent setWhen(io.mem.cmd.ready)
+              }
+
+              io.cpu.writeBack.haltIt.clearWhen(memCmdSent && (io.mem.rsp.fire || request.wr)) //Cut mem.cmd.ready path but insert one cycle stall when write
             }
+            memCmdSent clearWhen(!io.cpu.writeBack.isStuck)
           } otherwise {
             when(waysHit || !loadingNotDone){
               io.cpu.writeBack.haltIt := False
