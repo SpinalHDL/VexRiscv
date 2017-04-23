@@ -1,0 +1,85 @@
+[*]
+[*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
+[*] Sun Apr 23 13:26:26 2017
+[*]
+[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/rv32ui-p-sw.vcd"
+[dumpfile_mtime] "Sun Apr 23 13:04:48 2017"
+[dumpfile_size] 389364
+[savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/testA/dcache.gtkw"
+[timestart] 569
+[size] 1776 953
+[pos] -1 -353
+*-3.252876 591 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.VexRiscv.
+[sst_width] 387
+[signals_width] 376
+[sst_expanded] 1
+[sst_vpaned_height] 253
+@800200
+-execute
+@28
+TOP.VexRiscv.dataCache_1.io_cpu_execute_isValid
+@22
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_address[31:0]
+@28
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_all
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_bypass
+@22
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_data[31:0]
+@28
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_kind[1:0]
+@22
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_mask[3:0]
+@28
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_wr
+TOP.VexRiscv.dataCache_1.io_cpu_execute_isStuck
+@1000200
+-execute
+@28
+TOP.VexRiscv.dataCache_1.io_cpu_memory_isStuck
+@800200
+-writeBack
+@22
+TOP.VexRiscv.dataCache_1.io_cpu_writeBack_data[31:0]
+@28
+TOP.VexRiscv.dataCache_1.io_cpu_writeBack_haltIt
+TOP.VexRiscv.dataCache_1.io_cpu_writeBack_isStuck
+TOP.VexRiscv.dataCache_1.io_cpu_writeBack_isValid
+@1000200
+-writeBack
+@22
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_address[31:0]
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_data[31:0]
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_mask[3:0]
+@28
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_wr
+TOP.VexRiscv.dataCache_1.io_mem_cmd_ready
+TOP.VexRiscv.dataCache_1.io_mem_cmd_valid
+@22
+TOP.VexRiscv.dataCache_1.io_mem_rsp_payload_data[31:0]
+@28
+TOP.VexRiscv.dataCache_1.io_mem_rsp_valid
+TOP.VexRiscv.dataCache_1.dataWriteCmd_payload_address[2:0]
+@22
+TOP.VexRiscv.dataCache_1.dataWriteCmd_payload_data[31:0]
+TOP.VexRiscv.dataCache_1.dataWriteCmd_payload_mask[3:0]
+@28
+TOP.VexRiscv.dataCache_1.dataWriteCmd_valid
+TOP.VexRiscv.dataCache_1.clk
+TOP.VexRiscv.dataCache_1.way_dataReadRspTwoEnable
+@22
+TOP.VexRiscv.dataCache_1.way_dataReadRspTwo[31:0]
+@28
+TOP.VexRiscv.dataCache_1.way_tagReadRspTwoEnable
+@22
+TOP.VexRiscv.dataCache_1.way_tagReadRspTwo_address[26:0]
+@28
+TOP.VexRiscv.dataCache_1.way_tagReadRspTwo_dirty
+TOP.VexRiscv.dataCache_1.way_tagReadRspTwo_used
+@29
+TOP.VexRiscv.dataCache_1.way_dataReadRspOneAddress[2:0]
+@22
+TOP.VexRiscv.dataCache_1.way_dataReadRspOne[31:0]
+[pattern_trace] 1
+[pattern_trace] 0
