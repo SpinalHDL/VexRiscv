@@ -1,7 +1,7 @@
 package SpinalRiscv.Plugin
 
 import SpinalRiscv.Riscv._
-import SpinalRiscv.{Stageable, DecoderService, Riscv, VexRiscv}
+import SpinalRiscv._
 import spinal.core._
 import spinal.lib._
 
@@ -12,17 +12,20 @@ case class DataCacheConfig( cacheSize : Int,
                             addressWidth : Int,
                             cpuDataWidth : Int,
                             memDataWidth : Int,
-                            catchAccessFault : Boolean = false){
+                            catchAccessFault : Boolean = false,
+                            tagSizeShift : Int = 0){ //Used to force infering ram
   def burstSize = bytePerLine*8/memDataWidth
   val burstLength = bytePerLine/(memDataWidth/8)
   assert(catchAccessFault == false)
 }
 
+case class DataMmuConfig(dTlbSize : Int)
 
-class DBusCachedPlugin(config : DataCacheConfig)  extends Plugin[VexRiscv]{
+
+class DBusCachedPlugin(config : DataCacheConfig, mmuConfig : DataMmuConfig = null)  extends Plugin[VexRiscv]{
   import config._
   var dBus  : DataCacheMemBus = null
-
+  var mmuBus : MemoryTranslatorBus = null
   object MEMORY_ENABLE extends Stageable(Bool)
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
 
@@ -56,6 +59,9 @@ class DBusCachedPlugin(config : DataCacheConfig)  extends Plugin[VexRiscv]{
       List(LB, LH, LW, LBU, LHU, LWU).map(_ -> loadActions) ++
       List(SB, SH, SW).map(_ -> storeActions)
     )
+
+    if(mmuConfig != null)
+      mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(pipeline.memory,mmuConfig.dTlbSize)
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -98,6 +104,15 @@ class DBusCachedPlugin(config : DataCacheConfig)  extends Plugin[VexRiscv]{
       import memory._
       cache.io.cpu.memory.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.memory.isStuck := arbitration.isStuck
+      cache.io.cpu.memory.isRemoved := arbitration.removeIt
+      if(mmuBus != null){
+        cache.io.cpu.memory.mmuBus <> mmuBus
+      } else {
+        cache.io.cpu.memory.mmuBus.rsp.physicalAddress := cache.io.cpu.memory.mmuBus.cmd.virtualAddress
+        cache.io.cpu.memory.mmuBus.rsp.allowExecute := True
+        cache.io.cpu.memory.mmuBus.rsp.allowRead := True
+        cache.io.cpu.memory.mmuBus.rsp.allowWrite := True
+      }
     }
 
     writeBack plug new Area{
@@ -236,9 +251,12 @@ case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
 case class DataCacheCpuMemory(p : DataCacheConfig) extends Bundle with IMasterSlave{
   val isValid = Bool
   val isStuck = Bool
+  val isRemoved = Bool
+  val mmuBus  = MemoryTranslatorBus()
 
   override def asMaster(): Unit = {
-    out(isValid, isStuck)
+    out(isValid, isStuck, isRemoved)
+    slave(mmuBus)
   }
 }
 
@@ -435,7 +453,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     val request = requestIn.stage() //TODO FMAX half pipe ?
     request.ready := False
 
-    val buffer = Mem(Bits(p.memDataWidth bits),memTransactionPerLine << 1)  // WARNING << 1 could resolve cyclone II issue, //.add(new AttributeString("ramstyle","M4K"))
+    val buffer = Mem(Bits(p.memDataWidth bits),memTransactionPerLine << tagSizeShift)  // WARNING << tagSizeShift could resolve cyclone II issue, //.add(new AttributeString("ramstyle","M4K"))
 
     //Send line read commands to fill the buffer
     val readLineCmdCounter = Reg(UInt(log2Up(memTransactionPerLine + 1) bits)) init(0)
@@ -513,21 +531,23 @@ class DataCache(p : DataCacheConfig) extends Component{
 
   val stageA = new Area{
     val request = RegNextWhen(io.cpu.execute.args, !io.cpu.memory.isStuck)
+    io.cpu.memory.mmuBus.cmd.isValid := io.cpu.memory.isValid  //TODO filter request kind
+    io.cpu.memory.mmuBus.cmd.virtualAddress := request.address
   }
 
   val stageB = new Area {
     io.flushDone := False
 
     val request = RegNextWhen(stageA.request, !io.cpu.writeBack.isStuck)
-
-//    val waysHit = RegNextWhen(way.tagReadRspTwoRegIn.used && stageA.request.address(tagRange) === way.tagReadRspTwoRegIn.address,!io.cpu.writeBack.isStuck)  //Manual retiming
-    val waysHit = way.tagReadRspTwo.used && request.address(tagRange) === way.tagReadRspTwo.address
+    val mmuRsp = RegNextWhen(io.cpu.memory.mmuBus.rsp, !io.cpu.writeBack.isStuck)
+//    val waysHit = RegNextWhen(way.tagReadRspTwoRegIn.used && stageA.mmuRsp.physicalAddress(tagRange) === way.tagReadRspTwoRegIn.address,!io.cpu.writeBack.isStuck)  //Manual retiming
+    val waysHit = way.tagReadRspTwo.used && mmuRsp.physicalAddress(tagRange) === way.tagReadRspTwo.address
 
     //Evict the cache after reset
     val requestValid = io.cpu.writeBack.isValid || RegNextWhen(False, !io.cpu.writeBack.isStuck, True)
     request.kind init(DataCacheCpuCmdKind.EVICT)
     request.all init(True)
-    request.address init(0)
+    mmuRsp.physicalAddress init(0)
 
     io.cpu.writeBack.haltIt := requestValid
 
@@ -551,17 +571,17 @@ class DataCache(p : DataCacheConfig) extends Component{
         is(EVICT){
           when(request.all){
             tagsWriteCmd.valid := True
-            tagsWriteCmd.address := request.address(lineRange)
+            tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
             tagsWriteCmd.data.used := False
-            when(request.address(lineRange) =/= lineCount-1){
-              request.address.getDrivingReg(lineRange) := request.address(lineRange) + 1
+            when(mmuRsp.physicalAddress(lineRange) =/= lineCount-1){
+              mmuRsp.physicalAddress.getDrivingReg(lineRange) := mmuRsp.physicalAddress(lineRange) + 1
             }otherwise{
               io.cpu.writeBack.haltIt := False
             }
           }otherwise{
             when(waysHit) {
               tagsWriteCmd.valid := True
-              tagsWriteCmd.address := request.address(lineRange)
+              tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
               tagsWriteCmd.data.used := False
             }
             io.cpu.writeBack.haltIt := False
@@ -572,15 +592,15 @@ class DataCache(p : DataCacheConfig) extends Component{
 //            when(!flushAllState){
 //              victim.requestIn.valid := waysRead(0).tag.used && waysRead(0).tag.dirty
 //              victim.requestIn.way := writebackWayId
-//              victim.requestIn.address := writebackWayInfo.address @@ request.address(lineRange) @@ U((lineRange.low - 1 downto 0) -> false)
+//              victim.requestIn.address := writebackWayInfo.address @@ mmuRsp.physicalAddress(lineRange) @@ U((lineRange.low - 1 downto 0) -> false)
 //
 //              tagsWriteCmd.way := writebackWayId
-//              tagsWriteCmd.address := request.address(lineRange)
+//              tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
 //              tagsWriteCmd.data.used := False
 //
 //              when(!victim.requestIn.isStall) {
-//                request.address.getDrivingReg(lineRange) := request.address(lineRange) + 1
-//                flushAllDone :=  request.address(lineRange) === lineCount-1
+//                mmuRsp.physicalAddress.getDrivingReg(lineRange) := mmuRsp.physicalAddress(lineRange) + 1
+//                flushAllDone :=  mmuRsp.physicalAddress(lineRange) === lineCount-1
 //                flushAllState := True
 //                tagsWriteCmd.valid := True
 //              }
@@ -597,11 +617,11 @@ class DataCache(p : DataCacheConfig) extends Component{
 //
 //                victim.requestIn.valid := True
 //                victim.requestIn.way := writebackWayId
-//                victim.requestIn.address := writebackWayInfo.address @@ request.address(lineRange) @@ U((lineRange.low - 1 downto 0) -> false)
+//                victim.requestIn.address := writebackWayInfo.address @@ mmuRsp.physicalAddress(lineRange) @@ U((lineRange.low - 1 downto 0) -> false)
 //
 //                tagsWriteCmd.valid := victim.requestIn.ready
 //                tagsWriteCmd.way := writebackWayId
-//                tagsWriteCmd.address := request.address(lineRange)
+//                tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
 //                tagsWriteCmd.data.used := False
 //              } otherwise{
 //                io.cpu.memory.haltIt := False
@@ -615,7 +635,7 @@ class DataCache(p : DataCacheConfig) extends Component{
             val memCmdSent = RegInit(False)
             when(!victim.request.valid) { //Avoid mixing memory request while victim is pending
               io.mem.cmd.wr := request.wr
-              io.mem.cmd.address := request.address(tagRange.high downto wordRange.low) @@ U(0,wordRange.low bit)
+              io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0,wordRange.low bit)
               io.mem.cmd.mask := request.mask
               io.mem.cmd.data := request.data
               io.mem.cmd.length := 1
@@ -632,20 +652,20 @@ class DataCache(p : DataCacheConfig) extends Component{
             when(waysHit || !loadingNotDone){
               io.cpu.writeBack.haltIt := False
               dataWriteCmd.valid := request.wr
-              dataWriteCmd.address := request.address(lineRange.high downto wordRange.low)
+              dataWriteCmd.address := mmuRsp.physicalAddress(lineRange.high downto wordRange.low)
               dataWriteCmd.data := request.data
               dataWriteCmd.mask := request.mask
 
               tagsWriteCmd.valid := !loadingNotDone || request.wr
-              tagsWriteCmd.address := request.address(lineRange)
+              tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
               tagsWriteCmd.data.used := True
               tagsWriteCmd.data.dirty := request.wr
-              tagsWriteCmd.data.address := request.address(tagRange)
+              tagsWriteCmd.data.address := mmuRsp.physicalAddress(tagRange)
             } otherwise {
               val victimRequired = way.tagReadRspTwo.used && way.tagReadRspTwo.dirty
               loaderValid := loadingNotDone && !(victimNotSent && victim.request.isStall) //Additional condition used to be sure of that all previous victim are written into the  RAM
               victim.requestIn.valid := victimRequired && victimNotSent
-              victim.requestIn.address := way.tagReadRspTwo.address @@ request.address(lineRange) @@ U((lineRange.low - 1 downto 0) -> false)
+              victim.requestIn.address := way.tagReadRspTwo.address @@ mmuRsp.physicalAddress(lineRange) @@ U((lineRange.low - 1 downto 0) -> false)
             }
           }
         }
@@ -660,7 +680,7 @@ class DataCache(p : DataCacheConfig) extends Component{
   //The whole life of a loading task, the corresponding manager request is present
   val loader = new Area{
     val valid = RegNext(stageB.loaderValid) init(False)
-    val baseAddress =  stageB.request.address
+    val baseAddress =  stageB.mmuRsp.physicalAddress
 
     val memCmdSent = RegInit(False)
     when(valid && !memCmdSent) {

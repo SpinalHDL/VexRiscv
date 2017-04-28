@@ -79,7 +79,7 @@ class BranchPlugin(earlyBranch : Boolean,
   }
 
   override def build(pipeline: VexRiscv): Unit = prediction match {
-    case NONE => buildWithoutPrediction(pipeline)
+    case `NONE` => buildWithoutPrediction(pipeline)
     case `STATIC` => buildWithPrediction(pipeline)
     case `DYNAMIC` => buildWithPrediction(pipeline)
   }

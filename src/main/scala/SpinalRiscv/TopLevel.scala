@@ -203,24 +203,24 @@ object TopLevel {
 
       configTest.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, true),
-        new IBusSimplePlugin(
-          interfaceKeepData = true,
-          catchAccessFault = false
-        ),
-//        new IBusCachedPlugin(
-//          config = InstructionCacheConfig(
-//            cacheSize = 4096,
-//            bytePerLine =32,
-//            wayCount = 1,
-//            wrappedMemAccess = true,
-//            addressWidth = 32,
-//            cpuDataWidth = 32,
-//            memDataWidth = 32,
-//            catchAccessFault = false,
-//            asyncTagMemory = false,
-//            twoStageLogic = true
-//          )
+//        new IBusSimplePlugin(
+//          interfaceKeepData = true,
+//          catchAccessFault = false
 //        ),
+        new IBusCachedPlugin(
+          config = InstructionCacheConfig(
+            cacheSize = 4096,
+            bytePerLine =32,
+            wayCount = 1,
+            wrappedMemAccess = true,
+            addressWidth = 32,
+            cpuDataWidth = 32,
+            memDataWidth = 32,
+            catchAccessFault = false,
+            asyncTagMemory = false,
+            twoStageLogic = true
+          )
+        ),
 
 //        new DBusSimplePlugin(
 //          catchAddressMisaligned = false,
@@ -239,15 +239,26 @@ object TopLevel {
 //        ),
         new DBusCachedPlugin(
           config = new DataCacheConfig(
-            cacheSize         = 128,
+            cacheSize         = 4096,
             bytePerLine       = 32,
             wayCount          = 1,
             addressWidth      = 32,
             cpuDataWidth      = 32,
             memDataWidth      = 32,
-            catchAccessFault  = false
+            catchAccessFault  = false,
+            tagSizeShift      = 2
+          ),
+          mmuConfig = DataMmuConfig(
+            dTlbSize = 6
           )
         ),
+
+        new MemoryTranslatorPlugin(
+          tlbSize = 32,
+          exceptionCode = 13,
+          mmuRange = !_(31)
+        ),
+        new MachineCsr(csrConfigAll),
         new DecoderSimplePlugin(
           catchIllegalInstruction = false
         ),
@@ -264,10 +275,10 @@ object TopLevel {
         //        new HazardSimplePlugin(true, true, true, true),
         //        new HazardSimplePlugin(false, true, false, true),
         new HazardSimplePlugin(
-          bypassExecute           = false,
-          bypassMemory            = false,
-          bypassWriteBack         = false,
-          bypassWriteBackBuffer   = false,
+          bypassExecute           = true,
+          bypassMemory            = true,
+          bypassWriteBack         = true,
+          bypassWriteBackBuffer   = true,
           pessimisticUseSrc       = false,
           pessimisticWriteRegFile = false,
           pessimisticAddressMatch = false
@@ -282,9 +293,9 @@ object TopLevel {
         )
       )
 
-      val toplevel = new VexRiscv(configFull)
+//      val toplevel = new VexRiscv(configFull)
 //      val toplevel = new VexRiscv(configLight)
-//      val toplevel = new VexRiscv(configTest)
+      val toplevel = new VexRiscv(configTest)
       toplevel.decode.input(toplevel.config.INSTRUCTION).addAttribute(Verilator.public)
       toplevel.decode.input(toplevel.config.PC).addAttribute(Verilator.public)
       toplevel.decode.arbitration.isValid.addAttribute(Verilator.public)

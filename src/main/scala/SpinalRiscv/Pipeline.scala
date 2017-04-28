@@ -29,6 +29,7 @@ trait Pipeline {
   }
 
   def build(): Unit ={
+    plugins.foreach(_.pipeline = this.asInstanceOf[T])
     plugins.foreach(_.setup(this.asInstanceOf[T]))
 
     //Build plugins
