@@ -1,11 +1,12 @@
 IBUS=IBUS_CACHED
 DBUS=DBUS_CACHED
-TRACE=no
+TRACE=yes
 TRACE_START=0
 CSR=no
+MMU=yes
 DHRYSTONE=yes
 FREE_RTOS=no
-REDO=10
+REDO=1
 REF=no
 TRACE_WITH_TIME=no
 REF_TIME=no
@@ -32,6 +33,10 @@ endif
 
 ifeq ($(REF_TIME),yes)
 	ADDCFLAGS += -CFLAGS -DREF_TIME
+endif
+
+ifeq ($(MMU),yes)
+	ADDCFLAGS += -CFLAGS -DMMU
 endif
 
 ifeq ($(REF),yes)

@@ -256,7 +256,7 @@ object TopLevel {
         new MemoryTranslatorPlugin(
           tlbSize = 32,
           exceptionCode = 13,
-          mmuRange = !_(31)
+          mmuRange = _(31 downto 28) === 0xC
         ),
         new MachineCsr(csrConfigAll),
         new DecoderSimplePlugin(

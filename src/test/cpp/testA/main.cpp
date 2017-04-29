@@ -194,7 +194,10 @@ public:
 
 
 	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
-		if(addr % 4 != 0) cout << "Warning, unaligned IBusAccess : " << addr << endl;
+		if(addr % 4 != 0) {
+			cout << "Warning, unaligned IBusAccess : " << addr << endl;
+			fail();
+		}
 		*data =     (  (mem[addr + 0] << 0)
 					 | (mem[addr + 1] << 8)
 					 | (mem[addr + 2] << 16)
@@ -826,6 +829,11 @@ int main(int argc, char **argv, char **env) {
 		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 		8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,5,17,1 };
 		redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).run(4e3);)
+		#endif
+		#ifdef MMU
+		uint32_t mmuRef[] = {1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
+			13, 0xC4000000,0x33333333, 6};
+		redo(REDO,TestX28("mmu",mmuRef, sizeof(mmuRef)/4).run(4e3);)
 		#endif
 		#endif
 
