@@ -60,22 +60,43 @@ object TopLevel {
         wfiGen         = true
       )
 
-//      val csrConfig = MachineCsrConfig(
-//        mvendorid      = null,
-//        marchid        = null,
-//        mimpid         = null,
-//        mhartid        = null,
-//        misaExtensionsInit = 66,
-//        misaAccess     = CsrAccess.NONE,
-//        mtvecAccess    = CsrAccess.NONE,
-//        mtvecInit      = 0x00000020l,
-//        mepcAccess     = CsrAccess.READ_ONLY,
-//        mscratchGen    = false,
-//        mcauseAccess   = CsrAccess.READ_ONLY,
-//        mbadaddrAccess = CsrAccess.NONE,
-//        mcycleAccess   = CsrAccess.NONE,
-//        minstretAccess = CsrAccess.NONE
-//      )
+      val csrConfigSmall = MachineCsrConfig(
+        mvendorid      = null,
+        marchid        = null,
+        mimpid         = null,
+        mhartid        = null,
+        misaExtensionsInit = 66,
+        misaAccess     = CsrAccess.NONE,
+        mtvecAccess    = CsrAccess.NONE,
+        mtvecInit      = 0x00000020l,
+        mepcAccess     = CsrAccess.READ_WRITE,
+        mscratchGen    = false,
+        mcauseAccess   = CsrAccess.READ_ONLY,
+        mbadaddrAccess = CsrAccess.READ_ONLY,
+        mcycleAccess   = CsrAccess.NONE,
+        minstretAccess = CsrAccess.NONE,
+        ecallGen       = false,
+        wfiGen         = false
+      )
+
+      val csrConfigSmallest = MachineCsrConfig(
+        mvendorid      = null,
+        marchid        = null,
+        mimpid         = null,
+        mhartid        = null,
+        misaExtensionsInit = 66,
+        misaAccess     = CsrAccess.NONE,
+        mtvecAccess    = CsrAccess.NONE,
+        mtvecInit      = 0x00000020l,
+        mepcAccess     = CsrAccess.READ_ONLY,
+        mscratchGen    = false,
+        mcauseAccess   = CsrAccess.READ_ONLY,
+        mbadaddrAccess = CsrAccess.NONE,
+        mcycleAccess   = CsrAccess.NONE,
+        minstretAccess = CsrAccess.NONE,
+        ecallGen       = false,
+        wfiGen         = false
+      )
 
       configFull.plugins ++= List(
         new PcManagerSimplePlugin(0x00000000l, false),
@@ -109,7 +130,8 @@ object TopLevel {
             addressWidth      = 32,
             cpuDataWidth      = 32,
             memDataWidth      = 32,
-            catchAccessFault  = false
+            catchAccessFault  = false,
+            catchMemoryTranslationMiss = false
           )
         ),
         new DecoderSimplePlugin(
@@ -246,19 +268,20 @@ object TopLevel {
             cpuDataWidth      = 32,
             memDataWidth      = 32,
             catchAccessFault  = false,
+            catchMemoryTranslationMiss = true,
             tagSizeShift      = 2
           ),
-          mmuConfig = DataMmuConfig(
-            dTlbSize = 6
+          askMemoryTranslation = true,
+          memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+            portTlbSize = 6
           )
         ),
 
         new MemoryTranslatorPlugin(
           tlbSize = 32,
-          exceptionCode = 13,
           mmuRange = _(31 downto 28) === 0xC
         ),
-        new MachineCsr(csrConfigAll),
+        new MachineCsr(csrConfigSmall),
         new DecoderSimplePlugin(
           catchIllegalInstruction = false
         ),
@@ -275,10 +298,10 @@ object TopLevel {
         //        new HazardSimplePlugin(true, true, true, true),
         //        new HazardSimplePlugin(false, true, false, true),
         new HazardSimplePlugin(
-          bypassExecute           = true,
-          bypassMemory            = true,
-          bypassWriteBack         = true,
-          bypassWriteBackBuffer   = true,
+          bypassExecute           = false,
+          bypassMemory            = false,
+          bypassWriteBack         = false,
+          bypassWriteBackBuffer   = false,
           pessimisticUseSrc       = false,
           pessimisticWriteRegFile = false,
           pessimisticAddressMatch = false

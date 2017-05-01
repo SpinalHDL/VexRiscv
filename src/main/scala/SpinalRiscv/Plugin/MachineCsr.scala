@@ -245,7 +245,6 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         pipelineLiberator.enable setWhen(pipelineHasException)
 
         val groupedByStage = exceptionPortsInfos.map(_.stage).distinct.map(s => {
-          assert(s != writeBack)
           val stagePortsInfos = exceptionPortsInfos.filter(_.stage == s).sortWith(_.priority > _.priority)
           val stagePort = stagePortsInfos.length match{
             case 1 => stagePortsInfos.head.port
@@ -309,8 +308,8 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
           True  -> ((mip.MEIP && mie.MEIE) ? U(11) | ((mip.MSIP && mie.MSIE) ? U(3) | U(7))),
           False -> (if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionContext.code else U(0))
         )
-        when(exception){
-          mbadaddr := exceptionPortCtrl.exceptionContext.badAddr
+        when(RegNext(exception)){
+          mbadaddr := (if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionContext.badAddr else U(0))
         }
       }
 
@@ -343,17 +342,22 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
 
         val imm = IMM(input(INSTRUCTION))
 
-        val writeEnable = arbitration.isValid && !arbitration.isStuckByOthers && !arbitration.removeIt && input(IS_CSR) &&
-                          (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
-                          || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
 
 
         val writeSrc = input(INSTRUCTION)(14) ? imm.z.asBits.resized | input(SRC1)
         val readData = B(0, 32 bits)
+        val readDataReg = RegNext(readData)
+        val readDataRegValid = Reg(Bool) setWhen(arbitration.isValid) clearWhen(!arbitration.isStuck)
         val writeData = input(INSTRUCTION)(13).mux(
           False -> writeSrc,
-          True -> Mux(input(INSTRUCTION)(12), readData & ~writeSrc, readData | writeSrc)
+          True -> Mux(input(INSTRUCTION)(12), readDataReg & ~writeSrc, readDataReg | writeSrc)
         )
+        val writeInstruction = arbitration.isValid && input(IS_CSR)
+        (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
+          || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
+
+        arbitration.haltIt setWhen(writeInstruction && !readDataRegValid)
+        val writeEnable = writeInstruction && !arbitration.isStuckByOthers && !arbitration.removeIt && readDataRegValid
 
         when(arbitration.isValid && input(IS_CSR)) {
           output(REGFILE_WRITE_DATA) := readData
@@ -361,20 +365,20 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
 
 
         //Translation of the csrMapping into real logic
-        val csrAddress = input(INSTRUCTION)(csrRange)
+        switch(input(INSTRUCTION)(csrRange)) {
+          for ((address, jobs) <- csrMapping.mapping) {
+            is(address) {
+              when(writeEnable) {
+                for (element <- jobs) element match {
+                  case element: CsrWrite => element.that.assignFromBits(writeData(element.bitOffset, element.that.getBitsWidth bits))
+                  case _ =>
+                }
+              }
 
-        for ((address, jobs) <- csrMapping.mapping) {
-          when(csrAddress === address) {
-            when(writeEnable) {
               for (element <- jobs) element match {
-                case element: CsrWrite => element.that.assignFromBits(writeData(element.bitOffset, element.that.getBitsWidth bits))
+                case element: CsrRead if element.that.getBitsWidth != 0 => readData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
                 case _ =>
               }
-            }
-
-            for (element <- jobs) element match {
-              case element: CsrRead if element.that.getBitsWidth != 0 => readData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
-              case _ =>
             }
           }
         }

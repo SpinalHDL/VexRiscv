@@ -29,6 +29,7 @@ case class MemoryTranslatorCmd() extends Bundle{
 case class MemoryTranslatorRsp() extends Bundle{
   val physicalAddress = UInt(32 bits)
   val allowRead, allowWrite, allowExecute = Bool
+  val miss = Bool
 }
 
 case class MemoryTranslatorBus() extends Bundle with IMasterSlave{
@@ -42,5 +43,5 @@ case class MemoryTranslatorBus() extends Bundle with IMasterSlave{
 }
 
 trait MemoryTranslator{
-  def newTranslationPort(stage : Stage, cacheSize : Int) : MemoryTranslatorBus
+  def newTranslationPort(stage : Stage, args : Any) : MemoryTranslatorBus
 }
