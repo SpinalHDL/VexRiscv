@@ -5,8 +5,7 @@ import spinal.core._
 import spinal.lib._
 import scala.collection.mutable.ArrayBuffer
 
-case class VexRiscvConfig(pcWidth : Int){
-  val plugins = ArrayBuffer[Plugin[VexRiscv]]()
+case class VexRiscvConfig(plugins : Seq[Plugin[VexRiscv]]){
 
   //Default Stageables
   object BYPASSABLE_EXECUTE_STAGE   extends Stageable(Bool)
@@ -16,8 +15,8 @@ case class VexRiscvConfig(pcWidth : Int){
   object REG1_USE extends Stageable(Bool)
   object REG2_USE extends Stageable(Bool)
   object RESULT extends Stageable(UInt(32 bits))
-  object PC extends Stageable(UInt(pcWidth bits))
-  object PC_CALC_WITHOUT_JUMP extends Stageable(UInt(pcWidth bits))
+  object PC extends Stageable(UInt(32 bits))
+  object PC_CALC_WITHOUT_JUMP extends Stageable(UInt(32 bits))
   object INSTRUCTION extends Stageable(Bits(32 bits))
   object INSTRUCTION_READY extends Stageable(Bool)
   object INSTRUCTION_ANTICIPATED extends Stageable(Bits(32 bits))

@@ -34,7 +34,7 @@ class PcManagerSimplePlugin(resetVector : BigInt, fastPcCalculation : Boolean) e
       arbitration.isValid := True
 
       //PC calculation without Jump
-      val pcReg = Reg(UInt(pcWidth bits)) init(resetVector) addAttribute(Verilator.public)
+      val pcReg = Reg(UInt(32 bits)) init(resetVector) addAttribute(Verilator.public)
       val inc = RegInit(False)
       val pcBeforeJumps = if(fastPcCalculation){
         val pcPlus4 = pcReg + U(4)
@@ -45,7 +45,7 @@ class PcManagerSimplePlugin(resetVector : BigInt, fastPcCalculation : Boolean) e
       }
 
       insert(PC_CALC_WITHOUT_JUMP) := pcBeforeJumps
-      val pc = UInt(pcWidth bits)
+      val pc = UInt(32 bits)
       pc := input(PC_CALC_WITHOUT_JUMP)
 
       val samplePcNext = False //TODO FMAX
@@ -56,7 +56,7 @@ class PcManagerSimplePlugin(resetVector : BigInt, fastPcCalculation : Boolean) e
         val valids = sortedByStage.map(_.interface.valid)
         val pcs = sortedByStage.map(_.interface.payload)
 
-        val pcLoad = Flow(UInt(pcWidth bits))
+        val pcLoad = Flow(UInt(32 bits))
         pcLoad.valid := jumpInfos.map(_.interface.valid).orR
         pcLoad.payload := MuxOH(OHMasking.first(valids.asBits), pcs)
 
