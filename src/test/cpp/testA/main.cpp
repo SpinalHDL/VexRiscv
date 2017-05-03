@@ -160,6 +160,7 @@ public:
 	VerilatedVcdC* tfp;
 	#endif
 
+	bool withInstructionReadCheck = true;
 	void setIStall(bool enable) { iStall = enable; }
 	void setDStall(bool enable) { dStall = enable; }
 
@@ -269,6 +270,7 @@ public:
 	virtual void pass(){ throw success();}
 	virtual void fail(){ throw std::exception();}
     virtual void fillSimELements();
+    Workspace* noInstructionReadCheck(){withInstructionReadCheck = false; return this;}
 	void dump(int i){
 		#ifdef TRACE
 		if(i/2 >= TRACE_START) tfp->dump(i);
@@ -348,11 +350,13 @@ public:
 
 				for(SimElement* simElement : simElements) simElement->preCycle();
 
-				if(top->VexRiscv->decode_arbitration_isValid && !top->VexRiscv->decode_arbitration_haltIt){
-					uint32_t expectedData;
-					bool dummy;
-					iBusAccess(top->VexRiscv->decode_PC, &expectedData, &dummy);
-					assertEq(top->VexRiscv->decode_INSTRUCTION,expectedData);
+				if(withInstructionReadCheck){
+					if(top->VexRiscv->decode_arbitration_isValid && !top->VexRiscv->decode_arbitration_haltIt){
+						uint32_t expectedData;
+						bool dummy;
+						iBusAccess(top->VexRiscv->decode_PC, &expectedData, &dummy);
+						assertEq(top->VexRiscv->decode_INSTRUCTION,expectedData);
+					}
 				}
 
 				checks();
@@ -832,8 +836,10 @@ int main(int argc, char **argv, char **env) {
 		#endif
 		#ifdef MMU
 		uint32_t mmuRef[] = {1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
-			13, 0xC4000000,0x33333333, 6};
-		redo(REDO,TestX28("mmu",mmuRef, sizeof(mmuRef)/4).run(4e3);)
+			13, 0xC4000000,0x33333333, 6,7,
+			1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
+			13, 0xC4000000,0x33333333, 6,7};
+		redo(REDO,TestX28("mmu",mmuRef, sizeof(mmuRef)/4).noInstructionReadCheck()->run(4e3);)
 		#endif
 		#endif
 

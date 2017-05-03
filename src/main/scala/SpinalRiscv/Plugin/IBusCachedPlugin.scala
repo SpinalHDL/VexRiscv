@@ -13,28 +13,36 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    cpuDataWidth : Int,
                                    memDataWidth : Int,
                                    catchAccessFault : Boolean,
+                                   catchMemoryTranslationMiss : Boolean,
                                    asyncTagMemory : Boolean,
                                    twoStageLogic : Boolean){
   def burstSize = bytePerLine*8/memDataWidth
+  def catchSomething = catchAccessFault || catchMemoryTranslationMiss
+
 }
 
 
 
-class IBusCachedPlugin(config : InstructionCacheConfig) extends Plugin[VexRiscv] {
+class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : Boolean = false, memoryTranslatorPortConfig : Any = null) extends Plugin[VexRiscv] {
   import config._
-  var iBus  : InstructionCacheMemBus = null
+  assert(twoStageLogic || !askMemoryTranslation)
 
+  var iBus  : InstructionCacheMemBus = null
+  var mmuBus : MemoryTranslatorBus = null
+  var decodeExceptionPort : Flow[ExceptionCause] = null
 
 
   object IBUS_ACCESS_ERROR extends Stageable(Bool)
-  var decodeExceptionPort : Flow[ExceptionCause] = null
   override def setup(pipeline: VexRiscv): Unit = {
     pipeline.unremovableStages += pipeline.prefetch
 
-    if(catchAccessFault) {
+    if(catchSomething) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1)
     }
+
+    if(askMemoryTranslation != null)
+      mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(pipeline.fetch, memoryTranslatorPortConfig)
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -62,6 +70,15 @@ class IBusCachedPlugin(config : InstructionCacheConfig) extends Plugin[VexRiscv]
       fetch.insert(INSTRUCTION) := cache.io.cpu.fetch.data
       decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck,decode.input(INSTRUCTION),fetch.output(INSTRUCTION))
       decode.insert(INSTRUCTION_READY) := True
+    }else {
+      if (mmuBus != null) {
+        cache.io.cpu.fetch.mmuBus <> mmuBus
+      } else {
+        cache.io.cpu.fetch.mmuBus.rsp.physicalAddress := cache.io.cpu.fetch.mmuBus.cmd.virtualAddress
+        cache.io.cpu.fetch.mmuBus.rsp.allowExecute := True
+        cache.io.cpu.fetch.mmuBus.rsp.allowRead := True
+        cache.io.cpu.fetch.mmuBus.rsp.allowWrite := True
+      }
     }
 
     cache.io.flush.cmd.valid := False
@@ -77,12 +94,17 @@ class IBusCachedPlugin(config : InstructionCacheConfig) extends Plugin[VexRiscv]
     }
 
 
-    if(catchAccessFault){
-      if(!twoStageLogic) fetch.insert(IBUS_ACCESS_ERROR)  := cache.io.cpu.fetch.error
-      if( twoStageLogic) decode.insert(IBUS_ACCESS_ERROR) := cache.io.cpu.decode.error
+    if(catchSomething){
+      if(catchAccessFault) {
+        if (!twoStageLogic) fetch.insert(IBUS_ACCESS_ERROR) := cache.io.cpu.fetch.error
+        if (twoStageLogic) decode.insert(IBUS_ACCESS_ERROR) := cache.io.cpu.decode.error
+      }
 
-      decodeExceptionPort.valid   := decode.arbitration.isValid && decode.input(IBUS_ACCESS_ERROR)
-      decodeExceptionPort.code    := 1
+      val accessFault = if(catchAccessFault) decode.input(IBUS_ACCESS_ERROR) else False
+      val mmuMiss = if(catchMemoryTranslationMiss) cache.io.cpu.decode.mmuMiss else False
+
+      decodeExceptionPort.valid   := decode.arbitration.isValid && (accessFault || mmuMiss)
+      decodeExceptionPort.code    := mmuMiss ? U(14) | 1
       decodeExceptionPort.badAddr := decode.input(PC)
     }
   }
@@ -110,11 +132,13 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
   val address = UInt(p.addressWidth bit)
   val data    = if(!p.twoStageLogic) Bits(32 bit) else null
   val error   = if(!p.twoStageLogic && p.catchAccessFault) Bool else null
+  val mmuBus  = if(p.twoStageLogic) MemoryTranslatorBus() else null
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, address)
     outWithNull(isStuckByOthers)
     inWithNull(error,data,haltIt)
+    slaveWithNull(mmuBus)
   }
 }
 
@@ -127,11 +151,12 @@ case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle 
   val data    = Bits(32 bit)
   val dataAnticipated = Bits(32 bits)
   val error   = if(p.catchAccessFault) Bool else null
+  val mmuMiss   = if(p.catchMemoryTranslationMiss) Bool else null
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, address)
     in(haltIt, data, dataAnticipated)
-    if(p.catchAccessFault) in(error)
+    inWithNull(error,mmuMiss)
   }
 }
 
@@ -345,10 +370,6 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
         waysHitValid := True
         if(catchAccessFault) waysHitError := tag.error
       }
-
-//      when(lineLoader.request.valid && lineLoader.request.addr(lineRange) === io.cpu.fetch.address(lineRange)){
-//        waysHitValid := False //Not applicable to multi way
-//      }
     }
 
 
@@ -358,18 +379,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     if(catchAccessFault) io.cpu.fetch.error := waysRead(0).tag.error
     lineLoader.requestIn.valid := io.cpu.fetch.isValid && !hit //TODO avoid duplicated request
     lineLoader.requestIn.addr  := io.cpu.fetch.address
-
-    //    val loaderHitValid = lineLoader.request.valid && lineLoader.request.addr(tagLineRange) === io.cpu.fetch.address(tagLineRange)
-//    val loaderHitReady = lineLoader.loadedWordsReadable(io.cpu.fetch.address(wordRange))
-//
-//
-//    io.cpu.fetch.haltIt := io.cpu.fetch.isValid && !(waysHitValid || (loaderHitValid && loaderHitReady))
-//    io.cpu.fetch.data := waysHitWord //TODO
-//    if(catchAccessFault) io.cpu.fetch.error := (waysHitValid && waysHitError) ||  (loaderHitValid && loaderHitReady && lineLoader.loadingWithErrorReg)
-//    lineLoader.requestIn.valid := io.cpu.fetch.isValid && !io.cpu.fetch.isStuckByOthers && !waysHitValid
-//    lineLoader.requestIn.addr := io.cpu.fetch.address
   } else new Area{
-
     //Long readValidPath
 //    def writeFirstMemWrap[T <: Data](readValid : Bool, readAddress : UInt, lastAddress : UInt, readData : T,writeValid : Bool, writeAddress : UInt, writeData : T) : T = {
 //      val hit = writeValid && (readValid ? readAddress  | lastAddress) === writeAddress
@@ -458,17 +468,22 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       writeData = lineLoader.waysDatasWritePort.data
     )
 
-    val hit = tag.valid && tag.address === io.cpu.decode.address(tagRange) && !(tag.loading && !lineLoader.loadedWords(io.cpu.decode.address(wordRange)))
-//    val hit = tag.hit && !(tag.loading && !lineLoader.loadedWords(io.cpu.decode.address(wordRange)))
+    io.cpu.fetch.mmuBus.cmd.isValid := io.cpu.fetch.isValid
+    io.cpu.fetch.mmuBus.cmd.virtualAddress := io.cpu.fetch.address
+    val mmuRsp = RegNextWhen(io.cpu.fetch.mmuBus.rsp,!io.cpu.decode.isStuck)
+
+    val hit = tag.valid && tag.address === mmuRsp.physicalAddress(tagRange) && !(tag.loading && !lineLoader.loadedWords(mmuRsp.physicalAddress(wordRange)))
+//    val hit = tag.hit && !(tag.loading && !lineLoader.loadedWords(mmuRsp.physicalAddress(wordRange)))
 
     io.cpu.decode.haltIt  := io.cpu.decode.isValid && !hit //TODO PERF not halit it when removed, Should probably be applyed in many other places
     io.cpu.decode.data    := data
 //    io.cpu.decode.dataAnticipated := dataRegEn ? dataRegIn | data
     io.cpu.decode.dataAnticipated := io.cpu.decode.isStuck ? Mux(dataPostWrite,lineLoader.waysDatasWritePort.data,data) | Mux(dataPreWrite,lineLoader.waysDatasWritePort.data,memRead.data)
     if(catchAccessFault) io.cpu.decode.error := tag.error
+    if(catchMemoryTranslationMiss) io.cpu.decode.mmuMiss := mmuRsp.miss
 
-    lineLoader.requestIn.valid := io.cpu.decode.isValid && !hit //TODO avoid duplicated request
-    lineLoader.requestIn.addr  := io.cpu.decode.address
+    lineLoader.requestIn.valid := io.cpu.decode.isValid && !hit && !mmuRsp.miss//TODO avoid duplicated request
+    lineLoader.requestIn.addr  := mmuRsp.physicalAddress
   }
 
   io.flush.cmd.ready := !(lineLoader.request.valid || io.cpu.fetch.isValid)

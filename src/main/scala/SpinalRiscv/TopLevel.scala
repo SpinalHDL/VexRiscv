@@ -236,8 +236,13 @@ object TopLevel {
               cpuDataWidth = 32,
               memDataWidth = 32,
               catchAccessFault = false,
+              catchMemoryTranslationMiss = true,
               asyncTagMemory = false,
               twoStageLogic = true
+            ),
+            askMemoryTranslation = true,
+            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+              portTlbSize = 4
             )
           ),
 
