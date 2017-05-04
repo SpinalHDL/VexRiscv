@@ -125,7 +125,11 @@ class DBusCachedPlugin(config : DataCacheConfig, askMemoryTranslation : Boolean 
       import writeBack._
       cache.io.cpu.writeBack.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
-      if(catchSomething) cache.io.cpu.writeBack.exceptionBus <> exceptionBus
+      if(catchSomething) {
+        exceptionBus.valid := cache.io.cpu.writeBack.mmuMiss
+        exceptionBus.badAddr := cache.io.cpu.writeBack.badAddr
+        exceptionBus.code  := 13
+      }
       arbitration.haltIt.setWhen(cache.io.cpu.writeBack.haltIt)
 
       val rspShifted = Bits(32 bits)
@@ -145,9 +149,7 @@ class DBusCachedPlugin(config : DataCacheConfig, askMemoryTranslation : Boolean 
       when(arbitration.isValid && input(MEMORY_ENABLE)) {
         input(REGFILE_WRITE_DATA) := rspFormated
       }
-
-      //assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
-    }
+   }
   }
 }
 
@@ -273,12 +275,14 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   val isStuck = Bool
   val haltIt = Bool
   val data = Bits(p.cpuDataWidth bit)
-  val exceptionBus = if(p.catchSomething) Flow(ExceptionCause()) else null
+  val mmuMiss = Bool
+  val badAddr = UInt(32 bits)
+//  val exceptionBus = if(p.catchSomething) Flow(ExceptionCause()) else null
 
   override def asMaster(): Unit = {
     out(isValid,isStuck)
-    in(haltIt, data)
-    slaveWithNull(exceptionBus)
+    in(haltIt, data, mmuMiss, badAddr)
+
   }
 }
 
@@ -575,11 +579,10 @@ class DataCache(p : DataCacheConfig) extends Component{
     val victimNotSent  = RegInit(False) clearWhen(victim.requestIn.ready) setWhen(!io.cpu.memory.isStuck)
     val loadingNotDone = RegInit(False) clearWhen(loaderReady) setWhen(!io.cpu.memory.isStuck)
 
-    if(catchSomething){
-      io.cpu.writeBack.exceptionBus.valid := False
-      io.cpu.writeBack.exceptionBus.code := 13
-      io.cpu.writeBack.exceptionBus.badAddr := request.address
-    }
+
+    io.cpu.writeBack.mmuMiss := False
+    io.cpu.writeBack.badAddr := request.address
+
 
     when(requestValid) {
       switch(request.kind) {
@@ -647,7 +650,7 @@ class DataCache(p : DataCacheConfig) extends Component{
 //        }
         is(MEMORY) {
           if (catchMemoryTranslationMiss) {
-            io.cpu.writeBack.exceptionBus.valid := mmuRsp.miss
+            io.cpu.writeBack.mmuMiss := mmuRsp.miss
           }
           when(Bool(!catchMemoryTranslationMiss) || !mmuRsp.miss) {
             when(request.bypass) {
