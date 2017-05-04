@@ -66,7 +66,7 @@ class MemoryTranslatorPlugin(tlbSize : Int, mmuRange : UInt => Bool) extends Plu
         val cacheHits = cache.map(line => line.valid && line.virtualAddress === port.bus.cmd.virtualAddress(31 downto 12))
         val cacheHit = cacheHits.asBits.orR
         val cacheLine = MuxOH(cacheHits, cache)
-        val isInMmuRange = mmuRange(port.bus.cmd.virtualAddress)
+        val isInMmuRange = mmuRange(port.bus.cmd.virtualAddress) && !port.bus.cmd.bypass
 
         val sharedMiss = RegInit(False)
         val sharedIterator = Reg(UInt(log2Up(tlbSize + 1) bits))

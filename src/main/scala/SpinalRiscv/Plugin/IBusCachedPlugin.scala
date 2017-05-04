@@ -41,7 +41,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
       decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1)
     }
 
-    if(askMemoryTranslation != null)
+    if(askMemoryTranslation)
       mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(pipeline.fetch, memoryTranslatorPortConfig)
   }
 
@@ -169,18 +169,6 @@ case class InstructionCacheCpuBus(p : InstructionCacheConfig) extends Bundle wit
     master(prefetch)
     master(fetch)
     if(p.twoStageLogic) master(decode)
-  }
-}
-
-case class InstructionCacheTranslationBus(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
-  val virtualAddress  = UInt(32 bits)
-  val physicalAddress = UInt(32 bits)
-  val error           = if(p.catchAccessFault) Bool else null
-
-  override def asMaster(): Unit = {
-    out(virtualAddress)
-    in(physicalAddress)
-    if(p.catchAccessFault) in(error)
   }
 }
 
@@ -470,6 +458,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
     io.cpu.fetch.mmuBus.cmd.isValid := io.cpu.fetch.isValid
     io.cpu.fetch.mmuBus.cmd.virtualAddress := io.cpu.fetch.address
+    io.cpu.fetch.mmuBus.cmd.bypass := False
     val mmuRsp = RegNextWhen(io.cpu.fetch.mmuBus.rsp,!io.cpu.decode.isStuck)
 
     val hit = tag.valid && tag.address === mmuRsp.physicalAddress(tagRange) && !(tag.loading && !lineLoader.loadedWords(mmuRsp.physicalAddress(wordRange)))
