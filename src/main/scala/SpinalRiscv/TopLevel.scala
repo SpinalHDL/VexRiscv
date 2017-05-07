@@ -176,7 +176,7 @@ object TopLevel {
   //        new HazardSimplePlugin(false, false, false, false),
           new MulPlugin,
           new DivPlugin,
-          new MachineCsr(csrConfigAll),
+          new CsrPlugin(csrConfigAll),
           new BranchPlugin(
             earlyBranch = false,
             catchAddressMisaligned = true,
@@ -304,7 +304,7 @@ object TopLevel {
             virtualRange = _(31 downto 28) === 0xC,
             ioRange      = _(31 downto 28) === 0xF
           ),
-          new MachineCsr(csrConfigSmall),
+          new CsrPlugin(csrConfigSmall),
           new DecoderSimplePlugin(
             catchIllegalInstruction = false
           ),

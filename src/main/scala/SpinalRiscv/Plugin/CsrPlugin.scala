@@ -62,7 +62,7 @@ case class CsrMapping(){
 
 
 
-class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService{
+class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService{
   import config._
   import CsrAccess._
 
