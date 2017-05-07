@@ -562,12 +562,14 @@ public:
 	virtual void postCycle(){
 		if(pendingCount != 0 && !wr && (!ws->dStall || VL_RANDOM_I(7) < 100)){
 			ws->dBusAccess(address,0,2,0,&top->dBus_rsp_payload_data,&error_next);
+			top->dBus_rsp_payload_error = error_next;
 			top->dBus_rsp_valid = 1;
 			address += 4;
 			pendingCount--;
 		} else{
 			top->dBus_rsp_valid = 0;
 			top->dBus_rsp_payload_data = VL_RANDOM_I(32);
+			top->dBus_rsp_payload_error = VL_RANDOM_I(1);
 		}
 
 		top->dBus_cmd_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1) && (pendingCount == 0 || wr);

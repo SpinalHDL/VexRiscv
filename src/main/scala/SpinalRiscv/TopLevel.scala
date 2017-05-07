@@ -129,7 +129,9 @@ object TopLevel {
               addressWidth      = 32,
               cpuDataWidth      = 32,
               memDataWidth      = 32,
-              catchAccessFault  = false,
+              catchAccessError  = true,
+              catchIllegal      = true,
+              catchUnaligned    = true,
               catchMemoryTranslationMiss = false
             )
           ),
@@ -269,7 +271,9 @@ object TopLevel {
               addressWidth      = 32,
               cpuDataWidth      = 32,
               memDataWidth      = 32,
-              catchAccessFault  = false,
+              catchAccessError  = true,
+              catchIllegal      = true,
+              catchUnaligned    = true,
               catchMemoryTranslationMiss = true,
               tagSizeShift      = 2
             ),
@@ -281,7 +285,8 @@ object TopLevel {
 
           new MemoryTranslatorPlugin(
             tlbSize = 32,
-            mmuRange = _(31 downto 28) === 0xC
+            virtualRange = _(31 downto 28) === 0xC,
+            ioRange      = _(31 downto 28) === 0xF
           ),
           new MachineCsr(csrConfigSmall),
           new DecoderSimplePlugin(

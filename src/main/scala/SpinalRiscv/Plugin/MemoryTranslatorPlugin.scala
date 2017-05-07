@@ -9,7 +9,9 @@ case class MemoryTranslatorPort(bus : MemoryTranslatorBus, stage : Stage, args :
 
 case class MemoryTranslatorPortConfig(portTlbSize : Int)
 
-class MemoryTranslatorPlugin(tlbSize : Int, mmuRange : UInt => Bool) extends Plugin[VexRiscv] with MemoryTranslator {
+class MemoryTranslatorPlugin(tlbSize : Int,
+                             virtualRange : UInt => Bool,
+                             ioRange : UInt => Bool) extends Plugin[VexRiscv] with MemoryTranslator {
   assert(isPow2(tlbSize))
 
   val portsInfo = ArrayBuffer[MemoryTranslatorPort]()
@@ -66,7 +68,7 @@ class MemoryTranslatorPlugin(tlbSize : Int, mmuRange : UInt => Bool) extends Plu
         val cacheHits = cache.map(line => line.valid && line.virtualAddress === port.bus.cmd.virtualAddress(31 downto 12))
         val cacheHit = cacheHits.asBits.orR
         val cacheLine = MuxOH(cacheHits, cache)
-        val isInMmuRange = mmuRange(port.bus.cmd.virtualAddress) && !port.bus.cmd.bypass
+        val isInMmuRange = virtualRange(port.bus.cmd.virtualAddress) && !port.bus.cmd.bypassTranslation
 
         val sharedMiss = RegInit(False)
         val sharedIterator = Reg(UInt(log2Up(tlbSize + 1) bits))
@@ -112,6 +114,7 @@ class MemoryTranslatorPlugin(tlbSize : Int, mmuRange : UInt => Bool) extends Plu
           port.bus.rsp.allowWrite := True
           port.bus.rsp.allowExecute := True
         }
+        port.bus.rsp.isIoAccess := ioRange(port.bus.rsp.physicalAddress)
         port.bus.rsp.miss := sharedMiss
       }
     }

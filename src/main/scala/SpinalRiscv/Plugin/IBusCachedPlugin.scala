@@ -458,7 +458,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
     io.cpu.fetch.mmuBus.cmd.isValid := io.cpu.fetch.isValid
     io.cpu.fetch.mmuBus.cmd.virtualAddress := io.cpu.fetch.address
-    io.cpu.fetch.mmuBus.cmd.bypass := False
+    io.cpu.fetch.mmuBus.cmd.bypassTranslation := False
     val mmuRsp = RegNextWhen(io.cpu.fetch.mmuBus.rsp,!io.cpu.decode.isStuck)
 
     val hit = tag.valid && tag.address === mmuRsp.physicalAddress(tagRange) && !(tag.loading && !lineLoader.loadedWords(mmuRsp.physicalAddress(wordRange)))

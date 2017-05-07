@@ -25,10 +25,11 @@ trait ExceptionService{
 case class MemoryTranslatorCmd() extends Bundle{
   val isValid = Bool
   val virtualAddress  = UInt(32 bits)
-  val bypass = Bool
+  val bypassTranslation = Bool
 }
 case class MemoryTranslatorRsp() extends Bundle{
   val physicalAddress = UInt(32 bits)
+  val isIoAccess = Bool
   val allowRead, allowWrite, allowExecute = Bool
   val miss = Bool
 }
