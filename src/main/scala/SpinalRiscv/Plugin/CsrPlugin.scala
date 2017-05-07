@@ -81,6 +81,7 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
   var pluginExceptionPort : Flow[ExceptionCause] = null
   var timerInterrupt : Bool = null
   var externalInterrupt : Bool = null
+  var privilege : Bits = null
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
     val NONE, EBREAK, MRET= newElement()
@@ -141,10 +142,12 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
 
     timerInterrupt    = in Bool() setName("timerInterrupt")
     externalInterrupt = in Bool() setName("externalInterrupt")
+
+    privilege = RegInit(B"11")
   }
 
 
-  def isUser(stage : Stage) : Bool = False
+  def isUser(stage : Stage) : Bool = privilege === 0
 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
@@ -175,6 +178,7 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
       val mepc = Reg(UInt(xlen bits))
       val mstatus = new Area{
         val MIE, MPIE = RegInit(False)
+        val MPP = RegInit(B"11")
       }
       val mip = new Area{
         val MEIP = RegNext(externalInterrupt) init(False)
@@ -208,7 +212,7 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
 
       mtvecAccess(CSR.MTVEC, mtvec)
       mepcAccess(CSR.MEPC, mepc)
-      READ_WRITE(CSR.MSTATUS, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
+      READ_WRITE(CSR.MSTATUS,11 -> mstatus.MPP, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
       if(mscratchGen) READ_WRITE(CSR.MSCRATCH, mscratch)
       mcauseAccess(CSR.MCAUSE, xlen-1 -> mcause.interrupt, 0 -> mcause.exceptionCode)
       mbadaddrAccess(CSR.MBADADDR, mbadaddr)
@@ -298,8 +302,9 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
       when(exception || (interrupt && pipelineLiberator.done)){
         jumpInterface.valid := True
         jumpInterface.payload := mtvec
-        mstatus.MIE := False
+        mstatus.MIE  := False
         mstatus.MPIE := mstatus.MIE
+        mstatus.MPP  := privilege
         mepc := exception mux(
           True  -> writeBack.input(PC),
           False -> (writeBackWfi ? (writeBack.input(PC) + 4) | prefetch.input(PC_CALC_WITHOUT_JUMP)) //TODO ? WFI could emulate J PC + 4
@@ -316,11 +321,15 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
 
 
       //Manage MRET instructions
-      when(memory.arbitration.isFiring && memory.input(ENV_CTRL) === EnvCtrlEnum.MRET){
-        jumpInterface.valid := True
-        jumpInterface.payload := mepc
-        execute.arbitration.flushAll := True
-        mstatus.MIE := mstatus.MPIE
+      when(memory.input(ENV_CTRL) === EnvCtrlEnum.MRET) {
+        memory.arbitration.haltIt := writeBack.arbitration.isValid
+        when(memory.arbitration.isFiring) {
+          jumpInterface.valid := True
+          jumpInterface.payload := mepc
+          execute.arbitration.flushAll := True
+          mstatus.MIE := mstatus.MPIE
+          privilege := mstatus.MPP
+        }
       }
 
       //Manage ECALL instructions
