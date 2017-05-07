@@ -27,8 +27,8 @@ class MemoryTranslatorPlugin(tlbSize : Int,
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
     import pipeline.config._
-    def TLBW0  = M"0000000----------000-----0101011"
-    def TLBW1  = M"0000000----------001-----0101011"
+    def TLBW0  = M"0000000----------111-----0001111"
+    def TLBW1  = M"0000001----------111-----0001111"
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(IS_TLB, False)
     decoderService.add(TLBW0, List(IS_TLB -> True, REG1_USE -> True, SRC1_CTRL -> Src1CtrlEnum.RS))
@@ -124,7 +124,7 @@ class MemoryTranslatorPlugin(tlbSize : Int,
       import execute._
       val tlbWriteBuffer = Reg(UInt(20 bits))
       when(arbitration.isFiring && input(IS_TLB)){
-        switch(input(INSTRUCTION)(funct3Range)){
+        switch(input(INSTRUCTION)(25 downto 25)){
           is(0){
             tlbWriteBuffer := input(SRC1).asUInt.resized
           }

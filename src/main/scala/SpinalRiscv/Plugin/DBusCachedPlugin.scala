@@ -65,6 +65,12 @@ class DBusCachedPlugin(config : DataCacheConfig, askMemoryTranslation : Boolean 
       List(SB, SH, SW).map(_ -> storeActions)
     )
 
+    def MANAGEMENT  = M"-------00000-----101-----0001111"
+    decoderService.add(MANAGEMENT, stdActions ++ List(
+      SRC2_CTRL -> Src2CtrlEnum.RS,
+      REG2_USE -> True
+    ))
+
     if(askMemoryTranslation)
       mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(pipeline.memory,memoryTranslatorPortConfig)
 
@@ -97,11 +103,11 @@ class DBusCachedPlugin(config : DataCacheConfig, askMemoryTranslation : Boolean 
         default -> input(REG2)(31 downto 0)
       )
       cache.io.cpu.execute.args.size := size
-      cache.io.cpu.execute.args.forceUncachedAccess := False // cache.io.cpu.execute.args.address(31 downto 28) === 0xF
-      cache.io.cpu.execute.args.kind := DataCacheCpuCmdKind.MEMORY
-      cache.io.cpu.execute.args.clean := False
-      cache.io.cpu.execute.args.invalidate := False
-      cache.io.cpu.execute.args.way := False
+      cache.io.cpu.execute.args.forceUncachedAccess := False 
+      cache.io.cpu.execute.args.kind := input(INSTRUCTION)(2) ? DataCacheCpuCmdKind.MANAGMENT | DataCacheCpuCmdKind.MEMORY
+      cache.io.cpu.execute.args.clean := input(INSTRUCTION)(28)
+      cache.io.cpu.execute.args.invalidate := input(INSTRUCTION)(29)
+      cache.io.cpu.execute.args.way := input(INSTRUCTION)(30)
 
       insert(MEMORY_ADDRESS_LOW) := cache.io.cpu.execute.args.address(1 downto 0)
     }
@@ -234,7 +240,7 @@ object Bypasser{
 }
 
 object DataCacheCpuCmdKind extends SpinalEnum{
-  val MEMORY,LINE = newElement()
+  val MEMORY,MANAGMENT = newElement()
 }
 
 object DataCacheCpuExecute{
@@ -605,7 +611,7 @@ class DataCache(p : DataCacheConfig) extends Component{
         io.cpu.writeBack.mmuMiss := mmuRsp.miss
       }
       switch(request.kind) {
-        is(LINE) {
+        is(MANAGMENT) {
           when(delayedIsStuck && !mmuRsp.miss) {
             when(delayedWaysHitValid || (request.way && way.tagReadRspTwo.used)) {
               io.cpu.writeBack.haltIt.clearWhen(!(victim.requestIn.valid && !victim.requestIn.ready))

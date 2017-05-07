@@ -304,7 +304,6 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         )
 
         mcause.interrupt := interrupt
-
         mcause.exceptionCode := ((mip.MEIP && mie.MEIE) ? U(11) | ((mip.MSIP && mie.MSIE) ? U(3) | U(7)))
       }
 
