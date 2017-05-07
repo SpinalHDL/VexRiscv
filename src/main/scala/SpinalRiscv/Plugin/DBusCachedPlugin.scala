@@ -96,11 +96,7 @@ class DBusCachedPlugin(config : DataCacheConfig, askMemoryTranslation : Boolean 
         U(1)    -> input(REG2)(15 downto 0) ## input(REG2)(15 downto 0),
         default -> input(REG2)(31 downto 0)
       )
-      cache.io.cpu.execute.args.mask := (size.mux (
-        U(0)    -> B"0001",
-        U(1)    -> B"0011",
-        default -> B"1111"
-      ) << cache.io.cpu.execute.args.address(1 downto 0)).resized
+      cache.io.cpu.execute.args.size := size
       cache.io.cpu.execute.args.forceUncachedAccess := False // cache.io.cpu.execute.args.address(31 downto 28) === 0xF
       cache.io.cpu.execute.args.kind := DataCacheCpuCmdKind.MEMORY
       cache.io.cpu.execute.args.clean := False
@@ -130,11 +126,14 @@ class DBusCachedPlugin(config : DataCacheConfig, askMemoryTranslation : Boolean 
       cache.io.cpu.writeBack.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
       if(catchSomething) {
-        exceptionBus.valid := cache.io.cpu.writeBack.mmuMiss || cache.io.cpu.writeBack.accessError || cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.accessError
+        exceptionBus.valid := cache.io.cpu.writeBack.mmuMiss || cache.io.cpu.writeBack.accessError || cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.unalignedAccess
         exceptionBus.badAddr := cache.io.cpu.writeBack.badAddr
         exceptionBus.code  := 13
-        when(cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.accessError || cache.io.cpu.writeBack.accessError){
+        when(cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.accessError){
           exceptionBus.code := (input(INSTRUCTION)(5) ? U(7) | U(5)).resized
+        }
+        when(cache.io.cpu.writeBack.unalignedAccess){
+          exceptionBus.code := (input(INSTRUCTION)(5) ? U(6) | U(4)).resized
         }
       }
       arbitration.haltIt.setWhen(cache.io.cpu.writeBack.haltIt)
@@ -259,7 +258,7 @@ case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
   val wr = Bool
   val address = UInt(p.addressWidth bit)
   val data = Bits(p.cpuDataWidth bit)
-  val mask = Bits(p.cpuDataWidth/8 bit)
+  val size = UInt(2 bits)
   val forceUncachedAccess = Bool
   val clean, invalidate, way = Bool
 //  val all = Bool                      //Address should be zero when "all" is used
@@ -571,6 +570,12 @@ class DataCache(p : DataCacheConfig) extends Component{
     val victimNotSent  = RegInit(False) clearWhen(victim.requestIn.ready) setWhen(!io.cpu.memory.isStuck)
     val loadingNotDone = RegInit(False) clearWhen(loaderReady) setWhen(!io.cpu.memory.isStuck)
 
+    val writeMask = request.size.mux (
+      U(0)    -> B"0001",
+      U(1)    -> B"0011",
+      default -> B"1111"
+    ) |<< mmuRsp.physicalAddress(1 downto 0)
+
     io.cpu.writeBack.haltIt := io.cpu.writeBack.isValid
     io.cpu.writeBack.mmuMiss := False
     io.cpu.writeBack.illegalAccess := False
@@ -618,7 +623,7 @@ class DataCache(p : DataCacheConfig) extends Component{
         }
         is(MEMORY) {
           val illegal = if(catchIllegal) (request.wr && !mmuRsp.allowWrite) || (!request.wr && !mmuRsp.allowRead) else False
-          val unaligned = if(catchUnaligned) ((request.mask === 0xF && mmuRsp.physicalAddress(1 downto 0) =/= 0) || ((request.mask === 0x3 || request.mask === 0xC) && mmuRsp.physicalAddress(0) =/= False)) else False
+          val unaligned = if(catchUnaligned) ((request.size === 2 && mmuRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && mmuRsp.physicalAddress(0 downto 0) =/= 0)) else False
           io.cpu.writeBack.illegalAccess := illegal
           io.cpu.writeBack.unalignedAccess := unaligned
           when((Bool(!catchMemoryTranslationMiss) || !mmuRsp.miss) && !illegal && !unaligned) {
@@ -628,7 +633,7 @@ class DataCache(p : DataCacheConfig) extends Component{
                 //Avoid mixing memory request while victim is pending
                 io.mem.cmd.wr := request.wr
                 io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
-                io.mem.cmd.mask := request.mask
+                io.mem.cmd.mask := writeMask
                 io.mem.cmd.data := request.data
                 io.mem.cmd.length := 1
 
@@ -646,7 +651,7 @@ class DataCache(p : DataCacheConfig) extends Component{
                 dataWriteCmd.valid := request.wr
                 dataWriteCmd.address := mmuRsp.physicalAddress(lineRange.high downto wordRange.low)
                 dataWriteCmd.data := request.data
-                dataWriteCmd.mask := request.mask
+                dataWriteCmd.mask := writeMask
 
                 tagsWriteCmd.valid := (!loadingNotDone) || request.wr
                 tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
@@ -667,7 +672,7 @@ class DataCache(p : DataCacheConfig) extends Component{
 
 
     assert(!(io.cpu.writeBack.isValid && !io.cpu.writeBack.haltIt && io.cpu.writeBack.isStuck), "writeBack stuck by another plugin is not allowed")
-    io.cpu.writeBack.data := request.forceUncachedAccess ? io.mem.rsp.data | way.dataReadRspTwo //not multi ways
+    io.cpu.writeBack.data := (request.forceUncachedAccess || mmuRsp.isIoAccess) ? io.mem.rsp.data | way.dataReadRspTwo //not multi ways
   }
 
   //The whole life of a loading task, the corresponding manager request is present

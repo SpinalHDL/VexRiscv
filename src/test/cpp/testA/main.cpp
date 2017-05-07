@@ -332,6 +332,7 @@ public:
 				// dump variables into VCD file and toggle clock
 
 				dump(i);
+				//top->eval();
 				top->clk = 0;
 				top->eval();
 
@@ -360,6 +361,7 @@ public:
 				}
 
 				checks();
+				//top->eval();
 				top->clk = 1;
 				top->eval();
 
@@ -469,9 +471,7 @@ public:
 		top->iBus_rsp_valid = 0;
 		if(pendingCount != 0 && (!ws->iStall || VL_RANDOM_I(7) < 100)){
 			ws->iBusAccess(address,&top->iBus_rsp_payload_data,&error);
-			#ifdef CSR
 			top->iBus_rsp_payload_error = error;
-			#endif
 			pendingCount--;
 			address = (address & ~0x1F) + ((address + 4) & 0x1F);
 			top->iBus_rsp_valid = 1;
@@ -833,8 +833,8 @@ int main(int argc, char **argv, char **env) {
 
 		#ifdef CSR
 		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
-		8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,5,17,1 };
-		redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).run(4e3);)
+		8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
+		redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(4e3);)
 		#endif
 		#ifdef MMU
 		uint32_t mmuRef[] = {1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,

@@ -12,12 +12,13 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    addressWidth : Int,
                                    cpuDataWidth : Int,
                                    memDataWidth : Int,
+                                   catchIllegalAccess : Boolean,
                                    catchAccessFault : Boolean,
                                    catchMemoryTranslationMiss : Boolean,
                                    asyncTagMemory : Boolean,
                                    twoStageLogic : Boolean){
   def burstSize = bytePerLine*8/memDataWidth
-  def catchSomething = catchAccessFault || catchMemoryTranslationMiss
+  def catchSomething = catchAccessFault || catchMemoryTranslationMiss || catchIllegalAccess
 
 }
 
@@ -102,8 +103,9 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
 
       val accessFault = if(catchAccessFault) decode.input(IBUS_ACCESS_ERROR) else False
       val mmuMiss = if(catchMemoryTranslationMiss) cache.io.cpu.decode.mmuMiss else False
+      val illegalAccess = if(catchIllegalAccess) cache.io.cpu.decode.illegalAccess else False
 
-      decodeExceptionPort.valid   := decode.arbitration.isValid && (accessFault || mmuMiss)
+      decodeExceptionPort.valid   := decode.arbitration.isValid && (accessFault || mmuMiss || illegalAccess)
       decodeExceptionPort.code    := mmuMiss ? U(14) | 1
       decodeExceptionPort.badAddr := decode.input(PC)
     }
@@ -152,11 +154,12 @@ case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle 
   val dataAnticipated = Bits(32 bits)
   val error   = if(p.catchAccessFault) Bool else null
   val mmuMiss   = if(p.catchMemoryTranslationMiss) Bool else null
+  val illegalAccess = if(p.catchIllegalAccess) Bool else null
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, address)
     in(haltIt, data, dataAnticipated)
-    inWithNull(error,mmuMiss)
+    inWithNull(error,mmuMiss,illegalAccess)
   }
 }
 
@@ -177,7 +180,7 @@ case class InstructionCacheMemCmd(p : InstructionCacheConfig) extends Bundle{
 }
 case class InstructionCacheMemRsp(p : InstructionCacheConfig) extends Bundle{
   val data = Bits(32 bit)
-  val error = if(p.catchAccessFault) Bool else null
+  val error = Bool
 }
 
 case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
@@ -281,8 +284,11 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     io.flush.rsp := flushCounter.msb.rise && flushFromInterface
 
     val loadingWithErrorReg = if(catchAccessFault) RegInit(False) else null
-    val loadingWithError    = if(catchAccessFault) loadingWithErrorReg else null
-    if(catchAccessFault) loadingWithErrorReg := loadingWithError
+    val loadingWithError    = if(catchAccessFault) Bool else null
+    if(catchAccessFault) {
+      loadingWithError := loadingWithErrorReg
+      loadingWithErrorReg := loadingWithError
+    }
 
 
 
@@ -470,6 +476,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     io.cpu.decode.dataAnticipated := io.cpu.decode.isStuck ? Mux(dataPostWrite,lineLoader.waysDatasWritePort.data,data) | Mux(dataPreWrite,lineLoader.waysDatasWritePort.data,memRead.data)
     if(catchAccessFault) io.cpu.decode.error := tag.error
     if(catchMemoryTranslationMiss) io.cpu.decode.mmuMiss := mmuRsp.miss
+    if(catchIllegalAccess) io.cpu.decode.illegalAccess := !mmuRsp.miss && !mmuRsp.allowExecute
 
     lineLoader.requestIn.valid := io.cpu.decode.isValid && !hit && !mmuRsp.miss//TODO avoid duplicated request
     lineLoader.requestIn.addr  := mmuRsp.physicalAddress

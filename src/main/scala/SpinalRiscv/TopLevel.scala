@@ -99,24 +99,30 @@ object TopLevel {
       val configFull = VexRiscvConfig(
         plugins = List(
           new PcManagerSimplePlugin(0x00000000l, false),
-          new IBusSimplePlugin(
-            interfaceKeepData = true,
-            catchAccessFault = true
+//          new IBusSimplePlugin(
+//            interfaceKeepData = true,
+//            catchAccessFault = true
+//          ),
+          new IBusCachedPlugin(
+            config = InstructionCacheConfig(
+              cacheSize = 4096,
+              bytePerLine =32,
+              wayCount = 1,
+              wrappedMemAccess = true,
+              addressWidth = 32,
+              cpuDataWidth = 32,
+              memDataWidth = 32,
+              catchIllegalAccess = true,
+              catchAccessFault = true,
+              catchMemoryTranslationMiss = true,
+              asyncTagMemory = false,
+              twoStageLogic = true
+            ),
+            askMemoryTranslation = true,
+            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+              portTlbSize = 4
+            )
           ),
-  //        new IBusCachedPlugin(
-  //          config = InstructionCacheConfig(
-  //            cacheSize = 4096,
-  //            bytePerLine =32,
-  //            wayCount = 1,
-  //            wrappedMemAccess = true,
-  //            addressWidth = 32,
-  //            cpuDataWidth = 32,
-  //            memDataWidth = 32,
-  //            catchAccessFault = true,
-  //            asyncTagMemory = false,
-  //            twoStageLogic = true
-  //          )
-  //        ),
   //        new DBusSimplePlugin(
   //          catchAddressMisaligned = true,
   //          catchAccessFault = true
@@ -132,8 +138,17 @@ object TopLevel {
               catchAccessError  = true,
               catchIllegal      = true,
               catchUnaligned    = true,
-              catchMemoryTranslationMiss = false
+              catchMemoryTranslationMiss = true
+            ),
+            askMemoryTranslation = true,
+            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+              portTlbSize = 6
             )
+          ),
+          new MemoryTranslatorPlugin(
+            tlbSize = 32,
+            virtualRange = _(31 downto 28) === 0xC,
+            ioRange      = _(31 downto 28) === 0xF
           ),
           new DecoderSimplePlugin(
             catchIllegalInstruction = true
@@ -237,7 +252,8 @@ object TopLevel {
               addressWidth = 32,
               cpuDataWidth = 32,
               memDataWidth = 32,
-              catchAccessFault = false,
+              catchIllegalAccess = true,
+              catchAccessFault = true,
               catchMemoryTranslationMiss = true,
               asyncTagMemory = false,
               twoStageLogic = true
@@ -324,9 +340,9 @@ object TopLevel {
         )
       )
 
-//      val toplevel = new VexRiscv(configFull)
+      val toplevel = new VexRiscv(configFull)
 //      val toplevel = new VexRiscv(configLight)
-      val toplevel = new VexRiscv(configTest)
+//      val toplevel = new VexRiscv(configTest)
       toplevel.decode.input(toplevel.config.INSTRUCTION).addAttribute(Verilator.public)
       toplevel.decode.input(toplevel.config.PC).addAttribute(Verilator.public)
       toplevel.decode.arbitration.isValid.addAttribute(Verilator.public)

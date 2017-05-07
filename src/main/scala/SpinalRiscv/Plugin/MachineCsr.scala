@@ -304,13 +304,13 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
         )
 
         mcause.interrupt := interrupt
-        mcause.exceptionCode := interrupt.mux(
-          True  -> ((mip.MEIP && mie.MEIE) ? U(11) | ((mip.MSIP && mie.MSIE) ? U(3) | U(7))),
-          False -> (if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionContext.code else U(0))
-        )
-        when(RegNext(exception)){
-          mbadaddr := (if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionContext.badAddr else U(0))
-        }
+
+        mcause.exceptionCode := ((mip.MEIP && mie.MEIE) ? U(11) | ((mip.MSIP && mie.MSIE) ? U(3) | U(7)))
+      }
+
+      when(RegNext(exception)){
+        mbadaddr := (if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionContext.badAddr else U(0))
+        mcause.exceptionCode := (if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionContext.code else U(0))
       }
 
 
