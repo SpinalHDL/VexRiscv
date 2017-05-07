@@ -62,7 +62,7 @@ case class CsrMapping(){
 
 
 
-class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with ExceptionService {
+class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService{
   import config._
   import CsrAccess._
 
@@ -143,6 +143,8 @@ class MachineCsr(config : MachineCsrConfig) extends Plugin[VexRiscv] with Except
     externalInterrupt = in Bool() setName("externalInterrupt")
   }
 
+
+  def isUser(stage : Stage) : Bool = False
 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._

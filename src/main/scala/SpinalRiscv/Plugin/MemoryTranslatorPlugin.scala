@@ -47,7 +47,7 @@ class MemoryTranslatorPlugin(tlbSize : Int,
       val valid = Bool
       val virtualAddress = UInt(20 bits)
       val physicalAddress = UInt(20 bits)
-      val allowRead, allowWrite, allowExecute = Bool
+      val allowRead, allowWrite, allowExecute, allowUser = Bool
 
       def init = {
         valid init (False)
@@ -107,12 +107,14 @@ class MemoryTranslatorPlugin(tlbSize : Int,
           port.bus.rsp.allowRead := cacheLine.allowRead
           port.bus.rsp.allowWrite := cacheLine.allowWrite
           port.bus.rsp.allowExecute := cacheLine.allowExecute
+          port.bus.rsp.allowUser := cacheLine.allowUser
           port.stage.arbitration.haltIt setWhen (port.bus.cmd.isValid && !cacheHit && !sharedMiss)
         } otherwise {
           port.bus.rsp.physicalAddress := port.bus.cmd.virtualAddress
           port.bus.rsp.allowRead := True
           port.bus.rsp.allowWrite := True
           port.bus.rsp.allowExecute := True
+          port.bus.rsp.allowUser := True
         }
         port.bus.rsp.isIoAccess := ioRange(port.bus.rsp.physicalAddress)
         port.bus.rsp.miss := sharedMiss
@@ -132,10 +134,11 @@ class MemoryTranslatorPlugin(tlbSize : Int,
             val line = CacheLine()
             line.virtualAddress := tlbWriteBuffer
             line.physicalAddress := input(REG2)(19 downto 0).asUInt
-            line.valid := input(REG2)(31)
+            line.allowUser := input(REG2)(27)
             line.allowRead := input(REG2)(28)
             line.allowWrite := input(REG2)(29)
             line.allowExecute := input(REG2)(30)
+            line.valid := input(REG2)(31)
             core.shared.cache(input(SRC1)(log2Up(tlbSize)-1 downto 0).asUInt) := line
 
             core.ports.foreach(_.cache.foreach(_.valid := False)) //Invalidate all ports caches

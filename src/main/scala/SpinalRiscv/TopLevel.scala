@@ -21,7 +21,7 @@ package SpinalRiscv
 import SpinalRiscv.Plugin._
 import spinal.core._
 import spinal.lib._
-
+import SpinalRiscv.ip._
 
 object TopLevel {
   def main(args: Array[String]) {
