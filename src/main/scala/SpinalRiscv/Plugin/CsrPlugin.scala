@@ -351,28 +351,24 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
         import execute._
 
         val imm = IMM(input(INSTRUCTION))
-
-
-
         val writeSrc = input(INSTRUCTION)(14) ? imm.z.asBits.resized | input(SRC1)
         val readData = B(0, 32 bits)
-        val readDataReg = RegNext(readData)
         val readDataRegValid = Reg(Bool) setWhen(arbitration.isValid) clearWhen(!arbitration.isStuck)
         val writeData = input(INSTRUCTION)(13).mux(
           False -> writeSrc,
-          True -> Mux(input(INSTRUCTION)(12), readDataReg & ~writeSrc, readDataReg | writeSrc)
+          True -> Mux(input(INSTRUCTION)(12), memory.input(REGFILE_WRITE_DATA) & ~writeSrc, memory.input(REGFILE_WRITE_DATA) | writeSrc)
         )
         val writeInstruction = arbitration.isValid && input(IS_CSR)
         (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
           || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
 
-        arbitration.haltIt setWhen(writeInstruction && !readDataRegValid)
-        val writeEnable = writeInstruction && !arbitration.isStuckByOthers && !arbitration.removeIt && readDataRegValid
+        arbitration.haltIt setWhen(writeInstruction && (!readDataRegValid || memory.arbitration.isValid))
+        val writeEnable = writeInstruction && !memory.arbitration.isValid && readDataRegValid
+        assert(!(arbitration.removeIt && writeEnable),"Can't remove CSR instruction when write occure")
 
         when(arbitration.isValid && input(IS_CSR)) {
           output(REGFILE_WRITE_DATA) := readData
         }
-
 
         //Translation of the csrMapping into real logic
         switch(input(INSTRUCTION)(csrRange)) {
