@@ -12,16 +12,27 @@ import scala.collection.mutable
  * Created by spinalvm on 21.03.17.
  */
 
-trait CsrAccess
+trait CsrAccess{
+  def canWrite : Boolean = false
+  def canRead : Boolean = false
+}
 object CsrAccess {
-  object WRITE_ONLY extends CsrAccess
-  object READ_ONLY extends CsrAccess
-  object READ_WRITE extends CsrAccess
+  object WRITE_ONLY extends CsrAccess{
+    override def canWrite : Boolean = true
+  }
+  object READ_ONLY extends CsrAccess{
+    override def canRead : Boolean = true
+  }
+  object READ_WRITE extends CsrAccess{
+    override def canWrite : Boolean = true
+    override def canRead : Boolean = true
+  }
   object NONE extends CsrAccess
 }
 
 case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage, priority : Int)
 case class MachineCsrConfig(
+  catchIllegalAccess  : Boolean,
   mvendorid           : BigInt,
   marchid             : BigInt,
   mimpid              : BigInt,
@@ -36,9 +47,12 @@ case class MachineCsrConfig(
   mbadaddrAccess      : CsrAccess,
   mcycleAccess        : CsrAccess,
   minstretAccess      : CsrAccess,
+  ucycleAccess        : CsrAccess,
   wfiGen              : Boolean,
   ecallGen            : Boolean
-)
+){
+  assert(!ucycleAccess.canWrite)
+}
 
 
 case class CsrWrite(that : Data, bitOffset : Int)
@@ -82,6 +96,7 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
   var timerInterrupt : Bool = null
   var externalInterrupt : Bool = null
   var privilege : Bits = null
+  var selfException : Flow[ExceptionCause] = null
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
     val NONE, EBREAK, MRET= newElement()
@@ -144,6 +159,9 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
     externalInterrupt = in Bool() setName("externalInterrupt")
 
     privilege = RegInit(B"11")
+
+    if(catchIllegalAccess)
+      selfException = newExceptionPort(pipeline.execute)
   }
 
 
@@ -205,6 +223,7 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
       if(mimpid    != null) READ_ONLY(CSR.MIMPID   , U(mimpid   ))
       if(mhartid   != null) READ_ONLY(CSR.MHARTID  , U(mhartid  ))
 
+      //Machine CSR
       misaAccess(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
       READ_ONLY(CSR.MIP, 11 -> mip.MEIP, 7 -> mip.MTIP)
       READ_WRITE(CSR.MIP, 3 -> mip.MSIP)
@@ -220,6 +239,9 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
       mcycleAccess(CSR.MCYCLEH, mcycle(63 downto 32))
       minstretAccess(CSR.MINSTRET, minstret(31 downto 0))
       minstretAccess(CSR.MINSTRETH, minstret(63 downto 32))
+
+      //User CSR
+      ucycleAccess(CSR.UCYCLE, mcycle(31 downto 0))
 
 
 
@@ -350,30 +372,46 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
       execute plug new Area {
         import execute._
 
+        val illegalAccess = True
+        if(catchIllegalAccess) {
+          selfException.valid := arbitration.isValid && input(IS_CSR) && illegalAccess
+          selfException.code := 2
+          selfException.badAddr.assignDontCare()
+        }
+
         val imm = IMM(input(INSTRUCTION))
         val writeSrc = input(INSTRUCTION)(14) ? imm.z.asBits.resized | input(SRC1)
         val readData = B(0, 32 bits)
-        val readDataRegValid = Reg(Bool) setWhen(arbitration.isValid) clearWhen(!arbitration.isStuck)
+        val readDataRegValid = Reg(Bool) setWhen(arbitration.isValid && !memory.arbitration.isStuck) clearWhen(!arbitration.isStuck)
         val writeData = input(INSTRUCTION)(13).mux(
           False -> writeSrc,
           True -> Mux(input(INSTRUCTION)(12), memory.input(REGFILE_WRITE_DATA) & ~writeSrc, memory.input(REGFILE_WRITE_DATA) | writeSrc)
         )
-        val writeInstruction = arbitration.isValid && input(IS_CSR)
-        (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
-          || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
+        val writeOpcode = (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
+                          || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
+        val writeInstruction = arbitration.isValid && input(IS_CSR) && writeOpcode
 
-        arbitration.haltIt setWhen(writeInstruction && (!readDataRegValid || memory.arbitration.isValid))
-        val writeEnable = writeInstruction && !memory.arbitration.isValid && readDataRegValid
-        assert(!(arbitration.removeIt && writeEnable),"Can't remove CSR instruction when write occure")
+        arbitration.haltIt setWhen(writeInstruction && !readDataRegValid)
+        val writeEnable = writeInstruction && !arbitration.isStuckByOthers && !arbitration.removeIt && readDataRegValid
 
         when(arbitration.isValid && input(IS_CSR)) {
           output(REGFILE_WRITE_DATA) := readData
         }
 
         //Translation of the csrMapping into real logic
-        switch(input(INSTRUCTION)(csrRange)) {
+        val csrAddress = input(INSTRUCTION)(csrRange)
+        switch(csrAddress) {
           for ((address, jobs) <- csrMapping.mapping) {
             is(address) {
+              val withWrite = jobs.exists(_.isInstanceOf[CsrWrite])
+              val withRead = jobs.exists(_.isInstanceOf[CsrRead])
+              if(withRead && withWrite) {
+                illegalAccess := False
+              } else {
+                if (withWrite) illegalAccess.clearWhen(writeOpcode)
+                if (withRead) illegalAccess.clearWhen(!writeOpcode)
+              }
+
               when(writeEnable) {
                 for (element <- jobs) element match {
                   case element: CsrWrite => element.that.assignFromBits(writeData(element.bitOffset, element.that.getBitsWidth bits))
@@ -388,6 +426,7 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
             }
           }
         }
+        illegalAccess setWhen(privilege.asUInt < csrAddress(9 downto 8).asUInt)
       }
     }
   }

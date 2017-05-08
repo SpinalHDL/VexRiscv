@@ -40,6 +40,7 @@ object TopLevel {
 
 
       val csrConfigAll = MachineCsrConfig(
+        catchIllegalAccess = true,
         mvendorid      = 11,
         marchid        = 22,
         mimpid         = 33,
@@ -55,10 +56,12 @@ object TopLevel {
         mcycleAccess   = CsrAccess.READ_WRITE,
         minstretAccess = CsrAccess.READ_WRITE,
         ecallGen       = true,
-        wfiGen         = true
+        wfiGen         = true,
+        ucycleAccess   = CsrAccess.READ_ONLY
       )
 
       val csrConfigSmall = MachineCsrConfig(
+        catchIllegalAccess = false,
         mvendorid      = null,
         marchid        = null,
         mimpid         = null,
@@ -74,10 +77,12 @@ object TopLevel {
         mcycleAccess   = CsrAccess.NONE,
         minstretAccess = CsrAccess.NONE,
         ecallGen       = false,
-        wfiGen         = false
+        wfiGen         = false,
+        ucycleAccess   = CsrAccess.NONE
       )
 
       val csrConfigSmallest = MachineCsrConfig(
+        catchIllegalAccess = false,
         mvendorid      = null,
         marchid        = null,
         mimpid         = null,
@@ -93,7 +98,8 @@ object TopLevel {
         mcycleAccess   = CsrAccess.NONE,
         minstretAccess = CsrAccess.NONE,
         ecallGen       = false,
-        wfiGen         = false
+        wfiGen         = false,
+        ucycleAccess   = CsrAccess.NONE
       )
 
       val configFull = VexRiscvConfig(
@@ -239,74 +245,63 @@ object TopLevel {
       val configTest = VexRiscvConfig(
         plugins = List(
           new PcManagerSimplePlugin(0x00000000l, true),
-  //        new IBusSimplePlugin(
-  //          interfaceKeepData = true,
-  //          catchAccessFault = false
-  //        ),
-          new IBusCachedPlugin(
-            config = InstructionCacheConfig(
-              cacheSize = 4096,
-              bytePerLine =32,
-              wayCount = 1,
-              wrappedMemAccess = true,
-              addressWidth = 32,
-              cpuDataWidth = 32,
-              memDataWidth = 32,
-              catchIllegalAccess = true,
-              catchAccessFault = true,
-              catchMemoryTranslationMiss = true,
-              asyncTagMemory = false,
-              twoStageLogic = true
-            ),
-            askMemoryTranslation = true,
-            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-              portTlbSize = 4
-            )
+          new IBusSimplePlugin(
+            interfaceKeepData = true,
+            catchAccessFault = true
           ),
+//          new IBusCachedPlugin(
+//            config = InstructionCacheConfig(
+//              cacheSize = 4096,
+//              bytePerLine =32,
+//              wayCount = 1,
+//              wrappedMemAccess = true,
+//              addressWidth = 32,
+//              cpuDataWidth = 32,
+//              memDataWidth = 32,
+//              catchIllegalAccess = true,
+//              catchAccessFault = true,
+//              catchMemoryTranslationMiss = true,
+//              asyncTagMemory = false,
+//              twoStageLogic = true
+//            ),
+//            askMemoryTranslation = true,
+//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//              portTlbSize = 4
+//            )
+//          ),
 
-  //        new DBusSimplePlugin(
-  //          catchAddressMisaligned = false,
-  //          catchAccessFault = false
-  //        ),
-  //        new DBusCachedPlugin(
-  //          config = new DataCacheConfig(
-  //            cacheSize         = 2048,
-  //            bytePerLine       = 32,
-  //            wayCount          = 1,
-  //            addressWidth      = 32,
-  //            cpuDataWidth      = 32,
-  //            memDataWidth      = 32,
-  //            catchAccessFault  = false
-  //          )
-  //        ),
-          new DBusCachedPlugin(
-            config = new DataCacheConfig(
-              cacheSize         = 4096,
-              bytePerLine       = 32,
-              wayCount          = 1,
-              addressWidth      = 32,
-              cpuDataWidth      = 32,
-              memDataWidth      = 32,
-              catchAccessError  = true,
-              catchIllegal      = true,
-              catchUnaligned    = true,
-              catchMemoryTranslationMiss = true,
-              tagSizeShift      = 2
-            ),
-            askMemoryTranslation = true,
-            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-              portTlbSize = 6
-            )
+          new DBusSimplePlugin(
+            catchAddressMisaligned = true,
+            catchAccessFault = true
           ),
+//          new DBusCachedPlugin(
+//            config = new DataCacheConfig(
+//              cacheSize         = 4096,
+//              bytePerLine       = 32,
+//              wayCount          = 1,
+//              addressWidth      = 32,
+//              cpuDataWidth      = 32,
+//              memDataWidth      = 32,
+//              catchAccessError  = true,
+//              catchIllegal      = true,
+//              catchUnaligned    = true,
+//              catchMemoryTranslationMiss = true,
+//              tagSizeShift      = 2
+//            ),
+//            askMemoryTranslation = true,
+//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//              portTlbSize = 6
+//            )
+//          ),
 
-          new MemoryTranslatorPlugin(
-            tlbSize = 32,
-            virtualRange = _(31 downto 28) === 0xC,
-            ioRange      = _(31 downto 28) === 0xF
-          ),
+//          new MemoryTranslatorPlugin(
+//            tlbSize = 32,
+//            virtualRange = _(31 downto 28) === 0xC,
+//            ioRange      = _(31 downto 28) === 0xF
+//          ),
           new CsrPlugin(csrConfigSmall),
           new DecoderSimplePlugin(
-            catchIllegalInstruction = false
+            catchIllegalInstruction = true
           ),
           new RegFilePlugin(
             regFileReadyKind = Plugin.SYNC,
@@ -329,12 +324,12 @@ object TopLevel {
             pessimisticWriteRegFile = false,
             pessimisticAddressMatch = false
           ),
-  //        new MulPlugin,
-  //        new DivPlugin,
+//          new MulPlugin,
+//          new DivPlugin,
           //        new MachineCsr(csrConfig),
           new BranchPlugin(
             earlyBranch = false,
-            catchAddressMisaligned = false,
+            catchAddressMisaligned = true,
             prediction = NONE
           )
         )
