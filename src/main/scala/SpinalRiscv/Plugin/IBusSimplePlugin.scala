@@ -36,8 +36,6 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) 
   object IBUS_ACCESS_ERROR extends Stageable(Bool)
   var decodeExceptionPort : Flow[ExceptionCause] = null
   override def setup(pipeline: VexRiscv): Unit = {
-    pipeline.unremovableStages += pipeline.prefetch
-
     if(catchAccessFault) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1)

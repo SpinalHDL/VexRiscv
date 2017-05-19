@@ -382,10 +382,11 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
         val imm = IMM(input(INSTRUCTION))
         val writeSrc = input(INSTRUCTION)(14) ? imm.z.asBits.resized | input(SRC1)
         val readData = B(0, 32 bits)
+        def readDataReg = memory.input(REGFILE_WRITE_DATA)  //PIPE OPT
         val readDataRegValid = Reg(Bool) setWhen(arbitration.isValid && !memory.arbitration.isStuck) clearWhen(!arbitration.isStuck)
         val writeData = input(INSTRUCTION)(13).mux(
           False -> writeSrc,
-          True -> Mux(input(INSTRUCTION)(12), memory.input(REGFILE_WRITE_DATA) & ~writeSrc, memory.input(REGFILE_WRITE_DATA) | writeSrc)
+          True -> Mux(input(INSTRUCTION)(12), readDataReg & ~writeSrc, readDataReg | writeSrc)
         )
         val writeOpcode = (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
                           || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))

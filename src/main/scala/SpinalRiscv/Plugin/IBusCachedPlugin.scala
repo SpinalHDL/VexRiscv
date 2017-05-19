@@ -15,10 +15,19 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
   var decodeExceptionPort : Flow[ExceptionCause] = null
   var privilegeService : PrivilegeService = null
 
-
+  object FLUSH_ALL extends Stageable(Bool)
   object IBUS_ACCESS_ERROR extends Stageable(Bool)
   override def setup(pipeline: VexRiscv): Unit = {
-    pipeline.unremovableStages += pipeline.prefetch
+    import Riscv._
+    import pipeline.config._
+
+    def MANAGEMENT  = M"-----------------100-----0001111"
+
+    val decoderService = pipeline.service(classOf[DecoderService])
+    decoderService.addDefault(FLUSH_ALL, False)
+    decoderService.add(MANAGEMENT,  List(
+        FLUSH_ALL -> True
+    ))
 
     if(catchSomething) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
@@ -68,7 +77,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
       }
     }
 
-    cache.io.flush.cmd.valid := False
+
 
     if(twoStageLogic){
       cache.io.cpu.decode.isValid := decode.arbitration.isValid
@@ -95,6 +104,21 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
       decodeExceptionPort.valid   := decode.arbitration.isValid && (accessFault || mmuMiss || illegalAccess)
       decodeExceptionPort.code    := mmuMiss ? U(14) | 1
       decodeExceptionPort.badAddr := decode.input(PC)
+    }
+
+    memory plug new Area{
+      import memory._
+
+      cache.io.flush.cmd.valid := False
+      when(arbitration.isValid && input(FLUSH_ALL)){
+        cache.io.flush.cmd.valid := True
+
+        when(!cache.io.flush.cmd.ready){
+          arbitration.haltIt := True
+        } otherwise {
+          decode.arbitration.flushAll := True
+        }
+      }
     }
   }
 }

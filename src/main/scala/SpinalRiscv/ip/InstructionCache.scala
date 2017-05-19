@@ -393,6 +393,6 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     lineLoader.requestIn.addr  := mmuRsp.physicalAddress
   }
 
-  io.flush.cmd.ready := !(lineLoader.request.valid || io.cpu.fetch.isValid)
+  io.flush.cmd.ready := !(lineLoader.request.valid || io.cpu.fetch.isValid || (if(twoStageLogic) io.cpu.decode.isValid else False))
 }
 
