@@ -6,6 +6,8 @@ This repository host an RISC-V implementation written in SpinalHDL. There is som
 - 1.17 DMIPS/Mhz with all extension
 - Optimized for FPGA
 - Optional MUL/DIV/REM extension
+- Optional instruction and data caches
+- Optional MMU
 - Two implementation of shift instructions, Single cycle / shiftNumber cycle
 - Each stage could have bypass or interlock hazard logic
 - FreeRTOS port https://github.com/Dolu1990/FreeRTOS-RISCV
