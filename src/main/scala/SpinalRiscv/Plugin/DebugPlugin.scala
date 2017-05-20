@@ -1,5 +1,6 @@
 package SpinalRiscv.Plugin
 
+import SpinalRiscv.Plugin.IntAluPlugin.{AluCtrlEnum, ALU_CTRL}
 import SpinalRiscv._
 import SpinalRiscv.ip._
 import spinal.core._
@@ -39,8 +40,24 @@ class DebugPlugin() extends Plugin[VexRiscv] {
 
   var io : DebugExtensionIo = null
 
+
+  object IS_EBREAK extends Stageable(Bool)
   override def setup(pipeline: VexRiscv): Unit = {
+    import Riscv._
+    import pipeline.config._
+
     io = slave(DebugExtensionIo())
+
+    val decoderService = pipeline.service(classOf[DecoderService])
+
+    decoderService.addDefault(IS_EBREAK, False)
+    decoderService.add(EBREAK,List(
+      IS_EBREAK -> True,
+      SRC_USE_SUB_LESS -> False,
+      SRC1_CTRL -> Src1CtrlEnum.RS, // Zero
+      SRC2_CTRL -> Src2CtrlEnum.PC,
+      ALU_CTRL  -> AluCtrlEnum.ADD_SUB //Used to get the PC value in busReadDataReg
+    ))
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -63,8 +80,7 @@ class DebugPlugin() extends Plugin[VexRiscv] {
 
     val isPipActive = RegNext(List(fetch,decode,execute,memory,writeBack).map(_.arbitration.isValid).orR)
     val isPipBusy = isPipActive || RegNext(isPipActive)
-//    val isInBreakpoint = core.writeBack.inInst.valid && isMyTag(core.writeBack.inInst.ctrl)
-
+    val haltedByBreak = RegInit(False)
 
     when(io.bus.cmd.valid) {
       switch(io.bus.cmd.address(2 downto 2)) {
@@ -74,11 +90,12 @@ class DebugPlugin() extends Plugin[VexRiscv] {
             stepIt := io.bus.cmd.data(4)
             resetIt setWhen(io.bus.cmd.data(16)) clearWhen(io.bus.cmd.data(24))
             haltIt  setWhen(io.bus.cmd.data(17)) clearWhen(io.bus.cmd.data(25))
+            haltedByBreak clearWhen(io.bus.cmd.data(25))
           } otherwise{
             busReadDataReg(0) := resetIt
             busReadDataReg(1) := haltIt
             busReadDataReg(2) := isPipBusy
-//            busReadDataReg(3) := isInBreakpoint
+            busReadDataReg(3) := haltedByBreak
             busReadDataReg(4) := stepIt
           }
         }
@@ -86,7 +103,7 @@ class DebugPlugin() extends Plugin[VexRiscv] {
           when(io.bus.cmd.wr){
             insertDecodeInstruction := True
             val injectedInstructionSent = RegNext(decode.arbitration.isFiring) init(False)
-            decode.arbitration.haltIt setWhen(!injectedInstructionSent && !RegNext(decode.arbitration.isValid) init(False))
+            decode.arbitration.haltIt setWhen(!injectedInstructionSent && !RegNext(decode.arbitration.isValid).init(False))
             decode.arbitration.isValid setWhen(firstCycle)
             io.bus.cmd.ready := injectedInstructionSent
           }
@@ -94,28 +111,23 @@ class DebugPlugin() extends Plugin[VexRiscv] {
       }
     }
 
+    //Assign the bus write data into the register who drive the decode instruction, even if it need to cross some hierarchy (caches)
     Component.current.addPrePopTask(() => {
-      when(insertDecodeInstruction) {
-        decode.input(INSTRUCTION).getDrivingReg := io.bus.cmd.data
+      val reg = decode.input(INSTRUCTION).getDrivingReg
+      reg.component.rework{
+        when(insertDecodeInstruction.pull()) {
+          reg := io.bus.cmd.data.pull()
+        }
       }
     })
 
 
-
-    //Keep the execution pipeline empty after break instruction
-//    when(core.execute1.inInst.valid && isMyTag(core.execute1.inInst.ctrl)){
-//      core.execute0.halt := True
-//    }
-//
-//    when(isInBreakpoint){
-//      core.execute0.halt := True
-//      core.writeBack.halt := True
-//    }
-//
-//    when(flushIt) {
-//      core.writeBack.flush := True
-//    }
-
+    when(execute.arbitration.isFiring && execute.input(IS_EBREAK)){
+      prefetch.arbitration.haltIt := True
+      decode.arbitration.flushAll := True
+      haltIt := True
+      haltedByBreak := True
+    }
 
     when(haltIt){
       prefetch.arbitration.haltIt := True
@@ -127,6 +139,8 @@ class DebugPlugin() extends Plugin[VexRiscv] {
 
     io.resetOut := RegNext(resetIt)
 
-//    core.writeBack.irq.inhibate setWhen(haltIt || stepIt)
+    when(haltIt || stepIt){
+      service(classOf[InterruptionInhibitor]).inhibateInterrupts()
+    }
   }
 }

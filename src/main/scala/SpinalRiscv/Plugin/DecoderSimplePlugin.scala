@@ -43,7 +43,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
   override def add(encoding: Seq[(MaskedLiteral, Seq[(Stageable[_ <: BaseType], Any)])]): Unit = encoding.foreach(e => this.add(e._1,e._2))
   override def add(key: MaskedLiteral, values: Seq[(Stageable[_ <: BaseType], Any)]): Unit = {
     assert(!encodings.contains(key))
-    encodings(key) = values.map{case (a,b) => (a,b match{
+    encodings.getOrElseUpdate(key,ArrayBuffer[(Stageable[_ <: BaseType], BaseType)]()) ++= values.map{case (a,b) => (a,b match{
       case e : SpinalEnumElement[_] => e()
       case e : BaseType => e
     })}
@@ -58,7 +58,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
   }
 
   val defaults = mutable.HashMap[Stageable[_ <: BaseType], BaseType]()
-  val encodings = mutable.HashMap[MaskedLiteral,Seq[(Stageable[_ <: BaseType], BaseType)]]()
+  val encodings = mutable.HashMap[MaskedLiteral,ArrayBuffer[(Stageable[_ <: BaseType], BaseType)]]()
   var decodeExceptionPort : Flow[ExceptionCause] = null
 
 

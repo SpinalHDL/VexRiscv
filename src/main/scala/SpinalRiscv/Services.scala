@@ -26,6 +26,11 @@ trait PrivilegeService{
   def isUser(stage : Stage) : Bool
 }
 
+trait InterruptionInhibitor{
+  def inhibateInterrupts() : Unit
+}
+
+
 case class MemoryTranslatorCmd() extends Bundle{
   val isValid = Bool
   val virtualAddress  = UInt(32 bits)
