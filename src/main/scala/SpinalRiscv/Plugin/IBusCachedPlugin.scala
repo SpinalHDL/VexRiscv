@@ -80,7 +80,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
 
 
     if(twoStageLogic){
-      cache.io.cpu.decode.isValid := decode.arbitration.isValid
+      cache.io.cpu.decode.isValid := decode.arbitration.isValid && RegNextWhen(fetch.arbitration.isValid, !decode.arbitration.isStuck) //avoid inserted instruction from debug module
       decode.arbitration.haltIt.setWhen(cache.io.cpu.decode.haltIt)
       cache.io.cpu.decode.isStuck := decode.arbitration.isStuck
       cache.io.cpu.decode.isUser  := (if(privilegeService != null) privilegeService.isUser(writeBack) else False)
@@ -108,7 +108,6 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
 
     memory plug new Area{
       import memory._
-
       cache.io.flush.cmd.valid := False
       when(arbitration.isValid && input(FLUSH_ALL)){
         cache.io.flush.cmd.valid := True
