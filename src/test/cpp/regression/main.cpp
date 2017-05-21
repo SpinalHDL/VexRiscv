@@ -587,6 +587,24 @@ public:
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <string.h>
+#include <arpa/inet.h>
+
+#include <fcntl.h>
+/** Returns true on success, or false if there was an error */
+bool SetSocketBlockingEnabled(int fd, bool blocking)
+{
+   if (fd < 0) return false;
+
+#ifdef WIN32
+   unsigned long mode = blocking ? 0 : 1;
+   return (ioctlsocket(fd, FIONBIO, &mode) == 0) ? true : false;
+#else
+   int flags = fcntl(fd, F_GETFL, 0);
+   if (flags < 0) return false;
+   flags = blocking ? (flags&~O_NONBLOCK) : (flags|O_NONBLOCK);
+   return (fcntl(fd, F_SETFL, flags) == 0) ? true : false;
+#endif
+}
 
 class DebugPlugin : public SimElement{
 public:
@@ -594,10 +612,46 @@ public:
 
 	Workspace *ws;
 	VVexRiscv* top;
+
+	int welcomeSocket, clientHandle;
+	char buffer[1024];
+	struct sockaddr_in serverAddr;
+	struct sockaddr_storage serverStorage;
+	socklen_t addr_size;
+	uint32_t timeSpacer = 0;
+
 	DebugPlugin(Workspace* ws){
 		this->ws = ws;
 		this->top = ws->top;
 		top->debugReset = 0;
+
+
+
+		/*---- Create the socket. The three arguments are: ----*/
+		/* 1) Internet domain 2) Stream socket 3) Default protocol (TCP in this case) */
+		welcomeSocket = socket(PF_INET, SOCK_STREAM, 0);
+		SetSocketBlockingEnabled(welcomeSocket,0);
+
+
+		/*---- Configure settings of the server address struct ----*/
+		/* Address family = Internet */
+		serverAddr.sin_family = AF_INET;
+		/* Set port number, using htons function to use proper byte order */
+		serverAddr.sin_port = htons(7891);
+		/* Set IP address to localhost */
+		serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+		/* Set all bits of the padding field to 0 */
+		memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+		/*---- Bind the address struct to the socket ----*/
+		bind(welcomeSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+
+		/*---- Listen on the socket, with 5 max connection requests queued ----*/
+		listen(welcomeSocket,5);
+
+		/*---- Accept call creates a new socket for the incoming connection ----*/
+		addr_size = sizeof serverStorage;
+		clientHandle = -1;
 	}
 
 	virtual void onReset(){
@@ -612,19 +666,59 @@ public:
 	}
 
 	virtual void preCycle(){
+		if(clientHandle == -1){
+			clientHandle = accept(welcomeSocket, (struct sockaddr *) &serverStorage, &addr_size);
+		}
 
+		if(top->debug_bus_cmd_valid && top->debug_bus_cmd_ready && !top->debug_bus_cmd_payload_wr){
+			if(clientHandle != -1){
+				send(clientHandle,&top->debug_bus_rsp_data,4,0);
+			}
+		}
 	}
 
 	virtual void postCycle(){
 		top->reset = top->debug_resetOut;
+		if(top->debug_bus_cmd_ready){
+			top->debug_bus_cmd_valid = 0;
+			top->debug_bus_cmd_payload_wr = VL_RANDOM_I(1);
+			top->debug_bus_cmd_payload_address = VL_RANDOM_I(8);
+			top->debug_bus_cmd_payload_data = VL_RANDOM_I(32);
+		}
 
-				  /*input   debug_bus_cmd_valid,
-                  output  debug_bus_cmd_ready,
-                  input   debug_bus_cmd_payload_wr,
-                  input  [7:0] debug_bus_cmd_payload_address,
-                  input  [31:0] debug_bus_cmd_payload_data,
-                  output reg [31:0] debug_bus_rsp_data,
-                  output reg  debug_resetOut,*/
+		if(clientHandle != -1 && top->debug_bus_cmd_valid == 0){
+			if(timeSpacer == 0){
+				int requiredSize = 1 + 1 + 4 + 4;
+				int n = read(clientHandle,buffer,requiredSize);
+				if(n == requiredSize){
+					bool wr = buffer[0];
+					uint32_t size = buffer[1];
+					uint32_t address = *((uint32_t*)(buffer + 2));
+					uint32_t data = *((uint32_t*)(buffer + 6));
+
+					if((address & ~ 0x4) == 0xFFF00000){
+						assert(size == 2);
+
+						top->debug_bus_cmd_valid = 1;
+						top->debug_bus_cmd_payload_wr = wr;
+						top->debug_bus_cmd_payload_address = address;
+						top->debug_bus_cmd_payload_data = data;
+						timeSpacer = 50;
+					} else {
+						bool dummy;
+						ws->dBusAccess(address,wr,size,0xFFFFFFFF, &data, &dummy);
+						if(!wr){
+							send(clientHandle,&data,4,0);
+						}
+					}
+
+				} else if(n == 0){
+					printf("Socket read error");
+				}
+			} else {
+				timeSpacer--;
+			}
+		}
 	}
 };
 #endif
