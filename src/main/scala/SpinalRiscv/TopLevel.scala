@@ -183,7 +183,7 @@ object TopLevel {
           new MulPlugin,
           new DivPlugin,
           new CsrPlugin(csrConfigAll),
-//          new DebugPlugin(),
+          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = false,
             catchAddressMisaligned = true,

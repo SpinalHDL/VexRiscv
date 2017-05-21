@@ -36,7 +36,7 @@ case class DebugExtensionIo() extends Bundle with IMasterSlave{
   }
 }
 
-class DebugPlugin() extends Plugin[VexRiscv] {
+class DebugPlugin(debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
 
   var io : DebugExtensionIo = null
 
@@ -46,7 +46,7 @@ class DebugPlugin() extends Plugin[VexRiscv] {
     import Riscv._
     import pipeline.config._
 
-    io = slave(DebugExtensionIo())
+    io = slave(DebugExtensionIo()).setName("debug")
 
     val decoderService = pipeline.service(classOf[DecoderService])
 
@@ -64,83 +64,83 @@ class DebugPlugin() extends Plugin[VexRiscv] {
     import pipeline._
     import pipeline.config._
 
-    val busReadDataReg = Reg(Bits(32 bit))
-    when(writeBack.arbitration.isValid){
-      busReadDataReg := writeBack.output(REGFILE_WRITE_DATA)
-    }
-    io.bus.cmd.ready := True
-    io.bus.rsp.data := busReadDataReg
+    debugClockDomain {pipeline plug new Area{
+      val busReadDataReg = Reg(Bits(32 bit))
+      when(writeBack.arbitration.isValid) {
+        busReadDataReg := writeBack.output(REGFILE_WRITE_DATA)
+      }
+      io.bus.cmd.ready := True
+      io.bus.rsp.data := busReadDataReg
 
-    val insertDecodeInstruction = False
-    val firstCycle = RegNext(False) setWhen(io.bus.cmd.ready)
-    val resetIt = RegInit(False)
-    val haltIt = RegInit(False)
-    val flushIt = RegNext(False)
-    val stepIt = RegInit(False)
+      val insertDecodeInstruction = False
+      val firstCycle = RegNext(False) setWhen (io.bus.cmd.ready)
+      val resetIt = RegInit(False)
+      val haltIt = RegInit(False)
+      val stepIt = RegInit(False)
 
-    val isPipActive = RegNext(List(fetch,decode,execute,memory,writeBack).map(_.arbitration.isValid).orR)
-    val isPipBusy = isPipActive || RegNext(isPipActive)
-    val haltedByBreak = RegInit(False)
+      val isPipActive = RegNext(List(fetch, decode, execute, memory, writeBack).map(_.arbitration.isValid).orR)
+      val isPipBusy = isPipActive || RegNext(isPipActive)
+      val haltedByBreak = RegInit(False)
 
-    when(io.bus.cmd.valid) {
-      switch(io.bus.cmd.address(2 downto 2)) {
-        is(0){
-          when(io.bus.cmd.wr){
-            flushIt := io.bus.cmd.data(2)
-            stepIt := io.bus.cmd.data(4)
-            resetIt setWhen(io.bus.cmd.data(16)) clearWhen(io.bus.cmd.data(24))
-            haltIt  setWhen(io.bus.cmd.data(17)) clearWhen(io.bus.cmd.data(25))
-            haltedByBreak clearWhen(io.bus.cmd.data(25))
-          } otherwise{
-            busReadDataReg(0) := resetIt
-            busReadDataReg(1) := haltIt
-            busReadDataReg(2) := isPipBusy
-            busReadDataReg(3) := haltedByBreak
-            busReadDataReg(4) := stepIt
+      when(io.bus.cmd.valid) {
+        switch(io.bus.cmd.address(2 downto 2)) {
+          is(0) {
+            when(io.bus.cmd.wr) {
+              stepIt := io.bus.cmd.data(4)
+              resetIt setWhen (io.bus.cmd.data(16)) clearWhen (io.bus.cmd.data(24))
+              haltIt setWhen (io.bus.cmd.data(17)) clearWhen (io.bus.cmd.data(25))
+              haltedByBreak clearWhen (io.bus.cmd.data(25))
+            } otherwise {
+              busReadDataReg(0) := resetIt
+              busReadDataReg(1) := haltIt
+              busReadDataReg(2) := isPipBusy
+              busReadDataReg(3) := haltedByBreak
+              busReadDataReg(4) := stepIt
+            }
           }
-        }
-        is(1) {
-          when(io.bus.cmd.wr){
-            insertDecodeInstruction := True
-            val injectedInstructionSent = RegNext(decode.arbitration.isFiring) init(False)
-            decode.arbitration.haltIt setWhen(!injectedInstructionSent && !RegNext(decode.arbitration.isValid).init(False))
-            decode.arbitration.isValid setWhen(firstCycle)
-            io.bus.cmd.ready := injectedInstructionSent
+          is(1) {
+            when(io.bus.cmd.wr) {
+              insertDecodeInstruction := True
+              val injectedInstructionSent = RegNext(decode.arbitration.isFiring) init (False)
+              decode.arbitration.haltIt setWhen (!injectedInstructionSent && !RegNext(decode.arbitration.isValid).init(False))
+              decode.arbitration.isValid setWhen (firstCycle)
+              io.bus.cmd.ready := injectedInstructionSent
+            }
           }
         }
       }
-    }
 
-    //Assign the bus write data into the register who drive the decode instruction, even if it need to cross some hierarchy (caches)
-    Component.current.addPrePopTask(() => {
-      val reg = decode.input(INSTRUCTION).getDrivingReg
-      reg.component.rework{
-        when(insertDecodeInstruction.pull()) {
-          reg := io.bus.cmd.data.pull()
+      //Assign the bus write data into the register who drive the decode instruction, even if it need to cross some hierarchy (caches)
+      Component.current.addPrePopTask(() => {
+        val reg = decode.input(INSTRUCTION).getDrivingReg
+        reg.component.rework {
+          when(insertDecodeInstruction.pull()) {
+            reg := io.bus.cmd.data.pull()
+          }
         }
+      })
+
+
+      when(execute.arbitration.isFiring && execute.input(IS_EBREAK)) {
+        prefetch.arbitration.haltIt := True
+        decode.arbitration.flushAll := True
+        haltIt := True
+        haltedByBreak := True
       }
-    })
 
+      when(haltIt) {
+        prefetch.arbitration.haltIt := True
+      }
 
-    when(execute.arbitration.isFiring && execute.input(IS_EBREAK)){
-      prefetch.arbitration.haltIt := True
-      decode.arbitration.flushAll := True
-      haltIt := True
-      haltedByBreak := True
-    }
+      when(stepIt && prefetch.arbitration.isFiring) {
+        haltIt := True
+      }
 
-    when(haltIt){
-      prefetch.arbitration.haltIt := True
-    }
+      io.resetOut := RegNext(resetIt)
 
-    when(stepIt && prefetch.arbitration.isFiring){
-      haltIt := True
-    }
-
-    io.resetOut := RegNext(resetIt)
-
-    when(haltIt || stepIt){
-      service(classOf[InterruptionInhibitor]).inhibateInterrupts()
-    }
+      when(haltIt || stepIt) {
+        service(classOf[InterruptionInhibitor]).inhibateInterrupts()
+      }
+    }}
   }
 }

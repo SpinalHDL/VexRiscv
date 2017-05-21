@@ -137,6 +137,7 @@ double sc_time_stamp(){
 class SimElement{
 public:
 	virtual void onReset(){}
+	virtual void postReset(){}
 	virtual void preCycle(){}
 	virtual void postCycle(){}
 };
@@ -292,9 +293,10 @@ public:
 		top->clk = 0;
 		top->reset = 0;
 
-		for(SimElement* simElement : simElements) simElement->onReset();
 
 		top->eval(); currentTime = 3;
+		for(SimElement* simElement : simElements) simElement->onReset();
+
 		top->reset = 1;
 		top->eval();
 		#ifdef CSR
@@ -303,6 +305,8 @@ public:
 		#endif
 		dump(0);
 		top->reset = 0;
+		for(SimElement* simElement : simElements) simElement->postReset();
+
 		top->eval(); currentTime = 2;
 
 
@@ -578,6 +582,52 @@ public:
 #endif
 
 
+#ifdef DEBUG_PLUGIN
+#include <stdio.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <string.h>
+
+class DebugPlugin : public SimElement{
+public:
+
+
+	Workspace *ws;
+	VVexRiscv* top;
+	DebugPlugin(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+		top->debugReset = 0;
+	}
+
+	virtual void onReset(){
+		top->debug_bus_cmd_valid = 0;
+		top->debugReset = 1;
+	}
+
+
+
+	virtual void postReset(){
+		top->debugReset = 0;
+	}
+
+	virtual void preCycle(){
+
+	}
+
+	virtual void postCycle(){
+		top->reset = top->debug_resetOut;
+
+				  /*input   debug_bus_cmd_valid,
+                  output  debug_bus_cmd_ready,
+                  input   debug_bus_cmd_payload_wr,
+                  input  [7:0] debug_bus_cmd_payload_address,
+                  input  [31:0] debug_bus_cmd_payload_data,
+                  output reg [31:0] debug_bus_rsp_data,
+                  output reg  debug_resetOut,*/
+	}
+};
+#endif
 
 void Workspace::fillSimELements(){
 	#ifdef IBUS_SIMPLE
@@ -591,6 +641,9 @@ void Workspace::fillSimELements(){
 	#endif
 	#ifdef DBUS_CACHED
 		simElements.push_back(new DBusCached(this));
+	#endif
+	#ifdef DEBUG_PLUGIN
+		simElements.push_back(new DebugPlugin(this));
 	#endif
 }
 

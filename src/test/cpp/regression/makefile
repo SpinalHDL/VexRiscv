@@ -4,6 +4,7 @@ TRACE=no
 TRACE_START=0
 CSR=yes
 MMU=yes
+DEBUG_PLUGIN=yes
 DHRYSTONE=yes
 FREE_RTOS=no
 REDO=10
@@ -37,6 +38,10 @@ endif
 
 ifeq ($(MMU),yes)
 	ADDCFLAGS += -CFLAGS -DMMU
+endif
+
+ifeq ($(DEBUG_PLUGIN),yes)
+	ADDCFLAGS += -CFLAGS -DDEBUG_PLUGIN
 endif
 
 ifeq ($(REF),yes)
