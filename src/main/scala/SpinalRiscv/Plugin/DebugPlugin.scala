@@ -91,11 +91,11 @@ class DebugPlugin(debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
               haltIt setWhen (io.bus.cmd.data(17)) clearWhen (io.bus.cmd.data(25))
               haltedByBreak clearWhen (io.bus.cmd.data(25))
             } otherwise {
-              busReadDataReg(0) := resetIt
-              busReadDataReg(1) := haltIt
-              busReadDataReg(2) := isPipBusy
-              busReadDataReg(3) := haltedByBreak
-              busReadDataReg(4) := stepIt
+              io.bus.rsp.data(0) := resetIt
+              io.bus.rsp.data(1) := haltIt
+              io.bus.rsp.data(2) := isPipBusy
+              io.bus.rsp.data(3) := haltedByBreak
+              io.bus.rsp.data(4) := stepIt
             }
           }
           is(1) {

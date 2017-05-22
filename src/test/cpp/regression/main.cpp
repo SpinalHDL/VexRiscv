@@ -136,6 +136,7 @@ double sc_time_stamp(){
 
 class SimElement{
 public:
+	virtual ~SimElement(){}
 	virtual void onReset(){}
 	virtual void postReset(){}
 	virtual void preCycle(){}
@@ -154,6 +155,7 @@ public:
 	uint64_t mTimeCmp = 0;
 	uint64_t mTime = 0;
 	VVexRiscv* top;
+	bool resetDone = false;
 	int i;
 	uint32_t bootPc = -1;
 	uint32_t iStall = 1,dStall = 1;
@@ -185,6 +187,10 @@ public:
 		#ifdef TRACE
 		delete tfp;
 		#endif
+
+		for(SimElement* simElement : simElements) {
+			delete simElement;
+		}
 	}
 
 	Workspace* loadHex(string path){
@@ -311,6 +317,8 @@ public:
 
 
 		postReset();
+
+		resetDone = true;
 
 		#ifdef  REF
 		if(bootPc != -1) top->VexRiscv->core->prefetch_pc = bootPc;
@@ -608,16 +616,14 @@ bool SetSocketBlockingEnabled(int fd, bool blocking)
 
 class DebugPlugin : public SimElement{
 public:
-
-
 	Workspace *ws;
 	VVexRiscv* top;
 
-	int welcomeSocket, clientHandle;
-	char buffer[1024];
+	int serverSocket, clientHandle;
 	struct sockaddr_in serverAddr;
 	struct sockaddr_storage serverStorage;
 	socklen_t addr_size;
+	char buffer[1024];
 	uint32_t timeSpacer = 0;
 
 	DebugPlugin(Workspace* ws){
@@ -627,31 +633,44 @@ public:
 
 
 
-		/*---- Create the socket. The three arguments are: ----*/
-		/* 1) Internet domain 2) Stream socket 3) Default protocol (TCP in this case) */
-		welcomeSocket = socket(PF_INET, SOCK_STREAM, 0);
-		SetSocketBlockingEnabled(welcomeSocket,0);
+		//---- Create the socket. The three arguments are: ----//
+		// 1) Internet domain 2) Stream socket 3) Default protocol (TCP in this case) //
+		serverSocket = socket(PF_INET, SOCK_STREAM, 0);
+		assert(serverSocket != -1);
+		SetSocketBlockingEnabled(serverSocket,0);
 
 
-		/*---- Configure settings of the server address struct ----*/
-		/* Address family = Internet */
+		//---- Configure settings of the server address struct ----//
+		// Address family = Internet //
 		serverAddr.sin_family = AF_INET;
-		/* Set port number, using htons function to use proper byte order */
+		// Set port number, using htons function to use proper byte order //
 		serverAddr.sin_port = htons(7891);
-		/* Set IP address to localhost */
+		// Set IP address to localhost //
 		serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
-		/* Set all bits of the padding field to 0 */
+		// Set all bits of the padding field to 0 //
 		memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
-		/*---- Bind the address struct to the socket ----*/
-		bind(welcomeSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+		//---- Bind the address struct to the socket ----//
+		bind(serverSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
 
-		/*---- Listen on the socket, with 5 max connection requests queued ----*/
-		listen(welcomeSocket,5);
+		//---- Listen on the socket, with 5 max connection requests queued ----//
+		listen(serverSocket,1);
 
-		/*---- Accept call creates a new socket for the incoming connection ----*/
+		//---- Accept call creates a new socket for the incoming connection ----//
 		addr_size = sizeof serverStorage;
+
 		clientHandle = -1;
+	}
+
+	virtual ~DebugPlugin(){
+		if(clientHandle != -1) {
+			shutdown(clientHandle,SHUT_RDWR);
+			usleep(100);
+		}
+		if(serverSocket != -1) {
+			close(serverSocket);
+			usleep(100);
+		}
 	}
 
 	virtual void onReset(){
@@ -665,16 +684,23 @@ public:
 		top->debugReset = 0;
 	}
 
+	bool readRsp = false;
 	virtual void preCycle(){
 		if(clientHandle == -1){
-			clientHandle = accept(welcomeSocket, (struct sockaddr *) &serverStorage, &addr_size);
+			clientHandle = accept(serverSocket, (struct sockaddr *) &serverStorage, &addr_size);
 		}
 
+
 		if(top->debug_bus_cmd_valid && top->debug_bus_cmd_ready && !top->debug_bus_cmd_payload_wr){
+			readRsp = true;
+		}
+		if(readRsp){
 			if(clientHandle != -1){
 				send(clientHandle,&top->debug_bus_rsp_data,4,0);
 			}
+			readRsp = false;
 		}
+
 	}
 
 	virtual void postCycle(){
@@ -690,6 +716,7 @@ public:
 			if(timeSpacer == 0){
 				int requiredSize = 1 + 1 + 4 + 4;
 				int n = read(clientHandle,buffer,requiredSize);
+
 				if(n == requiredSize){
 					bool wr = buffer[0];
 					uint32_t size = buffer[1];
@@ -879,6 +906,169 @@ public:
 };
 
 
+
+#include<pthread.h>
+#include<stdlib.h>
+#include<unistd.h>
+
+#define RISCV_SPINAL_FLAGS_RESET 1<<0
+#define RISCV_SPINAL_FLAGS_HALT 1<<1
+#define RISCV_SPINAL_FLAGS_PIP_BUSY 1<<2
+#define RISCV_SPINAL_FLAGS_IS_IN_BREAKPOINT 1<<3
+#define RISCV_SPINAL_FLAGS_STEP 1<<4
+#define RISCV_SPINAL_FLAGS_PC_INC 1<<5
+
+#define RISCV_SPINAL_FLAGS_RESET_SET 1<<16
+#define RISCV_SPINAL_FLAGS_HALT_SET 1<<17
+
+#define RISCV_SPINAL_FLAGS_RESET_CLEAR 1<<24
+#define RISCV_SPINAL_FLAGS_HALT_CLEAR 1<<25
+
+class DebugPluginTest : public Workspace{
+public:
+	pthread_t clientThreadId;
+	char buffer[1024];
+	bool clientSuccess = false, clientFail = false;
+
+	static void* clientThreadWrapper(void *debugModule){
+		((DebugPluginTest*)debugModule)->clientThread();
+		return NULL;
+	}
+
+	int clientSocket;
+	void accessCmd(bool wr, uint32_t size, uint32_t address, uint32_t data){
+		buffer[0] = wr;
+		buffer[1] = size;
+		*((uint32_t*) (buffer + 2)) = address;
+		*((uint32_t*) (buffer + 6)) = data;
+		send(clientSocket,buffer,10,0);
+	}
+
+	void writeCmd(uint32_t size, uint32_t address, uint32_t data){
+		accessCmd(true, 2, address, data);
+	}
+
+
+	uint32_t readCmd(uint32_t size, uint32_t address){
+		accessCmd(false, 2, address, VL_RANDOM_I(32));
+		if(recv(clientSocket, buffer, 4, 0) != 4){
+			printf("Should read 4 bytes");
+			fail();
+		}
+		return *((uint32_t*) buffer);
+	}
+
+
+
+	void clientThread(){
+		struct sockaddr_in serverAddr;
+		socklen_t addr_size;
+
+		//---- Create the socket. The three arguments are: ----//
+		// 1) Internet domain 2) Stream socket 3) Default protocol (TCP in this case) //
+		clientSocket = socket(PF_INET, SOCK_STREAM, 0);
+
+		//---- Configure settings of the server address struct ----//
+		// Address family = Internet //
+		serverAddr.sin_family = AF_INET;
+		// Set port number, using htons function to use proper byte order //
+		serverAddr.sin_port = htons(7891);
+		// Set IP address to localhost //
+		serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
+		// Set all bits of the padding field to 0 //
+		memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
+
+		//---- Connect the socket to the server using the address struct ----//
+		addr_size = sizeof serverAddr;
+		int error = connect(clientSocket, (struct sockaddr *) &serverAddr, addr_size);
+//		printf("!! %x\n",readCmd(2,0x8));
+		uint32_t debugAddress = 0xFFF00000;
+		uint32_t readValue;
+
+		while(resetDone != true){usleep(100);}
+		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
+		if((readValue = readCmd(2,debugAddress + 4)) != 0x0000000C){
+			printf("wrong break PC %x\n",readValue);
+			clientFail = true; return;
+		}
+
+		writeCmd(2, debugAddress + 4, 0x13 + (1 << 15)); //Read regfile
+		if((readValue = readCmd(2,debugAddress + 4)) != 10){
+			printf("wrong break PC %x\n",readValue);
+			clientFail = true; return;
+		}
+
+		writeCmd(2, debugAddress + 4, 0x13 + (2 << 15)); //Read regfile
+		if((readValue = readCmd(2,debugAddress + 4)) != 20){
+			printf("wrong break PC %x\n",readValue);
+			clientFail = true; return;
+		}
+
+		writeCmd(2, debugAddress + 4, 0x13 + (3 << 15)); //Read regfile
+		if((readValue = readCmd(2,debugAddress + 4)) != 30){
+			printf("wrong break PC %x\n",readValue);
+			clientFail = true; return;
+		}
+
+		writeCmd(2, debugAddress + 4, 0x13 + (1 << 7) + (40 << 20)); //Write x1 with 40
+		writeCmd(2, debugAddress + 4, 0x13 + (29 << 7) + (0x10 << 20)); //Write x29 with 0x10
+		writeCmd(2, debugAddress + 4, 0x67 + (29 << 15)); //Branch x29
+		writeCmd(2, debugAddress + 0, RISCV_SPINAL_FLAGS_HALT_CLEAR); //Run CPU
+
+		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
+		if((readValue = readCmd(2,debugAddress + 4)) != 0x00000014){
+			printf("wrong break PC 2 %x\n",readValue);
+			clientFail = true; return;
+		}
+
+
+		writeCmd(2, debugAddress + 4, 0x13 + (3 << 15)); //Read regfile
+		if((readValue = readCmd(2,debugAddress + 4)) != 60){
+			printf("wrong x1 %x\n",readValue);
+			clientFail = true; return;
+		}
+
+		writeCmd(2, debugAddress + 4, 0x13 + (29 << 7) + (0x18 << 20)); //Write x29 with 0x10
+		writeCmd(2, debugAddress + 4, 0x67 + (29 << 15)); //Branch x29
+		writeCmd(2, debugAddress + 0, RISCV_SPINAL_FLAGS_HALT_CLEAR); //Run CPU
+
+
+
+		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
+		if((readValue = readCmd(2,debugAddress + 4)) != 0x00000024){
+			printf("wrong break PC 2 %x\n",readValue);
+			clientFail = true; return;
+		}
+
+
+		writeCmd(2, debugAddress + 4, 0x13 + (3 << 15)); //Read x3
+		if((readValue = readCmd(2,debugAddress + 4)) != 171){
+			printf("wrong x3 %x\n",readValue);
+			clientFail = true; return;
+		}
+
+
+		clientSuccess = true;
+	}
+
+
+	DebugPluginTest() : Workspace("DebugPluginTest") {
+		loadHex("../../resources/hex/debugPlugin.hex");
+		 pthread_create(&clientThreadId, NULL, &clientThreadWrapper, this);
+		 noInstructionReadCheck();
+	}
+
+	virtual ~DebugPluginTest(){
+		if(clientSocket != -1) close(clientSocket);
+	}
+
+	virtual void checks(){
+		if(clientSuccess) pass();
+		if(clientFail) fail();
+	}
+};
+
+
 string riscvTestMain[] = {
 	"rv32ui-p-simple",
 	"rv32ui-p-lui",
@@ -964,7 +1154,14 @@ int main(int argc, char **argv, char **env) {
 
 	for(int idx = 0;idx < 1;idx++){
 		#ifndef  REF
+
+
+
 		TestA().run();
+
+
+
+
 		for(const string &name : riscvTestMain){
 			redo(REDO,RiscvTest(name).run();)
 		}
@@ -992,18 +1189,15 @@ int main(int argc, char **argv, char **env) {
 		#endif
 		#endif
 
-
+		#ifdef DEBUG_PLUGIN
+		redo(REDO,DebugPluginTest().run(100e3););
+		#endif
 
 		#ifdef DHRYSTONE
-//		Dhrystone("dhrystoneO3",false,false).run(0.05e6);
-
 		Dhrystone("dhrystoneO3_Stall","dhrystoneO3",true,true).run(1.1e6);
 		Dhrystone("dhrystoneO3M_Stall","dhrystoneO3M",true,true).run(1.5e6);
 		Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.5e6);
 		Dhrystone("dhrystoneO3M","dhrystoneO3M",false,false).run(1.2e6);
-
-//		Dhrystone("dhrystoneO3ML",false,false).run(8e6);
-//		Dhrystone("dhrystoneO3MLL",false,false).run(80e6);
 		#endif
 
 

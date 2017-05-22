@@ -15,6 +15,9 @@ REF_TIME=no
 ADDCFLAGS += -CFLAGS -D${IBUS}
 ADDCFLAGS += -CFLAGS -D${DBUS}
 ADDCFLAGS += -CFLAGS -DREDO=${REDO}
+ADDCFLAGS += -CFLAGS -pthread
+
+
 ifeq ($(DHRYSTONE),yes)
 	ADDCFLAGS += -CFLAGS -DDHRYSTONE
 endif
@@ -58,10 +61,10 @@ run: compile
 	./obj_dir/VVexRiscv
 
 verilate:
-	verilator -cc  ../../../../VexRiscv.v  -O3 -CFLAGS -std=c++11  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-WIDTH --x-assign unique --exe main.cpp
+	verilator -cc  ../../../../VexRiscv.v  -O3 -CFLAGS -std=c++11 -LDFLAGS -pthread  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-WIDTH --x-assign unique --exe main.cpp
  	
 compile: verilate
-	make  -j -C obj_dir/ -f VVexRiscv.mk VVexRiscv
+	make  -j  -C obj_dir/ -f VVexRiscv.mk VVexRiscv
  	
 clean:
 	rm -rf obj_dir
