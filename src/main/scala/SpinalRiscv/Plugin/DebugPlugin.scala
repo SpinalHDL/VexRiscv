@@ -138,8 +138,10 @@ class DebugPlugin(debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
 
       io.resetOut := RegNext(resetIt)
 
-      when(haltIt || stepIt) {
-        service(classOf[InterruptionInhibitor]).inhibateInterrupts()
+      if(serviceExist(classOf[InterruptionInhibitor])) {
+        when(haltIt || stepIt) {
+          service(classOf[InterruptionInhibitor]).inhibateInterrupts()
+        }
       }
     }}
   }

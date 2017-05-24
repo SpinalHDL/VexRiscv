@@ -17,6 +17,13 @@
 
 #include <iomanip>
 
+#include <time.h>
+
+struct timespec timer_get(){
+    struct timespec start_time;
+    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
+    return start_time;
+}
 
 class Memory{
 public:
@@ -157,6 +164,8 @@ public:
 	VVexRiscv* top;
 	bool resetDone = false;
 	int i;
+	double cyclesPerSecond = 10e6;
+	double allowedCycles = 0.0;
 	uint32_t bootPc = -1;
 	uint32_t iStall = 1,dStall = 1;
 	#ifdef TRACE
@@ -171,15 +180,20 @@ public:
 	ofstream memTraces;
 	ofstream logTraces;
 
+	struct timespec start_time;
+
 
 	Workspace(string name){
 		testsCounter++;
 		this->name = name;
 		top = new VVexRiscv;
-		regTraces.open (name + ".regTrace");
-		memTraces.open (name + ".memTrace");
+		#ifdef TRACE_ACCESS
+			regTraces.open (name + ".regTrace");
+			memTraces.open (name + ".memTrace");
+		#endif
 		logTraces.open (name + ".logTrace");
 		fillSimELements();
+		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
 	}
 
 	virtual ~Workspace(){
@@ -195,6 +209,11 @@ public:
 
 	Workspace* loadHex(string path){
 		loadHexImpl(path,&mem);
+		return this;
+	}
+
+	Workspace* setCyclesPerSecond(double value){
+		cyclesPerSecond = value;
 		return this;
 	}
 
@@ -326,9 +345,21 @@ public:
 		if(bootPc != -1) top->VexRiscv->prefetch_PcManagerSimplePlugin_pcReg = bootPc;
 		#endif
 
+
 		try {
 			// run simulation for 100 clock periods
 			for (i = 16; i < timeout*2; i+=2) {
+				while(allowedCycles <= 0.0){
+					struct timespec end_time;
+					clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
+					uint64_t diffInNanos = end_time.tv_sec*1e9 + end_time.tv_nsec -  start_time.tv_sec*1e9 - start_time.tv_nsec;
+					start_time = end_time;
+					double dt = diffInNanos*1e-9;
+					allowedCycles += dt*cyclesPerSecond;
+					if(allowedCycles > cyclesPerSecond/100) allowedCycles = cyclesPerSecond/100;
+				}
+				allowedCycles-=1.0;
+
 				#ifndef REF_TIME
 				mTime = i/2;
 				#endif
@@ -596,8 +627,8 @@ public:
 #include <netinet/in.h>
 #include <string.h>
 #include <arpa/inet.h>
-
 #include <fcntl.h>
+
 /** Returns true on success, or false if there was an error */
 bool SetSocketBlockingEnabled(int fd, bool blocking)
 {
@@ -644,7 +675,7 @@ public:
 		// Address family = Internet //
 		serverAddr.sin_family = AF_INET;
 		// Set port number, using htons function to use proper byte order //
-		serverAddr.sin_port = htons(7891);
+		serverAddr.sin_port = htons(7893);
 		// Set IP address to localhost //
 		serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 		// Set all bits of the padding field to 0 //
@@ -688,6 +719,8 @@ public:
 	virtual void preCycle(){
 		if(clientHandle == -1){
 			clientHandle = accept(serverSocket, (struct sockaddr *) &serverStorage, &addr_size);
+			if(clientHandle != -1)
+				printf("CONNECTED\n");
 		}
 
 
@@ -962,7 +995,6 @@ public:
 
 	void clientThread(){
 		struct sockaddr_in serverAddr;
-		socklen_t addr_size;
 
 		//---- Create the socket. The three arguments are: ----//
 		// 1) Internet domain 2) Stream socket 3) Default protocol (TCP in this case) //
@@ -972,20 +1004,21 @@ public:
 		// Address family = Internet //
 		serverAddr.sin_family = AF_INET;
 		// Set port number, using htons function to use proper byte order //
-		serverAddr.sin_port = htons(7891);
+		serverAddr.sin_port = htons(7893);
 		// Set IP address to localhost //
 		serverAddr.sin_addr.s_addr = inet_addr("127.0.0.1");
 		// Set all bits of the padding field to 0 //
 		memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
 		//---- Connect the socket to the server using the address struct ----//
-		addr_size = sizeof serverAddr;
+		socklen_t addr_size = sizeof serverAddr;
 		int error = connect(clientSocket, (struct sockaddr *) &serverAddr, addr_size);
 //		printf("!! %x\n",readCmd(2,0x8));
 		uint32_t debugAddress = 0xFFF00000;
 		uint32_t readValue;
 
 		while(resetDone != true){usleep(100);}
+
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
 		if((readValue = readCmd(2,debugAddress + 4)) != 0x0000000C){
 			printf("wrong break PC %x\n",readValue);
@@ -1128,7 +1161,6 @@ string riscvTestDiv[] = {
 	"rv32um-p-remu"
 };
 
-#include <time.h>
 
 struct timespec timer_start(){
     struct timespec start_time;
@@ -1154,6 +1186,10 @@ int main(int argc, char **argv, char **env) {
 
 	for(int idx = 0;idx < 1;idx++){
 		#ifndef  REF
+
+		#ifdef DEBUG_PLUGIN_EXTERNAL
+		Workspace("debugPluginExternal").loadHex("../../resources/hex/debugPluginExternal.hex")->noInstructionReadCheck()->setCyclesPerSecond(5e3)->run(1e9);
+		#endif
 
 
 
