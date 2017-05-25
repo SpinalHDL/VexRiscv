@@ -715,6 +715,12 @@ public:
 		top->debugReset = 0;
 	}
 
+	void connectionReset(){
+		printf("CONNECTION RESET\n");
+		shutdown(clientHandle,SHUT_RDWR);
+		clientHandle = -1;
+	}
+
 	bool readRsp = false;
 	virtual void preCycle(){
 		if(clientHandle == -1){
@@ -729,7 +735,7 @@ public:
 		}
 		if(readRsp){
 			if(clientHandle != -1){
-				send(clientHandle,&top->debug_bus_rsp_data,4,0);
+				if(send(clientHandle,&top->debug_bus_rsp_data,4,0) == -1) connectionReset();
 			}
 			readRsp = false;
 		}
@@ -766,14 +772,15 @@ public:
 						timeSpacer = 50;
 					} else {
 						bool dummy;
+						printf("wr=%d size=%d address=%x data=%x\n",wr,size,address,data);
 						ws->dBusAccess(address,wr,size,0xFFFFFFFF, &data, &dummy);
 						if(!wr){
-							send(clientHandle,&data,4,0);
+							if(-1 == send(clientHandle,&data,4,0))  connectionReset();
 						}
 					}
 
-				} else if(n == 0){
-					printf("Socket read error");
+				} else {
+					 connectionReset();
 				}
 			} else {
 				timeSpacer--;
