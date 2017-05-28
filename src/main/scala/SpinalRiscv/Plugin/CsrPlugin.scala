@@ -273,7 +273,7 @@ class CsrPlugin(config : MachineCsrConfig) extends Plugin[VexRiscv] with Excepti
         val exceptionValids = Vec(Bool,stages.length)
         val exceptionValidsRegs = Vec(Reg(Bool) init(False), stages.length)
         val exceptionContext = Reg(ExceptionCause())
-        val pipelineHasException = exceptionValids.orR
+        val pipelineHasException = exceptionValids.orR   //TODO FMAX maybe could be partialy pipelined
 
         pipelineLiberator.enable setWhen(pipelineHasException)
 

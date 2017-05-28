@@ -360,6 +360,7 @@ public:
 				}
 				allowedCycles-=1.0;
 
+
 				#ifndef REF_TIME
 				mTime = i/2;
 				#endif
@@ -628,6 +629,7 @@ public:
 #include <string.h>
 #include <arpa/inet.h>
 #include <fcntl.h>
+#include <sys/ioctl.h>
 
 /** Returns true on success, or false if there was an error */
 bool SetSocketBlockingEnabled(int fd, bool blocking)
@@ -722,6 +724,7 @@ public:
 	}
 
 	bool readRsp = false;
+	bool wasReady = false;
 	virtual void preCycle(){
 		if(clientHandle == -1){
 			clientHandle = accept(serverSocket, (struct sockaddr *) &serverStorage, &addr_size);
@@ -740,11 +743,14 @@ public:
 			readRsp = false;
 		}
 
+		wasReady = top->debug_bus_cmd_ready;
 	}
 
 	virtual void postCycle(){
 		top->reset = top->debug_resetOut;
-		if(top->debug_bus_cmd_ready){
+		if(wasReady){
+			if(top->debug_bus_cmd_valid)
+				timeSpacer = 50;
 			top->debug_bus_cmd_valid = 0;
 			top->debug_bus_cmd_payload_wr = VL_RANDOM_I(1);
 			top->debug_bus_cmd_payload_address = VL_RANDOM_I(8);
@@ -754,33 +760,41 @@ public:
 		if(clientHandle != -1 && top->debug_bus_cmd_valid == 0){
 			if(timeSpacer == 0){
 				int requiredSize = 1 + 1 + 4 + 4;
-				int n = read(clientHandle,buffer,requiredSize);
-
-				if(n == requiredSize){
-					bool wr = buffer[0];
-					uint32_t size = buffer[1];
-					uint32_t address = *((uint32_t*)(buffer + 2));
-					uint32_t data = *((uint32_t*)(buffer + 6));
-
-					if((address & ~ 0x4) == 0xFFF00000){
-						assert(size == 2);
-
-						top->debug_bus_cmd_valid = 1;
-						top->debug_bus_cmd_payload_wr = wr;
-						top->debug_bus_cmd_payload_address = address;
-						top->debug_bus_cmd_payload_data = data;
-						timeSpacer = 50;
+				int n;
+				if(ioctl(clientHandle,FIONREAD,&n) != 0){
+			  		connectionReset();
+				} else if(n >= requiredSize){
+					if(requiredSize != read(clientHandle,buffer,requiredSize)){
+			  			connectionReset();
 					} else {
-						bool dummy;
-						printf("wr=%d size=%d address=%x data=%x\n",wr,size,address,data);
-						ws->dBusAccess(address,wr,size,0xFFFFFFFF, &data, &dummy);
-						if(!wr){
-							if(-1 == send(clientHandle,&data,4,0))  connectionReset();
+						bool wr = buffer[0];
+						uint32_t size = buffer[1];
+						uint32_t address = *((uint32_t*)(buffer + 2));
+						uint32_t data = *((uint32_t*)(buffer + 6));
+
+						if((address & ~ 0x4) == 0xFFF00000){
+							assert(size == 2);
+
+							top->debug_bus_cmd_valid = 1;
+							top->debug_bus_cmd_payload_wr = wr;
+							top->debug_bus_cmd_payload_address = address;
+							top->debug_bus_cmd_payload_data = data;
+						} else {
+							bool dummy;
+							printf("wr=%d size=%d address=%x data=%x\n",wr,size,address,data);
+							ws->dBusAccess(address,wr,size,0xFFFFFFFF, &data, &dummy);
+							if(!wr){
+								if(-1 == send(clientHandle,&data,4,0))  connectionReset();
+							}
 						}
 					}
-
 				} else {
-					 connectionReset();
+					int error = 0;
+                    socklen_t len = sizeof (error);
+                    int retval = getsockopt (clientHandle, SOL_SOCKET, SO_ERROR, &error, &len);
+                    if (retval != 0 || error != 0) {
+                    	connectionReset();
+                    }
 				}
 			} else {
 				timeSpacer--;
@@ -1195,7 +1209,16 @@ int main(int argc, char **argv, char **env) {
 		#ifndef  REF
 
 		#ifdef DEBUG_PLUGIN_EXTERNAL
-		Workspace("debugPluginExternal").loadHex("../../resources/hex/debugPluginExternal.hex")->noInstructionReadCheck()->setCyclesPerSecond(5e3)->run(1e9);
+		{
+			Workspace w("debugPluginExternal");
+			w.loadHex("../../resources/hex/debugPluginExternal.hex");
+			w.noInstructionReadCheck();
+			#if defined(TRACE) || defined(TRACE_ACCESS)
+				//w.setCyclesPerSecond(5e3);
+				printf("Speed reduced 5Khz\n");
+			#endif
+			w.run(1e9);
+		}
 		#endif
 
 
@@ -1233,7 +1256,7 @@ int main(int argc, char **argv, char **env) {
 		#endif
 
 		#ifdef DEBUG_PLUGIN
-		redo(REDO,DebugPluginTest().run(100e3););
+		redo(REDO,DebugPluginTest().run(1e6););
 		#endif
 
 		#ifdef DHRYSTONE
