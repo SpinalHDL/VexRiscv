@@ -5,6 +5,7 @@ import SpinalRiscv._
 import SpinalRiscv.ip._
 import spinal.core._
 import spinal.lib._
+import spinal.lib.bus.amba3.apb.{Apb3Config, Apb3}
 
 
 case class DebugExtensionCmd() extends Bundle{
@@ -23,6 +24,24 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
   override def asMaster(): Unit = {
     master(cmd)
     in(rsp)
+  }
+
+  def toApb3(): Apb3 ={
+    val apb = Apb3(Apb3Config(
+      addressWidth = 8,
+      dataWidth = 32,
+      useSlaveError = false
+    ))
+
+    cmd.valid := apb.PSEL(0) && apb.PENABLE
+    cmd.wr := apb.PWRITE
+    cmd.address := apb.PADDR
+    cmd.data := apb.PWDATA
+
+    apb.PREADY := cmd.ready
+    apb.PRDATA := rsp.data
+
+    apb
   }
 }
 

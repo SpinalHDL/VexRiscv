@@ -466,7 +466,7 @@ public:
 			ws->iBusAccess(top->iBus_cmd_payload_pc,&inst_next,&error_next);
 		}
 	}
-
+	//TODO doesn't catch when instruction removed ?
 	virtual void postCycle(){
 		top->iBus_rsp_ready = !pending;
 		if(pending && (!ws->iStall || VL_RANDOM_I(7) < 100)){
@@ -772,7 +772,7 @@ public:
 						uint32_t address = *((uint32_t*)(buffer + 2));
 						uint32_t data = *((uint32_t*)(buffer + 6));
 
-						if((address & ~ 0x4) == 0xFFF00000){
+						if((address & ~ 0x4) == 0xF00F0000){
 							assert(size == 2);
 
 							top->debug_bus_cmd_valid = 1;
@@ -1035,7 +1035,7 @@ public:
 		socklen_t addr_size = sizeof serverAddr;
 		int error = connect(clientSocket, (struct sockaddr *) &serverAddr, addr_size);
 //		printf("!! %x\n",readCmd(2,0x8));
-		uint32_t debugAddress = 0xFFF00000;
+		uint32_t debugAddress = 0xF00F0000;
 		uint32_t readValue;
 
 		while(resetDone != true){usleep(100);}

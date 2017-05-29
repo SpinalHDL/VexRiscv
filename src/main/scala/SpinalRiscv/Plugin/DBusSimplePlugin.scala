@@ -3,6 +3,7 @@ package SpinalRiscv.Plugin
 import SpinalRiscv._
 import spinal.core._
 import spinal.lib._
+import spinal.lib.bus.amba4.axi._
 
 
 case class DBusSimpleCmd() extends Bundle{
@@ -22,6 +23,20 @@ case class DBusSimpleRsp() extends Bundle with IMasterSlave{
   }
 }
 
+
+object DBusSimpleBus{
+  def getAxi4Config() = Axi4Config(
+    addressWidth = 32,
+    dataWidth = 32,
+    useId = false,
+    useRegion = false,
+    useBurst = false,
+    useLock = false,
+    useQos = false,
+    useLen = false,
+    useResp = true
+  )
+}
 case class DBusSimpleBus() extends Bundle with IMasterSlave{
   val cmd = Stream(DBusSimpleCmd())
   val rsp = DBusSimpleRsp()
@@ -30,7 +45,55 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     master(cmd)
     slave(rsp)
   }
+
+  def toAxi4Shared(stageCmd : Boolean = false): Axi4Shared = {
+    val axi = Axi4Shared(DBusSimpleBus.getAxi4Config())
+    val pendingWritesMax = 7
+    val pendingWrites = CounterUpDown(
+      stateCount = pendingWritesMax + 1,
+      incWhen = axi.sharedCmd.fire && axi.sharedCmd.write,
+      decWhen = axi.writeRsp.fire
+    )
+
+    val cmdPreFork = if (stageCmd) cmd.stage.stage() else cmd
+    val (cmdFork, dataFork) = StreamFork2(cmdPreFork.haltWhen((pendingWrites =/= 0 && !cmdPreFork.wr) || pendingWrites === pendingWritesMax))
+    axi.sharedCmd.arbitrationFrom(cmdFork)
+    axi.sharedCmd.write := cmdFork.wr
+    axi.sharedCmd.prot := "010"
+    axi.sharedCmd.cache := "1111"
+    axi.sharedCmd.size := cmdFork.size.resized
+    axi.sharedCmd.addr := cmdFork.address
+
+    val dataStage = dataFork.throwWhen(!dataFork.wr)
+    axi.writeData.arbitrationFrom(dataStage)
+    axi.writeData.last := True
+    axi.writeData.data := dataStage.data
+    axi.writeData.strb := (dataStage.size.mux(
+      U(0) -> B"0001",
+      U(1) -> B"0011",
+      default -> B"1111"
+    ) << dataStage.address(1 downto 0)).resized
+
+
+    rsp.ready := axi.r.valid
+    rsp.error := !axi.r.isOKAY()
+    rsp.data := axi.r.data
+
+    axi.r.ready := True
+    axi.b.ready := True
+
+
+    //TODO remove
+    val axi2 = Axi4Shared(DBusSimpleBus.getAxi4Config())
+    axi.arw >/-> axi2.arw
+    axi.w >/-> axi2.w
+    axi.r <-/< axi2.r
+    axi.b <-/< axi2.b
+
+    axi2
+  }
 }
+
 
 class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Boolean) extends Plugin[VexRiscv]{
 
@@ -124,7 +187,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
 
 
       insert(MEMORY_READ_DATA) := dBus.rsp.data
-      arbitration.haltIt setWhen(arbitration.isValid && input(MEMORY_ENABLE) && !dBus.rsp.ready)
+      arbitration.haltIt setWhen(arbitration.isValid && input(MEMORY_ENABLE) && input(REGFILE_WRITE_VALID) && !dBus.rsp.ready)
 
       if(catchAccessFault){
         memoryExceptionPort.valid := arbitration.isValid && input(MEMORY_ENABLE) && dBus.rsp.ready && dBus.rsp.error
