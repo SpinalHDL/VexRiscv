@@ -63,8 +63,9 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
     //TODO remove
     val axi2 = Axi4ReadOnly(IBusSimpleBus.getAxi4Config())
-    axi.ar >/-> axi2.ar
-    axi.r <-/< axi2.r
+//    axi.ar >/-> axi2.ar
+//    axi.r <-/< axi2.r
+    axi2 << axi
     axi2
   }
 }
@@ -88,9 +89,9 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) 
     val pendingCmd = RegInit(False) clearWhen(iBus.rsp.ready) setWhen(iBus.cmd.fire)
 
     //Emit iBus.cmd request
-    iBus.cmd.valid := prefetch.arbitration.isFiring //prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
+    iBus.cmd.valid := prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers && !(pendingCmd && !iBus.rsp.ready)//prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
     iBus.cmd.pc := prefetch.output(PC)
-    prefetch.arbitration.haltIt setWhen(!iBus.cmd.ready || (pendingCmd && !iBus.rsp.ready)) //TODO rework arbitration of iBusCmdvalid and halt it
+    prefetch.arbitration.haltIt setWhen(!iBus.cmd.ready || (pendingCmd && !iBus.rsp.ready))
 
 
     //Bus rsp buffer

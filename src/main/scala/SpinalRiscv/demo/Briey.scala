@@ -298,16 +298,6 @@ object Briey{
     val config = SpinalConfig().dumpWave()
     config.generateVerilog({
       val toplevel = new Briey(BrieyConfig.default)
-      /*toplevel.axi.ram.ram.initialContent = new Array[BigInt](toplevel.axi.ram.ram.wordCount)
-      toplevel.axi.ram.ram.initialContent(0) = 0x00000013
-      toplevel.axi.ram.ram.initialContent(1) = 0x10000013
-      toplevel.axi.ram.ram.initialContent(2) = 0x20000013
-      toplevel.axi.ram.ram.initialContent(3) = 0x30000013
-      toplevel.axi.ram.ram.initialContent(4) = 0x40000013
-      toplevel.axi.ram.ram.initialContent(5) = 0x50000013
-      toplevel.axi.ram.ram.initialContent(6) = 0x60000013
-      toplevel.axi.ram.ram.initialContent(7) = 0x70000013*/
-      
       toplevel
     })
   }

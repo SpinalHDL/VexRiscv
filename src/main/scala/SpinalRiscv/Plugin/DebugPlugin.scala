@@ -141,7 +141,7 @@ class DebugPlugin(debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
 
 
       when(execute.arbitration.isFiring && execute.input(IS_EBREAK)) {
-        prefetch.arbitration.haltIt := True
+        prefetch.arbitration.haltItByOther := True
         decode.arbitration.flushAll := True
         haltIt := True
         haltedByBreak := True

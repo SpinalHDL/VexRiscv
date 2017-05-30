@@ -291,8 +291,8 @@ object TopLevel {
         )
       )
 
-//      val toplevel = new VexRiscv(configFull)
-      val toplevel = new VexRiscv(configLight)
+      val toplevel = new VexRiscv(configFull)
+//      val toplevel = new VexRiscv(configLight)
 //      val toplevel = new VexRiscv(configTest)
       toplevel.decode.input(toplevel.config.INSTRUCTION).addAttribute(Verilator.public)
       toplevel.decode.input(toplevel.config.PC).addAttribute(Verilator.public)

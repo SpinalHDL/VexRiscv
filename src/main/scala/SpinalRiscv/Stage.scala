@@ -46,6 +46,7 @@ class Stage() extends Area{
 
   val arbitration = new Area{
     val haltIt = False
+    val haltItByOther = False
     val removeIt = False
     val flushAll = False
     val isValid = RegInit(False)
