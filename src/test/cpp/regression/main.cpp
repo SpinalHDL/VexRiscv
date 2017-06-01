@@ -591,7 +591,7 @@ public:
 	virtual void preCycle(){
 		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
 			if(pendingCount == 0){
-				pendingCount = top->dBus_cmd_payload_length;
+				pendingCount = top->dBus_cmd_payload_length+1;
 				address = top->dBus_cmd_payload_address;
 				wr = top->dBus_cmd_payload_wr;
 			}
@@ -1214,7 +1214,7 @@ int main(int argc, char **argv, char **env) {
 			w.loadHex("../../resources/hex/debugPluginExternal.hex");
 			w.noInstructionReadCheck();
 			#if defined(TRACE) || defined(TRACE_ACCESS)
-				//w.setCyclesPerSecond(5e3);
+				w.setCyclesPerSecond(5e3);
 				printf("Speed reduced 5Khz\n");
 			#endif
 			w.run(1e9);

@@ -8,7 +8,7 @@ import spinal.lib._
 
 
 
-class DBusCachedPlugin(config : DataCacheConfig, askMemoryTranslation : Boolean = false, memoryTranslatorPortConfig : Any = null)  extends Plugin[VexRiscv]{
+class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : Any = null)  extends Plugin[VexRiscv]{
   import config._
   var dBus  : DataCacheMemBus = null
   var mmuBus : MemoryTranslatorBus = null
@@ -55,8 +55,7 @@ class DBusCachedPlugin(config : DataCacheConfig, askMemoryTranslation : Boolean 
       REG2_USE -> True
     ))
 
-    if(askMemoryTranslation)
-      mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(pipeline.memory,memoryTranslatorPortConfig)
+    mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(pipeline.memory,memoryTranslatorPortConfig)
 
     if(catchSomething)
       exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(pipeline.writeBack)
@@ -104,15 +103,9 @@ class DBusCachedPlugin(config : DataCacheConfig, askMemoryTranslation : Boolean 
       cache.io.cpu.memory.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.memory.isStuck := arbitration.isStuck
       cache.io.cpu.memory.isRemoved := arbitration.removeIt
-      if(mmuBus != null){
-        cache.io.cpu.memory.mmuBus <> mmuBus
-      } else {
-        cache.io.cpu.memory.mmuBus.rsp.physicalAddress := cache.io.cpu.memory.mmuBus.cmd.virtualAddress
-        cache.io.cpu.memory.mmuBus.rsp.allowExecute := True
-        cache.io.cpu.memory.mmuBus.rsp.allowRead := True
-        cache.io.cpu.memory.mmuBus.rsp.allowWrite := True
-        cache.io.cpu.memory.mmuBus.rsp.allowUser := True
-      }
+      arbitration.haltIt setWhen(cache.io.cpu.memory.haltIt)
+
+      cache.io.cpu.memory.mmuBus <> mmuBus
     }
 
     writeBack plug new Area{

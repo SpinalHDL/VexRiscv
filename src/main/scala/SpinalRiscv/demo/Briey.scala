@@ -3,6 +3,7 @@ package SpinalRiscv.demo
 
 import SpinalRiscv.Plugin._
 import SpinalRiscv._
+import SpinalRiscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba3.apb._
@@ -124,14 +125,55 @@ class Briey(config: BrieyConfig) extends Component{
       val configLight = VexRiscvConfig(
         plugins = List(
           new PcManagerSimplePlugin(0x00000000l, false),
-          new IBusSimplePlugin(
-            interfaceKeepData = false,
-            catchAccessFault = false
+//          new IBusSimplePlugin(
+//            interfaceKeepData = false,
+//            catchAccessFault = false
+//          ),
+          new IBusCachedPlugin(
+            config = InstructionCacheConfig(
+              cacheSize = 4096,
+              bytePerLine =32,
+              wayCount = 1,
+              wrappedMemAccess = true,
+              addressWidth = 32,
+              cpuDataWidth = 32,
+              memDataWidth = 32,
+              catchIllegalAccess = false,
+              catchAccessFault = false,
+              catchMemoryTranslationMiss = false,
+              asyncTagMemory = false,
+              twoStageLogic = true
+            )
+//            askMemoryTranslation = true,
+//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//              portTlbSize = 4
+//            )
           ),
           new DBusSimplePlugin(
             catchAddressMisaligned = false,
             catchAccessFault = false
           ),
+//          new DBusCachedPlugin(
+//            config = new DataCacheConfig(
+//              cacheSize         = 4096,
+//              bytePerLine       = 32,
+//              wayCount          = 1,
+//              addressWidth      = 32,
+//              cpuDataWidth      = 32,
+//              memDataWidth      = 32,
+//              catchAccessError  = false,
+//              catchIllegal      = false,
+//              catchUnaligned    = false,
+//              catchMemoryTranslationMiss = false
+//            ),
+//            memoryTranslatorPortConfig = null
+//            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//            //              portTlbSize = 6
+//            //            )
+//          ),
+//          new StaticMemoryTranslatorPlugin(
+//            ioRange      = _(31 downto 28) === 0xF
+//          ),
           new DecoderSimplePlugin(
             catchIllegalInstruction = false
           ),
@@ -168,7 +210,9 @@ class Briey(config: BrieyConfig) extends Component{
       var debugBus : Apb3 = null
       for(plugin <- configLight.plugins) plugin match{
         case plugin : IBusSimplePlugin => iBus = plugin.iBus.toAxi4ReadOnly()
+        case plugin : IBusCachedPlugin => iBus = plugin.iBus.toAxi4ReadOnly()
         case plugin : DBusSimplePlugin => dBus = plugin.dBus.toAxi4Shared()
+        case plugin : DBusCachedPlugin => dBus = plugin.dBus.toAxi4Shared()
         case plugin : DebugPlugin => {
           resetCtrl.coreResetUnbuffered setWhen(plugin.io.resetOut)
           debugBus = plugin.io.bus.toApb3()

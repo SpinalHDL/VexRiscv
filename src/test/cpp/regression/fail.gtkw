@@ -1,47 +1,56 @@
 [*]
 [*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
-[*] Sun May 28 13:48:58 2017
+[*] Wed May 31 17:28:39 2017
 [*]
 [dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/regression/debugPluginExternal.vcd"
-[dumpfile_mtime] "Sun May 28 12:59:45 2017"
-[dumpfile_size] 905973760
+[dumpfile_mtime] "Wed May 31 17:28:23 2017"
+[dumpfile_size] 285487729
 [savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/regression/fail.gtkw"
-[timestart] 1181704
+[timestart] 1754228
 [size] 1776 953
-[pos] -1 -353
-*-6.000000 1181914 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[pos] -775 -353
+*-5.000000 1754292 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
-[sst_width] 201
-[signals_width] 392
+[treeopen] TOP.VexRiscv.
+[sst_width] 264
+[signals_width] 416
 [sst_expanded] 1
 [sst_vpaned_height] 279
-@22
-TOP.VexRiscv.DebugPlugin_busReadDataReg[31:0]
 @28
-TOP.VexRiscv.DebugPlugin_firstCycle
 TOP.VexRiscv.DebugPlugin_haltIt
-TOP.VexRiscv.DebugPlugin_haltedByBreak
 TOP.VexRiscv.DebugPlugin_insertDecodeInstruction
 TOP.VexRiscv.DebugPlugin_isPipActive
 TOP.VexRiscv.DebugPlugin_isPipBusy
-TOP.VexRiscv.DebugPlugin_resetIt
-TOP.VexRiscv.DebugPlugin_stepIt
-TOP.VexRiscv.debugReset
-@22
-TOP.VexRiscv.debug_bus_cmd_payload_address[7:0]
-TOP.VexRiscv.debug_bus_cmd_payload_data[31:0]
-@28
-TOP.VexRiscv.debug_bus_cmd_payload_wr
-@29
-TOP.VexRiscv.debug_bus_cmd_ready
-@28
-TOP.VexRiscv.debug_bus_cmd_valid
-@22
-TOP.VexRiscv.debug_bus_rsp_data[31:0]
-@28
-TOP.VexRiscv.debug_resetOut
-TOP.VexRiscv.decode_LEGAL_INSTRUCTION
-TOP.VexRiscv.CsrPlugin_exception
 TOP.VexRiscv.clk
+@22
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_address[31:0]
+@28
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_clean
+@22
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_data[31:0]
+@28
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_forceUncachedAccess
+@29
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_invalidate
+@28
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_kind[0]
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_size[1:0]
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_way
+TOP.VexRiscv.dataCache_1.io_cpu_execute_args_wr
+TOP.VexRiscv.dataCache_1.io_cpu_execute_isValid
+@22
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_address[31:0]
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_data[31:0]
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_length[3:0]
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_mask[3:0]
+@28
+TOP.VexRiscv.dataCache_1.io_mem_cmd_payload_wr
+TOP.VexRiscv.dataCache_1.io_mem_cmd_ready
+TOP.VexRiscv.dataCache_1.io_mem_cmd_valid
+@22
+TOP.VexRiscv.dataCache_1.victim_request_payload_address[31:0]
+@28
+TOP.VexRiscv.dataCache_1.victim_request_ready
+TOP.VexRiscv.dataCache_1.victim_request_valid
 [pattern_trace] 1
 [pattern_trace] 0

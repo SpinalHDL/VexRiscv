@@ -3,6 +3,7 @@ package SpinalRiscv.ip
 import SpinalRiscv._
 import spinal.core._
 import spinal.lib._
+import spinal.lib.bus.amba4.axi.{Axi4ReadOnly, Axi4Config}
 
 
 case class InstructionCacheConfig( cacheSize : Int,
@@ -20,6 +21,15 @@ case class InstructionCacheConfig( cacheSize : Int,
   def burstSize = bytePerLine*8/memDataWidth
   def catchSomething = catchAccessFault || catchMemoryTranslationMiss || catchIllegalAccess
 
+  def getAxi4Config() = Axi4Config(
+    addressWidth = addressWidth,
+    dataWidth = memDataWidth,
+    useId = false,
+    useRegion = false,
+    useLock = false,
+    useQos = false,
+    useSize = false
+  )
 }
 
 
@@ -89,6 +99,7 @@ case class InstructionCacheCpuBus(p : InstructionCacheConfig) extends Bundle wit
 case class InstructionCacheMemCmd(p : InstructionCacheConfig) extends Bundle{
   val address = UInt(p.addressWidth bit)
 }
+
 case class InstructionCacheMemRsp(p : InstructionCacheConfig) extends Bundle{
   val data = Bits(32 bit)
   val error = Bool
@@ -102,7 +113,29 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
     master(cmd)
     slave(rsp)
   }
+
+  def toAxi4ReadOnly(): Axi4ReadOnly = {
+    val axiConfig = p.getAxi4Config()
+    val mm = Axi4ReadOnly(axiConfig)
+
+    mm.readCmd.valid := cmd.valid
+    mm.readCmd.len := p.burstSize-1
+    mm.readCmd.addr := cmd.address
+    mm.readCmd.prot  := "110"
+    mm.readCmd.cache := "1111"
+    if(p.wrappedMemAccess)
+      mm.readCmd.setBurstWRAP()
+    else
+      mm.readCmd.setBurstINCR()
+    cmd.ready := mm.readCmd.ready
+    rsp.valid := mm.readRsp.valid
+    rsp.data  := mm.readRsp.data
+    rsp.error := !mm.readRsp.isOKAY()
+    mm.readRsp.ready := True
+    mm
+  }
 }
+
 
 case class InstructionCacheFlushBus() extends Bundle with IMasterSlave{
   val cmd = Event

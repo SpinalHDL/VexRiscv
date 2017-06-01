@@ -3,6 +3,7 @@ package SpinalRiscv.ip
 import SpinalRiscv._
 import spinal.core._
 import spinal.lib._
+import spinal.lib.bus.amba4.axi.{Axi4Shared, Axi4Config}
 
 
 case class DataCacheConfig( cacheSize : Int,
@@ -17,9 +18,19 @@ case class DataCacheConfig( cacheSize : Int,
                             catchMemoryTranslationMiss : Boolean,
                             clearTagsAfterReset : Boolean = true,
                             tagSizeShift : Int = 0){ //Used to force infering ram
-def burstSize = bytePerLine*8/memDataWidth
+  def burstSize = bytePerLine*8/memDataWidth
   val burstLength = bytePerLine/(memDataWidth/8)
   def catchSomething = catchUnaligned || catchMemoryTranslationMiss || catchIllegal || catchAccessError
+
+  def getAxi4SharedConfig() = Axi4Config(
+    addressWidth = addressWidth,
+    dataWidth = memDataWidth,
+    useId = false,
+    useRegion = false,
+    useBurst = false,
+    useLock = false,
+    useQos = false
+  )
 }
 
 
@@ -130,10 +141,12 @@ case class DataCacheCpuMemory(p : DataCacheConfig) extends Bundle with IMasterSl
   val isValid = Bool
   val isStuck = Bool
   val isRemoved = Bool
+  val haltIt = Bool
   val mmuBus  = MemoryTranslatorBus()
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved)
+    in(haltIt)
     slave(mmuBus)
   }
 }
@@ -173,7 +186,7 @@ case class DataCacheMemCmd(p : DataCacheConfig) extends Bundle{
   val address = UInt(p.addressWidth bit)
   val data = Bits(p.memDataWidth bits)
   val mask = Bits(p.memDataWidth/8 bits)
-  val length = UInt(log2Up(p.burstLength+1) bit)
+  val length = UInt(log2Up(p.burstLength) bits)
 }
 case class DataCacheMemRsp(p : DataCacheConfig) extends Bundle{
   val data = Bits(p.memDataWidth bit)
@@ -187,6 +200,50 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
   override def asMaster(): Unit = {
     master(cmd)
     slave(rsp)
+  }
+
+  def toAxi4Shared(stageCmd : Boolean = false): Axi4Shared = {
+    val axi = Axi4Shared(p.getAxi4SharedConfig())
+    val pendingWritesMax = 7
+    val pendingWrites = CounterUpDown(
+      stateCount = pendingWritesMax + 1,
+      incWhen = axi.sharedCmd.fire && axi.sharedCmd.write,
+      decWhen = axi.writeRsp.fire
+    )
+
+    val cmdPreFork = if (stageCmd) cmd.stage.stage().s2mPipe() else cmd
+    val (cmdFork, dataFork) = StreamFork2(cmdPreFork.haltWhen((pendingWrites =/= 0 && !cmdPreFork.wr) || pendingWrites === pendingWritesMax))
+    axi.sharedCmd.arbitrationFrom(cmdFork)
+    axi.sharedCmd.write := cmdFork.wr
+    axi.sharedCmd.prot := "010"
+    axi.sharedCmd.cache := "1111"
+    axi.sharedCmd.size := log2Up(p.memDataWidth/8)
+    axi.sharedCmd.addr := cmdFork.address
+    axi.sharedCmd.len  := cmdFork.length.resized
+
+    val dataStage = dataFork.throwWhen(!dataFork.wr)
+    axi.writeData.arbitrationFrom(dataStage)
+    axi.writeData.last := True
+    axi.writeData.data := dataStage.data
+    axi.writeData.strb := dataStage.mask
+
+
+    rsp.valid := axi.r.valid
+    rsp.error := !axi.r.isOKAY()
+    rsp.data := axi.r.data
+
+    axi.r.ready := True
+    axi.b.ready := True
+
+
+    //TODO remove
+    val axi2 = cloneOf(axi)
+    //    axi.arw >/-> axi2.arw
+    //    axi.w >/-> axi2.w
+    //    axi.r <-/< axi2.r
+    //    axi.b <-/< axi2.b
+    axi2 << axi
+    axi2
   }
 }
 
@@ -349,10 +406,8 @@ class DataCache(p : DataCacheConfig) extends Component{
         when(!dataReadRestored) {
           dataReadCmd.valid := True
           dataReadCmd.payload := way.dataReadRspOneAddress //Restore stage one readed value
-          assert(io.cpu.memory.isStuck,"Should not issue instructions when a victim line is not entirly in the victim cache",FAILURE)
         }
         dataReadRestored := True
-
       }
     }
 
@@ -383,7 +438,7 @@ class DataCache(p : DataCacheConfig) extends Component{
       io.mem.cmd.valid := True
       io.mem.cmd.wr := True
       io.mem.cmd.address := request.address(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
-      io.mem.cmd.length := p.burstLength
+      io.mem.cmd.length := p.burstLength-1
       io.mem.cmd.data := bufferReaded.payload
       io.mem.cmd.mask := (1<<(wordWidth/8))-1
 
@@ -412,6 +467,8 @@ class DataCache(p : DataCacheConfig) extends Component{
     io.cpu.memory.mmuBus.cmd.isValid := io.cpu.memory.isValid  && request.kind === MEMORY //TODO filter request kind
     io.cpu.memory.mmuBus.cmd.virtualAddress := request.address
     io.cpu.memory.mmuBus.cmd.bypassTranslation := request.way
+
+    io.cpu.memory.haltIt := io.cpu.memory.isValid && request.kind === MEMORY && !request.wr && victim.request.valid && !victim.dataReadRestored
   }
 
   val stageB = new Area {
@@ -498,7 +555,7 @@ class DataCache(p : DataCacheConfig) extends Component{
                 io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
                 io.mem.cmd.mask := writeMask
                 io.mem.cmd.data := request.data
-                io.mem.cmd.length := 1
+                io.mem.cmd.length := 0
 
                 when(!memCmdSent) {
                   io.mem.cmd.valid := True
@@ -548,7 +605,7 @@ class DataCache(p : DataCacheConfig) extends Component{
       io.mem.cmd.valid := True
       io.mem.cmd.wr := False
       io.mem.cmd.address := baseAddress(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
-      io.mem.cmd.length := p.burstLength
+      io.mem.cmd.length := p.burstLength-1
     }
 
     when(valid && io.mem.cmd.ready){
