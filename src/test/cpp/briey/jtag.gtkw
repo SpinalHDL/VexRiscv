@@ -1,0 +1,98 @@
+[*]
+[*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
+[*] Tue Jun  6 08:32:08 2017
+[*]
+[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/briey/Briey.vcd"
+[dumpfile_mtime] "Tue Jun  6 08:32:08 2017"
+[dumpfile_size] 23745041
+[savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/briey/jtag.gtkw"
+[timestart] 6592000000
+[size] 1776 953
+[pos] -775 -353
+*-21.000000 5877400000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.Briey.
+[treeopen] TOP.Briey.axi_jtagCtrl.
+[treeopen] TOP.Briey.axi_jtagCtrl.jtagBridge_1.
+[sst_width] 399
+[signals_width] 363
+[sst_expanded] 1
+[sst_vpaned_height] 503
+@28
+TOP.io_jtag_tck
+TOP.io_jtag_tdi
+TOP.io_jtag_tdo
+TOP.io_jtag_tms
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_axiClk
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_jtag_tck
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_jtag_tdi
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_jtag_tdo
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_jtag_tms
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.jtag_idcodeArea_instructionHit
+@22
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.jtag_idcodeArea_shifter[31:0]
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.jtag_tap_fsm_state[3:0]
+@28
+TOP.Briey.axi_jtagCtrl.debugger_io_mem_cmd_valid
+@22
+TOP.Briey.axi_jtagCtrl.debugger_io_mem_cmd_payload_address[31:0]
+TOP.Briey.axi_jtagCtrl.debugger_io_mem_cmd_payload_data[31:0]
+@28
+TOP.Briey.axi_jtagCtrl.debugger_io_mem_cmd_payload_size[1:0]
+TOP.Briey.axi_jtagCtrl.debugger_io_mem_cmd_payload_wr
+TOP.Briey.axi_jtagCtrl.debugger_io_mem_rsp_valid
+@22
+TOP.Briey.axi_jtagCtrl.io_axi_arw_payload_addr[31:0]
+@28
+TOP.Briey.axi_jtagCtrl.io_axi_arw_payload_size[2:0]
+TOP.Briey.axi_jtagCtrl.io_axi_arw_payload_write
+TOP.Briey.axi_jtagCtrl.io_axi_arw_ready
+TOP.Briey.axi_jtagCtrl.io_axi_arw_valid
+TOP.Briey.axi_jtagCtrl.io_axi_b_ready
+@22
+TOP.Briey.axi_jtagCtrl.io_axi_r_payload_data[31:0]
+@28
+TOP.Briey.axi_jtagCtrl.io_axi_r_ready
+TOP.Briey.axi_jtagCtrl.io_axi_r_valid
+@22
+TOP.Briey.axi_jtagCtrl.io_axi_w_payload_data[31:0]
+@28
+TOP.Briey.axi_jtagCtrl.io_axi_w_payload_last
+@22
+TOP.Briey.axi_jtagCtrl.io_axi_w_payload_strb[3:0]
+@28
+TOP.Briey.axi_jtagCtrl.io_axi_w_ready
+TOP.Briey.axi_jtagCtrl.io_axi_w_valid
+TOP.Briey.axi_jtagCtrl.debugger.io_remote_cmd_payload_fragment[0]
+TOP.Briey.axi_jtagCtrl.debugger.io_remote_cmd_payload_last
+TOP.Briey.axi_jtagCtrl.debugger.io_remote_cmd_valid
+@22
+TOP.Briey.axi_jtagCtrl.debugger.io_remote_rsp_payload_data[31:0]
+@28
+TOP.Briey.axi_jtagCtrl.debugger.io_remote_rsp_payload_error
+TOP.Briey.axi_jtagCtrl.debugger.io_remote_rsp_valid
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_remote_cmd_payload_fragment[0]
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_remote_cmd_payload_last
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_remote_cmd_valid
+@22
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_remote_rsp_payload_data[31:0]
+@28
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_remote_rsp_payload_error
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_remote_rsp_valid
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.flowCCByToggle_1.io_input_payload_fragment[0]
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.flowCCByToggle_1.io_input_payload_last
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.flowCCByToggle_1.io_input_valid
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.flowCCByToggle_1.io_jtag_tck
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.flowCCByToggle_1.io_output_payload_fragment[0]
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.flowCCByToggle_1.io_output_payload_last
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.flowCCByToggle_1.io_output_valid
+@29
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_jtag_tck
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_jtag_tdi
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_jtag_tdo
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.io_jtag_tms
+@22
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.jtag_tap_fsm_state[3:0]
+TOP.Briey.axi_jtagCtrl.jtagBridge_1.jtag_tap_instruction[3:0]
+[pattern_trace] 1
+[pattern_trace] 0

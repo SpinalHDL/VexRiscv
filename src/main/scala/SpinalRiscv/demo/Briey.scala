@@ -339,7 +339,7 @@ class Briey(config: BrieyConfig) extends Component{
 
 object Briey{
   def main(args: Array[String]) {
-    val config = SpinalConfig().dumpWave()
+    val config = SpinalConfig()
     config.generateVerilog({
       val toplevel = new Briey(BrieyConfig.default)
       toplevel

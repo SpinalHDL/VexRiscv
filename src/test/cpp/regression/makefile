@@ -66,6 +66,7 @@ ifeq ($(FREE_RTOS),yes)
 	ADDCFLAGS += -CFLAGS -DFREE_RTOS
 endif
 
+all: clean run
 
 run: compile
 	./obj_dir/VVexRiscv

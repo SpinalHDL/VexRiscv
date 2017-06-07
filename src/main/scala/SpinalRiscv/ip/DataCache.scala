@@ -187,6 +187,7 @@ case class DataCacheMemCmd(p : DataCacheConfig) extends Bundle{
   val data = Bits(p.memDataWidth bits)
   val mask = Bits(p.memDataWidth/8 bits)
   val length = UInt(log2Up(p.burstLength) bits)
+  val last = Bool
 }
 case class DataCacheMemRsp(p : DataCacheConfig) extends Bundle{
   val data = Bits(p.memDataWidth bit)
@@ -212,21 +213,23 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     )
 
     val cmdPreFork = if (stageCmd) cmd.stage.stage().s2mPipe() else cmd
-    val (cmdFork, dataFork) = StreamFork2(cmdPreFork.haltWhen((pendingWrites =/= 0 && !cmdPreFork.wr) || pendingWrites === pendingWritesMax))
-    axi.sharedCmd.arbitrationFrom(cmdFork)
-    axi.sharedCmd.write := cmdFork.wr
+    val hazard = (pendingWrites =/= 0 && !cmdPreFork.wr) || pendingWrites === pendingWritesMax
+    val (cmdFork, dataFork) = StreamFork2(cmdPreFork.haltWhen(hazard))
+    val cmdStage  = cmdFork.throwWhen(RegNextWhen(!cmdFork.last,cmdFork.fire).init(False))
+    val dataStage = dataFork.throwWhen(!dataFork.wr)
+
+    axi.sharedCmd.arbitrationFrom(cmdStage)
+    axi.sharedCmd.write := cmdStage.wr
     axi.sharedCmd.prot := "010"
     axi.sharedCmd.cache := "1111"
     axi.sharedCmd.size := log2Up(p.memDataWidth/8)
-    axi.sharedCmd.addr := cmdFork.address
-    axi.sharedCmd.len  := cmdFork.length.resized
+    axi.sharedCmd.addr := cmdStage.address
+    axi.sharedCmd.len  := cmdStage.length.resized
 
-    val dataStage = dataFork.throwWhen(!dataFork.wr)
     axi.writeData.arbitrationFrom(dataStage)
-    axi.writeData.last := True
     axi.writeData.data := dataStage.data
     axi.writeData.strb := dataStage.mask
-
+    axi.writeData.last := dataStage.last
 
     rsp.valid := axi.r.valid
     rsp.error := !axi.r.isOKAY()
@@ -441,6 +444,7 @@ class DataCache(p : DataCacheConfig) extends Component{
       io.mem.cmd.length := p.burstLength-1
       io.mem.cmd.data := bufferReaded.payload
       io.mem.cmd.mask := (1<<(wordWidth/8))-1
+      io.mem.cmd.last := bufferReadedCounter === bufferReadedCounter.maxValue
 
       when(!memCmdAlreadyUsed && io.mem.cmd.ready){
         bufferReaded.ready := True
@@ -556,6 +560,7 @@ class DataCache(p : DataCacheConfig) extends Component{
                 io.mem.cmd.mask := writeMask
                 io.mem.cmd.data := request.data
                 io.mem.cmd.length := 0
+                io.mem.cmd.last := True
 
                 when(!memCmdSent) {
                   io.mem.cmd.valid := True
@@ -606,6 +611,7 @@ class DataCache(p : DataCacheConfig) extends Component{
       io.mem.cmd.wr := False
       io.mem.cmd.address := baseAddress(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
       io.mem.cmd.length := p.burstLength-1
+      io.mem.cmd.last := True
     }
 
     when(valid && io.mem.cmd.ready){

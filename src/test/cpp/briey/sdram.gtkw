@@ -1,0 +1,115 @@
+[*]
+[*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
+[*] Wed Jun  7 01:18:28 2017
+[*]
+[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/briey/Briey.vcd"
+[dumpfile_mtime] "Wed Jun  7 01:17:07 2017"
+[dumpfile_size] 1021433582
+[savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/briey/sdram.gtkw"
+[timestart] 20762992700
+[size] 1776 953
+[pos] -1 -353
+*-16.000000 20763117800 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.Briey.
+[treeopen] TOP.Briey.axi_jtagCtrl.
+[treeopen] TOP.Briey.axi_sdramCtrl.
+[sst_width] 325
+[signals_width] 456
+[sst_expanded] 1
+[sst_vpaned_height] 503
+@28
+TOP.Briey.axi_core_cpu.DebugPlugin_haltIt
+TOP.Briey.axi_sdramCtrl.io_sdram_BA[1:0]
+TOP.Briey.axi_sdramCtrl.io_sdram_CKE
+TOP.Briey.axi_sdramCtrl.io_sdram_CSn
+TOP.Briey.axi_sdramCtrl.io_sdram_DQM[1:0]
+@22
+TOP.Briey.axi_sdramCtrl.io_sdram_DQ_read[15:0]
+@28
+TOP.Briey.axi_sdramCtrl.io_sdram_DQ_writeEnable
+@22
+TOP.Briey.axi_sdramCtrl.io_sdram_DQ_write[15:0]
+@28
+TOP.Briey.axi_sdramCtrl.io_sdram_RASn
+TOP.Briey.axi_sdramCtrl.io_sdram_CASn
+TOP.Briey.axi_sdramCtrl.io_sdram_WEn
+@24
+TOP.Briey.axi_sdramCtrl.io_sdram_ADDR[12:0]
+@22
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_cmd_payload_context_id[3:0]
+@28
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_cmd_payload_context_last
+@22
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_cmd_payload_data[15:0]
+@28
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_cmd_payload_mask[1:0]
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_cmd_valid
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_cmd_ready
+@22
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_cmd_payload_address[24:0]
+@28
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_cmd_payload_write
+@22
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_rsp_payload_context_id[3:0]
+@28
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_rsp_payload_context_last
+@22
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_rsp_payload_data[15:0]
+@28
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_rsp_ready
+TOP.Briey.axi_sdramCtrl.ctrl.io_bus_rsp_valid
+TOP.Briey.axi_core_cpu.DebugPlugin_haltIt
+TOP.Briey.axi_core_cpu.DebugPlugin_haltedByBreak
+TOP.Briey.axi_core_cpu.DebugPlugin_isPipBusy
+TOP.Briey.axi_core_cpu.DebugPlugin_resetIt
+TOP.Briey.axi_core_cpu.DebugPlugin_stepIt
+TOP.Briey.axi_core_cpu.DebugPlugin_insertDecodeInstruction
+@22
+TOP.Briey.axi_jtagCtrl.debugger.io_mem_cmd_payload_address[31:0]
+TOP.Briey.axi_jtagCtrl.debugger.io_mem_cmd_payload_data[31:0]
+@28
+TOP.Briey.axi_jtagCtrl.debugger.io_mem_cmd_payload_size[1:0]
+TOP.Briey.axi_jtagCtrl.debugger.io_mem_cmd_payload_wr
+@29
+TOP.Briey.axi_jtagCtrl.debugger.io_mem_cmd_ready
+@28
+TOP.Briey.axi_jtagCtrl.debugger.io_mem_cmd_valid
+@22
+TOP.Briey.axi_jtagCtrl.debugger.io_mem_rsp_payload[31:0]
+@28
+TOP.Briey.axi_jtagCtrl.debugger.io_mem_rsp_valid
+@22
+TOP.Briey.axi_core_cpu.prefetch_PC[31:0]
+TOP.Briey.axi_core_cpu.execute_PC[31:0]
+@28
+TOP.Briey.axi_core_cpu.execute_IS_EBREAK
+TOP.Briey.axi_core_cpu.execute_arbitration_isValid
+@22
+TOP.Briey.axi_core_cpu.DebugPlugin_busReadDataReg[31:0]
+@28
+TOP.Briey.axi_core_cpu.writeBack_arbitration_isValid
+@22
+TOP.Briey.axi_core_cpu.writeBack_REGFILE_WRITE_DATA[31:0]
+TOP.Briey.axi_core_cpu.writeBack_PC[31:0]
+TOP.Briey.axi_core_cpu.execute_REGFILE_WRITE_DATA[31:0]
+TOP.Briey.axi_core_cpu.execute_SRC1[31:0]
+TOP.Briey.axi_core_cpu.execute_SRC2[31:0]
+TOP.Briey.axi_core_cpu.decode_SRC1[31:0]
+@28
+TOP.Briey.axi_core_cpu.decode_SRC1_CTRL[1:0]
+@22
+TOP.Briey.axi_core_cpu.decode_SRC2[31:0]
+@28
+TOP.Briey.axi_core_cpu.decode_SRC2_CTRL[1:0]
+@22
+TOP.Briey.axi_core_cpu.decode_REG1[31:0]
+TOP.Briey.axi_core_cpu.RegFilePlugin_regFile(0)[31:0]
+TOP.Briey.axi_core_cpu.decode_RegFilePlugin_regFileReadAddress1[4:0]
+@28
+TOP.Briey.axi_core_cpu.decode_IS_EBREAK
+TOP.Briey.axi_core_cpu.decode_arbitration_isValid
+@22
+TOP.Briey.axi_core_cpu.decode_INSTRUCTION[31:0]
+[pattern_trace] 1
+[pattern_trace] 0

@@ -307,8 +307,8 @@ public:
 
 		currentTime = 4;
 		// init trace dump
-		Verilated::traceEverOn(true);
 		#ifdef TRACE
+		Verilated::traceEverOn(true);
 		tfp = new VerilatedVcdC;
 		top->trace(tfp, 99);
 		tfp->open((string(name)+ ".vcd").c_str());
