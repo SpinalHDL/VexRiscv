@@ -212,38 +212,48 @@ public:
 			usleep(100);
 		}
 	}
+
+	uint32_t selfSleep = 0;
 	virtual void tick(){
-		if(clientHandle == -1){
-			clientHandle = accept(serverSocket, (struct sockaddr *) &serverStorage, &addr_size);
-			if(clientHandle != -1)
-				printf("CONNECTED\n");
-		}
-		if(clientHandle != -1){
-			uint8_t buffer;
-			int n;
+		if(selfSleep)
+			selfSleep--;
+		else{
+			if(clientHandle == -1){
+				clientHandle = accept(serverSocket, (struct sockaddr *) &serverStorage, &addr_size);
+				if(clientHandle != -1)
+					printf("CONNECTED\n");
+				else
+					selfSleep = 1000;
+			}
+			if(clientHandle != -1){
+				uint8_t buffer;
+				int n;
 
-			if(ioctl(clientHandle,FIONREAD,&n) != 0)
-				connectionReset();
-			else if(n >= 1){
-				switch(read(clientHandle,&buffer,1)){
-				case 0: break;
-				case 1:
-					*tms = (buffer & 1) != 0;
-					*tdi = (buffer & 2) != 0;
-					*tck = (buffer & 8) != 0;
-					if(buffer & 4){
-						buffer = (*tdo != 0);
-						//printf("TDO=%d\n",buffer);
-						if(-1 == send(clientHandle,&buffer,1,0))
-							connectionReset();
-					}else {
-
-					//	printf("\n");
-					}
-					break;
-				default:
+				if(ioctl(clientHandle,FIONREAD,&n) != 0)
 					connectionReset();
-					break;
+				else if(n >= 1){
+					switch(read(clientHandle,&buffer,1)){
+					case 0: break;
+					case 1:
+						*tms = (buffer & 1) != 0;
+						*tdi = (buffer & 2) != 0;
+						*tck = (buffer & 8) != 0;
+						if(buffer & 4){
+							buffer = (*tdo != 0);
+							//printf("TDO=%d\n",buffer);
+							if(-1 == send(clientHandle,&buffer,1,0))
+								connectionReset();
+						}else {
+
+						//	printf("\n");
+						}
+						break;
+					default:
+						connectionReset();
+						break;
+					}
+				}else{
+					selfSleep = 10;
 				}
 			}
 		}
@@ -617,7 +627,7 @@ public:
 		ClockDomain *axiClk = new ClockDomain(&top->io_axiClk,NULL,20000,100000);
 		ClockDomain *vgaClk = new ClockDomain(&top->io_vgaClk,NULL,40000,100000);
 		AsyncReset *asyncReset = new AsyncReset(&top->io_asyncReset,50000);
-		Jtag *jtag = new Jtag(&top->io_jtag_tms,&top->io_jtag_tdi,&top->io_jtag_tdo,&top->io_jtag_tck,200000);
+		Jtag *jtag = new Jtag(&top->io_jtag_tms,&top->io_jtag_tdi,&top->io_jtag_tdo,&top->io_jtag_tck,60000);
 		processes.push_back(axiClk);
 		processes.push_back(vgaClk);
 		processes.push_back(asyncReset);

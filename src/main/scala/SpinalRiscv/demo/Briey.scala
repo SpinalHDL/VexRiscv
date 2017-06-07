@@ -149,31 +149,31 @@ class Briey(config: BrieyConfig) extends Component{
 //              portTlbSize = 4
 //            )
           ),
-          new DBusSimplePlugin(
-            catchAddressMisaligned = false,
-            catchAccessFault = false
+//          new DBusSimplePlugin(
+//            catchAddressMisaligned = false,
+//            catchAccessFault = false
+//          ),
+          new DBusCachedPlugin(
+            config = new DataCacheConfig(
+              cacheSize         = 4096,
+              bytePerLine       = 32,
+              wayCount          = 1,
+              addressWidth      = 32,
+              cpuDataWidth      = 32,
+              memDataWidth      = 32,
+              catchAccessError  = false,
+              catchIllegal      = false,
+              catchUnaligned    = false,
+              catchMemoryTranslationMiss = false
+            ),
+            memoryTranslatorPortConfig = null
+            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+            //              portTlbSize = 6
+            //            )
           ),
-//          new DBusCachedPlugin(
-//            config = new DataCacheConfig(
-//              cacheSize         = 4096,
-//              bytePerLine       = 32,
-//              wayCount          = 1,
-//              addressWidth      = 32,
-//              cpuDataWidth      = 32,
-//              memDataWidth      = 32,
-//              catchAccessError  = false,
-//              catchIllegal      = false,
-//              catchUnaligned    = false,
-//              catchMemoryTranslationMiss = false
-//            ),
-//            memoryTranslatorPortConfig = null
-//            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-//            //              portTlbSize = 6
-//            //            )
-//          ),
-//          new StaticMemoryTranslatorPlugin(
-//            ioRange      = _(31 downto 28) === 0xF
-//          ),
+          new StaticMemoryTranslatorPlugin(
+            ioRange      = _(31 downto 28) === 0xF
+          ),
           new DecoderSimplePlugin(
             catchIllegalInstruction = false
           ),
