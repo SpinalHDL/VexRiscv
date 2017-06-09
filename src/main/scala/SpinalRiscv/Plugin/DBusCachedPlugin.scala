@@ -62,6 +62,26 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
 
     if(pipeline.serviceExist(classOf[PrivilegeService]))
       privilegeService = pipeline.service(classOf[PrivilegeService])
+
+    if(pipeline.serviceExist(classOf[ReportService])){
+      val report = pipeline.service(classOf[ReportService])
+      report.add("dBus" -> {
+        val e = new BusReport()
+        val c = new CacheReport()
+        e.kind = "cached"
+        e.flushInstructions.add(0x13 | (1 << 7)) ////ADDI x1, x0, 0
+        for(idx <- 0 until cacheSize by bytePerLine){
+          e.flushInstructions.add(0x13 + (1 << 7)  + (1 << 15) + (bytePerLine << 20)) //ADDI x1, x1, 32
+          e.flushInstructions.add(0x7000500F + (1 << 15)) //Clean invalid data cache way x1
+        }
+
+        e.info = c
+        c.size = cacheSize
+        c.bytePerLine = bytePerLine
+
+        e
+      })
+    }
   }
 
   override def build(pipeline: VexRiscv): Unit = {

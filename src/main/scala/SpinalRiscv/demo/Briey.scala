@@ -200,7 +200,8 @@ class Briey(config: BrieyConfig) extends Component{
             earlyBranch = false,
             catchAddressMisaligned = false,
             prediction = NONE
-          )
+          ),
+          new YamlPlugin("cpu0.yaml")
         )
       )
 

@@ -1,3 +1,6 @@
+sudo apt-get install libYAML-dev
+
+
 sudo apt-get update
 sudo apt-get install build-essential software-properties-common -y
 sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y

@@ -1,22 +1,22 @@
 [*]
 [*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
-[*] Thu Jun  8 18:59:55 2017
+[*] Fri Jun  9 08:05:42 2017
 [*]
 [dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/briey/Briey.vcd"
-[dumpfile_mtime] "Thu Jun  8 18:59:41 2017"
-[dumpfile_size] 1075034305
+[dumpfile_mtime] "Fri Jun  9 08:05:37 2017"
+[dumpfile_size] 2070466159
 [savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/briey/jtag.gtkw"
-[timestart] 152443780000
+[timestart] 51980000000
 [size] 1776 953
 [pos] -1 -353
-*-19.000000 152586930000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-33.000000 62611680000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.Briey.
 [treeopen] TOP.Briey.axi_jtagCtrl.
 [sst_width] 288
 [signals_width] 302
 [sst_expanded] 1
-[sst_vpaned_height] 279
+[sst_vpaned_height] 503
 @28
 TOP.io_jtag_tck
 TOP.io_jtag_tdi
@@ -24,15 +24,17 @@ TOP.io_jtag_tdo
 TOP.io_jtag_tms
 @22
 TOP.Briey.axi_jtagCtrl.jtagBridge_1.jtag_tap_fsm_state[3:0]
-@23
 TOP.Briey.axi_core_cpu.debug_bus_cmd_payload_address[7:0]
-@22
 TOP.Briey.axi_core_cpu.debug_bus_cmd_payload_data[31:0]
-@28
+@29
 TOP.Briey.axi_core_cpu.debug_bus_cmd_payload_wr
+@28
 TOP.Briey.axi_core_cpu.debug_bus_cmd_ready
 TOP.Briey.axi_core_cpu.debug_bus_cmd_valid
 @22
 TOP.Briey.axi_core_cpu.debug_bus_rsp_data[31:0]
+@28
+TOP.Briey.axi_core_cpu.DebugPlugin_haltIt
+TOP.Briey.axi_core_cpu.DebugPlugin_haltedByBreak
 [pattern_trace] 1
 [pattern_trace] 0

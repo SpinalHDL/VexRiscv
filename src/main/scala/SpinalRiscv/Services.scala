@@ -1,7 +1,11 @@
 package SpinalRiscv
 
+import java.util
+
 import spinal.core._
 import spinal.lib._
+
+import scala.beans.BeanProperty
 
 trait JumpService{
   def createJumpInterface(stage : Stage) : Flow[UInt]
@@ -55,4 +59,19 @@ case class MemoryTranslatorBus() extends Bundle with IMasterSlave{
 
 trait MemoryTranslator{
   def newTranslationPort(stage : Stage, args : Any) : MemoryTranslatorBus
+}
+
+
+trait ReportService{
+  def add(that : (String,Object)) : Unit
+}
+
+class BusReport{
+  @BeanProperty var kind = ""
+  @BeanProperty var flushInstructions = new util.LinkedList[Int]()
+  @BeanProperty var info : Object = null
+}
+class CacheReport {
+  @BeanProperty var size = 0
+  @BeanProperty var bytePerLine = 0
 }

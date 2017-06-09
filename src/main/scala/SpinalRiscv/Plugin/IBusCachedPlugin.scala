@@ -39,6 +39,22 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
 
     if(pipeline.serviceExist(classOf[PrivilegeService]))
       privilegeService = pipeline.service(classOf[PrivilegeService])
+
+    if(pipeline.serviceExist(classOf[ReportService])){
+      val report = pipeline.service(classOf[ReportService])
+      report.add("iBus" -> {
+        val e = new BusReport()
+        val c = new CacheReport()
+        e.kind = "cached"
+        e.flushInstructions.add(0x400F) //invalid instruction cache
+
+        e.info = c
+        c.size = cacheSize
+        c.bytePerLine = bytePerLine
+
+        e
+      })
+    }
   }
 
   override def build(pipeline: VexRiscv): Unit = {
