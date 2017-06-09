@@ -655,8 +655,8 @@ public:
 
 		axiClk->add(sdram);
 		#ifdef TRACE
-		speedFactor = 100e-6;
-		cout << "Simulation caped to " << timeToSec << " of real time"<< endl;
+		//speedFactor = 100e-6;
+		//cout << "Simulation caped to " << timeToSec << " of real time"<< endl;
 		#endif
 	}
 
