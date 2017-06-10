@@ -630,6 +630,7 @@ public:
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <netinet/tcp.h>
 
 /** Returns true on success, or false if there was an error */
 bool SetSocketBlockingEnabled(int fd, bool blocking)
@@ -671,7 +672,13 @@ public:
 		serverSocket = socket(PF_INET, SOCK_STREAM, 0);
 		assert(serverSocket != -1);
 		SetSocketBlockingEnabled(serverSocket,0);
-
+		int flag = 1;
+		int result = setsockopt(serverSocket,            /* socket affected */
+								 IPPROTO_TCP,     /* set option at TCP level */
+								 TCP_NODELAY,     /* name of option */
+								 (char *) &flag,  /* the cast is historical
+														 cruft */
+								 sizeof(int));    /* length of option value */
 
 		//---- Configure settings of the server address struct ----//
 		// Address family = Internet //

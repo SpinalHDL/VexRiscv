@@ -136,6 +136,7 @@ public:
 #include <arpa/inet.h>
 #include <fcntl.h>
 #include <sys/ioctl.h>
+#include <netinet/tcp.h>
 
 /** Returns true on success, or false if there was an error */
 bool SetSocketBlockingEnabled(int fd, bool blocking)
@@ -183,6 +184,14 @@ public:
 		// 1) Internet domain 2) Stream socket 3) Default protocol (TCP in this case) //
 		serverSocket = socket(PF_INET, SOCK_STREAM, 0);
 		assert(serverSocket != -1);
+		int flag = 1;
+		setsockopt(  serverSocket,            /* socket affected */
+					 IPPROTO_TCP,     /* set option at TCP level */
+					 TCP_NODELAY,     /* name of option */
+					 (char *) &flag,  /* the cast is historical
+											 cruft */
+					 sizeof(int));    /* length of option value */
+
 		SetSocketBlockingEnabled(serverSocket,0);
 
 
