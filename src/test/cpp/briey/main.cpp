@@ -30,12 +30,12 @@ public:
 };
 
 //#include <functional>
-class Process{
+class TimeProcess{
 public:
 	uint64_t wakeDelay = 0;
 	bool wakeEnable = false;
 //	std::function<int(double)> lambda;
-	virtual ~Process(){}
+	virtual ~TimeProcess(){}
 	virtual void schedule(uint64_t delay){
 		wakeDelay = delay;
 		wakeEnable = true;
@@ -47,7 +47,16 @@ public:
 };
 
 
-class ClockDomain : public Process{
+class SensitiveProcess{
+public:
+
+	virtual ~SensitiveProcess(){}
+	virtual void tick(uint64_t time){
+
+	}
+};
+
+class ClockDomain : public TimeProcess{
 public:
 	CData* clk;
 	CData* reset;
@@ -91,7 +100,7 @@ public:
 
 };
 
-class AsyncReset : public Process{
+class AsyncReset : public TimeProcess{
 public:
 	CData* reset;
 	uint32_t state;
@@ -144,7 +153,7 @@ bool SetSocketBlockingEnabled(int fd, bool blocking)
 #endif
 }
 
-class Jtag : public Process{
+class Jtag : public TimeProcess{
 public:
 	CData *tms, *tdi, *tdo, *tck;
 	enum State {reset};
@@ -268,7 +277,8 @@ class success : public std::exception { };
 class Workspace{
 public:
 	static uint32_t cycles;
-	vector<Process*> processes;
+	vector<TimeProcess*> timeProcesses;
+	vector<SensitiveProcess*> checkProcesses;
 	VBriey* top;
 	bool resetDone = false;
 	double timeToSec = 1e-12;
@@ -294,7 +304,8 @@ public:
 		delete tfp;
 		#endif
 
-		for(Process* p : processes) delete p;
+		for(auto* p : timeProcesses) delete p;
+		for(auto* p : checkProcesses) delete p;
 
 	}
 
@@ -338,7 +349,7 @@ public:
 		try {
 			while(1){
 				uint64_t delay = ~0l;
-				for(Process* p : processes)
+				for(TimeProcess* p : timeProcesses)
 					if(p->wakeEnable && p->wakeDelay < delay)
 						delay = p->wakeDelay;
 
@@ -348,7 +359,7 @@ public:
 				if(delay != 0){
 					dump(time);
 				}
-				for(Process* p : processes) {
+				for(TimeProcess* p : timeProcesses) {
 					p->wakeDelay -= delay;
 					if(p->wakeDelay == 0){
 						p->wakeEnable = false;
@@ -357,7 +368,7 @@ public:
 				}
 
 				top->eval();
-
+				for(auto* p : checkProcesses) p->tick(time);
 
 				if(delay != 0){
 					if(time - tickLastSimTime > 1000*400000 || time - tickLastSimTime > 1.0*speedFactor/timeToSec){
@@ -366,7 +377,9 @@ public:
 						uint64_t diffInNanos = end_time.tv_sec*1e9 + end_time.tv_nsec -  tick_time.tv_sec*1e9 - tick_time.tv_nsec;
 						tick_time = end_time;
 						double dt = diffInNanos*1e-9;
-						printf("Simulation speed : %f ms/realTime\n",(time - tickLastSimTime)/dt*timeToSec*1e3);
+						#ifdef PRINT_PERF
+							printf("Simulation speed : %f ms/realTime\n",(time - tickLastSimTime)/dt*timeToSec*1e3);
+						#endif
 						tickLastSimTime = time;
 					}
 					time += delay;
@@ -387,7 +400,7 @@ public:
 					if(flushCounter > 100000){
 						#ifdef TRACE
 						tfp->flush();
-						printf("flush\n");
+						//printf("flush\n");
 						#endif
 						flushCounter = 0;
 					}
@@ -620,6 +633,62 @@ public:
 	}
 };
 
+class UartRx : public SensitiveProcess{
+public:
+
+	CData *rx;
+	uint32_t uartTimeRate;
+	UartRx(CData *rx, uint32_t uartTimeRate){
+		this->rx = rx;
+		this->uartTimeRate = uartTimeRate;
+	}
+
+	enum State {START, DATA, STOP,START_SUCCESS};
+	State state = START;
+	uint64_t holdTime = 0;
+	CData holdValue;
+	char data;
+	uint32_t counter;
+	virtual void tick(uint64_t time){
+		if(time < holdTime){
+			if(*rx != holdValue){
+				cout << "UART RX FRAME ERROR" << endl;
+				holdTime = time;
+				state = START;
+			}
+		}else{
+			switch(state){
+			case START:
+			case START_SUCCESS:
+				if(state == START_SUCCESS){
+					cout << data << flush;
+					state = START;
+				}
+				if(*rx == 0 && time > uartTimeRate){
+					holdTime = time + uartTimeRate;
+					holdValue = *rx;
+					state = DATA;
+					counter = 0;
+					data = 0;
+				}
+				break;
+			case DATA:
+				data |= (*rx) << counter++;
+				if(counter == 8){
+					state = STOP;
+				}
+				holdValue = *rx;
+				holdTime = time + uartTimeRate;
+				break;
+			case STOP:
+				holdTime = time + uartTimeRate;
+				holdValue = 1;
+				state = START_SUCCESS;
+				break;
+			}
+		}
+	}
+};
 
 class BrieyWorkspace : public Workspace{
 public:
@@ -628,10 +697,12 @@ public:
 		ClockDomain *vgaClk = new ClockDomain(&top->io_vgaClk,NULL,40000,100000);
 		AsyncReset *asyncReset = new AsyncReset(&top->io_asyncReset,50000);
 		Jtag *jtag = new Jtag(&top->io_jtag_tms,&top->io_jtag_tdi,&top->io_jtag_tdo,&top->io_jtag_tck,60000);
-		processes.push_back(axiClk);
-		processes.push_back(vgaClk);
-		processes.push_back(asyncReset);
-		processes.push_back(jtag);
+		UartRx *uartRx = new UartRx(&top->io_uart_txd,(50000000/8/115200)*8*axiClk->tooglePeriod*2);
+		timeProcesses.push_back(axiClk);
+		timeProcesses.push_back(vgaClk);
+		timeProcesses.push_back(asyncReset);
+		timeProcesses.push_back(jtag);
+		checkProcesses.push_back(uartRx);
 
 		SdramConfig *sdramConfig = new SdramConfig(
 			2,  //byteCount

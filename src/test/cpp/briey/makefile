@@ -1,5 +1,6 @@
 DEBUG?=no
 TRACE?=no
+PRINT_PERF?=no
 TRACE_START=0
 ADDCFLAGS += -CFLAGS -pthread 
 
@@ -12,6 +13,9 @@ ifeq ($(DEBUG),yes)
 endif
 ifneq ($(DEBUG),yes)
 	ADDCFLAGS += -CFLAGS "-O3"
+endif
+ifeq ($(PRINT_PERF),yes)
+	ADDCFLAGS += -CFLAGS -DPRINT_PERF
 endif
 
 ADDCFLAGS += -CFLAGS -DTRACE_START=${TRACE_START}
