@@ -213,7 +213,7 @@ class Briey(config: BrieyConfig) extends Component{
         case plugin : IBusSimplePlugin => iBus = plugin.iBus.toAxi4ReadOnly()
         case plugin : IBusCachedPlugin => iBus = plugin.iBus.toAxi4ReadOnly()
         case plugin : DBusSimplePlugin => dBus = plugin.dBus.toAxi4Shared()
-        case plugin : DBusCachedPlugin => dBus = plugin.dBus.toAxi4Shared()
+        case plugin : DBusCachedPlugin => dBus = plugin.dBus.toAxi4Shared(true)
         case plugin : DebugPlugin => {
           resetCtrl.coreResetUnbuffered setWhen(plugin.io.resetOut)
           debugBus = plugin.io.bus.toApb3()
@@ -298,19 +298,32 @@ class Briey(config: BrieyConfig) extends Component{
     )
 
 
-    axiCrossbar.addPipelining(apbBridge.io.axi,(crossbar,bridge) => {
+    axiCrossbar.addPipelining(apbBridge.io.axi)((crossbar,bridge) => {
       crossbar.sharedCmd.halfPipe() >> bridge.sharedCmd
       crossbar.writeData.halfPipe() >> bridge.writeData
       crossbar.writeRsp             << bridge.writeRsp
       crossbar.readRsp              << bridge.readRsp
     })
 
-    axiCrossbar.addPipelining(sdramCtrl.io.axi,(crossbar,ctrl) => {
+    axiCrossbar.addPipelining(sdramCtrl.io.axi)((crossbar,ctrl) => {
       crossbar.sharedCmd.halfPipe()  >>  ctrl.sharedCmd
       crossbar.writeData            >/-> ctrl.writeData
       crossbar.writeRsp              <<  ctrl.writeRsp
       crossbar.readRsp               <<  ctrl.readRsp
     })
+
+    axiCrossbar.addPipelining(ram.io.axi)((crossbar,ctrl) => {
+      crossbar.sharedCmd.halfPipe()  >>  ctrl.sharedCmd
+      crossbar.writeData            >/-> ctrl.writeData
+      crossbar.writeRsp              <<  ctrl.writeRsp
+      crossbar.readRsp               <<  ctrl.readRsp
+    })
+
+    axiCrossbar.addPipelining(vgaCtrl.io.axi)((ctrl,crossbar) => {
+      ctrl.readCmd.halfPipe()    >>  crossbar.readCmd
+      ctrl.readRsp               <<  crossbar.readRsp
+    })
+
 
     axiCrossbar.build()
 

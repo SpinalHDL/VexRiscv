@@ -971,6 +971,7 @@ public:
 #include<pthread.h>
 #include<stdlib.h>
 #include<unistd.h>
+#include <netinet/tcp.h>
 
 #define RISCV_SPINAL_FLAGS_RESET 1<<0
 #define RISCV_SPINAL_FLAGS_HALT 1<<1
@@ -1027,6 +1028,13 @@ public:
 		//---- Create the socket. The three arguments are: ----//
 		// 1) Internet domain 2) Stream socket 3) Default protocol (TCP in this case) //
 		clientSocket = socket(PF_INET, SOCK_STREAM, 0);
+		int flag = 1;
+		int result = setsockopt(clientSocket,            /* socket affected */
+								 IPPROTO_TCP,     /* set option at TCP level */
+								 TCP_NODELAY,     /* name of option */
+								 (char *) &flag,  /* the cast is historical
+														 cruft */
+								 sizeof(int));    /* length of option value */
 
 		//---- Configure settings of the server address struct ----//
 		// Address family = Internet //

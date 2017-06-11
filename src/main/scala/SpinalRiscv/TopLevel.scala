@@ -123,42 +123,42 @@ object TopLevel {
               catchMemoryTranslationMiss = true,
               asyncTagMemory = false,
               twoStageLogic = true
+            ),
+            askMemoryTranslation = true,
+            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+              portTlbSize = 4
             )
-//            askMemoryTranslation = true,
-//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-//              portTlbSize = 4
-//            )
           ),
-          new DBusSimplePlugin(
-            catchAddressMisaligned = true,
-            catchAccessFault = true
-          ),
-//          new DBusCachedPlugin(
-//            config = new DataCacheConfig(
-//              cacheSize         = 4096,
-//              bytePerLine       = 32,
-//              wayCount          = 1,
-//              addressWidth      = 32,
-//              cpuDataWidth      = 32,
-//              memDataWidth      = 32,
-//              catchAccessError  = true,
-//              catchIllegal      = true,
-//              catchUnaligned    = true,
-//              catchMemoryTranslationMiss = true
-//            ),
-//            memoryTranslatorPortConfig = null
-////            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-////              portTlbSize = 6
-////            )
+//          new DBusSimplePlugin(
+//            catchAddressMisaligned = true,
+//            catchAccessFault = true
 //          ),
-          new StaticMemoryTranslatorPlugin(
-            ioRange      = _(31 downto 28) === 0xF
+          new DBusCachedPlugin(
+            config = new DataCacheConfig(
+              cacheSize         = 4096,
+              bytePerLine       = 32,
+              wayCount          = 1,
+              addressWidth      = 32,
+              cpuDataWidth      = 32,
+              memDataWidth      = 32,
+              catchAccessError  = true,
+              catchIllegal      = true,
+              catchUnaligned    = true,
+              catchMemoryTranslationMiss = true
+            ),
+//            memoryTranslatorPortConfig = null
+            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+              portTlbSize = 6
+            )
           ),
-//          new MemoryTranslatorPlugin(
-//            tlbSize = 32,
-//            virtualRange = _(31 downto 28) === 0xC,
+//          new StaticMemoryTranslatorPlugin(
 //            ioRange      = _(31 downto 28) === 0xF
 //          ),
+          new MemoryTranslatorPlugin(
+            tlbSize = 32,
+            virtualRange = _(31 downto 28) === 0xC,
+            ioRange      = _(31 downto 28) === 0xF
+          ),
           new DecoderSimplePlugin(
             catchIllegalInstruction = true
           ),
@@ -192,7 +192,7 @@ object TopLevel {
             catchAddressMisaligned = true,
             prediction = DYNAMIC
           ),
-          new YamlPlugin("cpu0")
+          new YamlPlugin("cpu0.yaml")
         )
       )
 
