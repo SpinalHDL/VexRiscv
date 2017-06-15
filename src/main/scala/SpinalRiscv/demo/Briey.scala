@@ -60,11 +60,12 @@ class Briey(config: BrieyConfig) extends Component{
     val sdram      = master(SdramInterface(sdramLayout))
 
     //Peripherals IO
-    val gpioA      = master(TriStateArray(32 bits))
-    val gpioB      = master(TriStateArray(32 bits))
-    val uart       = master(Uart())
-    val vga        = master(Vga(vgaRgbConfig))
+    val gpioA         = master(TriStateArray(32 bits))
+    val gpioB         = master(TriStateArray(32 bits))
+    val uart          = master(Uart())
+    val vga           = master(Vga(vgaRgbConfig))
     val timerExternal = in(PinsecTimerCtrlExternal())
+    val coreInterrupt = in Bool
   }
 
   val resetCtrlClockDomain = ClockDomain(
@@ -121,107 +122,6 @@ class Briey(config: BrieyConfig) extends Component{
   )
 
   val axi = new ClockingArea(axiClockDomain) {
-    val core = new ClockingArea(coreClockDomain){
-      val configLight = VexRiscvConfig(
-        plugins = List(
-          new PcManagerSimplePlugin(0x00000000l, false),
-//          new IBusSimplePlugin(
-//            interfaceKeepData = false,
-//            catchAccessFault = false
-//          ),
-          new IBusCachedPlugin(
-            config = InstructionCacheConfig(
-              cacheSize = 4096,
-              bytePerLine =32,
-              wayCount = 1,
-              wrappedMemAccess = true,
-              addressWidth = 32,
-              cpuDataWidth = 32,
-              memDataWidth = 32,
-              catchIllegalAccess = false,
-              catchAccessFault = false,
-              catchMemoryTranslationMiss = false,
-              asyncTagMemory = false,
-              twoStageLogic = true
-            )
-//            askMemoryTranslation = true,
-//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-//              portTlbSize = 4
-//            )
-          ),
-//          new DBusSimplePlugin(
-//            catchAddressMisaligned = false,
-//            catchAccessFault = false
-//          ),
-          new DBusCachedPlugin(
-            config = new DataCacheConfig(
-              cacheSize         = 4096,
-              bytePerLine       = 32,
-              wayCount          = 1,
-              addressWidth      = 32,
-              cpuDataWidth      = 32,
-              memDataWidth      = 32,
-              catchAccessError  = false,
-              catchIllegal      = false,
-              catchUnaligned    = false,
-              catchMemoryTranslationMiss = false
-            ),
-            memoryTranslatorPortConfig = null
-            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-            //              portTlbSize = 6
-            //            )
-          ),
-          new StaticMemoryTranslatorPlugin(
-            ioRange      = _(31 downto 28) === 0xF
-          ),
-          new DecoderSimplePlugin(
-            catchIllegalInstruction = false
-          ),
-          new RegFilePlugin(
-            regFileReadyKind = Plugin.SYNC,
-            zeroBoot = false
-          ),
-          new IntAluPlugin,
-          new SrcPlugin(
-            separatedAddSub = false
-          ),
-          new LightShifterPlugin,
-          new HazardSimplePlugin(
-            bypassExecute           = false,
-            bypassMemory            = false,
-            bypassWriteBack         = false,
-            bypassWriteBackBuffer   = false,
-            pessimisticUseSrc       = false,
-            pessimisticWriteRegFile = false,
-            pessimisticAddressMatch = false
-          ),
-          new DebugPlugin(axiClockDomain),
-          new BranchPlugin(
-            earlyBranch = false,
-            catchAddressMisaligned = false,
-            prediction = NONE
-          ),
-          new YamlPlugin("cpu0.yaml")
-        )
-      )
-
-      val cpu = new VexRiscv(configLight)
-      var iBus : Axi4Bus = null
-      var dBus : Axi4Bus = null
-      var debugBus : Apb3 = null
-      for(plugin <- configLight.plugins) plugin match{
-        case plugin : IBusSimplePlugin => iBus = plugin.iBus.toAxi4ReadOnly()
-        case plugin : IBusCachedPlugin => iBus = plugin.iBus.toAxi4ReadOnly()
-        case plugin : DBusSimplePlugin => dBus = plugin.dBus.toAxi4Shared()
-        case plugin : DBusCachedPlugin => dBus = plugin.dBus.toAxi4Shared(true)
-        case plugin : DebugPlugin => {
-          resetCtrl.coreResetUnbuffered setWhen(plugin.io.resetOut)
-          debugBus = plugin.io.bus.toApb3()
-        }
-        case _ =>
-      }
-    }
-
     val ram = Axi4SharedOnChipRam(
       dataWidth = 32,
       byteCount = onChipRamSize,
@@ -282,6 +182,136 @@ class Briey(config: BrieyConfig) extends Component{
     )
     val vgaCtrl = Axi4VgaCtrl(vgaCtrlConfig)
 
+
+
+    val core = new ClockingArea(coreClockDomain){
+      val configLight = VexRiscvConfig(
+        plugins = List(
+          new PcManagerSimplePlugin(0x00000000l, false),
+          //          new IBusSimplePlugin(
+          //            interfaceKeepData = false,
+          //            catchAccessFault = false
+          //          ),
+          new IBusCachedPlugin(
+            config = InstructionCacheConfig(
+              cacheSize = 4096,
+              bytePerLine =32,
+              wayCount = 1,
+              wrappedMemAccess = true,
+              addressWidth = 32,
+              cpuDataWidth = 32,
+              memDataWidth = 32,
+              catchIllegalAccess = false,
+              catchAccessFault = false,
+              catchMemoryTranslationMiss = false,
+              asyncTagMemory = false,
+              twoStageLogic = true
+            )
+            //            askMemoryTranslation = true,
+            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+            //              portTlbSize = 4
+            //            )
+          ),
+          //          new DBusSimplePlugin(
+          //            catchAddressMisaligned = false,
+          //            catchAccessFault = false
+          //          ),
+          new DBusCachedPlugin(
+            config = new DataCacheConfig(
+              cacheSize         = 4096,
+              bytePerLine       = 32,
+              wayCount          = 1,
+              addressWidth      = 32,
+              cpuDataWidth      = 32,
+              memDataWidth      = 32,
+              catchAccessError  = false,
+              catchIllegal      = false,
+              catchUnaligned    = false,
+              catchMemoryTranslationMiss = false
+            ),
+            memoryTranslatorPortConfig = null
+            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+            //              portTlbSize = 6
+            //            )
+          ),
+          new StaticMemoryTranslatorPlugin(
+            ioRange      = _(31 downto 28) === 0xF
+          ),
+          new DecoderSimplePlugin(
+            catchIllegalInstruction = false
+          ),
+          new RegFilePlugin(
+            regFileReadyKind = Plugin.SYNC,
+            zeroBoot = false
+          ),
+          new IntAluPlugin,
+          new SrcPlugin(
+            separatedAddSub = false
+          ),
+          new LightShifterPlugin,
+          new HazardSimplePlugin(
+            bypassExecute           = true,
+            bypassMemory            = true,
+            bypassWriteBack         = true,
+            bypassWriteBackBuffer   = true,
+            pessimisticUseSrc       = false,
+            pessimisticWriteRegFile = false,
+            pessimisticAddressMatch = false
+          ),
+          new DebugPlugin(axiClockDomain),
+          new BranchPlugin(
+            earlyBranch = false,
+            catchAddressMisaligned = false,
+            prediction = STATIC
+          ),
+          new CsrPlugin(
+            config = MachineCsrConfig(
+              catchIllegalAccess = false,
+              mvendorid      = null,
+              marchid        = null,
+              mimpid         = null,
+              mhartid        = null,
+              misaExtensionsInit = 66,
+              misaAccess     = CsrAccess.NONE,
+              mtvecAccess    = CsrAccess.NONE,
+              mtvecInit      = 0x00000020l,
+              mepcAccess     = CsrAccess.READ_WRITE,
+              mscratchGen    = false,
+              mcauseAccess   = CsrAccess.READ_ONLY,
+              mbadaddrAccess = CsrAccess.READ_ONLY,
+              mcycleAccess   = CsrAccess.NONE,
+              minstretAccess = CsrAccess.NONE,
+              ecallGen       = false,
+              wfiGen         = false,
+              ucycleAccess   = CsrAccess.NONE
+            )
+          ),
+          new YamlPlugin("cpu0.yaml")
+        )
+      )
+
+      val cpu = new VexRiscv(configLight)
+      var iBus : Axi4ReadOnly = null
+      var dBus : Axi4Shared = null
+      var debugBus : Apb3 = null
+      for(plugin <- configLight.plugins) plugin match{
+        case plugin : IBusSimplePlugin => iBus = plugin.iBus.toAxi4ReadOnly()
+        case plugin : IBusCachedPlugin => iBus = plugin.iBus.toAxi4ReadOnly()
+        case plugin : DBusSimplePlugin => dBus = plugin.dBus.toAxi4Shared()
+        case plugin : DBusCachedPlugin => dBus = plugin.dBus.toAxi4Shared(true)
+        case plugin : CsrPlugin        => {
+          plugin.externalInterrupt := BufferCC(io.coreInterrupt)
+          plugin.timerInterrupt := timerCtrl.io.interrupt
+        }
+        case plugin : DebugPlugin      => {
+          resetCtrl.coreResetUnbuffered setWhen(plugin.io.resetOut)
+          debugBus = plugin.io.bus.toApb3()
+        }
+        case _ =>
+      }
+    }
+
+
     val axiCrossbar = Axi4CrossbarFactory()
 
     axiCrossbar.addSlaves(
@@ -294,7 +324,7 @@ class Briey(config: BrieyConfig) extends Component{
       core.iBus       -> List(ram.io.axi, sdramCtrl.io.axi),
       core.dBus       -> List(ram.io.axi, sdramCtrl.io.axi, apbBridge.io.axi),
       jtagCtrl.io.axi -> List(ram.io.axi, sdramCtrl.io.axi, apbBridge.io.axi),
-      vgaCtrl.io.axi  -> List(                              sdramCtrl.io.axi)
+      vgaCtrl.io.axi  -> List(            sdramCtrl.io.axi)
     )
 
 
@@ -324,6 +354,12 @@ class Briey(config: BrieyConfig) extends Component{
       ctrl.readRsp               <<  crossbar.readRsp
     })
 
+    axiCrossbar.addPipelining(core.dBus)((cpu,crossbar) => {
+      cpu.sharedCmd             >>  crossbar.sharedCmd
+      cpu.writeData             >>  crossbar.writeData
+      cpu.writeRsp              <<  crossbar.writeRsp
+      cpu.readRsp               <-< crossbar.readRsp
+    })
 
     axiCrossbar.build()
 
