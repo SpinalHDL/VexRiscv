@@ -25,13 +25,13 @@ You can find two example of CPU instantiation in :
 - src/main/scala/VexRiscv/GenFull.scala
 - src/main/scala/VexRiscv/GenSmallest.scala
 
-To generate the corresponding RTL as a VexRiscv.v file, run :
+To generate the corresponding RTL as a VexRiscv.v file, run (it could take time the first time you run it):
 
 ```sh
-sbt run-main VexRiscv.GenFull
+sbt "run-main VexRiscv.GenFull"
 
 # or
-sbt run-main VexRiscv.GenSmallest
+sbt "run-main VexRiscv.GenSmallest"
 ```
 
 ## Tests

@@ -117,10 +117,6 @@ class Briey(config: BrieyConfig) extends Component{
     reset = resetCtrl.vgaReset
   )
 
-  val jtagClockDomain = ClockDomain(
-    clock = io.jtag.tck
-  )
-
   val axi = new ClockingArea(axiClockDomain) {
     val ram = Axi4SharedOnChipRam(
       dataWidth = 32,
