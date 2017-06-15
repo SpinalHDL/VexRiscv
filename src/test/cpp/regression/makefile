@@ -1,15 +1,17 @@
-IBUS=IBUS_CACHED
-DBUS=DBUS_CACHED
+IBUS?=IBUS_CACHED
+DBUS?=DBUS_CACHED
 TRACE?=no
 TRACE_ACCESS?=no
 TRACE_START=0
-CSR=yes
-MMU=yes
-DEBUG_PLUGIN=yes
+MUL?=yes
+DIV?=yes
+CSR?=yes
+MMU?=yes
+DEBUG_PLUGIN?=yes
 DEBUG_PLUGIN_EXTERNAL?=no
 DHRYSTONE=yes
 FREE_RTOS=no
-REDO=10
+REDO?=10
 REF=no
 TRACE_WITH_TIME=no
 REF_TIME=no
@@ -43,6 +45,14 @@ endif
 
 ifeq ($(MMU),yes)
 	ADDCFLAGS += -CFLAGS -DMMU
+endif
+
+ifeq ($(MUL),yes)
+	ADDCFLAGS += -CFLAGS -DMUL
+endif
+
+ifeq ($(DIV),yes)
+	ADDCFLAGS += -CFLAGS -DDIV
 endif
 
 ifeq ($(TRACE_ACCESS),yes)

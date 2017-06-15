@@ -39,7 +39,12 @@ public:
 	uint8_t* get(uint32_t address){
 		if(mem[address >> 20] == NULL) {
 			uint8_t* ptr = new uint8_t[1024*1024];
-			for(uint32_t i = 0;i < 1024*1024;i++) ptr[i] = 0xFF;
+			for(uint32_t i = 0;i < 1024*1024;i+=4) {
+				ptr[i + 0] = 0xFF;
+				ptr[i + 1] = 0xFF;
+				ptr[i + 2] = 0xFF;
+				ptr[i + 3] = 0xFF;
+			}
 			mem[address >> 20] = ptr;
 		}
 		return &mem[address >> 20][address & 0xFFFFF];
@@ -223,7 +228,7 @@ public:
 	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
 		if(addr % 4 != 0) {
 			cout << "Warning, unaligned IBusAccess : " << addr << endl;
-			fail();
+		//	fail();
 		}
 		*data =     (  (mem[addr + 0] << 0)
 					 | (mem[addr + 1] << 8)
@@ -461,7 +466,7 @@ public:
 
 	virtual void preCycle(){
 		if (top->iBus_cmd_valid && top->iBus_cmd_ready && !pending) {
-			assertEq(top->iBus_cmd_payload_pc & 3,0);
+			//assertEq(top->iBus_cmd_payload_pc & 3,0);
 			pending = true;
 			ws->iBusAccess(top->iBus_cmd_payload_pc,&inst_next,&error_next);
 		}
@@ -966,7 +971,7 @@ public:
 	}
 };
 
-
+#ifdef DEBUG_PLUGIN
 
 #include<pthread.h>
 #include<stdlib.h>
@@ -1137,6 +1142,7 @@ public:
 	}
 };
 
+#endif
 
 string riscvTestMain[] = {
 	"rv32ui-p-simple",
@@ -1223,67 +1229,75 @@ int main(int argc, char **argv, char **env) {
 	for(int idx = 0;idx < 1;idx++){
 		#ifndef  REF
 
-		#ifdef DEBUG_PLUGIN_EXTERNAL
-		{
-			Workspace w("debugPluginExternal");
-			w.loadHex("../../resources/hex/debugPluginExternal.hex");
-			w.noInstructionReadCheck();
-			#if defined(TRACE) || defined(TRACE_ACCESS)
-				w.setCyclesPerSecond(5e3);
-				printf("Speed reduced 5Khz\n");
+			#ifdef DEBUG_PLUGIN_EXTERNAL
+			{
+				Workspace w("debugPluginExternal");
+				w.loadHex("../../resources/hex/debugPluginExternal.hex");
+				w.noInstructionReadCheck();
+				#if defined(TRACE) || defined(TRACE_ACCESS)
+					w.setCyclesPerSecond(5e3);
+					printf("Speed reduced 5Khz\n");
+				#endif
+				w.run(1e9);
+			}
 			#endif
-			w.run(1e9);
-		}
-		#endif
 
 
 
-		TestA().run();
+			TestA().run();
 
 
 
 
-		for(const string &name : riscvTestMain){
-			redo(REDO,RiscvTest(name).run();)
-		}
-		for(const string &name : riscvTestMemory){
-			redo(REDO,RiscvTest(name).run();)
-		}
-		for(const string &name : riscvTestMul){
-			redo(REDO,RiscvTest(name).run();)
-		}
-		for(const string &name : riscvTestDiv){
-			redo(REDO,RiscvTest(name).run();)
-		}
+			for(const string &name : riscvTestMain){
+				redo(REDO,RiscvTest(name).run();)
+			}
+			for(const string &name : riscvTestMemory){
+				redo(REDO,RiscvTest(name).run();)
+			}
+			#ifdef MUL
+			for(const string &name : riscvTestMul){
+				redo(REDO,RiscvTest(name).run();)
+			}
+			#endif
+			#ifdef DIV
+			for(const string &name : riscvTestDiv){
+				redo(REDO,RiscvTest(name).run();)
+			}
+			#endif
 
-		#ifdef CSR
-		uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
-		8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
-		redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(4e3);)
-		#endif
-		#ifdef MMU
-		uint32_t mmuRef[] = {1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
-			13, 0xC4000000,0x33333333, 6,7,
-			1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
-			13, 0xC4000000,0x33333333, 6,7};
-		redo(REDO,TestX28("mmu",mmuRef, sizeof(mmuRef)/4).noInstructionReadCheck()->run(4e3);)
-		#endif
+			#ifdef CSR
+				uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
+				8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
+				redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(4e3);)
+			#endif
+			#ifdef MMU
+				uint32_t mmuRef[] = {1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
+					13, 0xC4000000,0x33333333, 6,7,
+					1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
+					13, 0xC4000000,0x33333333, 6,7};
+				redo(REDO,TestX28("mmu",mmuRef, sizeof(mmuRef)/4).noInstructionReadCheck()->run(4e3);)
+			#endif
 		#endif
 
 		#ifdef DEBUG_PLUGIN
-		redo(REDO,DebugPluginTest().run(1e6););
+			redo(REDO,DebugPluginTest().run(1e6););
 		#endif
 
 		#ifdef DHRYSTONE
-		Dhrystone("dhrystoneO3_Stall","dhrystoneO3",true,true).run(1.1e6);
-		Dhrystone("dhrystoneO3M_Stall","dhrystoneO3M",true,true).run(1.5e6);
-		Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.5e6);
-		Dhrystone("dhrystoneO3M","dhrystoneO3M",false,false).run(1.2e6);
+			Dhrystone("dhrystoneO3_Stall","dhrystoneO3",true,true).run(1.1e6);
+			#if defined(MUL) || defined(DIV)
+				Dhrystone("dhrystoneO3M_Stall","dhrystoneO3M",true,true).run(1.5e6);
+			#endif
+			Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.5e6);
+			#if defined(MUL) || defined(DIV)
+				Dhrystone("dhrystoneO3M","dhrystoneO3M",false,false).run(1.2e6);
+			#endif
 		#endif
 
 
 		#ifdef FREE_RTOS
-		redo(1,Workspace("freeRTOS_demo").loadHex("../../resources/hex/freeRTOS_demo.hex")->bootAt(0x80000000u)->run(100e6);)
+			redo(1,Workspace("freeRTOS_demo").loadHex("../../resources/hex/freeRTOS_demo.hex")->bootAt(0x80000000u)->run(100e6);)
 		#endif
 	}
 

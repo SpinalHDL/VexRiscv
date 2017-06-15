@@ -20,76 +20,47 @@ The hardware description of this CPU is done by using an very software oriented 
 - There is an service system which provide a very dynamic framework. As instance, a plugin could provide an exception service which could then be used by others plugins to emit exceptions from the pipeline.
 
 
-## CPU instantiation 
-There is an example of instantiation of the CPU
+## CPU generation
+You can find two example of CPU instantiation in :
+- src/main/scala/VexRiscv/GenFull.scala
+- src/main/scala/VexRiscv/GenSmallest.scala
 
-```scala
-//Define the cpu configuraiton
-val config = VexRiscvConfig(
-    pcWidth = 32
-)
+To generate the corresponding RTL as a VexRiscv.v file, run :
 
-//Define the CSR configuration (riscv-privileged-v1.9.1)
-val csrConfig = MachineCsrConfig(
-    mvendorid      = 11,
-    marchid        = 22,
-    mimpid         = 33,
-    mhartid        = 0,
-    misaExtensionsInit = 66,
-    misaAccess     = CsrAccess.READ_WRITE,
-    mtvecAccess    = CsrAccess.READ_WRITE,
-    mtvecInit      = 0x00000020l,
-    mepcAccess     = CsrAccess.READ_WRITE,
-    mscratchGen    = true,
-    mcauseAccess   = CsrAccess.READ_WRITE,
-    mbadaddrAccess = CsrAccess.READ_WRITE,
-    mcycleAccess   = CsrAccess.READ_WRITE,
-    minstretAccess = CsrAccess.READ_WRITE,
-    ecallGen       = true,
-    wfiGen         = true
-)
+```sh
+sbt run-main VexRiscv.GenFull
 
-//Add plugins into the cpu configuration
-config.plugins ++= List(
-    new PcManagerSimplePlugin(0x00000000l, false),
-    new IBusSimplePlugin(
-        interfaceKeepData = true
-    ),
-    new DecoderSimplePlugin(
-        catchIllegalInstruction = true
-    ),
-    new RegFilePlugin(
-        regFileReadyKind = Plugin.SYNC,
-        zeroBoot = false
-    ),
-    new IntAluPlugin,
-    new SrcPlugin,
-    new FullBarrielShifterPlugin,
-    new DBusSimplePlugin(
-        catchUnalignedException = true
-    ),
-    new HazardSimplePlugin(true, true, true, true),
-    new MulPlugin,
-    new DivPlugin,
-    new MachineCsr(csrConfig),
-    new BranchPlugin(
-        earlyBranch = false,
-        catchUnalignedException = true,
-        prediction = DYNAMIC
-    )
-)
+# or
+sbt run-main VexRiscv.GenSmallest
+```
 
-//Instanciate the CPU
-val toplevel = new VexRiscv(config)
+## Tests
+To run tests (need the verilator simulator), go in the src/test/cpp/regression folder and run :
+
+```sh
+# To test the GenFull CPU
+make clean run
+
+# To test the GenSmallest CPU
+make clean run IBUS=IBUS_SIMPLE DBUS=DBUS_SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no
+```
+
+## Interactive debug of the simulated CPU via GDB/OpenOCD in Verilator
+It's as described to run tests, but you just have to add DEBUG_PLUGIN_EXTERNAL=yes in the make arguments.
+Work for the GenFull, but not for the GenSmallest as this configuration has no debug module.
+
+Then you can use the https://github.com/SpinalHDL/openocd_riscv tool to create a GDB server connected to the target (the simulated CPU)
+
+```sh
+src/openocd -c "set VEXRISCV_YAML PATH_TO_THE_GENERATED_CPU0_YAML_FILE" -f tcl/target/vexriscv_sim.cfg
 ```
 
 
-## Plugin structure
+## Cpu plugin structure
 
 There is an example of an pseudo ALU plugin :
 
 ```scala
-
 //Define an signal name/type which could be used in the pipeline
 object ALU_ENABLE extends Stageable(Bool)
 object ALU_OP     extends Stageable(Bits(2  bits))  // ADD, SUB, AND, OR
