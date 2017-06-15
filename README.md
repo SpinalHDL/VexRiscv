@@ -19,6 +19,23 @@ The hardware description of this CPU is done by using an very software oriented 
 - There is an automatic a tool which allow plugins to insert data in the pipeline at a given stage, and allow other plugins to read it in another stages through automatic pipelining.
 - There is an service system which provide a very dynamic framework. As instance, a plugin could provide an exception service which could then be used by others plugins to emit exceptions from the pipeline.
 
+## Dependencies
+
+On Ubuntu 14 :
+
+```sh
+# JAVA JDK 7 or 8
+sudo apt-get install openjdk-7-jdk
+
+# SBT
+echo "deb https://dl.bintray.com/sbt/debian /" | sudo tee -a /etc/apt/sources.list.d/sbt.list
+sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 2EE0EA64E40A89B84B2DF73499E82A75642AC823
+sudo apt-get update
+sudo apt-get install sbt
+
+# Verilator (for sim only)
+sudo apt-get install verilator
+```
 
 ## CPU generation
 You can find two example of CPU instantiation in :
