@@ -34,7 +34,17 @@ sudo apt-get update
 sudo apt-get install sbt
 
 # Verilator (for sim only)
-sudo apt-get install verilator
+sudo apt-get install git make autoconf g++ flex bison
+git clone http://git.veripool.org/git/verilator   # Only first time
+unsetenv VERILATOR_ROOT  # For csh; ignore error if on bash
+unset VERILATOR_ROOT  # For bash
+cd verilator
+git pull        # Make sure we're up-to-date
+git tag         # See what versions exist
+autoconf        # Create ./configure script
+./configure
+make
+sudo make install
 ```
 
 ## CPU generation
