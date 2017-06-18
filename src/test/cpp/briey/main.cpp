@@ -164,7 +164,7 @@ public:
 	struct sockaddr_in serverAddr;
 	struct sockaddr_storage serverStorage;
 	socklen_t addr_size;
-	uint64_t period;
+	uint64_t tooglePeriod;
 //	char buffer[1024];
 
 	Jtag(CData *tms, CData *tdi, CData *tdo, CData* tck,uint64_t period){
@@ -172,7 +172,7 @@ public:
 		this->tdi = tdi;
 		this->tdo = tdo;
 		this->tck = tck;
-		this->period = period;
+		this->tooglePeriod = period/2;
 		*tms = 0;
 		*tdi = 0;
 		*tdo = 0;
@@ -191,6 +191,15 @@ public:
 					 (char *) &flag,  /* the cast is historical
 											 cruft */
 					 sizeof(int));    /* length of option value */
+
+		/*int a = 0xFFF;
+		if (setsockopt(serverSocket, SOL_SOCKET, SO_RCVBUF, &a, sizeof(int)) == -1) {
+		    fprintf(stderr, "Error setting socket opts: %s\n", strerror(errno));
+		}
+		a = 0xFFFFFF;
+		if (setsockopt(serverSocket, SOL_SOCKET, SO_SNDBUF, &a, sizeof(int)) == -1) {
+		    fprintf(stderr, "Error setting socket opts: %s\n", strerror(errno));
+		}*/
 
 		SetSocketBlockingEnabled(serverSocket,0);
 
@@ -232,50 +241,67 @@ public:
 	}
 
 	uint32_t selfSleep = 0;
+	uint32_t checkNewConnectionsTimer = 0;
+	uint8_t rxBuffer[100];
+	int32_t rxBufferSize = 0;
+	int32_t rxBufferRemaining = 0;
 	virtual void tick(){
+		checkNewConnectionsTimer++;
+		if(checkNewConnectionsTimer == 5000){
+			checkNewConnectionsTimer = 0;
+			int newclientHandle = accept(serverSocket, (struct sockaddr *) &serverStorage, &addr_size);
+			if(newclientHandle != -1){
+				if(clientHandle != -1){
+					connectionReset();
+				}
+				clientHandle = newclientHandle;
+				printf("CONNECTED\n");
+			}
+			else{
+				if(clientHandle == -1)
+					selfSleep = 1000;
+			}
+		}
 		if(selfSleep)
 			selfSleep--;
 		else{
-			if(clientHandle == -1){
-				clientHandle = accept(serverSocket, (struct sockaddr *) &serverStorage, &addr_size);
-				if(clientHandle != -1)
-					printf("CONNECTED\n");
-				else
-					selfSleep = 1000;
-			}
 			if(clientHandle != -1){
 				uint8_t buffer;
 				int n;
 
-				if(ioctl(clientHandle,FIONREAD,&n) != 0)
-					connectionReset();
-				else if(n >= 1){
-					switch(read(clientHandle,&buffer,1)){
-					case 0: break;
-					case 1:
-						*tms = (buffer & 1) != 0;
-						*tdi = (buffer & 2) != 0;
-						*tck = (buffer & 8) != 0;
-						if(buffer & 4){
-							buffer = (*tdo != 0);
-							//printf("TDO=%d\n",buffer);
-							if(-1 == send(clientHandle,&buffer,1,0))
-								connectionReset();
-						}else {
-
-						//	printf("\n");
-						}
-						break;
-					default:
+				if(rxBufferRemaining == 0){
+					if(ioctl(clientHandle,FIONREAD,&n) != 0)
 						connectionReset();
-						break;
+					else if(n >= 1){
+						rxBufferSize = read(clientHandle,&rxBuffer,100);
+						if(rxBufferSize < 0){
+							connectionReset();
+						}else {
+							rxBufferRemaining = rxBufferSize;
+						}
+					}else {
+						selfSleep = 30;
 					}
-				}else{
-					selfSleep = 10;
+				}
+
+				if(rxBufferRemaining != 0){
+					uint8_t buffer = rxBuffer[rxBufferSize - (rxBufferRemaining--)];
+					*tms = (buffer & 1) != 0;
+					*tdi = (buffer & 2) != 0;
+					*tck = (buffer & 8) != 0;
+					if(buffer & 4){
+						buffer = (*tdo != 0);
+						//printf("TDO=%d\n",buffer);
+						if(-1 == send(clientHandle,&buffer,1,0))
+							connectionReset();
+					}else {
+
+					//	printf("\n");
+					}
 				}
 			}
 		}
-		schedule(period);
+		schedule(tooglePeriod);
 	}
 
 };
@@ -530,9 +556,9 @@ public:
 			if(!opened)
 				cout << "SDRAM : write in closed bank" << endl;
 			uint32_t addr = byteId + (column + openedRow * config->colSize) * config->byteCount;
+			//printf("SDRAM : Write A=%08x D=%02x\n",addr,data);
 			this->data[addr] = data;
 
-			//printf("SDRAM : Write A=%08x D=%02x\n",addr,data);
 		}
 
 		CData read(uint32_t column, CData byteId){
@@ -705,7 +731,7 @@ public:
 		ClockDomain *axiClk = new ClockDomain(&top->io_axiClk,NULL,20000,100000);
 		ClockDomain *vgaClk = new ClockDomain(&top->io_vgaClk,NULL,40000,100000);
 		AsyncReset *asyncReset = new AsyncReset(&top->io_asyncReset,50000);
-		Jtag *jtag = new Jtag(&top->io_jtag_tms,&top->io_jtag_tdi,&top->io_jtag_tdo,&top->io_jtag_tck,60000);
+		Jtag *jtag = new Jtag(&top->io_jtag_tms,&top->io_jtag_tdi,&top->io_jtag_tdo,&top->io_jtag_tck,80000);
 		UartRx *uartRx = new UartRx(&top->io_uart_txd,(50000000/8/115200)*8*axiClk->tooglePeriod*2);
 		timeProcesses.push_back(axiClk);
 		timeProcesses.push_back(vgaClk);
@@ -716,8 +742,8 @@ public:
 		SdramConfig *sdramConfig = new SdramConfig(
 			2,  //byteCount
 			4,  //bankCount
-			13, //rowSize
-			10  //colSize
+			1 << 13, //rowSize
+			1 << 10  //colSize
 		);
 		SdramIo *sdramIo = new SdramIo();
 		sdramIo->BA              = &top->io_sdram_BA             ;

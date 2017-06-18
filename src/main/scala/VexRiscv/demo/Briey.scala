@@ -244,7 +244,9 @@ class Briey(config: BrieyConfig) extends Component{
           new SrcPlugin(
             separatedAddSub = false
           ),
-          new LightShifterPlugin,
+          new FullBarrielShifterPlugin,
+          new MulPlugin,
+          new DivPlugin,
           new HazardSimplePlugin(
             bypassExecute           = true,
             bypassMemory            = true,

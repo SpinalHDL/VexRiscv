@@ -9,7 +9,7 @@ ifeq ($(TRACE),yes)
 	ADDCFLAGS += -CFLAGS -DTRACE
 endif
 ifeq ($(DEBUG),yes)
-	ADDCFLAGS += -CFLAGS "-g -O0"
+	ADDCFLAGS += -CFLAGS "-g3 -O0"
 endif
 ifneq ($(DEBUG),yes)
 	ADDCFLAGS += -CFLAGS "-O3"
