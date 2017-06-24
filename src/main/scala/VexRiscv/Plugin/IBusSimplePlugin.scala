@@ -63,9 +63,9 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
     //TODO remove
     val axi2 = Axi4ReadOnly(IBusSimpleBus.getAxi4Config())
-//    axi.ar >/-> axi2.ar
-//    axi.r <-/< axi2.r
-    axi2 << axi
+    axi.ar >-> axi2.ar
+    axi.r << axi2.r
+//    axi2 << axi
     axi2
   }
 }

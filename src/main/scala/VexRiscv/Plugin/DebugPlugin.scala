@@ -93,6 +93,7 @@ class DebugPlugin(debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
 
       val insertDecodeInstruction = False
       val firstCycle = RegNext(False) setWhen (io.bus.cmd.ready)
+      val secondCycle = RegNext(firstCycle)
       val resetIt = RegInit(False)
       val haltIt = RegInit(False)
       val stepIt = RegInit(False)
@@ -120,10 +121,9 @@ class DebugPlugin(debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
           is(1) {
             when(io.bus.cmd.wr) {
               insertDecodeInstruction := True
-              val injectedInstructionSent = RegNext(decode.arbitration.isFiring) init (False)
-              decode.arbitration.haltIt setWhen (!injectedInstructionSent && !RegNext(decode.arbitration.isValid).init(False))
               decode.arbitration.isValid setWhen (firstCycle)
-              io.bus.cmd.ready := injectedInstructionSent
+              decode.arbitration.haltIt setWhen (secondCycle)
+              io.bus.cmd.ready := !(firstCycle || secondCycle || isPipActive)
             }
           }
         }

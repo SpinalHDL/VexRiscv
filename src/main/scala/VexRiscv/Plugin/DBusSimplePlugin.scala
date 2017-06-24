@@ -85,11 +85,11 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
 
     //TODO remove
     val axi2 = Axi4Shared(DBusSimpleBus.getAxi4Config())
-//    axi.arw >/-> axi2.arw
-//    axi.w >/-> axi2.w
-//    axi.r <-/< axi2.r
-//    axi.b <-/< axi2.b
-    axi2 << axi
+    axi.arw >-> axi2.arw
+    axi.w >> axi2.w
+    axi.r << axi2.r
+    axi.b << axi2.b
+//    axi2 << axi
     axi2
   }
 }

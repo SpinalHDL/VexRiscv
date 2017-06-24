@@ -18,6 +18,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include "VBriey_VexRiscv.h"
 
 
 class SimElement{
@@ -725,6 +726,39 @@ public:
 	}
 };
 
+class VexRiscvTracer : public SimElement{
+public:
+	VBriey_VexRiscv *cpu;
+	ofstream instructionTraces;
+	ofstream regTraces;
+
+	VexRiscvTracer(VBriey_VexRiscv *cpu){
+		this->cpu = cpu;
+#ifdef TRACE_INSTRUCTION
+	instructionTraces.open ("instructionTrace.log");
+#endif
+#ifdef TRACE_REG
+	regTraces.open ("regTraces.log");
+#endif
+	}
+
+
+
+	virtual void preCycle(){
+#ifdef TRACE_INSTRUCTION
+		if(cpu->writeBack_arbitration_isFiring){
+			instructionTraces <<  hex << setw(8) <<  cpu->writeBack_INSTRUCTION << endl;
+		}
+#endif
+#ifdef TRACE_REG
+		if(cpu->writeBack_RegFilePlugin_regFileWrite_valid == 1 && cpu->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
+			regTraces << " PC " << hex << setw(8) <<  cpu->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)cpu->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << cpu->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
+		}
+
+#endif
+	}
+};
+
 class BrieyWorkspace : public Workspace{
 public:
 	BrieyWorkspace() : Workspace("Briey"){
@@ -764,6 +798,8 @@ public:
 		//speedFactor = 100e-6;
 		//cout << "Simulation caped to " << timeToSec << " of real time"<< endl;
 		#endif
+
+		axiClk->add(new VexRiscvTracer(top->Briey->axi_core_cpu));
 	}
 
 

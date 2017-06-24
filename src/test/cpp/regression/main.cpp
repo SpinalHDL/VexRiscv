@@ -256,6 +256,11 @@ public:
 			}
 
 			switch(addr){
+			case 0xF0010000u: {
+				cout << mem[0xF0010000u];
+				logTraces << (char)mem[0xF0010000u];
+				break;
+			}
 			case 0xF00FFF00u: {
 				cout << mem[0xF00FFF00u];
 				logTraces << (char)mem[0xF00FFF00u];
@@ -283,6 +288,7 @@ public:
 			case 0xF00FFF44u: *data = mTime >> 32;    break;
 			case 0xF00FFF48u: *data = mTimeCmp;       break;
 			case 0xF00FFF4Cu: *data = mTimeCmp >> 32; break;
+			case 0xF0010004u: *data = ~0;		      break;
 			}
 			memTraces <<
 			#ifdef TRACE_WITH_TIME
@@ -793,9 +799,10 @@ public:
 							top->debug_bus_cmd_payload_data = data;
 						} else {
 							bool dummy;
-							printf("wr=%d size=%d address=%x data=%x\n",wr,size,address,data);
+							//printf("wr=%d size=%d address=%x data=%x\n",wr,size,address,data);
 							ws->dBusAccess(address,wr,size,0xFFFFFFFF, &data, &dummy);
 							if(!wr){
+								//cout << hex << setw(8) << address << " -> " << hex << setw(8) << data << endl;
 								if(-1 == send(clientHandle,&data,4,0))  connectionReset();
 							}
 						}
@@ -1022,6 +1029,7 @@ public:
 			printf("Should read 4 bytes");
 			fail();
 		}
+
 		return *((uint32_t*) buffer);
 	}
 
