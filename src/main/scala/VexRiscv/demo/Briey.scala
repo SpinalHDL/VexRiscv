@@ -197,9 +197,9 @@ class Briey(config: BrieyConfig) extends Component{
               addressWidth = 32,
               cpuDataWidth = 32,
               memDataWidth = 32,
-              catchIllegalAccess = false,
-              catchAccessFault = false,
-              catchMemoryTranslationMiss = false,
+              catchIllegalAccess = true,
+              catchAccessFault = true,
+              catchMemoryTranslationMiss = true,
               asyncTagMemory = false,
               twoStageLogic = true
             )
@@ -220,10 +220,10 @@ class Briey(config: BrieyConfig) extends Component{
               addressWidth      = 32,
               cpuDataWidth      = 32,
               memDataWidth      = 32,
-              catchAccessError  = false,
-              catchIllegal      = false,
-              catchUnaligned    = false,
-              catchMemoryTranslationMiss = false
+              catchAccessError  = true,
+              catchIllegal      = true,
+              catchUnaligned    = true,
+              catchMemoryTranslationMiss = true
             ),
             memoryTranslatorPortConfig = null
             //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
@@ -234,7 +234,7 @@ class Briey(config: BrieyConfig) extends Component{
             ioRange      = _(31 downto 28) === 0xF
           ),
           new DecoderSimplePlugin(
-            catchIllegalInstruction = false
+            catchIllegalInstruction = true
           ),
           new RegFilePlugin(
             regFileReadyKind = Plugin.SYNC,
@@ -259,7 +259,7 @@ class Briey(config: BrieyConfig) extends Component{
           new DebugPlugin(axiClockDomain),
           new BranchPlugin(
             earlyBranch = false,
-            catchAddressMisaligned = false,
+            catchAddressMisaligned = true,
             prediction = STATIC
           ),
           new CsrPlugin(

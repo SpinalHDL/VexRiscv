@@ -17,6 +17,7 @@ case class DataCacheConfig( cacheSize : Int,
                             catchUnaligned : Boolean,
                             catchMemoryTranslationMiss : Boolean,
                             clearTagsAfterReset : Boolean = true,
+                            waysHitRetime : Boolean = true,
                             tagSizeShift : Int = 0){ //Used to force infering ram
   def burstSize = bytePerLine*8/memDataWidth
   val burstLength = bytePerLine/(memDataWidth/8)
@@ -478,8 +479,10 @@ class DataCache(p : DataCacheConfig) extends Component{
   val stageB = new Area {
     val request = RegNextWhen(stageA.request, !io.cpu.writeBack.isStuck)
     val mmuRsp = RegNextWhen(io.cpu.memory.mmuBus.rsp, !io.cpu.writeBack.isStuck)
-    //    val waysHit = RegNextWhen(way.tagReadRspTwoRegIn.used && stageA.mmuRsp.physicalAddress(tagRange) === way.tagReadRspTwoRegIn.address,!io.cpu.writeBack.isStuck)  //Manual retiming
-    val waysHit = way.tagReadRspTwo.used && mmuRsp.physicalAddress(tagRange) === way.tagReadRspTwo.address
+    val waysHit = if(waysHitRetime)
+      RegNextWhen(way.tagReadRspTwoRegIn.used && io.cpu.memory.mmuBus.rsp.physicalAddress(tagRange) === way.tagReadRspTwoRegIn.address,!io.cpu.writeBack.isStuck)  //Manual retiming
+    else
+      way.tagReadRspTwo.used && mmuRsp.physicalAddress(tagRange) === way.tagReadRspTwo.address
 
 
     //Loader interface
