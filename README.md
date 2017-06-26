@@ -61,6 +61,9 @@ sbt "run-main VexRiscv.GenFull"
 sbt "run-main VexRiscv.GenSmallest"
 ```
 
+NOTE :
+The VexRiscv could need the unreleased master-head of SpinalHDL. If it fail to compile, just get the SpinalHDL repository and do a "sbt publish-local" in it.
+
 ## Tests
 To run tests (need the verilator simulator), go in the src/test/cpp/regression folder and run :
 
@@ -79,9 +82,26 @@ Work for the GenFull, but not for the GenSmallest as this configuration has no d
 Then you can use the https://github.com/SpinalHDL/openocd_riscv tool to create a GDB server connected to the target (the simulated CPU)
 
 ```sh
+#in the VexRiscv repository, to run the simulation on which one OpenOCD can connect itself =>
+sbt "run-main VexRiscv.GenFull"
+cd src/test/cpp/regression
+make run DEBUG_PLUGIN_EXTERNAL=yes
+
+#In the openocd git, after building it =>
 src/openocd -c "set VEXRISCV_YAML PATH_TO_THE_GENERATED_CPU0_YAML_FILE" -f tcl/target/vexriscv_sim.cfg
+
+#Run a GDB session with an elf RISCV executable (GenFull CPU)
+YourRiscvToolsPath/bin/riscv32-unknown-elf-gdb VexRiscvRepo/src/test/resources/elf/uart.elf
+target remote localhost:3333
+monitor reset halt
+load
+continue
+
+# Now it should print messages in the Verilator simulation of the CPU
 ```
 
+## Using eclipse to run the software and debug it
+You can use the eclipse + zilin embedded CDT plugin to do it.
 
 ## Cpu plugin structure
 
