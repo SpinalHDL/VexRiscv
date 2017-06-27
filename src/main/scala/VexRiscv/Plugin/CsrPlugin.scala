@@ -31,7 +31,7 @@ object CsrAccess {
 }
 
 case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage, priority : Int)
-case class csrPluginConfig(
+case class CsrPluginConfig(
   catchIllegalAccess  : Boolean,
   mvendorid           : BigInt,
   marchid             : BigInt,
@@ -55,7 +55,7 @@ case class csrPluginConfig(
 }
 
 object CsrPluginConfig{
-  val all = csrPluginConfig(
+  val all = CsrPluginConfig(
     catchIllegalAccess = true,
     mvendorid      = 11,
     marchid        = 22,
@@ -76,7 +76,7 @@ object CsrPluginConfig{
     ucycleAccess   = CsrAccess.READ_ONLY
   )
 
-  val small = csrPluginConfig(
+  val small = CsrPluginConfig(
     catchIllegalAccess = false,
     mvendorid      = null,
     marchid        = null,
@@ -97,7 +97,7 @@ object CsrPluginConfig{
     ucycleAccess   = CsrAccess.NONE
   )
 
-  val smallest = csrPluginConfig(
+  val smallest = CsrPluginConfig(
     catchIllegalAccess = false,
     mvendorid      = null,
     marchid        = null,
@@ -140,7 +140,7 @@ case class CsrMapping(){
 
 
 
-class CsrPlugin(config : csrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor{
+class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor{
   import config._
   import CsrAccess._
 

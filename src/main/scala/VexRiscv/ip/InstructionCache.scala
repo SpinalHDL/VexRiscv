@@ -412,7 +412,6 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     val mmuRsp = RegNextWhen(io.cpu.fetch.mmuBus.rsp,!io.cpu.decode.isStuck)
 
     val hit = tag.valid && tag.address === mmuRsp.physicalAddress(tagRange) && !(tag.loading && !lineLoader.loadedWords(mmuRsp.physicalAddress(wordRange)))
-    //    val hit = tag.hit && !(tag.loading && !lineLoader.loadedWords(mmuRsp.physicalAddress(wordRange)))
 
     io.cpu.decode.haltIt  := io.cpu.decode.isValid && !hit //TODO PERF not halit it when removed, Should probably be applyed in many other places
     io.cpu.decode.data    := data

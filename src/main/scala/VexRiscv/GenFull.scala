@@ -64,7 +64,8 @@ object GenFull extends App{
           ),
           new IntAluPlugin,
           new SrcPlugin(
-            separatedAddSub = false
+            separatedAddSub = false,
+            executeInsertion = true
           ),
           new FullBarrielShifterPlugin,
           new HazardSimplePlugin(

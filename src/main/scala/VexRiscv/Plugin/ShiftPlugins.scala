@@ -80,6 +80,15 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
   }
 }
 
+
+
+
+
+
+
+
+
+
 class LightShifterPlugin extends Plugin[VexRiscv]{
   object ShiftCtrlEnum extends SpinalEnum(binarySequential){
     val DISABLE, SLL, SRL, SRA = newElement()

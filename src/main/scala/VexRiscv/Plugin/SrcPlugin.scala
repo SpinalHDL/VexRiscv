@@ -4,13 +4,13 @@ import VexRiscv.{Riscv, VexRiscv}
 import spinal.core._
 
 
-class SrcPlugin(separatedAddSub : Boolean) extends Plugin[VexRiscv]{
+class SrcPlugin(separatedAddSub : Boolean, executeInsertion : Boolean = false) extends Plugin[VexRiscv]{
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
-
-    decode plug new Area{
-      import decode._
+    val insertionStage = if(executeInsertion) execute else decode
+    insertionStage plug new Area{
+      import insertionStage._
 
       val imm = Riscv.IMM(input(INSTRUCTION))
       insert(SRC1) := input(SRC1_CTRL).mux(

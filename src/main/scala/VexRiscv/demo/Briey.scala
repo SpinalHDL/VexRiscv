@@ -208,10 +208,10 @@ class Briey(config: BrieyConfig) extends Component{
             //              portTlbSize = 4
             //            )
           ),
-          //          new DBusSimplePlugin(
-          //            catchAddressMisaligned = false,
-          //            catchAccessFault = false
-          //          ),
+//                    new DBusSimplePlugin(
+//                      catchAddressMisaligned = true,
+//                      catchAccessFault = true
+//                    ),
           new DBusCachedPlugin(
             config = new DataCacheConfig(
               cacheSize         = 4096,
@@ -242,7 +242,8 @@ class Briey(config: BrieyConfig) extends Component{
           ),
           new IntAluPlugin,
           new SrcPlugin(
-            separatedAddSub = false
+            separatedAddSub = false,
+            executeInsertion = true
           ),
           new FullBarrielShifterPlugin,
           new MulPlugin,
@@ -263,7 +264,7 @@ class Briey(config: BrieyConfig) extends Component{
             prediction = STATIC
           ),
           new CsrPlugin(
-            config = csrPluginConfig(
+            config = CsrPluginConfig(
               catchIllegalAccess = false,
               mvendorid      = null,
               marchid        = null,

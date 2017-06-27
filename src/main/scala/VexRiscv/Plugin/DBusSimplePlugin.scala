@@ -103,8 +103,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
   object MEMORY_ENABLE extends Stageable(Bool)
   object MEMORY_READ_DATA extends Stageable(Bits(32 bits))
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
+  object ALIGNEMENT_FAULT extends Stageable(Bool)
 
-  var executeExceptionPort : Flow[ExceptionCause] = null
   var memoryExceptionPort : Flow[ExceptionCause] = null
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -117,7 +117,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
       SRC_USE_SUB_LESS  -> False,
       MEMORY_ENABLE     -> True,
       REG1_USE          -> True
-    ) ++ (if(catchAccessFault) List(IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB) else Nil) //Used for access fault bad address in memory stage
+    ) ++ (if(catchAccessFault || catchAddressMisaligned) List(IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB) else Nil) //Used for access fault bad address in memory stage
 
     val loadActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMI,
@@ -137,12 +137,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
       List(SB, SH, SW).map(_ -> storeActions)
     )
 
-    if(catchAddressMisaligned) {
-      val exceptionService = pipeline.service(classOf[ExceptionService])
-      executeExceptionPort = exceptionService.newExceptionPort(pipeline.execute)
-    }
 
-    if(catchAccessFault) {
+    if(catchAccessFault || catchAddressMisaligned) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       memoryExceptionPort = exceptionService.newExceptionPort(pipeline.memory)
     }
@@ -158,7 +154,14 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
     execute plug new Area{
       import execute._
 
-      dBus.cmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers && !arbitration.removeIt
+      insert(ALIGNEMENT_FAULT) := {
+        if (catchAddressMisaligned)
+          (dBus.cmd.size === 2 && dBus.cmd.address(1 downto 0) =/= 0) || (dBus.cmd.size === 1 && dBus.cmd.address(0 downto 0) =/= 0)
+        else
+          False
+      }
+
+      dBus.cmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers && !arbitration.removeIt && !input(ALIGNEMENT_FAULT)
       dBus.cmd.wr := input(INSTRUCTION)(5)
       dBus.cmd.address := input(SRC_ADD).asUInt
       dBus.cmd.size := input(INSTRUCTION)(13 downto 12).asUInt
@@ -167,18 +170,11 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
         U(1) -> input(REG2)(15 downto 0) ## input(REG2)(15 downto 0),
         default -> input(REG2)(31 downto 0)
       )
-      when(arbitration.isValid && input(MEMORY_ENABLE) && !dBus.cmd.ready){
+      when(arbitration.isValid && input(MEMORY_ENABLE) && !dBus.cmd.ready && !input(ALIGNEMENT_FAULT)){
         arbitration.haltIt := True
       }
 
       insert(MEMORY_ADDRESS_LOW) := dBus.cmd.address(1 downto 0)
-
-      if(catchAddressMisaligned){
-        executeExceptionPort.code := (dBus.cmd.wr ? U(6) | U(4)).resized
-        executeExceptionPort.badAddr := dBus.cmd.address
-        executeExceptionPort.valid := (arbitration.isValid && input(MEMORY_ENABLE)
-          && ((dBus.cmd.size === 2 && dBus.cmd.address(1 downto 0) =/= 0) || (dBus.cmd.size === 1 && dBus.cmd.address(0 downto 0) =/= 0)))
-      }
     }
 
     //Collect dBus.rsp read responses
@@ -189,11 +185,27 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
       insert(MEMORY_READ_DATA) := dBus.rsp.data
       arbitration.haltIt setWhen(arbitration.isValid && input(MEMORY_ENABLE) && input(REGFILE_WRITE_VALID) && !dBus.rsp.ready)
 
-      if(catchAccessFault){
-        memoryExceptionPort.valid := arbitration.isValid && input(MEMORY_ENABLE) && dBus.rsp.ready && dBus.rsp.error
-        memoryExceptionPort.code  := 5
+      if(catchAccessFault || catchAddressMisaligned){
+        if(!catchAccessFault){
+          memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(6) | U(4)).resized
+          memoryExceptionPort.valid := input(ALIGNEMENT_FAULT)
+        } else if(!catchAddressMisaligned){
+          memoryExceptionPort.valid := dBus.rsp.ready && dBus.rsp.error
+          memoryExceptionPort.code  := 5
+        } else {
+          memoryExceptionPort.valid := dBus.rsp.ready && dBus.rsp.error
+          memoryExceptionPort.code  := 5
+          when(input(ALIGNEMENT_FAULT)){
+            memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(6) | U(4)).resized
+            memoryExceptionPort.valid := True
+          }
+        }
+        when(!(arbitration.isValid && input(MEMORY_ENABLE))){
+          memoryExceptionPort.valid := False
+        }
         memoryExceptionPort.badAddr := input(REGFILE_WRITE_DATA).asUInt  //Drived by IntAluPlugin
       }
+
 
       assert(!(dBus.rsp.ready && input(MEMORY_ENABLE) && arbitration.isValid && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
     }
