@@ -385,12 +385,45 @@ class Briey(config: BrieyConfig) extends Component{
   io.vga            <> axi.vgaCtrl.io.vga
 }
 
-
+//DE1-SoC
 object Briey{
   def main(args: Array[String]) {
     val config = SpinalConfig()
     config.generateVerilog({
       val toplevel = new Briey(BrieyConfig.default)
+      toplevel
+    })
+  }
+}
+
+//DE0-Nano
+object BrieyDe0Nano{
+  def main(args: Array[String]) {
+    object IS42x160G {
+      def layout = SdramLayout(
+        bankWidth   = 2,
+        columnWidth = 9,
+        rowWidth    = 13,
+        dataWidth   = 16
+      )
+
+      def timingGrade7 = SdramTimings(
+        bootRefreshCount =   8,
+        tPOW             = 100 us,
+        tREF             =  64 ms,
+        tRC              =  60 ns,
+        tRFC             =  60 ns,
+        tRAS             =  37 ns,
+        tRP              =  15 ns,
+        tRCD             =  15 ns,
+        cMRD             =   2,
+        tWR              =  10 ns,
+        cWR              =   1
+      )
+    }
+    val config = SpinalConfig()
+    config.generateVerilog({
+      val toplevel = new Briey(BrieyConfig.default.copy(sdramLayout = IS42x160G.layout))
       toplevel
     })
   }

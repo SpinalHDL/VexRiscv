@@ -759,6 +759,126 @@ public:
 	}
 };
 
+
+
+
+#include <SDL2/SDL.h>
+#include <assert.h>
+#include <stdint.h>
+#include <stdlib.h>
+
+
+class Display : public SimElement{
+public:
+	int width, height;
+	uint32_t *pixels;
+    SDL_Window* window;
+    SDL_Renderer* renderer;
+    SDL_Texture * texture;
+    uint32_t x,y;
+    uint32_t refreshCounter = 0;
+
+    Display(int width, int height){
+		this->width = width;
+		this->height = height;
+		x = y = 0;
+		init();
+	}
+
+	virtual ~Display(){
+	    delete[] pixels;
+	    SDL_DestroyTexture(texture);
+	    SDL_DestroyRenderer(renderer);
+	    SDL_DestroyWindow(window);
+	    SDL_Quit();
+	}
+
+	void init(){
+
+        /* Initialize SDL. */
+        if (SDL_Init(SDL_INIT_VIDEO) < 0)
+                return;
+
+        /* Create the window where we will draw. */
+        window = SDL_CreateWindow("VGA",
+                        SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+                        width, height,
+                        SDL_WINDOW_SHOWN);
+
+        /* We must call SDL_CreateRenderer in order for draw calls to affect this window. */
+        renderer = SDL_CreateRenderer(window, -1, 0);
+
+        texture = SDL_CreateTexture(renderer,
+            SDL_PIXELFORMAT_ARGB8888, SDL_TEXTUREACCESS_STATIC, width, height);
+        pixels = new Uint32[width * height];
+        memset(pixels, 0, width * height * sizeof(Uint32));
+	}
+
+	void set(uint32_t color){
+		pixels[x + y*width] = color;
+	}
+
+	void incX(){
+		x++;
+		if(x >= width) x = width;
+	}
+
+	void incY(){
+		y++;
+		if(y >= height) y = height;
+	}
+
+	void refresh(){
+		cout << "Display refresh " << refreshCounter++ << endl;
+		SDL_UpdateTexture(texture, NULL, pixels, 640 * sizeof(Uint32));
+		SDL_RenderClear(renderer);
+		SDL_RenderCopy(renderer, texture, NULL, NULL);
+		SDL_RenderPresent(renderer);
+	}
+
+	virtual void postCycle(){
+
+	}
+
+	virtual void preCycle(){
+
+	}
+};
+
+class Vga : public Display{
+public:
+	VBriey* top;
+	Vga(VBriey* top,int width, int height) : Display(width, height){
+		this->top = top;
+	}
+
+	virtual ~Vga(){
+	}
+
+	virtual void postCycle(){
+
+	}
+
+	uint32_t lastvSync = 0,lasthSync = 0;
+	virtual void preCycle(){
+		if(!top->io_vga_vSync && lastvSync) {
+			y = 0;
+			refresh();
+		}
+		if(!top->io_vga_hSync && lasthSync && x != 0) {
+			incY();
+			x = 0;
+		}
+		if(top->io_vga_colorEn){
+			this->set((top->io_vga_color_r << 19) + (top->io_vga_color_g << 10) + (top->io_vga_color_b << 3));
+			incX();
+		}
+
+		lastvSync = top->io_vga_vSync;
+		lasthSync = top->io_vga_hSync;
+	}
+};
+
 class BrieyWorkspace : public Workspace{
 public:
 	BrieyWorkspace() : Workspace("Briey"){
@@ -800,6 +920,11 @@ public:
 		#endif
 
 		axiClk->add(new VexRiscvTracer(top->Briey->axi_core_cpu));
+
+		#ifdef VGA
+		Vga *vga = new Vga(top,640,480);
+		vgaClk->add(vga);
+		#endif
 	}
 
 
@@ -824,30 +949,10 @@ long timer_end(struct timespec start_time){
 
 
 
-/*
-#include <boost/coroutine2/all.hpp>
-#include <functional>
-#include <iostream>
 
-using boost::coroutines2::coroutine;
 
-void cooperative(coroutine<int>::push_type &sink, int i)
-{
-  int j = i;
-  sink(++j);
-  sink(++j);
-  std::cout << "end\n";
-}
 
-int main2()
-{
-  using std::placeholders::_1;
-  coroutine<int>::pull_type source{std::bind(cooperative, _1, 0)};
-  std::cout << source.get() << '\n';
-  source();
-  std::cout << source.get() << '\n';
-  source();
-}*/
+
 
 int main(int argc, char **argv, char **env) {
 
@@ -862,10 +967,6 @@ int main(int argc, char **argv, char **env) {
 	uint64_t duration = timer_end(startedAt);
 	cout << endl << "****************************************************************" << endl;
 	cout << "Had simulate " << Workspace::cycles << " clock cycles in " << duration*1e-9 << " s (" << Workspace::cycles / (duration*1e-9) << " Khz)" << endl;
-	/*if(successCounter == testsCounter)
-		cout << "SUCCESS " << successCounter << "/" << testsCounter << endl;
-	else
-		cout<< "FAILURE " << testsCounter - successCounter << "/"  << testsCounter << endl;*/
 	cout << "****************************************************************" << endl << endl;
 
 

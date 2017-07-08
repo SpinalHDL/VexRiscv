@@ -1,102 +1,66 @@
 [*]
 [*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
-[*] Fri Jun 23 12:04:47 2017
+[*] Sat Jul  8 21:52:29 2017
 [*]
-[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/briey/fail/Briey.vcd"
-[dumpfile_mtime] "Fri Jun 23 09:43:01 2017"
-[dumpfile_size] 1976675834
+[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/briey/Briey.vcd"
+[dumpfile_mtime] "Sat Jul  8 21:52:14 2017"
+[dumpfile_size] 1407698718
 [savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/briey/wip.gtkw"
-[timestart] 174298398700
+[timestart] 24655083000
 [size] 1776 953
-[pos] -1 -353
-*-17.000000 174298828600 174053720000 174335369100 174375180000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[pos] -1 -1
+*-18.000000 24656341000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.Briey.
-[treeopen] TOP.Briey.axi_core_cpu.
-[treeopen] TOP.Briey.axi_sdramCtrl.
-[sst_width] 269
-[signals_width] 586
+[treeopen] TOP.Briey.axi_vgaCtrl.
+[sst_width] 201
+[signals_width] 356
 [sst_expanded] 1
-[sst_vpaned_height] 503
+[sst_vpaned_height] 279
+@23
+TOP.Briey.axi_vgaCtrl.io_apb_PADDR[7:0]
 @28
-TOP.Briey.axi_core_cpu.DebugPlugin_haltIt
-TOP.Briey.axi_core_cpu.DebugPlugin_haltedByBreak
+TOP.Briey.axi_vgaCtrl.io_apb_PENABLE
 @22
-TOP.Briey.axi_core_cpu.writeBack_PC[31:0]
+TOP.Briey.axi_vgaCtrl.io_apb_PRDATA[31:0]
 @28
-TOP.Briey.axi_core_cpu.writeBack_arbitration_isFiring
+TOP.Briey.axi_vgaCtrl.io_apb_PREADY
+TOP.Briey.axi_vgaCtrl.io_apb_PSEL[0]
 @22
-TOP.Briey.axi_core_cpu.writeBack_PC[31:0]
-TOP.Briey.axi_core_cpu.RegFilePlugin_regFile(12)[31:0]
-TOP.Briey.axi_core_cpu.RegFilePlugin_regFile(13)[31:0]
-TOP.Briey.axi_core_cpu.RegFilePlugin_regFile(15)[31:0]
-@800022
-#{TOP.Briey.axi_core_cpu.writeBack_RegFilePlugin_regFileWrite_payload_address[0:4]} (4)TOP.Briey.axi_core_cpu.writeBack_RegFilePlugin_regFileWrite_payload_address[4:0] (3)TOP.Briey.axi_core_cpu.writeBack_RegFilePlugin_regFileWrite_payload_address[4:0] (2)TOP.Briey.axi_core_cpu.writeBack_RegFilePlugin_regFileWrite_payload_address[4:0] (1)TOP.Briey.axi_core_cpu.writeBack_RegFilePlugin_regFileWrite_payload_address[4:0] (0)TOP.Briey.axi_core_cpu.writeBack_RegFilePlugin_regFileWrite_payload_address[4:0]
-@24
-TOP.Briey.axi_core_cpu.writeBack_RegFilePlugin_regFileWrite_payload_address[4:0]
-@1001200
--group_end
-@22
-TOP.Briey.axi_core_cpu.writeBack_RegFilePlugin_regFileWrite_payload_data[31:0]
+TOP.Briey.axi_vgaCtrl.io_apb_PWDATA[31:0]
 @28
-TOP.Briey.axi_core_cpu.writeBack_RegFilePlugin_regFileWrite_valid
+TOP.Briey.axi_vgaCtrl.io_apb_PWRITE
+TOP.Briey.axi_vgaCtrl.io_axiClk
 @22
-TOP.Briey.axi_core_cpu.RegFilePlugin_regFile(2)[31:0]
-TOP.Briey.axi_core_cpu.dataCache_1.io_cpu_writeBack_badAddr[31:0]
+TOP.Briey.axi_vgaCtrl.io_axi_ar_payload_addr[31:0]
+TOP.Briey.axi_vgaCtrl.io_axi_ar_payload_len[7:0]
 @28
-TOP.Briey.axi_core_cpu.dataCache_1.io_cpu_writeBack_haltIt
-TOP.Briey.axi_core_cpu.dataCache_1.io_cpu_writeBack_isValid
+TOP.Briey.axi_vgaCtrl.io_axi_ar_payload_size[2:0]
+TOP.Briey.axi_vgaCtrl.io_axi_ar_ready
+TOP.Briey.axi_vgaCtrl.io_axi_ar_valid
 @22
-TOP.Briey.axi_core_cpu.dBus_cmd_payload_address[31:0]
-TOP.Briey.axi_core_cpu.dBus_cmd_payload_data[31:0]
+TOP.Briey.axi_vgaCtrl.io_axi_r_payload_data[31:0]
 @28
-TOP.Briey.axi_core_cpu.dBus_cmd_payload_last
-TOP.Briey.axi_core_cpu.dBus_cmd_payload_length[2:0]
+TOP.Briey.axi_vgaCtrl.io_axi_r_payload_last
+TOP.Briey.axi_vgaCtrl.io_axi_r_ready
+TOP.Briey.axi_vgaCtrl.io_axi_r_valid
+TOP.Briey.axi_vgaCtrl.io_vgaClk
+TOP.Briey.axi_vgaCtrl.io_vga_colorEn
 @22
-TOP.Briey.axi_core_cpu.dBus_cmd_payload_mask[3:0]
+TOP.Briey.axi_vgaCtrl.io_vga_color_b[4:0]
+TOP.Briey.axi_vgaCtrl.io_vga_color_g[5:0]
+TOP.Briey.axi_vgaCtrl.io_vga_color_r[4:0]
 @28
-TOP.Briey.axi_core_cpu.dBus_cmd_payload_wr
-TOP.Briey.axi_core_cpu.dBus_cmd_ready
-TOP.Briey.axi_core_cpu.dBus_cmd_valid
+TOP.Briey.axi_vgaCtrl.io_vga_hSync
+TOP.Briey.axi_vgaCtrl.io_vga_vSync
 @22
-TOP.Briey.axi_core_cpu.dBus_rsp_payload_data[31:0]
-@28
-TOP.Briey.axi_core_cpu.dBus_rsp_payload_error
-TOP.Briey.axi_core_cpu.dBus_rsp_valid
-@22
-TOP.Briey.axi_ram.io_axi_r_payload_data[31:0]
-TOP.Briey.axi_ram.io_axi_r_payload_id[3:0]
-@28
-TOP.Briey.axi_ram.io_axi_r_payload_last
-TOP.Briey.axi_ram.io_axi_r_payload_resp[1:0]
-TOP.Briey.axi_ram.io_axi_r_ready
-TOP.Briey.axi_ram.io_axi_r_valid
-@22
-TOP.Briey.axi_core_cpu.dataCache_1.io_cpu_execute_args_address[31:0]
-TOP.Briey.axi_core_cpu.dataCache_1.io_cpu_execute_args_data[31:0]
-@28
-TOP.Briey.axi_core_cpu.dataCache_1.io_cpu_execute_args_wr
-TOP.Briey.axi_core_cpu.dataCache_1.io_cpu_execute_isValid
-TOP.Briey.axi_core_cpu.execute_arbitration_isFiring
-@22
-TOP.Briey.axi_core_cpu.execute_PC[31:0]
-TOP.Briey.axi_ram.io_axi_arw_payload_addr[11:0]
-TOP.Briey.axi_ram.io_axi_arw_payload_len[7:0]
-@28
-TOP.Briey.axi_ram.io_axi_arw_payload_size[2:0]
-TOP.Briey.axi_ram.io_axi_arw_payload_write
-TOP.Briey.axi_ram.io_axi_arw_ready
-TOP.Briey.axi_ram.io_axi_arw_valid
-@22
-TOP.Briey.axi_ram.io_axi_w_payload_data[31:0]
-TOP.Briey.axi_ram.io_axi_w_payload_strb[3:0]
-@28
-TOP.Briey.axi_ram.io_axi_w_ready
-TOP.Briey.axi_ram.io_axi_w_valid
-TOP.Briey.axi_core_cpu.DebugPlugin_haltIt
-@22
-TOP.Briey.axi_core_cpu.execute_INSTRUCTION[31:0]
-TOP.Briey.axi_core_cpu.RegFilePlugin_regFile(11)[31:0]
-TOP.Briey.axi_core_cpu.RegFilePlugin_regFile(14)[31:0]
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_h_colorEnd[11:0]
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_h_colorStart[11:0]
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_h_syncEnd[11:0]
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_h_syncStart[11:0]
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_v_colorEnd[11:0]
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_v_colorStart[11:0]
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_v_syncEnd[11:0]
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_v_syncStart[11:0]
 [pattern_trace] 1
 [pattern_trace] 0

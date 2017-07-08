@@ -71,8 +71,8 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
         e.kind = "cached"
         e.flushInstructions.add(0x13 | (1 << 7)) ////ADDI x1, x0, 0
         for(idx <- 0 until cacheSize by bytePerLine){
-          e.flushInstructions.add(0x13 + (1 << 7)  + (1 << 15) + (bytePerLine << 20)) //ADDI x1, x1, 32
           e.flushInstructions.add(0x7000500F + (1 << 15)) //Clean invalid data cache way x1
+          e.flushInstructions.add(0x13 + (1 << 7)  + (1 << 15) + (bytePerLine << 20)) //ADDI x1, x1, 32
         }
 
         e.info = c

@@ -3,8 +3,13 @@ TRACE?=no
 TRACE_INSTRUCTION?=no
 TRACE_REG?=no
 PRINT_PERF?=no
+VGA?=yes
 TRACE_START=0
 ADDCFLAGS += -CFLAGS -pthread 
+ADDCFLAGS += -CFLAGS -lSDL2
+ADDCFLAGS += -LDFLAGS -lSDL2
+
+
 
 ifeq ($(TRACE),yes)
 	VERILATOR_ARGS += --trace
@@ -20,6 +25,9 @@ ifeq ($(PRINT_PERF),yes)
 	ADDCFLAGS += -CFLAGS -DPRINT_PERF
 endif
 
+ifeq ($(VGA),yes)
+	ADDCFLAGS += -CFLAGS -DVGA
+endif
 ifeq ($(TRACE_INSTRUCTION),yes)
 	ADDCFLAGS += -CFLAGS -DTRACE_INSTRUCTION
 endif
