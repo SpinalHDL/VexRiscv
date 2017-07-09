@@ -54,15 +54,15 @@ You can find two example of CPU instantiation in :
 
 To generate the corresponding RTL as a VexRiscv.v file, run (it could take time the first time you run it):
 
+NOTE :
+The VexRiscv could need the unreleased master-head of SpinalHDL. If it fail to compile, just get the SpinalHDL repository and do a "sbt publish-local" in it.
+
 ```sh
 sbt "run-main VexRiscv.GenFull"
 
 # or
 sbt "run-main VexRiscv.GenSmallest"
 ```
-
-NOTE :
-The VexRiscv could need the unreleased master-head of SpinalHDL. If it fail to compile, just get the SpinalHDL repository and do a "sbt publish-local" in it.
 
 ## Tests
 To run tests (need the verilator simulator), go in the src/test/cpp/regression folder and run :
@@ -104,11 +104,66 @@ continue
 You can use the eclipse + zilin embedded CDT plugin to do it.
 
 ## Briey SoC
-WIP
+As a demonstrator, a SoC named Briey is implemented in src/main/scala/VexRiscv/demo/Briey.scala. This SoC is very similar to the Pinsec one  :
+<img src="http://cdn.rawgit.com/SpinalHDL/SpinalDoc/dd17971aa549ccb99168afd55aad274bbdff1e88/asset/picture/pinsec_hardware.svg"   align="middle" width="300">
 
+
+To generate the Briey SoC Hardware :
+
+```sh
+sbt "run-main VexRiscv.demo.Briey"
 ```
-sudo apt-get install libsdl2-dev
-sudo apt-get install build-essential xorg-dev libudev-dev libts-dev libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libpulse-dev libopenal-dev libogg-dev libvorbis-dev libaudiofile-dev libpng12-dev libfreetype6-dev libusb-dev libdbus-1-dev zlib1g-dev libdirectfb-dev
+
+To run the verilator simulation of the Briey SoC which can be then connected to OpenOCD/GDB, first get those dependencies :
+
+```sh
+sudo apt-get install build-essential xorg-dev libudev-dev libts-dev libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libpulse-dev libopenal-dev libogg-dev libvorbis-dev libaudiofile-dev libpng12-dev libfreetype6-dev libusb-dev libdbus-1-dev zlib1g-dev libdirectfb-dev libsdl2-dev
+```
+
+Then go in src/test/cpp/briey and run the simulation with (UART TX is printed in the terminal, VGA is displayed in a GUI):
+
+```sh
+make clean
+```
+
+To connect OpenOCD (https://github.com/SpinalHDL/openocd_riscv) to the simulation :
+
+```sh
+src/openocd -f tcl/interface/jtag_tcp.cfg -c "set BRIEY_CPU0_YAML /home/spinalvm/Spinal/VexRiscv/cpu0.yaml" -f tcl/target/briey.cfg
+```
+
+You can find multiples software examples and demo there : https://github.com/SpinalHDL/BrieySoftware
+
+
+## Build the RISC-V GCC
+
+To install in /opt/ the rv32i and rv32im gcc, do the following (will take hours):
+
+```sh
+# Be carefull, sometime the git clone has issue to successfully clone riscv-gnu-toolchain.
+sudo apt-get install autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev -y
+
+git clone --recursive https://github.com/riscv/riscv-gnu-toolchain riscv-gnu-toolchain
+cd riscv-gnu-toolchain
+
+echo "Starting RISC-V Toolchain build process"
+
+ARCH=rv32im
+rmdir -rf $ARCH
+mkdir $ARCH; cd $ARCH
+../configure  --prefix=/opt/$ARCH --with-arch=$ARCH --with-abi=ilp32
+sudo make -j4
+cd ..
+
+
+ARCH=rv32i
+rmdir -rf $ARCH
+mkdir $ARCH; cd $ARCH
+../configure  --prefix=/opt/$ARCH --with-arch=$ARCH --with-abi=ilp32
+sudo make -j4
+cd ..
+
+echo -e "\\nRISC-V Toolchain installation completed!"
 ```
 
 ## Cpu plugin structure
