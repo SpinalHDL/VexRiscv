@@ -6,6 +6,7 @@ import VexRiscv.ip._
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba3.apb.{Apb3Config, Apb3}
+import spinal.lib.bus.avalon.{AvalonMMConfig, AvalonMM}
 
 
 case class DebugExtensionCmd() extends Bundle{
@@ -19,14 +20,14 @@ case class DebugExtensionRsp() extends Bundle{
 
 case class DebugExtensionBus() extends Bundle with IMasterSlave{
   val cmd = Stream(DebugExtensionCmd())
-  val rsp = DebugExtensionRsp() //One cycle latency
+  val rsp = DebugExtensionRsp() //zero cycle latency
 
   override def asMaster(): Unit = {
     master(cmd)
     in(rsp)
   }
 
-  def toApb3(): Apb3 ={
+  def fromApb3(): Apb3 ={
     val apb = Apb3(Apb3Config(
       addressWidth = 8,
       dataWidth = 32,
@@ -42,6 +43,20 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
     apb.PRDATA := rsp.data
 
     apb
+  }
+
+  def fromAvalon(): AvalonMM ={
+    val bus = AvalonMM(AvalonMMConfig.fixed(addressWidth = 8,dataWidth = 32, readLatency = 0))
+
+    cmd.valid := bus.read || bus.write
+    cmd.wr := bus.write
+    cmd.address := bus.address
+    cmd.data := bus.writeData
+
+    bus.waitRequestn := cmd.ready
+    bus.readData := rsp.data
+
+    bus
   }
 }
 

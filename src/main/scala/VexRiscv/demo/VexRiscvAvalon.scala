@@ -132,6 +132,10 @@ object VexRiscvAvalon{
             plugin.dBus.asDirectionLess()
             master(plugin.dBus.toAvalon()).setName("dBusAvalon")
           }
+          case plugin: DebugPlugin => {
+            plugin.io.bus.asDirectionLess()
+            slave(plugin.io.bus.fromAvalon()).setName("debugBusAvalon")
+          }
           case _ =>
         }
       }

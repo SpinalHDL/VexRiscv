@@ -304,7 +304,7 @@ class Briey(config: BrieyConfig) extends Component{
         }
         case plugin : DebugPlugin      => {
           resetCtrl.coreResetUnbuffered setWhen(plugin.io.resetOut)
-          debugBus = plugin.io.bus.toApb3()
+          debugBus = plugin.io.bus.fromApb3()
         }
         case _ =>
       }
