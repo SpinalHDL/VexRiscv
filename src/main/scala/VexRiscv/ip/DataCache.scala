@@ -4,6 +4,7 @@ import VexRiscv._
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Shared, Axi4Config}
+import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 
 
 case class DataCacheConfig( cacheSize : Int,
@@ -31,6 +32,16 @@ case class DataCacheConfig( cacheSize : Int,
     useBurst = false,
     useLock = false,
     useQos = false
+  )
+
+  def getAvalonConfig() = AvalonMMConfig.bursted(
+    addressWidth = addressWidth,
+    dataWidth = memDataWidth,
+    burstCountWidth = log2Up(burstSize + 1)).copy(
+    useByteEnable = true,
+    constantBurstBehavior = true,
+    burstOnBurstBoundariesOnly = true,
+    maximumPendingReadTransactions = 2
   )
 }
 
@@ -248,6 +259,25 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     //    axi.b <-/< axi2.b
     axi2 << axi
     axi2
+  }
+
+
+  def toAvalon(): AvalonMM = {
+    val avalonConfig = p.getAvalonConfig()
+    val mm = AvalonMM(avalonConfig)
+    mm.read := cmd.valid && !cmd.wr
+    mm.write := cmd.valid && cmd.wr
+    mm.address := cmd.address(cmd.address.high downto log2Up(p.memDataWidth/8)) @@ U(0,log2Up(p.memDataWidth/8) bits)
+    mm.burstCount := cmd.length + U(1, widthOf(mm.burstCount) bits)
+    mm.byteEnable := cmd.mask
+    mm.writeData := cmd.data
+
+    cmd.ready := mm.waitRequestn
+    rsp.valid := mm.readDataValid
+    rsp.data  := mm.readData
+    rsp.error := False
+
+    mm
   }
 }
 

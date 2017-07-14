@@ -391,6 +391,8 @@ object Briey{
     val config = SpinalConfig()
     config.generateVerilog({
       val toplevel = new Briey(BrieyConfig.default)
+      toplevel.axi.vgaCtrl.vga.ctrl.io.error.addAttribute(Verilator.public)
+      toplevel.axi.vgaCtrl.vga.ctrl.io.frameStart.addAttribute(Verilator.public)
       toplevel
     })
   }

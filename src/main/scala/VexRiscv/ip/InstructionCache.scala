@@ -4,6 +4,7 @@ import VexRiscv._
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4ReadOnly, Axi4Config}
+import spinal.lib.bus.avalon.{AvalonMMConfig, AvalonMM}
 
 
 case class InstructionCacheConfig( cacheSize : Int,
@@ -30,6 +31,15 @@ case class InstructionCacheConfig( cacheSize : Int,
     useQos = false,
     useSize = false
   )
+
+  def getAvalonConfig() = AvalonMMConfig.bursted(
+    addressWidth = addressWidth,
+    dataWidth = memDataWidth,
+    burstCountWidth = log2Up(burstSize + 1)).getReadOnlyConfig.copy(
+    linewrapBursts = wrappedMemAccess,
+    constantBurstBehavior = true
+  )
+
 }
 
 
@@ -132,6 +142,19 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
     rsp.data  := mm.readRsp.data
     rsp.error := !mm.readRsp.isOKAY()
     mm.readRsp.ready := True
+    mm
+  }
+
+  def toAvalon(): AvalonMM = {
+    val avalonConfig = p.getAvalonConfig()
+    val mm = AvalonMM(avalonConfig)
+    mm.read := cmd.valid
+    mm.burstCount := U(p.burstSize)
+    mm.address := cmd.address
+    cmd.ready := mm.waitRequestn
+    rsp.valid := mm.readDataValid
+    rsp.data := mm.readData
+    rsp.error := False
     mm
   }
 }

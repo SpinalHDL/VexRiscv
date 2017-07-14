@@ -1,5 +1,7 @@
 #include "VBriey.h"
 #include "VBriey_Briey.h"
+//#include "VBriey_Axi4VgaCtrl.h"
+//#include "VBriey_VgaCtrl.h"
 #ifdef REF
 #include "VBriey_RiscvCore.h"
 #endif
@@ -357,7 +359,7 @@ public:
 	virtual void fail(){ throw std::exception();}
     virtual void fillSimELements();
 
-	void dump(uint64_t i){
+	virtual void dump(uint64_t i){
 		#ifdef TRACE
 		if(i >= TRACE_START) tfp->dump(i);
 		#endif
@@ -834,6 +836,7 @@ public:
 		SDL_RenderClear(renderer);
 		SDL_RenderCopy(renderer, texture, NULL, NULL);
 		SDL_RenderPresent(renderer);
+        memset(pixels, 0, width * height * sizeof(Uint32));
 	}
 
 	virtual void postCycle(){
@@ -926,6 +929,20 @@ public:
 		vgaClk->add(vga);
 		#endif
 	}
+
+
+	/*bool trigged = false;
+	uint32_t frameStartCounter = 0;
+	virtual void dump(uint64_t i){
+		if(!trigged) {
+			if(top->Briey->axi_vgaCtrl->vga_ctrl->io_frameStart) {
+				frameStartCounter++;
+				if(frameStartCounter < 3*32) cout << "**\n" << endl;
+			}
+			if(top->Briey->axi_vgaCtrl->vga_ctrl->io_error && frameStartCounter > 3*32) trigged = true;
+		}
+		if(trigged)Workspace::dump(i);
+	}*/
 
 
 };

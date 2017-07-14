@@ -104,7 +104,9 @@ continue
 You can use the eclipse + zilin embedded CDT plugin to do it.
 
 ## Briey SoC
+
 As a demonstrator, a SoC named Briey is implemented in src/main/scala/VexRiscv/demo/Briey.scala. This SoC is very similar to the Pinsec one  :
+
 <img src="http://cdn.rawgit.com/SpinalHDL/SpinalDoc/dd17971aa549ccb99168afd55aad274bbdff1e88/asset/picture/pinsec_hardware.svg"   align="middle" width="300">
 
 

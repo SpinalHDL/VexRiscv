@@ -1,66 +1,30 @@
 [*]
 [*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
-[*] Sat Jul  8 21:52:29 2017
+[*] Sun Jul  9 22:38:21 2017
 [*]
 [dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/briey/Briey.vcd"
-[dumpfile_mtime] "Sat Jul  8 21:52:14 2017"
-[dumpfile_size] 1407698718
+[dumpfile_mtime] "Sun Jul  9 22:38:03 2017"
+[dumpfile_size] 1880556694
 [savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/briey/wip.gtkw"
-[timestart] 24655083000
+[timestart] 225385490000
 [size] 1776 953
-[pos] -1 -1
-*-18.000000 24656341000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[pos] -775 -1
+*-24.000000 225374620001 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.Briey.
 [treeopen] TOP.Briey.axi_vgaCtrl.
-[sst_width] 201
-[signals_width] 356
+[sst_width] 358
+[signals_width] 150
 [sst_expanded] 1
 [sst_vpaned_height] 279
-@23
-TOP.Briey.axi_vgaCtrl.io_apb_PADDR[7:0]
 @28
-TOP.Briey.axi_vgaCtrl.io_apb_PENABLE
-@22
-TOP.Briey.axi_vgaCtrl.io_apb_PRDATA[31:0]
-@28
-TOP.Briey.axi_vgaCtrl.io_apb_PREADY
-TOP.Briey.axi_vgaCtrl.io_apb_PSEL[0]
-@22
-TOP.Briey.axi_vgaCtrl.io_apb_PWDATA[31:0]
-@28
-TOP.Briey.axi_vgaCtrl.io_apb_PWRITE
-TOP.Briey.axi_vgaCtrl.io_axiClk
-@22
-TOP.Briey.axi_vgaCtrl.io_axi_ar_payload_addr[31:0]
-TOP.Briey.axi_vgaCtrl.io_axi_ar_payload_len[7:0]
-@28
-TOP.Briey.axi_vgaCtrl.io_axi_ar_payload_size[2:0]
-TOP.Briey.axi_vgaCtrl.io_axi_ar_ready
-TOP.Briey.axi_vgaCtrl.io_axi_ar_valid
-@22
-TOP.Briey.axi_vgaCtrl.io_axi_r_payload_data[31:0]
-@28
-TOP.Briey.axi_vgaCtrl.io_axi_r_payload_last
-TOP.Briey.axi_vgaCtrl.io_axi_r_ready
-TOP.Briey.axi_vgaCtrl.io_axi_r_valid
-TOP.Briey.axi_vgaCtrl.io_vgaClk
-TOP.Briey.axi_vgaCtrl.io_vga_colorEn
-@22
-TOP.Briey.axi_vgaCtrl.io_vga_color_b[4:0]
-TOP.Briey.axi_vgaCtrl.io_vga_color_g[5:0]
-TOP.Briey.axi_vgaCtrl.io_vga_color_r[4:0]
-@28
-TOP.Briey.axi_vgaCtrl.io_vga_hSync
-TOP.Briey.axi_vgaCtrl.io_vga_vSync
-@22
-TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_h_colorEnd[11:0]
-TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_h_colorStart[11:0]
-TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_h_syncEnd[11:0]
-TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_h_syncStart[11:0]
-TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_v_colorEnd[11:0]
-TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_v_colorStart[11:0]
-TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_v_syncEnd[11:0]
-TOP.Briey.axi_vgaCtrl.vga_ctrl.io_timings_v_syncStart[11:0]
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_frameStart
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_pixels_ready
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_pixels_valid
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_softReset
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_vgaClk
+TOP.Briey.axi_vgaCtrl.vga_ctrl.io_vga_colorEn
+@29
+TOP.Briey.axi_vgaCtrl.vga_run
 [pattern_trace] 1
 [pattern_trace] 0
