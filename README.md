@@ -58,10 +58,10 @@ NOTE :
 The VexRiscv could need the unreleased master-head of SpinalHDL. If it fail to compile, just get the SpinalHDL repository and do a "sbt publish-local" in it.
 
 ```sh
-sbt "run-main VexRiscv.GenFull"
+sbt "run-main VexRiscv.demo.GenFull"
 
 # or
-sbt "run-main VexRiscv.GenSmallest"
+sbt "run-main VexRiscv.demo.GenSmallest"
 ```
 
 ## Tests
@@ -83,7 +83,7 @@ Then you can use the https://github.com/SpinalHDL/openocd_riscv tool to create a
 
 ```sh
 #in the VexRiscv repository, to run the simulation on which one OpenOCD can connect itself =>
-sbt "run-main VexRiscv.GenFull"
+sbt "run-main VexRiscv.demo.GenFull"
 cd src/test/cpp/regression
 make run DEBUG_PLUGIN_EXTERNAL=yes
 
@@ -125,7 +125,7 @@ sudo apt-get install build-essential xorg-dev libudev-dev libts-dev libgl1-mesa-
 Then go in src/test/cpp/briey and run the simulation with (UART TX is printed in the terminal, VGA is displayed in a GUI):
 
 ```sh
-make clean
+make clean run
 ```
 
 To connect OpenOCD (https://github.com/SpinalHDL/openocd_riscv) to the simulation :

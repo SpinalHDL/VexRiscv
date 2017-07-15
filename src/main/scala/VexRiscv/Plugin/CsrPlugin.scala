@@ -107,7 +107,7 @@ object CsrPluginConfig{
     misaAccess     = CsrAccess.NONE,
     mtvecAccess    = CsrAccess.NONE,
     mtvecInit      = 0x00000020l,
-    mepcAccess     = CsrAccess.READ_ONLY,
+    mepcAccess     = CsrAccess.NONE,
     mscratchGen    = false,
     mcauseAccess   = CsrAccess.READ_ONLY,
     mbadaddrAccess = CsrAccess.NONE,

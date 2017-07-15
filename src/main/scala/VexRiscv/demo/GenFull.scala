@@ -1,7 +1,8 @@
-package VexRiscv
+package VexRiscv.demo
 
 import VexRiscv.Plugin._
 import VexRiscv.ip.{DataCacheConfig, InstructionCacheConfig}
+import VexRiscv.{Plugin, VexRiscv, VexRiscvConfig}
 import spinal.core._
 
 /**
