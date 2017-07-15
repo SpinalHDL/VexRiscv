@@ -7,6 +7,8 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba3.apb.Apb3
 import spinal.lib.bus.amba4.axi.{Axi4Shared, Axi4ReadOnly}
+import spinal.lib.bus.avalon.AvalonMM
+import spinal.lib.eda.altera.{ResetEmitterTag, InterruptReceiverTag, QSysify}
 
 /**
  * Created by spinalvm on 14.07.17.
@@ -18,8 +20,10 @@ import spinal.lib.bus.amba4.axi.{Axi4Shared, Axi4ReadOnly}
 
 object VexRiscvAvalon{
   def main(args: Array[String]) {
-    SpinalVhdl{
-      val configLight = VexRiscvConfig(
+    val report = SpinalVhdl{
+
+      //CPU configuration
+      val cpuConfig = VexRiscvConfig(
         plugins = List(
           new PcManagerSimplePlugin(0x00000000l, false),
           new IBusCachedPlugin(
@@ -119,27 +123,52 @@ object VexRiscvAvalon{
         )
       )
 
-      val cpu = new VexRiscv(configLight)
+      //CPU instanciation
+      val cpu = new VexRiscv(cpuConfig)
 
+      //CPU modifications to be an Avalon one
       cpu.setDefinitionName("VexRiscvAvalon")
       cpu.rework {
-        for (plugin <- configLight.plugins) plugin match {
+        var iBus : AvalonMM = null
+        for (plugin <- cpuConfig.plugins) plugin match {
           case plugin: IBusCachedPlugin => {
-            plugin.iBus.asDirectionLess()
-            master(plugin.iBus.toAvalon()).setName("iBusAvalon")
+            plugin.iBus.asDirectionLess() //Unset IO properties of iBus
+            iBus = master(plugin.iBus.toAvalon())
+              .setName("iBusAvalon")
+              .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
           }
           case plugin: DBusCachedPlugin => {
             plugin.dBus.asDirectionLess()
-            master(plugin.dBus.toAvalon()).setName("dBusAvalon")
+            master(plugin.dBus.toAvalon())
+              .setName("dBusAvalon")
+              .addTag(ClockDomainTag(ClockDomain.current))
           }
           case plugin: DebugPlugin => {
             plugin.io.bus.asDirectionLess()
-            slave(plugin.io.bus.fromAvalon()).setName("debugBusAvalon")
+            slave(plugin.io.bus.fromAvalon())
+              .setName("debugBusAvalon")
+              .addTag(ClockDomainTag(plugin.debugClockDomain))
+              .parent = null  //Avoid the io bundle to be interpreted as a QSys conduit
+            plugin.io.resetOut
+              .addTag(ResetEmitterTag(plugin.debugClockDomain))
+              .parent = null //Avoid the io bundle to be interpreted as a QSys conduit
+          }
+          case _ =>
+        }
+        for (plugin <- cpuConfig.plugins) plugin match {
+          case plugin: CsrPlugin => {
+            plugin.externalInterrupt
+              .addTag(InterruptReceiverTag(iBus, ClockDomain.current))
+            plugin.timerInterrupt
+              .addTag(InterruptReceiverTag(iBus, ClockDomain.current))
           }
           case _ =>
         }
       }
       cpu
     }
+
+    //Generate the QSys TCL script to integrate the CPU
+    QSysify(report.toplevel)
   }
 }

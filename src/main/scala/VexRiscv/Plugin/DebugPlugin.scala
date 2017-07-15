@@ -70,7 +70,7 @@ case class DebugExtensionIo() extends Bundle with IMasterSlave{
   }
 }
 
-class DebugPlugin(debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
+class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
 
   var io : DebugExtensionIo = null
 
