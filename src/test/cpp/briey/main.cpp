@@ -689,8 +689,8 @@ public:
 	uint32_t counter;
 	virtual void tick(uint64_t time){
 		if(time < holdTime){
-			if(*rx != holdValue){
-				cout << "UART RX FRAME ERROR" << endl;
+			if(*rx != holdValue && time + (uartTimeRate>>7) < holdTime){
+				cout << "UART RX FRAME ERROR at " << time << endl;
 				holdTime = time;
 				state = START;
 			}
@@ -831,7 +831,7 @@ public:
 	}
 
 	void refresh(){
-		cout << "Display refresh " << refreshCounter++ << endl;
+		//cout << "Display refresh " << refreshCounter++ << endl;
 		SDL_UpdateTexture(texture, NULL, pixels, 640 * sizeof(Uint32));
 		SDL_RenderClear(renderer);
 		SDL_RenderCopy(renderer, texture, NULL, NULL);
