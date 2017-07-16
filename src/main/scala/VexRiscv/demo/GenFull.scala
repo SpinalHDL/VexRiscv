@@ -51,7 +51,7 @@ object GenFull extends App{
           )
         ),
         new MemoryTranslatorPlugin(
-          tlbSize = 32,
+          tlbSize = 64,
           virtualRange = _(31 downto 28) === 0xC,
           ioRange      = _(31 downto 28) === 0xF
         ),

@@ -3,7 +3,7 @@ This repository host an RISC-V implementation written in SpinalHDL. There is som
 - RV32IM instruction set
 - Interrupts and exception handling with the Machine mode from the riscv-privileged-v1.9.1 specification.
 - Pipelined on 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
-- 1.17 DMIPS/Mhz with all extension
+- 1.17 DMIPS/Mhz when all features are enabled extension
 - Optimized for FPGA
 - Optional MUL/DIV/REM extension
 - Optional instruction and data caches
@@ -18,6 +18,37 @@ The hardware description of this CPU is done by using an very software oriented 
 - There is very few fixed things. Nearly everything is plugin based. The PC manager is a plugin, the register file is a plugin, the hazard controller is a plugin ...
 - There is an automatic a tool which allow plugins to insert data in the pipeline at a given stage, and allow other plugins to read it in another stages through automatic pipelining.
 - There is an service system which provide a very dynamic framework. As instance, a plugin could provide an exception service which could then be used by others plugins to emit exceptions from the pipeline.
+
+## Area / FMax 
+
+The following number where obtains by synthesis the CPU as toplevel without any specific synthesis option to save area or to get better maximal frequency (neutral).
+The used CPU corresponding configuration can be find in src/scala/VexRiscv/demo.
+
+```
+VexRiscv smallest no CSR ->
+  Artix 7    -> 324 Mhz 478 LUT 539 FF 
+  Cyclone V  -> 187 Mhz 341 ALMs
+  Cyclone IV -> 180 Mhz 736 LUT 529 FF 
+  Cyclone II -> 156 Mhz 740 LUT 528 FF 
+  
+VexRiscv smallest ->
+  Artix 7    -> 335 Mhz 560 LUT 589 FF 
+  Cyclone V  -> 182 Mhz 420 ALMs
+  Cyclone IV -> 160 Mhz 852 LUT 579 FF 
+  Cyclone II -> 144 Mhz 844 LUT 578 FF 
+  
+VexRiscv full no MMU ->
+  Artix 7    -> 227 Mhz 2280 LUT 1728 FF 
+  Cyclone V  -> 120 Mhz 1,540 ALMs
+  Cyclone IV -> 120 Mhz 3,282 LUT 1,987 FF 
+  Cyclone II -> 101 Mhz 3,347 LUT 1,986 FF 
+  
+VexRiscv full ->
+  Artix 7    -> 210 Mhz 2542 LUT 2246 FF 
+  Cyclone V  -> 114 Mhz 1,815 ALMs
+  Cyclone IV -> 96 Mhz 3,717 LUT 2,505 FF 
+  Cyclone II -> 94 Mhz 3,772 LUT 2,506 FF 
+```
 
 ## Dependencies
 

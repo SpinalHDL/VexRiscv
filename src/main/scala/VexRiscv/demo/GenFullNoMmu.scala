@@ -75,7 +75,7 @@ object GenFullNoMmu extends App{
         new BranchPlugin(
           earlyBranch = false,
           catchAddressMisaligned = true,
-          prediction = DYNAMIC
+          prediction = STATIC
         ),
         new YamlPlugin("cpu0.yaml")
       )

@@ -1,7 +1,7 @@
 package VexRiscv.demo
 
 import spinal.core.SpinalVerilog
-import spinal.lib.eda.bench.{Bench, AlteraStdTargets, Rtl}
+import spinal.lib.eda.bench.{XilinxStdTargets, Bench, AlteraStdTargets, Rtl}
 
 /**
  * Created by PIC32F_USER on 16/07/2017.
@@ -34,7 +34,9 @@ object SynthesisBench {
 
     val rtls = List(smallestNoCsr, smallest, fullNoMmu, full)
 
-    val targets = AlteraStdTargets(
+    val targets = XilinxStdTargets(
+      vivadoArtix7Path = "E:\\Xilinx\\Vivado\\2016.3\\bin"
+    ) ++ AlteraStdTargets(
       quartusCycloneIIPath = "D:/altera/13.0sp1/quartus/bin64",
       quartusCycloneIVPath = "D:/altera_lite/15.1/quartus/bin64",
       quartusCycloneVPath  = "D:/altera_lite/15.1/quartus/bin64"
