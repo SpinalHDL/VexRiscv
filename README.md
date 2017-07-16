@@ -1,3 +1,18 @@
+## Index
+
+- [Description](#description)
+- [Area / FMax](#area---fmax)
+- [Dependencies](#dependencies)
+- [CPU generation](#cpu-generation)
+- [Regression tests](#regression-tests)
+- [Interactive debug of the simulated CPU via GDB/OpenOCD in Verilator](#interactive-debug-of-the-simulated-cpu-via-gdb-openocd-in-verilator)
+- [Using eclipse to run the software and debug it](#using-eclipse-to-run-the-software-and-debug-it)
+- [Briey SoC](#briey-soc)
+- [Build the RISC-V GCC](#build-the-risc-v-gcc)
+- [Cpu plugin structure](#cpu-plugin-structure)
+
+## Description
+
 This repository host an RISC-V implementation written in SpinalHDL. There is some specs :
 
 - RV32IM instruction set
@@ -95,7 +110,7 @@ sbt "run-main VexRiscv.demo.GenFull"
 sbt "run-main VexRiscv.demo.GenSmallest"
 ```
 
-## Tests
+## Regression tests
 To run tests (need the verilator simulator), go in the src/test/cpp/regression folder and run :
 
 ```sh
@@ -132,10 +147,9 @@ continue
 ```
 
 ## Using eclipse to run the software and debug it
-You can use the eclipse + zilin embedded CDT plugin to do it.
+You can use the eclipse + zilin embedded CDT plugin to do it (http://opensource.zylin.com/embeddedcdt.html). Tested with Helios Service Release 2 and the corresponding zylin plugin.
 
 ## Briey SoC
-
 As a demonstrator, a SoC named Briey is implemented in src/main/scala/VexRiscv/demo/Briey.scala. This SoC is very similar to the Pinsec one  :
 
 <img src="http://cdn.rawgit.com/SpinalHDL/SpinalDoc/dd17971aa549ccb99168afd55aad274bbdff1e88/asset/picture/pinsec_hardware.svg"   align="middle" width="300">
@@ -167,6 +181,7 @@ src/openocd -f tcl/interface/jtag_tcp.cfg -c "set BRIEY_CPU0_YAML /home/spinalvm
 
 You can find multiples software examples and demo there : https://github.com/SpinalHDL/BrieySoftware
 
+You can find some FPGA project which instantiate the Briey SoC there (DE1-SoC, DE0-Nano): https://drive.google.com/drive/folders/0B-CqLXDTaMbKZGdJZlZ5THAxRTQ?usp=sharing
 
 ## Build the RISC-V GCC
 
