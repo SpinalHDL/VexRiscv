@@ -79,7 +79,7 @@ object GenFull extends App{
         ),
         new MulPlugin,
         new DivPlugin,
-        new CsrPlugin(CsrPluginConfig.all),
+        new CsrPlugin(CsrPluginConfig.small),
         new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
           earlyBranch = false,
