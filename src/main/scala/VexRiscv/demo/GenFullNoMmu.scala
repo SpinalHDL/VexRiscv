@@ -8,7 +8,7 @@ import spinal.core._
 /**
  * Created by spinalvm on 15.06.17.
  */
-object GenFull extends App{
+object GenFullNoMmu extends App{
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       plugins = List(
@@ -27,10 +27,6 @@ object GenFull extends App{
             catchMemoryTranslationMiss = true,
             asyncTagMemory = false,
             twoStageLogic = true
-          ),
-          askMemoryTranslation = true,
-          memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-            portTlbSize = 4
           )
         ),
         new DBusCachedPlugin(
@@ -45,14 +41,9 @@ object GenFull extends App{
             catchIllegal      = true,
             catchUnaligned    = true,
             catchMemoryTranslationMiss = true
-          ),
-          memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-            portTlbSize = 6
           )
         ),
-        new MemoryTranslatorPlugin(
-          tlbSize = 32,
-          virtualRange = _(31 downto 28) === 0xC,
+        new StaticMemoryTranslatorPlugin(
           ioRange      = _(31 downto 28) === 0xF
         ),
         new DecoderSimplePlugin(

@@ -7,7 +7,7 @@ import spinal.core._
 /**
  * Created by spinalvm on 15.06.17.
  */
-object GenSmallest extends App{
+object GenSmallestNoCsr extends App{
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       plugins = List(
@@ -20,7 +20,6 @@ object GenSmallest extends App{
           catchAddressMisaligned = false,
           catchAccessFault = false
         ),
-        new CsrPlugin(CsrPluginConfig.smallest),
         new DecoderSimplePlugin(
           catchIllegalInstruction = false
         ),
