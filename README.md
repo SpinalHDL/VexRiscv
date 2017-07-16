@@ -39,15 +39,15 @@ VexRiscv smallest (RV32I, 0.47 DMIPS/Mhz, no datapath bypass) ->
   
 VexRiscv full (RV32IM, 1.14 DMIPS/Mhz, I$, D$, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
   Artix 7    -> 249 Mhz 1862 LUT 1498 FF 
-  Cyclone V  -> 133 Mhz 1,272 ALMs
-  Cyclone IV -> 116 Mhz 2,727 LUT 1,759 FF 
-  Cyclone II -> 105 Mhz 2,771 LUT 1,758 FF 
+  Cyclone V  -> 133 Mhz 1272 ALMs
+  Cyclone IV -> 116 Mhz 2727 LUT 1759 FF 
+  Cyclone II -> 105 Mhz 2771 LUT 1758 FF 
     
 VexRiscv full with MMU (RV32IM, 1.16 DMIPS/Mhz, I$, D$, single cycle barrel shifter, debug module, catch exceptions, static branch, MMU) ->
   Artix 7    -> 210 Mhz 2104 LUT 2017 FF 
-  Cyclone V  -> 115 Mhz 1,503 ALMs
-  Cyclone IV -> 100 Mhz 3,145 LUT 2,278 FF 
-  Cyclone II -> 92 Mhz 3,195 LUT 2,279 FF 
+  Cyclone V  -> 115 Mhz 1503 ALMs
+  Cyclone IV -> 100 Mhz 3145 LUT 2278 FF 
+  Cyclone II -> 92 Mhz 3195 LUT 2279 FF 
 ```
 
 ## Dependencies
