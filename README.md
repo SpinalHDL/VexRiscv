@@ -5,7 +5,7 @@
 - [Dependencies](#dependencies)
 - [CPU generation](#cpu-generation)
 - [Regression tests](#regression-tests)
-- [Interactive debug of the simulated CPU via GDB, OpenOCD and Verilator sim](#interactive-debug-of-the-simulated-cpu-via-gdb--openocd-and-verilator-sim)
+- [Interactive debug of the simulated CPU via GDB OpenOCD and Verilator](#interactive-debug-of-the-simulated-cpu-via-gdb-openocd-and-verilator)
 - [Using eclipse to run the software and debug it](#using-eclipse-to-run-the-software-and-debug-it)
 - [Briey SoC](#briey-soc)
 - [Build the RISC-V GCC](#build-the-risc-v-gcc)
@@ -121,7 +121,7 @@ make clean run
 make clean run IBUS=IBUS_SIMPLE DBUS=DBUS_SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no
 ```
 
-## Interactive debug of the simulated CPU via GDB, OpenOCD and Verilator sim
+## Interactive debug of the simulated CPU via GDB OpenOCD and Verilator
 It's as described to run tests, but you just have to add DEBUG_PLUGIN_EXTERNAL=yes in the make arguments.
 Work for the GenFull, but not for the GenSmallest as this configuration has no debug module.
 
