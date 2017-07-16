@@ -1,11 +1,11 @@
 ## Index
 
 - [Description](#description)
-- [Area / FMax](#area---fmax)
+- [Area usage and maximal frequency](#area-usage-and-maximal-frequency)
 - [Dependencies](#dependencies)
 - [CPU generation](#cpu-generation)
 - [Regression tests](#regression-tests)
-- [Interactive debug of the simulated CPU via GDB/OpenOCD in Verilator](#interactive-debug-of-the-simulated-cpu-via-gdb-openocd-in-verilator)
+- [Interactive debug of the simulated CPU via GDB and OpenOCD (Verilator sim)](#interactive-debug-of-the-simulated-cpu-via-gdb-and-openocd--verilator-sim-)
 - [Using eclipse to run the software and debug it](#using-eclipse-to-run-the-software-and-debug-it)
 - [Briey SoC](#briey-soc)
 - [Build the RISC-V GCC](#build-the-risc-v-gcc)
@@ -34,7 +34,7 @@ The hardware description of this CPU is done by using an very software oriented 
 - There is an automatic a tool which allow plugins to insert data in the pipeline at a given stage, and allow other plugins to read it in another stages through automatic pipelining.
 - There is an service system which provide a very dynamic framework. As instance, a plugin could provide an exception service which could then be used by others plugins to emit exceptions from the pipeline.
 
-## Area / FMax 
+## Area usage and maximal frequency 
 
 The following number where obtains by synthesis the CPU as toplevel without any specific synthesis option to save area or to get better maximal frequency (neutral).
 The used CPU corresponding configuration can be find in src/scala/VexRiscv/demo.
@@ -121,7 +121,7 @@ make clean run
 make clean run IBUS=IBUS_SIMPLE DBUS=DBUS_SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no
 ```
 
-## Interactive debug of the simulated CPU via GDB/OpenOCD in Verilator
+## Interactive debug of the simulated CPU via GDB and OpenOCD (Verilator sim) 
 It's as described to run tests, but you just have to add DEBUG_PLUGIN_EXTERNAL=yes in the make arguments.
 Work for the GenFull, but not for the GenSmallest as this configuration has no debug module.
 
