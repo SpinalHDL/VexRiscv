@@ -16,14 +16,15 @@
 This repository host an RISC-V implementation written in SpinalHDL. There is some specs :
 
 - RV32IM instruction set
-- Interrupts and exception handling with the Machine mode from the riscv-privileged-v1.9.1 specification.
 - Pipelined on 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
 - 1.16 DMIPS/Mhz when all features are enabled extension
 - Optimized for FPGA
-- Optional MUL/DIV/REM extension
+- Optional MUL/DIV extension
 - Optional instruction and data caches
 - Optional MMU
-- Two implementation of shift instructions, Single cycle / shiftNumber cycle
+- Optional debug extension allowing GDB debugging via an openOCD JTAG connection
+- Optional interrupts and exception handling with the Machine and the User mode from the riscv-privileged-v1.9.1 spec.
+- Two implementation of shift instructions, Single cycle / shiftNumber cycles
 - Each stage could have bypass or interlock hazard logic
 - FreeRTOS port https://github.com/Dolu1990/FreeRTOS-RISCV
 
