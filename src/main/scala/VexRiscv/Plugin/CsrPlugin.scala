@@ -188,7 +188,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
     val nonImmediatActions = defaultCsrActions ++ List(
       SRC1_CTRL                -> Src1CtrlEnum.RS,
-      REG1_USE                 -> True
+      RS1_USE                 -> True
     )
 
     val immediatActions = defaultCsrActions

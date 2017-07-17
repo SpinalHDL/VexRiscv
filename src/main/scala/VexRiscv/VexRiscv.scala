@@ -1,19 +1,17 @@
 package VexRiscv
 
-import VexRiscv.Plugin.Plugin
+import VexRiscv.Plugin._
 import spinal.core._
-import spinal.lib._
-import scala.collection.mutable.ArrayBuffer
 
 case class VexRiscvConfig(plugins : Seq[Plugin[VexRiscv]]){
 
   //Default Stageables
   object BYPASSABLE_EXECUTE_STAGE   extends Stageable(Bool)
   object BYPASSABLE_MEMORY_STAGE   extends Stageable(Bool)
-  object REG1   extends Stageable(Bits(32 bits))
-  object REG2   extends Stageable(Bits(32 bits))
-  object REG1_USE extends Stageable(Bool)
-  object REG2_USE extends Stageable(Bool)
+  object RS1   extends Stageable(Bits(32 bits))
+  object RS2   extends Stageable(Bits(32 bits))
+  object RS1_USE extends Stageable(Bool)
+  object RS2_USE extends Stageable(Bool)
   object RESULT extends Stageable(UInt(32 bits))
   object PC extends Stageable(UInt(32 bits))
   object PC_CALC_WITHOUT_JUMP extends Stageable(UInt(32 bits))

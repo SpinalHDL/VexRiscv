@@ -27,10 +27,10 @@ class HazardSimplePlugin(bypassExecute : Boolean,
         if (bypassable) {
           when(runtimeBypassableValue) {
             when(addr0Match) {
-              decode.input(REG1) := stage.output(REGFILE_WRITE_DATA)
+              decode.input(RS1) := stage.output(REGFILE_WRITE_DATA)
             }
             when(addr1Match) {
-              decode.input(REG2) := stage.output(REGFILE_WRITE_DATA)
+              decode.input(RS2) := stage.output(REGFILE_WRITE_DATA)
             }
           }
         }
@@ -62,10 +62,10 @@ class HazardSimplePlugin(bypassExecute : Boolean,
     when(writeBackBuffer.valid) {
       if (bypassWriteBackBuffer) {
         when(addr0Match) {
-          decode.input(REG1) := writeBackBuffer.data
+          decode.input(RS1) := writeBackBuffer.data
         }
         when(addr1Match) {
-          decode.input(REG2) := writeBackBuffer.data
+          decode.input(RS2) := writeBackBuffer.data
         }
       } else {
         when(addr0Match) {
@@ -83,10 +83,10 @@ class HazardSimplePlugin(bypassExecute : Boolean,
 
 
     if(!pessimisticUseSrc) {
-      when(!decode.input(REG1_USE)) {
+      when(!decode.input(RS1_USE)) {
         src0Hazard := False
       }
-      when(!decode.input(REG2_USE)) {
+      when(!decode.input(RS2_USE)) {
         src1Hazard := False
       }
     }

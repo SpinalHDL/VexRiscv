@@ -17,8 +17,8 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = fals
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
     val decoderService = pipeline.service(classOf[DecoderService])
-    decoderService.addDefault(REG1_USE,False)
-    decoderService.addDefault(REG2_USE,False)
+    decoderService.addDefault(RS1_USE,False)
+    decoderService.addDefault(RS2_USE,False)
     decoderService.addDefault(REGFILE_WRITE_VALID,False)
   }
 
@@ -54,8 +54,8 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = fals
         case `SYNC` =>  (global.regFile.readSync(regFileReadAddress1),global.regFile.readSync(regFileReadAddress2))
       }
 
-      insert(REG1) := rs1Data
-      insert(REG2) := rs2Data
+      insert(RS1) := rs1Data
+      insert(RS2) := rs2Data
     }
 
     //Write register file

@@ -31,8 +31,8 @@ class MemoryTranslatorPlugin(tlbSize : Int,
     def TLBW1  = M"0000001----------111-----0001111"
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(IS_TLB, False)
-    decoderService.add(TLBW0, List(IS_TLB -> True, REG1_USE -> True, SRC1_CTRL -> Src1CtrlEnum.RS))
-    decoderService.add(TLBW1, List(IS_TLB -> True, REG1_USE -> True, REG2_USE -> True, SRC1_CTRL -> Src1CtrlEnum.RS))
+    decoderService.add(TLBW0, List(IS_TLB -> True, RS1_USE -> True, SRC1_CTRL -> Src1CtrlEnum.RS))
+    decoderService.add(TLBW1, List(IS_TLB -> True, RS1_USE -> True, RS2_USE -> True, SRC1_CTRL -> Src1CtrlEnum.RS))
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -133,12 +133,12 @@ class MemoryTranslatorPlugin(tlbSize : Int,
           is(1){
             val line = CacheLine()
             line.virtualAddress := tlbWriteBuffer
-            line.physicalAddress := input(REG2)(19 downto 0).asUInt
-            line.allowUser := input(REG2)(27)
-            line.allowRead := input(REG2)(28)
-            line.allowWrite := input(REG2)(29)
-            line.allowExecute := input(REG2)(30)
-            line.valid := input(REG2)(31)
+            line.physicalAddress := input(RS2)(19 downto 0).asUInt
+            line.allowUser := input(RS2)(27)
+            line.allowRead := input(RS2)(28)
+            line.allowWrite := input(RS2)(29)
+            line.allowExecute := input(RS2)(30)
+            line.valid := input(RS2)(31)
             core.shared.cache(input(SRC1)(log2Up(tlbSize)-1 downto 0).asUInt) := line
 
             core.ports.foreach(_.cache.foreach(_.valid := False)) //Invalidate all ports caches

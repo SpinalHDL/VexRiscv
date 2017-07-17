@@ -19,6 +19,7 @@
 package VexRiscv
 
 import VexRiscv.Plugin._
+import VexRiscv.demo.SimdAddPlugin
 import spinal.core._
 import spinal.lib._
 import VexRiscv.ip._

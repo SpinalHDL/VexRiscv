@@ -86,13 +86,14 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) 
     import pipeline._
     import pipeline.config._
     iBus = master(IBusSimpleBus(interfaceKeepData)).setName("iBus")
-    val pendingCmd = RegInit(False) clearWhen(iBus.rsp.ready) setWhen(iBus.cmd.fire)
+    prefetch plug new Area {
+      val pendingCmd = RegInit(False) clearWhen (iBus.rsp.ready) setWhen (iBus.cmd.fire)
 
-    //Emit iBus.cmd request
-    iBus.cmd.valid := prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers && !(pendingCmd && !iBus.rsp.ready)//prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
-    iBus.cmd.pc := prefetch.output(PC)
-    prefetch.arbitration.haltIt setWhen(!iBus.cmd.ready || (pendingCmd && !iBus.rsp.ready))
-
+      //Emit iBus.cmd request
+      iBus.cmd.valid := prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers && !(pendingCmd && !iBus.rsp.ready) //prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
+      iBus.cmd.pc := prefetch.output(PC)
+      prefetch.arbitration.haltIt setWhen (!iBus.cmd.ready || (pendingCmd && !iBus.rsp.ready))
+    }
 
     //Bus rsp buffer
     val rspBuffer = if(!interfaceKeepData) new Area{

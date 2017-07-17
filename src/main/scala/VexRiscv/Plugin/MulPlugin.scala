@@ -24,8 +24,8 @@ class MulPlugin extends Plugin[VexRiscv]{
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
       BYPASSABLE_MEMORY_STAGE  -> False,
-      REG1_USE                 -> True,
-      REG2_USE                 -> True,
+      RS1_USE                 -> True,
+      RS2_USE                 -> True,
       IS_MUL                   -> True
     )
 

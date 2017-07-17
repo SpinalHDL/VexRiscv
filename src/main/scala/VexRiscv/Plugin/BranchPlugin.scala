@@ -39,8 +39,8 @@ class BranchPlugin(earlyBranch : Boolean,
       SRC1_CTRL         -> Src1CtrlEnum.RS,
       SRC2_CTRL         -> Src2CtrlEnum.RS,
       SRC_USE_SUB_LESS  -> True,
-      REG1_USE          -> True,
-      REG2_USE          -> True
+      RS1_USE          -> True,
+      RS2_USE          -> True
     )
 
     val jActions = List[(Stageable[_ <: BaseType],Any)](
@@ -55,7 +55,7 @@ class BranchPlugin(earlyBranch : Boolean,
     decoderService.addDefault(BRANCH_CTRL, BranchCtrlEnum.INC)
     decoderService.add(List(
       JAL -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JAL, ALU_CTRL -> AluCtrlEnum.ADD_SUB)),
-      JALR -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JALR, ALU_CTRL -> AluCtrlEnum.ADD_SUB, REG1_USE -> True)),
+      JALR -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JALR, ALU_CTRL -> AluCtrlEnum.ADD_SUB, RS1_USE -> True)),
       BEQ -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
       BNE -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
       BLT -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
@@ -108,7 +108,7 @@ class BranchPlugin(earlyBranch : Boolean,
       )
 
       val imm = IMM(input(INSTRUCTION))
-      val branch_src1 = (input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? input(REG1).asUInt | input(PC)
+      val branch_src1 = (input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? input(RS1).asUInt | input(PC)
       val branch_src2 = input(BRANCH_CTRL).mux(
         BranchCtrlEnum.JAL  -> imm.j_sext,
         BranchCtrlEnum.JALR -> imm.i_sext,
@@ -212,7 +212,7 @@ class BranchPlugin(earlyBranch : Boolean,
       val branch_src1,branch_src2 = UInt(32 bits)
       switch(input(BRANCH_CTRL)){
         is(BranchCtrlEnum.JALR){
-          branch_src1 := input(REG1).asUInt
+          branch_src1 := input(RS1).asUInt
           branch_src2 := imm.i_sext.asUInt
         }
         default{

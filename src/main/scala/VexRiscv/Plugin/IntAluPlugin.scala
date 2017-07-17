@@ -28,7 +28,7 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,
-      REG1_USE -> True
+      RS1_USE -> True
     )
 
     val nonImmediateActions = List[(Stageable[_ <: BaseType],Any)](
@@ -37,8 +37,8 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,
-      REG1_USE -> True,
-      REG2_USE -> True
+      RS1_USE -> True,
+      RS2_USE -> True
     )
 
     val otherAction = List[(Stageable[_ <: BaseType],Any)](

@@ -116,7 +116,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
       SRC1_CTRL         -> Src1CtrlEnum.RS,
       SRC_USE_SUB_LESS  -> False,
       MEMORY_ENABLE     -> True,
-      REG1_USE          -> True
+      RS1_USE          -> True
     ) ++ (if(catchAccessFault || catchAddressMisaligned) List(IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB) else Nil) //Used for access fault bad address in memory stage
 
     val loadActions = stdActions ++ List(
@@ -128,7 +128,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
 
     val storeActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMS,
-      REG2_USE -> True
+      RS2_USE -> True
     )
 
     decoderService.addDefault(MEMORY_ENABLE, False)
@@ -166,9 +166,9 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
       dBus.cmd.address := input(SRC_ADD).asUInt
       dBus.cmd.size := input(INSTRUCTION)(13 downto 12).asUInt
       dBus.cmd.payload.data := dBus.cmd.size.mux (
-        U(0) -> input(REG2)(7 downto 0) ## input(REG2)(7 downto 0) ## input(REG2)(7 downto 0) ## input(REG2)(7 downto 0),
-        U(1) -> input(REG2)(15 downto 0) ## input(REG2)(15 downto 0),
-        default -> input(REG2)(31 downto 0)
+        U(0) -> input(RS2)(7 downto 0) ## input(RS2)(7 downto 0) ## input(RS2)(7 downto 0) ## input(RS2)(7 downto 0),
+        U(1) -> input(RS2)(15 downto 0) ## input(RS2)(15 downto 0),
+        default -> input(RS2)(31 downto 0)
       )
       when(arbitration.isValid && input(MEMORY_ENABLE) && !dBus.cmd.ready && !input(ALIGNEMENT_FAULT)){
         arbitration.haltIt := True

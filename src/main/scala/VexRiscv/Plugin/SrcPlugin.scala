@@ -14,12 +14,12 @@ class SrcPlugin(separatedAddSub : Boolean, executeInsertion : Boolean = false) e
 
       val imm = Riscv.IMM(input(INSTRUCTION))
       insert(SRC1) := input(SRC1_CTRL).mux(
-        Src1CtrlEnum.RS   -> output(REG1),
+        Src1CtrlEnum.RS   -> output(RS1),
         Src1CtrlEnum.FOUR -> B(4),
         Src1CtrlEnum.IMU  -> imm.u.resized
       )
       insert(SRC2) := input(SRC2_CTRL).mux(
-        Src2CtrlEnum.RS -> output(REG2),
+        Src2CtrlEnum.RS -> output(RS2),
         Src2CtrlEnum.IMI -> imm.i_sext.resized,
         Src2CtrlEnum.IMS -> imm.s_sext.resized,
         Src2CtrlEnum.PC -> output(PC).asBits

@@ -28,7 +28,7 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       SRC1_CTRL         -> Src1CtrlEnum.RS,
       SRC_USE_SUB_LESS  -> False,
       MEMORY_ENABLE     -> True,
-      REG1_USE          -> True
+      RS1_USE          -> True
     ) ++ (if (catchUnaligned) List(IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB) else Nil) //Used for access fault bad address in memory stage
 
     val loadActions = stdActions ++ List(
@@ -40,7 +40,7 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
 
     val storeActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMS,
-      REG2_USE -> True
+      RS2_USE -> True
     )
 
     decoderService.addDefault(MEMORY_ENABLE, False)
@@ -52,7 +52,7 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
     def MANAGEMENT  = M"-------00000-----101-----0001111"
     decoderService.add(MANAGEMENT, stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.RS,
-      REG2_USE -> True
+      RS2_USE -> True
     ))
 
     mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(pipeline.memory,memoryTranslatorPortConfig)
@@ -104,9 +104,9 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       cache.io.cpu.execute.args.wr := input(INSTRUCTION)(5)
       cache.io.cpu.execute.args.address := input(SRC_ADD).asUInt
       cache.io.cpu.execute.args.data := size.mux(
-        U(0)    -> input(REG2)( 7 downto 0) ## input(REG2)( 7 downto 0) ## input(REG2)(7 downto 0) ## input(REG2)(7 downto 0),
-        U(1)    -> input(REG2)(15 downto 0) ## input(REG2)(15 downto 0),
-        default -> input(REG2)(31 downto 0)
+        U(0)    -> input(RS2)( 7 downto 0) ## input(RS2)( 7 downto 0) ## input(RS2)(7 downto 0) ## input(RS2)(7 downto 0),
+        U(1)    -> input(RS2)(15 downto 0) ## input(RS2)(15 downto 0),
+        default -> input(RS2)(31 downto 0)
       )
       cache.io.cpu.execute.args.size := size
       cache.io.cpu.execute.args.forceUncachedAccess := False 
