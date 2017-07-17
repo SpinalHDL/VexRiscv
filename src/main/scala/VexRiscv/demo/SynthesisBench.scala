@@ -20,6 +20,13 @@ object SynthesisBench {
       SpinalVerilog(GenSmallest.cpu().setDefinitionName(getRtlPath().split("\\.").head))
     }
 
+
+    val smallAndProductive = new Rtl {
+      override def getName(): String = "VexRiscv small and productive"
+      override def getRtlPath(): String = "VexRiscvSmallAndProductive.v"
+      SpinalVerilog(GenSmallAndProductive.cpu().setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
     val fullNoMmu = new Rtl {
       override def getName(): String = "VexRiscv full no MMU"
       override def getRtlPath(): String = "VexRiscvFullNoMmu.v"
@@ -32,7 +39,7 @@ object SynthesisBench {
       SpinalVerilog(GenFull.cpu().setDefinitionName(getRtlPath().split("\\.").head))
     }
 
-    val rtls = List(smallestNoCsr, smallest, fullNoMmu, full)
+    val rtls = List(smallestNoCsr, smallest, smallAndProductive, fullNoMmu, full)
 
     val targets = XilinxStdTargets(
       vivadoArtix7Path = "E:\\Xilinx\\Vivado\\2016.3\\bin"
