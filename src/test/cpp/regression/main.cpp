@@ -1233,7 +1233,6 @@ int main(int argc, char **argv, char **env) {
 
 	printf("BOOT\n");
 	timespec startedAt = timer_start();
-	Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.5e6);
 
 	for(int idx = 0;idx < 1;idx++){
 		#ifndef  REF
