@@ -9,7 +9,8 @@
 - [Using eclipse to run the software and debug it](#using-eclipse-to-run-the-software-and-debug-it)
 - [Briey SoC](#briey-soc)
 - [Build the RISC-V GCC](#build-the-risc-v-gcc)
-- [Cpu plugin structure](#cpu-plugin-structure)
+- [CPU parametrization and instantiation example](#cpu-parametrization-and-instantiation-example)
+- [Add a custom instruction to the CPU via the plugin system](#add-a-custom-instruction-to-the-cpu-via-the-plugin-system)
 
 ## Description
 
@@ -268,9 +269,9 @@ val cpu = new VexRiscv(
 )
 ```
 
-## CPU plugin example
+## Add a custom instruction to the CPU via the plugin system
 
-There is an example of an simple plugin which add an simple SIMD add :
+There is an example of an simple plugin which add an simple SIMD_ADD instruction :
 
 ```scala
 import spinal.core._
