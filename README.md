@@ -215,56 +215,145 @@ cd ..
 echo -e "\\nRISC-V Toolchain installation completed!"
 ```
 
-## Cpu plugin structure
+## CPU parametrization and instantiation example
 
-There is an example of an pseudo ALU plugin :
+You can find many example of different config in the https://github.com/SpinalHDL/VexRiscv/tree/master/src/main/scala/VexRiscv/demo folder. There is one :
 
 ```scala
-//Define an signal name/type which could be used in the pipeline
-object ALU_ENABLE extends Stageable(Bool)
-object ALU_OP     extends Stageable(Bits(2  bits))  // ADD, SUB, AND, OR
-object ALU_SRC1   extends Stageable(UInt(32 bits))
-object ALU_SRC2   extends Stageable(UInt(32 bits))
-object ALU_RESULT extends Stageable(UInt(32 bits))
+//Instanciate one VexRiscv
+val cpu = new VexRiscv(
+  //Provide a configuration instance
+  config = VexRiscvConfig(
+    //Provide a list of plugins which will futher add their logic into the CPU
+    plugins = List(
+      new PcManagerSimplePlugin(
+        resetVector = 0x00000000l,
+        fastPcCalculation = true
+      ),
+      new IBusSimplePlugin(
+        interfaceKeepData = false,
+        catchAccessFault = false
+      ),
+      new DBusSimplePlugin(
+        catchAddressMisaligned = false,
+        catchAccessFault = false
+      ),
+      new DecoderSimplePlugin(
+        catchIllegalInstruction = false
+      ),
+      new RegFilePlugin(
+        regFileReadyKind = Plugin.SYNC,
+        zeroBoot = true
+      ),
+      new IntAluPlugin,
+      new SrcPlugin(
+        separatedAddSub = false,
+        executeInsertion = false
+      ),
+      new LightShifterPlugin,
+      new HazardSimplePlugin(
+        bypassExecute           = false,
+        bypassMemory            = false,
+        bypassWriteBack         = false,
+        bypassWriteBackBuffer   = false
+      ),
+      new BranchPlugin(
+        earlyBranch = false,
+        catchAddressMisaligned = false,
+        prediction = NONE
+      ),
+      new YamlPlugin("cpu0.yaml")
+    )
+  )
+)
+```
 
-class AluPlugin() extends Plugin[VexRiscv]{
+## CPU plugin example
+
+There is an example of an simple plugin which add an simple SIMD add :
+
+```scala
+import spinal.core._
+import VexRiscv.Plugin.Plugin
+import VexRiscv.{Stageable, DecoderService, VexRiscv}
+
+//This plugin example will add a new instruction named SIMD_ADD which do the following :
+//
+//RD : Regfile Destination, RS : Regfile Source
+//RD( 7 downto  0) = RS1( 7 downto  0) + RS2( 7 downto  0)
+//RD(16 downto  8) = RS1(16 downto  8) + RS2(16 downto  8)
+//RD(23 downto 16) = RS1(23 downto 16) + RS2(23 downto 16)
+//RD(31 downto 24) = RS1(31 downto 24) + RS2(31 downto 24)
+//
+//Instruction encoding :
+//0000011----------000-----0110011
+//       |RS2||RS1|   |RD |
+//
+//Note :  RS1, RS2, RD positions follow the RISC-V spec and are common for all instruction of the ISA
+
+class SimdAddPlugin extends Plugin[VexRiscv]{
+  //Define the concept of IS_SIMD_ADD signals, which specify if the current instruction is destined for ths plugin
+  object IS_SIMD_ADD extends Stageable(Bool)
 
   //Callback to setup the plugin and ask for different services
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
-    //Do some setups as for example specifying some instruction decoding by using the Decoding service
+
+    //Retrieve the DecoderService instance
     val decoderService = pipeline.service(classOf[DecoderService])
 
-    decoderService.addDefault(ALU_ENABLE,False)
-    decodingService.add(List(
-        M"0100----------" -> List(ALU_ENABLE -> True, ALU_OP -> B"01"),
-        M"0110---11-----" -> List(ALU_ENABLE -> True, ...)
-    ))
+    //Specify the IS_SIMD_ADD default value when instruction are decoded
+    decoderService.addDefault(IS_SIMD_ADD, False)
+
+    //Specify the instruction decoding which should be applied when the instruction match the 'key' parttern
+    decoderService.add(
+      //Bit pattern of the new SIMD_ADD instruction
+      key = M"0000011----------000-----0110011",
+
+      //Decoding specification when the 'key' pattern is recognized in the instruction
+      List(
+        IS_SIMD_ADD              -> True,
+        REGFILE_WRITE_VALID      -> True, //Enable the register file write
+        BYPASSABLE_EXECUTE_STAGE -> True, //Notify the hazard management unit that the instruction result is already accessible in the EXECUTE stage (Bypass ready)
+        BYPASSABLE_MEMORY_STAGE  -> True, //Same as above but for the memory stage
+        RS1_USE                  -> True, //Notify the hazard management unit that this instruction use the RS1 value
+        RS2_USE                  -> True  //Same than above but for RS2.
+      )
+    )
   }
 
-
-  //Callback to build the hardware logic
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
+    import pipeline.config._
 
-    execute plug new Area {
-      import execute._
-      //Add some logic in the execute stage
-      insert(ALU_RESULT) := input(ALU_OP).mux(
-        B"00" -> input(ALU_SRC1) + input(ALU_SRC2),
-        B"01" -> input(ALU_SRC1) - input(ALU_SRC2),
-        B"10" -> input(ALU_SRC1) & input(ALU_SRC2),
-        B"11" -> input(ALU_SRC1) | input(ALU_SRC2),
-      )
-    }
+    //Define some signals used internally to the plugin
+    val rs1 = execute.input(RS1).asUInt //32 bits UInt value of the regfile[RS1]
+    val rs2 = execute.input(RS2).asUInt
+    val rd = UInt(32 bits)
 
-    writeBack plug new Area {
-      import writeBack._
-      //Add some logic in the execute stage
-      when(input(ALU_ENABLE)){
-        input(REGFILE_WRITE_DATA) := input(ALU_RESULT)
-      }
+    //Do some computation
+    rd( 7 downto  0) := rs1( 7 downto  0) + rs2( 7 downto  0)
+    rd(16 downto  8) := rs1(16 downto  8) + rs2(16 downto  8)
+    rd(23 downto 16) := rs1(23 downto 16) + rs2(23 downto 16)
+    rd(31 downto 24) := rs1(31 downto 24) + rs2(31 downto 24)
+
+    //When the instruction is a SIMD_ADD one, then write the result into the register file data path.
+    when(execute.input(IS_SIMD_ADD)){
+      execute.output(REGFILE_WRITE_DATA) := rd.asBits
     }
   }
 }
 ```
+
+Then if you want to add this plugin to a given CPU, you just need to add it in its parameterized plugin list.
+
+This example is a very simple one, but each plugin can really have access to the whole CPU
+- Halt a given stage of the CPU
+- Unschedule instructions
+- Emit an exception
+- Introduce new instruction decoding specification
+- Ask to jump the PC somewhere
+- Read signals published by other plugins
+- override published signals values
+- Provide an alternative implementation
+- ...

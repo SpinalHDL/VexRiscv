@@ -11,7 +11,10 @@ object GenSmallestNoCsr extends App{
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       plugins = List(
-        new PcManagerSimplePlugin(0x00000000l, true),
+        new PcManagerSimplePlugin(
+          resetVector = 0x00000000l,
+          fastPcCalculation = true
+        ),
         new IBusSimplePlugin(
           interfaceKeepData = false,
           catchAccessFault = false
@@ -51,6 +54,5 @@ object GenSmallestNoCsr extends App{
       )
     )
   )
-
   SpinalVerilog(cpu())
 }
