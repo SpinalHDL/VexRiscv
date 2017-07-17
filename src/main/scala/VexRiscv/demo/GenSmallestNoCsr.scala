@@ -29,7 +29,8 @@ object GenSmallestNoCsr extends App{
         ),
         new IntAluPlugin,
         new SrcPlugin(
-          separatedAddSub = false
+          separatedAddSub = false,
+          executeInsertion = false
         ),
         new LightShifterPlugin,
         new HazardSimplePlugin(
