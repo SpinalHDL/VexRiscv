@@ -6,7 +6,7 @@ import spinal.lib.eda.bench.{XilinxStdTargets, Bench, AlteraStdTargets, Rtl}
 /**
  * Created by PIC32F_USER on 16/07/2017.
  */
-object SynthesisBench {
+object VexRiscvSynthesisBench {
   def main(args: Array[String]) {
     val smallestNoCsr = new Rtl {
       override def getName(): String = "VexRiscv smallest no CSR"
@@ -47,6 +47,35 @@ object SynthesisBench {
     }
 
     val rtls = List(smallestNoCsr, smallest, smallAndProductive, fullNoMmuNoCache, fullNoMmu, full)
+
+    val targets = XilinxStdTargets(
+      vivadoArtix7Path = "E:\\Xilinx\\Vivado\\2016.3\\bin"
+    ) ++ AlteraStdTargets(
+      quartusCycloneIIPath = "D:/altera/13.0sp1/quartus/bin64",
+      quartusCycloneIVPath = "D:/altera_lite/15.1/quartus/bin64",
+      quartusCycloneVPath  = "D:/altera_lite/15.1/quartus/bin64"
+    )
+
+    Bench(rtls, targets, "E:/tmp/")
+  }
+}
+
+
+object BrieySynthesisBench {
+  def main(args: Array[String]) {
+    val briey = new Rtl {
+      override def getName(): String = "Briey"
+      override def getRtlPath(): String = "Briey.v"
+      SpinalVerilog({
+        val briey = new Briey(BrieyConfig.default).setDefinitionName(getRtlPath().split("\\.").head)
+        briey.io.axiClk.setName("clk")
+        briey
+      })
+    }
+
+
+
+    val rtls = List(briey)
 
     val targets = XilinxStdTargets(
       vivadoArtix7Path = "E:\\Xilinx\\Vivado\\2016.3\\bin"

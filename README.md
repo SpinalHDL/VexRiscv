@@ -55,14 +55,14 @@ VexRiscv smallest (RV32I, 0.47 DMIPS/Mhz, no datapath bypass) ->
   Cyclone II -> 144 Mhz 844 LUT 578 FF 
   
 VexRiscv small and productive (RV32I, 0.78 DMIPS/Mhz)  ->
-  Artix 7 -> 330 Mhz 719 LUT 557 FF 
-  Cyclone V -> 153 Mhz 539 ALMs
+  Artix 7   -> 330 Mhz 719 LUT 557 FF 
+  Cyclone V  -> 153 Mhz 539 ALMs
   Cyclone IV -> 148 Mhz 1,127 LUT 552 FF 
   Cyclone II -> 114 Mhz 1,133 LUT 551 FF 
 
 VexRiscv full no cache (RV32IM, 1.14 DMIPS/Mhz, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
-  Artix 7 -> 291 Mhz 1403 LUT 936 FF 
-  Cyclone V -> 147 Mhz 928 ALMs
+  Artix 7    -> 291 Mhz 1403 LUT 936 FF 
+  Cyclone V  -> 147 Mhz 928 ALMs
   Cyclone IV -> 137 Mhz 1,910 LUT 959 FF 
   Cyclone II -> 110 Mhz 1,940 LUT 958 FF 
 
@@ -196,6 +196,12 @@ src/openocd -f tcl/interface/jtag_tcp.cfg -c "set BRIEY_CPU0_YAML /home/spinalvm
 You can find multiples software examples and demo there : https://github.com/SpinalHDL/BrieySoftware
 
 You can find some FPGA project which instantiate the Briey SoC there (DE1-SoC, DE0-Nano): https://drive.google.com/drive/folders/0B-CqLXDTaMbKZGdJZlZ5THAxRTQ?usp=sharing
+
+There is some measurements of Briey SoC timings and area : 
+  Artix 7    -> 230 Mhz 3551 LUT 3612 FF 
+  Cyclone V  -> 126 Mhz 2,608 ALMs
+  Cyclone IV -> 117 Mhz 5,196 LUT 3,784 FF 
+  Cyclone II -> 102 Mhz 5,321 LUT 3,787 FF 
 
 ## Build the RISC-V GCC
 
