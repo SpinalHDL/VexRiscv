@@ -198,10 +198,13 @@ You can find multiples software examples and demo there : https://github.com/Spi
 You can find some FPGA project which instantiate the Briey SoC there (DE1-SoC, DE0-Nano): https://drive.google.com/drive/folders/0B-CqLXDTaMbKZGdJZlZ5THAxRTQ?usp=sharing
 
 There is some measurements of Briey SoC timings and area : 
+
+```
   Artix 7    -> 230 Mhz 3551 LUT 3612 FF 
   Cyclone V  -> 126 Mhz 2,608 ALMs
   Cyclone IV -> 117 Mhz 5,196 LUT 3,784 FF 
   Cyclone II -> 102 Mhz 5,321 LUT 3,787 FF 
+```
 
 ## Build the RISC-V GCC
 
