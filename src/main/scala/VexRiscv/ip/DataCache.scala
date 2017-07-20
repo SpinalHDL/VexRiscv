@@ -419,7 +419,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     requestIn.valid := False
     requestIn.payload.assignDontCare()
 
-    val request = requestIn.stage() //TODO FMAX half pipe ?
+    val request = requestIn.halfPipe()
     request.ready := False
 
     val buffer = Mem(Bits(p.memDataWidth bits),memTransactionPerLine << tagSizeShift)  // WARNING << tagSizeShift could resolve cyclone II issue, //.add(new AttributeString("ramstyle","M4K"))
