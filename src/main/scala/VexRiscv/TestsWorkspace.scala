@@ -23,6 +23,8 @@ import VexRiscv.demo.SimdAddPlugin
 import spinal.core._
 import spinal.lib._
 import VexRiscv.ip._
+import spinal.lib.bus.avalon.AvalonMM
+import spinal.lib.eda.altera.{InterruptReceiverTag, ResetEmitterTag}
 
 object TestsWorkspace {
   def main(args: Array[String]) {
@@ -223,6 +225,44 @@ object TestsWorkspace {
       val toplevel = new VexRiscv(configFull)
 //      val toplevel = new VexRiscv(configLight)
 //      val toplevel = new VexRiscv(configTest)
+
+      toplevel.rework {
+        var iBus : AvalonMM = null
+        for (plugin <- toplevel.config.plugins) plugin match {
+          /*case plugin: IBusCachedPlugin => {
+            plugin.iBus.asDirectionLess() //Unset IO properties of iBus
+            iBus = master(plugin.iBus.toAvalon())
+              .setName("iBusAvalon")
+              .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
+          }*/
+        /*  case plugin: DBusCachedPlugin => {
+            plugin.dBus.asDirectionLess()
+            master(plugin.dBus.toAvalon())
+              .setName("dBusAvalon")
+              .addTag(ClockDomainTag(ClockDomain.current))
+          }*/
+         /* case plugin: DebugPlugin => {
+            plugin.io.bus.asDirectionLess()
+            slave(plugin.io.bus.fromAvalon())
+              .setName("debugBusAvalon")
+              .addTag(ClockDomainTag(plugin.debugClockDomain))
+              .parent = null  //Avoid the io bundle to be interpreted as a QSys conduit
+            plugin.io.resetOut
+              .addTag(ResetEmitterTag(plugin.debugClockDomain))
+              .parent = null //Avoid the io bundle to be interpreted as a QSys conduit
+          }*/
+          case _ =>
+        }
+        for (plugin <- toplevel.config.plugins) plugin match {
+          case plugin: CsrPlugin => {
+            plugin.externalInterrupt
+              .addTag(InterruptReceiverTag(iBus, ClockDomain.current))
+            plugin.timerInterrupt
+              .addTag(InterruptReceiverTag(iBus, ClockDomain.current))
+          }
+          case _ =>
+        }
+      }
 //      toplevel.writeBack.input(config.PC).addAttribute(Verilator.public)
 //      toplevel.service(classOf[DecoderSimplePlugin]).bench(toplevel)
 

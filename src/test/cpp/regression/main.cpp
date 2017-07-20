@@ -830,6 +830,9 @@ void Workspace::fillSimELements(){
 	#ifdef IBUS_CACHED
 		simElements.push_back(new IBusCached(this));
 	#endif
+	#ifdef IBUS_CACHED_AVALON
+		simElements.push_back(new IBusCachedAvalon(this));
+	#endif
 	#ifdef DBUS_SIMPLE
 		simElements.push_back(new DBusSimple(this));
 	#endif
