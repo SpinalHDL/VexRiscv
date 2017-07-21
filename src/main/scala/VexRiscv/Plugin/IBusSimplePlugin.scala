@@ -4,6 +4,7 @@ import VexRiscv.{Stageable, ExceptionService, ExceptionCause, VexRiscv}
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi._
+import spinal.lib.bus.avalon.{AvalonMMConfig, AvalonMM}
 
 
 case class IBusSimpleCmd() extends Bundle{
@@ -32,6 +33,13 @@ object IBusSimpleBus{
     useLen = false,
     useResp = true,
     useSize = false
+  )
+
+  def getAvalonConfig() = AvalonMMConfig.pipelined(
+    addressWidth = 32,
+    dataWidth = 32
+  ).getReadOnlyConfig.copy(
+    maximumPendingReadTransactions = 1
   )
 }
 case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMasterSlave{
@@ -67,6 +75,22 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
     axi.r << axi2.r
 //    axi2 << axi
     axi2
+  }
+
+  def toAvalon(): AvalonMM = {
+    assert(!interfaceKeepData)
+    val avalonConfig = IBusSimpleBus.getAvalonConfig()
+    val mm = AvalonMM(avalonConfig)
+
+    mm.read := cmd.valid
+    mm.address := (cmd.pc >> 2) @@ U"00"
+    cmd.ready := mm.waitRequestn
+
+    rsp.ready := mm.readDataValid
+    rsp.inst := mm.readData
+    rsp.error := False //TODO
+
+    mm
   }
 }
 

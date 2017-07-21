@@ -33,7 +33,7 @@ object TestsWorkspace {
         plugins = List(
           new PcManagerSimplePlugin(0x00000000l, false),
 //          new IBusSimplePlugin(
-//            interfaceKeepData = true,
+//            interfaceKeepData = false,
 //            catchAccessFault = true
 //          ),
           new IBusCachedPlugin(
@@ -229,11 +229,23 @@ object TestsWorkspace {
       toplevel.rework {
         var iBus : AvalonMM = null
         for (plugin <- toplevel.config.plugins) plugin match {
+          case plugin: IBusSimplePlugin => {
+            plugin.iBus.asDirectionLess() //Unset IO properties of iBus
+            iBus = master(plugin.iBus.toAvalon())
+              .setName("iBusAvalon")
+              .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
+          }
           case plugin: IBusCachedPlugin => {
             plugin.iBus.asDirectionLess() //Unset IO properties of iBus
             iBus = master(plugin.iBus.toAvalon())
               .setName("iBusAvalon")
               .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
+          }
+          case plugin: DBusSimplePlugin => {
+            plugin.dBus.asDirectionLess()
+            master(plugin.dBus.toAvalon())
+              .setName("dBusAvalon")
+              .addTag(ClockDomainTag(ClockDomain.current))
           }
           case plugin: DBusCachedPlugin => {
             plugin.dBus.asDirectionLess()

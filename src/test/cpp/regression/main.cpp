@@ -491,6 +491,53 @@ public:
 };
 #endif
 
+#ifdef IBUS_SIMPLE_AVALON
+#include <queue>
+struct IBusSimpleAvalonRsp{
+	uint32_t data;
+	bool error;
+};
+
+
+class IBusSimpleAvalon : public SimElement{
+public:
+	queue<IBusSimpleAvalonRsp> rsps;
+
+	Workspace *ws;
+	VVexRiscv* top;
+	IBusSimpleAvalon(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+		top->iBusAvalon_waitRequestn = 1;
+		top->iBusAvalon_readDataValid = 0;
+	}
+
+	virtual void preCycle(){
+		if (top->iBusAvalon_read && top->iBusAvalon_waitRequestn) {
+			IBusSimpleAvalonRsp rsp;
+			ws->iBusAccess(top->iBusAvalon_address,&rsp.data,&rsp.error);
+			rsps.push(rsp);
+		}
+	}
+	//TODO doesn't catch when instruction removed ?
+	virtual void postCycle(){
+		if(!rsps.empty() && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+			IBusSimpleAvalonRsp rsp = rsps.front(); rsps.pop();
+			top->iBusAvalon_readDataValid = 1;
+			top->iBusAvalon_readData = rsp.data;
+		} else {
+			top->iBusAvalon_readDataValid = 0;
+			top->iBusAvalon_readData = VL_RANDOM_I(32);
+		}
+		if(ws->iStall)
+			top->iBusAvalon_waitRequestn = VL_RANDOM_I(7) < 100;
+	}
+};
+#endif
+
 
 #ifdef IBUS_CACHED
 class IBusCached : public SimElement{
@@ -634,6 +681,59 @@ public:
 	}
 };
 #endif
+
+#ifdef DBUS_SIMPLE_AVALON
+#include <queue>
+struct DBusSimpleAvalonRsp{
+	uint32_t data;
+	bool error;
+};
+
+
+class DBusSimpleAvalon : public SimElement{
+public:
+	queue<DBusSimpleAvalonRsp> rsps;
+
+	Workspace *ws;
+	VVexRiscv* top;
+	DBusSimpleAvalon(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+		top->dBusAvalon_waitRequestn = 1;
+		top->dBusAvalon_readDataValid = 0;
+	}
+
+	virtual void preCycle(){
+		if (top->dBusAvalon_write && top->dBusAvalon_waitRequestn) {
+			bool dummy;
+			ws->dBusAccess(top->dBusAvalon_address,1,2,top->dBusAvalon_byteEnable,&top->dBusAvalon_writeData,&dummy);
+		}
+		if (top->dBusAvalon_read && top->dBusAvalon_waitRequestn) {
+			DBusSimpleAvalonRsp rsp;
+			ws->dBusAccess(top->dBusAvalon_address,0,2,0xF,&rsp.data,&rsp.error);
+			rsps.push(rsp);
+		}
+	}
+	//TODO doesn't catch when instruction removed ?
+	virtual void postCycle(){
+		if(!rsps.empty() && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+			DBusSimpleAvalonRsp rsp = rsps.front(); rsps.pop();
+			top->dBusAvalon_readDataValid = 1;
+			top->dBusAvalon_readData = rsp.data;
+		} else {
+			top->dBusAvalon_readDataValid = 0;
+			top->dBusAvalon_readData = VL_RANDOM_I(32);
+		}
+		if(ws->iStall)
+			top->dBusAvalon_waitRequestn = VL_RANDOM_I(7) < 100;
+	}
+};
+#endif
+
+
 
 #ifdef DBUS_CACHED
 class DBusCached : public SimElement{
@@ -1039,6 +1139,9 @@ void Workspace::fillSimELements(){
 	#ifdef IBUS_SIMPLE
 		simElements.push_back(new IBusSimple(this));
 	#endif
+	#ifdef IBUS_SIMPLE_AVALON
+		simElements.push_back(new IBusSimpleAvalon(this));
+	#endif
 	#ifdef IBUS_CACHED
 		simElements.push_back(new IBusCached(this));
 	#endif
@@ -1047,6 +1150,9 @@ void Workspace::fillSimELements(){
 	#endif
 	#ifdef DBUS_SIMPLE
 		simElements.push_back(new DBusSimple(this));
+	#endif
+	#ifdef DBUS_SIMPLE_AVALON
+		simElements.push_back(new DBusSimpleAvalon(this));
 	#endif
 	#ifdef DBUS_CACHED
 		simElements.push_back(new DBusCached(this));

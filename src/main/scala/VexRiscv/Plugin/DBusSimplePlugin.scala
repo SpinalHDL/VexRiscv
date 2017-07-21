@@ -4,6 +4,7 @@ import VexRiscv._
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi._
+import spinal.lib.bus.avalon.{AvalonMMConfig, AvalonMM}
 
 
 case class DBusSimpleCmd() extends Bundle{
@@ -35,6 +36,13 @@ object DBusSimpleBus{
     useQos = false,
     useLen = false,
     useResp = true
+  )
+
+  def getAvalonConfig() = AvalonMMConfig.pipelined(
+    addressWidth = 32,
+    dataWidth = 32).copy(
+    useByteEnable = true,
+    maximumPendingReadTransactions = 1
   )
 }
 case class DBusSimpleBus() extends Bundle with IMasterSlave{
@@ -91,6 +99,35 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     axi.b << axi2.b
 //    axi2 << axi
     axi2
+  }
+
+
+
+  def toAvalon(stageCmd : Boolean = true): AvalonMM = {
+    val avalonConfig = DBusSimpleBus.getAvalonConfig()
+    val mm = AvalonMM(avalonConfig)
+    val cmdStage = if(stageCmd) cmd.stage else cmd
+    mm.read := cmdStage.valid && !cmdStage.wr
+    mm.write := cmdStage.valid && cmdStage.wr
+    mm.address := (cmdStage.address >> 2) @@ U"00"
+    mm.writeData := cmdStage.size.mux (
+      U(0) -> cmdStage.data(7 downto 0) ## cmdStage.data(7 downto 0) ## cmdStage.data(7 downto 0) ## cmdStage.data(7 downto 0),
+      U(1) -> cmdStage.data(15 downto 0) ## cmdStage.data(15 downto 0),
+      default -> cmdStage.data(31 downto 0)
+    )
+    mm.byteEnable := (cmdStage.size.mux (
+      U(0) -> B"0001",
+      U(1) -> B"0011",
+      default -> B"1111"
+    ) << cmdStage.address(1 downto 0)).resized
+
+
+    cmdStage.ready := mm.waitRequestn
+    rsp.ready :=mm.readDataValid
+    rsp.error := False //TODO
+    rsp.data := mm.readData
+
+    mm
   }
 }
 
