@@ -37,6 +37,7 @@ case class InstructionCacheConfig( cacheSize : Int,
     dataWidth = memDataWidth,
     burstCountWidth = log2Up(burstSize + 1)).getReadOnlyConfig.copy(
     linewrapBursts = wrappedMemAccess,
+    useResponse = true,
     constantBurstBehavior = true
   )
 
@@ -154,7 +155,7 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
     cmd.ready := mm.waitRequestn
     rsp.valid := mm.readDataValid
     rsp.data := mm.readData
-    rsp.error := False
+    rsp.error := mm.response =/= AvalonMM.Response.OKAY
     mm
   }
 }

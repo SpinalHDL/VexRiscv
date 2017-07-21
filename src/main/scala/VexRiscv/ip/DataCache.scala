@@ -41,6 +41,7 @@ case class DataCacheConfig( cacheSize : Int,
     useByteEnable = true,
     constantBurstBehavior = true,
     burstOnBurstBoundariesOnly = true,
+    useResponse = true,
     maximumPendingReadTransactions = 2
   )
 }
@@ -275,7 +276,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     cmd.ready := mm.waitRequestn
     rsp.valid := mm.readDataValid
     rsp.data  := mm.readData
-    rsp.error := False
+    rsp.error := mm.response =/= AvalonMM.Response.OKAY
 
     mm
   }

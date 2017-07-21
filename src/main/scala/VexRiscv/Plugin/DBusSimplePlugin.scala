@@ -42,6 +42,7 @@ object DBusSimpleBus{
     addressWidth = 32,
     dataWidth = 32).copy(
     useByteEnable = true,
+    useResponse = true,
     maximumPendingReadTransactions = 1
   )
 }
@@ -124,7 +125,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
 
     cmdStage.ready := mm.waitRequestn
     rsp.ready :=mm.readDataValid
-    rsp.error := False //TODO
+    rsp.error := mm.response =/= AvalonMM.Response.OKAY
     rsp.data := mm.readData
 
     mm

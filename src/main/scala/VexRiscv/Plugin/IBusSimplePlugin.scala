@@ -39,6 +39,7 @@ object IBusSimpleBus{
     addressWidth = 32,
     dataWidth = 32
   ).getReadOnlyConfig.copy(
+    useResponse = true,
     maximumPendingReadTransactions = 1
   )
 }
@@ -88,7 +89,7 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
     rsp.ready := mm.readDataValid
     rsp.inst := mm.readData
-    rsp.error := False //TODO
+    rsp.error := mm.response =/= AvalonMM.Response.OKAY
 
     mm
   }
@@ -139,6 +140,8 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) 
         fetch.insert(IBUS_ACCESS_ERROR) := rspBuffer.error
       }
     }
+
+    fetch.insert(IBUS_ACCESS_ERROR) clearWhen(!fetch.arbitration.isValid) //Avoid interference with instruction injection from the debug plugin
 
     if(interfaceKeepData)
       fetch.arbitration.haltIt setWhen(fetch.arbitration.isValid && !iBus.rsp.ready)

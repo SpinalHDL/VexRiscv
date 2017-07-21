@@ -528,9 +528,11 @@ public:
 			IBusSimpleAvalonRsp rsp = rsps.front(); rsps.pop();
 			top->iBusAvalon_readDataValid = 1;
 			top->iBusAvalon_readData = rsp.data;
+			top->iBusAvalon_response = rsp.error ? 3 : 0;
 		} else {
 			top->iBusAvalon_readDataValid = 0;
 			top->iBusAvalon_readData = VL_RANDOM_I(32);
+			top->iBusAvalon_response = VL_RANDOM_I(2);
 		}
 		if(ws->iStall)
 			top->iBusAvalon_waitRequestn = VL_RANDOM_I(7) < 100;
@@ -625,8 +627,9 @@ public:
 		if(!tasks.empty() && (!ws->iStall || VL_RANDOM_I(7) < 100)){
 			uint32_t &address = tasks.front().address;
 			uint32_t &pendingCount = tasks.front().pendingCount;
+			bool error;
 			ws->iBusAccess(address,&top->iBusAvalon_readData,&error);
-			//top->iBus_rsp_payload_error = error; //TODO
+			top->iBusAvalon_response = error ? 3 : 0;
 			pendingCount--;
 			address = (address & ~0x1F) + ((address + 4) & 0x1F);
 			top->iBusAvalon_readDataValid = 1;
@@ -723,9 +726,11 @@ public:
 			DBusSimpleAvalonRsp rsp = rsps.front(); rsps.pop();
 			top->dBusAvalon_readDataValid = 1;
 			top->dBusAvalon_readData = rsp.data;
+			top->dBusAvalon_response = rsp.error ? 3 : 0;
 		} else {
 			top->dBusAvalon_readDataValid = 0;
 			top->dBusAvalon_readData = VL_RANDOM_I(32);
+			top->dBusAvalon_response = VL_RANDOM_I(2);
 		}
 		if(ws->iStall)
 			top->dBusAvalon_waitRequestn = VL_RANDOM_I(7) < 100;
@@ -837,13 +842,13 @@ public:
 		if(!rsps.empty() && (!ws->dStall || VL_RANDOM_I(7) < 100)){
 			DBusCachedAvalonTask rsp = rsps.front();
 			rsps.pop();
-			//top->dBus_rsp_payload_error = rsp.error; //TODO
+			top->dBusAvalon_response = rsp.error ? 3 : 0;
 			top->dBusAvalon_readData = rsp.data;
 			top->dBusAvalon_readDataValid = 1;
 		} else{
 			top->dBusAvalon_readDataValid = 0;
 			top->dBusAvalon_readData = VL_RANDOM_I(32);
-			//top->dBus_rsp_payload_error = VL_RANDOM_I(1); //TODO
+			top->dBusAvalon_response = VL_RANDOM_I(2); //TODO
 		}
 
 		top->dBusAvalon_waitRequestn = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
