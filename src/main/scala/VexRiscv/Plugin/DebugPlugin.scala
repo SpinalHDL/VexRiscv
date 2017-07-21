@@ -46,7 +46,7 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
   }
 
   def fromAvalon(): AvalonMM ={
-    val bus = AvalonMM(AvalonMMConfig.fixed(addressWidth = 8,dataWidth = 32, readLatency = 0))
+    val bus = AvalonMM(AvalonMMConfig.fixed(addressWidth = 8,dataWidth = 32, readLatency = 1))
 
     cmd.valid := bus.read || bus.write
     cmd.wr := bus.write
@@ -99,13 +99,6 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
     import pipeline.config._
 
     debugClockDomain {pipeline plug new Area{
-      val busReadDataReg = Reg(Bits(32 bit))
-      when(writeBack.arbitration.isValid) {
-        busReadDataReg := writeBack.output(REGFILE_WRITE_DATA)
-      }
-      io.bus.cmd.ready := True
-      io.bus.rsp.data := busReadDataReg
-
       val insertDecodeInstruction = False
       val firstCycle = RegNext(False) setWhen (io.bus.cmd.ready)
       val secondCycle = RegNext(firstCycle)
@@ -117,6 +110,21 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
       val isPipBusy = isPipActive || RegNext(isPipActive)
       val haltedByBreak = RegInit(False)
 
+
+      val busReadDataReg = Reg(Bits(32 bit))
+      when(writeBack.arbitration.isValid) {
+        busReadDataReg := writeBack.output(REGFILE_WRITE_DATA)
+      }
+      io.bus.cmd.ready := True
+      io.bus.rsp.data := busReadDataReg
+      when(!RegNext(io.bus.cmd.address(2))){
+        io.bus.rsp.data(0) := resetIt
+        io.bus.rsp.data(1) := haltIt
+        io.bus.rsp.data(2) := isPipBusy
+        io.bus.rsp.data(3) := haltedByBreak
+        io.bus.rsp.data(4) := stepIt
+      }
+
       when(io.bus.cmd.valid) {
         switch(io.bus.cmd.address(2 downto 2)) {
           is(0) {
@@ -125,12 +133,6 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
               resetIt setWhen (io.bus.cmd.data(16)) clearWhen (io.bus.cmd.data(24))
               haltIt setWhen (io.bus.cmd.data(17)) clearWhen (io.bus.cmd.data(25))
               haltedByBreak clearWhen (io.bus.cmd.data(25))
-            } otherwise {
-              io.bus.rsp.data(0) := resetIt
-              io.bus.rsp.data(1) := haltIt
-              io.bus.rsp.data(2) := isPipBusy
-              io.bus.rsp.data(3) := haltedByBreak
-              io.bus.rsp.data(4) := stepIt
             }
           }
           is(1) {
@@ -138,7 +140,7 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
               insertDecodeInstruction := True
               decode.arbitration.isValid setWhen (firstCycle)
               decode.arbitration.haltIt setWhen (secondCycle)
-              io.bus.cmd.ready := !(firstCycle || secondCycle || isPipActive)
+              io.bus.cmd.ready := !(firstCycle || secondCycle || decode.arbitration.isValid)
             }
           }
         }

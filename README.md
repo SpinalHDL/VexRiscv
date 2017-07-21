@@ -132,7 +132,7 @@ To run tests (need the verilator simulator), go in the src/test/cpp/regression f
 make clean run
 
 # To test the GenSmallest CPU
-make clean run IBUS=IBUS_SIMPLE DBUS=DBUS_SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no
+make clean run IBUS=SIMPLE DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no
 ```
 
 ## Interactive debug of the simulated CPU via GDB OpenOCD and Verilator

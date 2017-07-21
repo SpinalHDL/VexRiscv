@@ -495,7 +495,6 @@ public:
 #ifdef IBUS_CACHED
 class IBusCached : public SimElement{
 public:
-	uint32_t inst_next = VL_RANDOM_I(32);
 	bool error_next = false;
 	uint32_t pendingCount = 0;
 	uint32_t address;
@@ -532,6 +531,63 @@ public:
 			top->iBus_rsp_valid = 1;
 		}
 		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100 && pendingCount == 0;
+	}
+};
+#endif
+
+#ifdef IBUS_CACHED_AVALON
+#include <queue>
+
+struct IBusCachedAvalonTask{
+	uint32_t address;
+	uint32_t pendingCount;
+};
+
+class IBusCachedAvalon : public SimElement{
+public:
+	uint32_t inst_next = VL_RANDOM_I(32);
+	bool error_next = false;
+
+	queue<IBusCachedAvalonTask> tasks;
+	Workspace *ws;
+	VVexRiscv* top;
+
+	IBusCachedAvalon(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+		top->iBusAvalon_waitRequestn = 1;
+		top->iBusAvalon_readDataValid = 0;
+	}
+
+	virtual void preCycle(){
+		if (top->iBusAvalon_read && top->iBusAvalon_waitRequestn) {
+			assertEq(top->iBusAvalon_address & 3,0);
+			IBusCachedAvalonTask task;
+			task.address = top->iBusAvalon_address;
+			task.pendingCount = top->iBusAvalon_burstCount;
+			tasks.push(task);
+		}
+	}
+
+	virtual void postCycle(){
+		bool error;
+		top->iBusAvalon_readDataValid = 0;
+		if(!tasks.empty() && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+			uint32_t &address = tasks.front().address;
+			uint32_t &pendingCount = tasks.front().pendingCount;
+			ws->iBusAccess(address,&top->iBusAvalon_readData,&error);
+			//top->iBus_rsp_payload_error = error; //TODO
+			pendingCount--;
+			address = (address & ~0x1F) + ((address + 4) & 0x1F);
+			top->iBusAvalon_readDataValid = 1;
+			if(pendingCount == 0)
+				tasks.pop();
+		}
+		if(ws->iStall)
+			top->iBusAvalon_waitRequestn = VL_RANDOM_I(7) < 100;
 	}
 };
 #endif
@@ -632,6 +688,69 @@ public:
 };
 #endif
 
+#ifdef DBUS_CACHED_AVALON
+#include <queue>
+
+struct DBusCachedAvalonTask{
+	uint32_t data;
+	bool error;
+};
+
+class DBusCachedAvalon : public SimElement{
+public:
+	uint32_t beatCounter = 0;
+	queue<DBusCachedAvalonTask> rsps;
+
+	Workspace *ws;
+	VVexRiscv* top;
+	DBusCachedAvalon(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+		top->dBusAvalon_waitRequestn = 1;
+		top->dBusAvalon_readDataValid = 0;
+	}
+
+
+	virtual void preCycle(){
+		if ((top->dBusAvalon_read || top->dBusAvalon_write) && top->dBusAvalon_waitRequestn) {
+			if(top->dBusAvalon_write){
+				bool error_next = false;
+				ws->dBusAccess(top->dBusAvalon_address + beatCounter * 4,1,2,top->dBusAvalon_byteEnable,&top->dBusAvalon_writeData,&error_next);
+				beatCounter++;
+				if(beatCounter == top->dBusAvalon_burstCount){
+					beatCounter = 0;
+				}
+			} else {
+				for(int beat = 0;beat < top->dBusAvalon_burstCount;beat++){
+					DBusCachedAvalonTask rsp;
+					ws->dBusAccess(top->dBusAvalon_address  + beat * 4,0,2,0,&rsp.data,&rsp.error);
+					rsps.push(rsp);
+				}
+			}
+		}
+	}
+
+	virtual void postCycle(){
+		if(!rsps.empty() && (!ws->dStall || VL_RANDOM_I(7) < 100)){
+			DBusCachedAvalonTask rsp = rsps.front();
+			rsps.pop();
+			//top->dBus_rsp_payload_error = rsp.error; //TODO
+			top->dBusAvalon_readData = rsp.data;
+			top->dBusAvalon_readDataValid = 1;
+		} else{
+			top->dBusAvalon_readDataValid = 0;
+			top->dBusAvalon_readData = VL_RANDOM_I(32);
+			//top->dBus_rsp_payload_error = VL_RANDOM_I(1); //TODO
+		}
+
+		top->dBusAvalon_waitRequestn = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
+	}
+};
+#endif
+
 
 #ifdef DEBUG_PLUGIN
 #include <stdio.h>
@@ -659,6 +778,12 @@ bool SetSocketBlockingEnabled(int fd, bool blocking)
 #endif
 }
 
+struct DebugPluginTask{
+	bool wr;
+	uint32_t address;
+	uint32_t data;
+};
+
 class DebugPlugin : public SimElement{
 public:
 	Workspace *ws;
@@ -670,6 +795,8 @@ public:
 	socklen_t addr_size;
 	char buffer[1024];
 	uint32_t timeSpacer = 0;
+	bool taskValid = false;
+	DebugPluginTask task;
 
 	DebugPlugin(Workspace* ws){
 		this->ws = ws;
@@ -725,7 +852,6 @@ public:
 	}
 
 	virtual void onReset(){
-		top->debug_bus_cmd_valid = 0;
 		top->debugReset = 1;
 	}
 
@@ -741,41 +867,21 @@ public:
 		clientHandle = -1;
 	}
 
-	bool readRsp = false;
-	bool wasReady = false;
+
 	virtual void preCycle(){
+
+	}
+
+	virtual void postCycle(){
 		if(clientHandle == -1){
 			clientHandle = accept(serverSocket, (struct sockaddr *) &serverStorage, &addr_size);
 			if(clientHandle != -1)
 				printf("CONNECTED\n");
 		}
 
-
-		if(top->debug_bus_cmd_valid && top->debug_bus_cmd_ready && !top->debug_bus_cmd_payload_wr){
-			readRsp = true;
-		}
-		if(readRsp){
-			if(clientHandle != -1){
-				if(send(clientHandle,&top->debug_bus_rsp_data,4,0) == -1) connectionReset();
-			}
-			readRsp = false;
-		}
-
-		wasReady = top->debug_bus_cmd_ready;
-	}
-
-	virtual void postCycle(){
 		top->reset = top->debug_resetOut;
-		if(wasReady){
-			if(top->debug_bus_cmd_valid)
-				timeSpacer = 50;
-			top->debug_bus_cmd_valid = 0;
-			top->debug_bus_cmd_payload_wr = VL_RANDOM_I(1);
-			top->debug_bus_cmd_payload_address = VL_RANDOM_I(8);
-			top->debug_bus_cmd_payload_data = VL_RANDOM_I(32);
-		}
 
-		if(clientHandle != -1 && top->debug_bus_cmd_valid == 0){
+		if(clientHandle != -1 && taskValid == false){
 			if(timeSpacer == 0){
 				int requiredSize = 1 + 1 + 4 + 4;
 				int n;
@@ -792,11 +898,12 @@ public:
 
 						if((address & ~ 0x4) == 0xF00F0000){
 							assert(size == 2);
+							timeSpacer = 50;
 
-							top->debug_bus_cmd_valid = 1;
-							top->debug_bus_cmd_payload_wr = wr;
-							top->debug_bus_cmd_payload_address = address;
-							top->debug_bus_cmd_payload_data = data;
+							taskValid = true;
+							task.wr = wr;
+							task.address = address;
+							task.data = data;
 						} else {
 							bool dummy;
 							//printf("wr=%d size=%d address=%x data=%x\n",wr,size,address,data);
@@ -820,7 +927,112 @@ public:
 			}
 		}
 	}
+
+	void sendRsp(uint32_t data){
+		if(clientHandle != -1){
+			if(send(clientHandle,&data,4,0) == -1) connectionReset();
+		}
+	}
 };
+#endif
+
+#ifdef DEBUG_PLUGIN_STD
+class DebugPluginStd : public DebugPlugin{
+public:
+	DebugPluginStd(Workspace* ws) : DebugPlugin(ws){
+
+	}
+
+	virtual void onReset(){
+		DebugPlugin::onReset();
+		top->debug_bus_cmd_valid = 0;
+	}
+
+	bool rspFire = false;
+
+	virtual void preCycle(){
+		DebugPlugin::preCycle();
+
+		if(rspFire){
+			sendRsp(top->debug_bus_rsp_data);
+			rspFire = false;
+		}
+
+		if(top->debug_bus_cmd_valid && top->debug_bus_cmd_ready){
+			taskValid = false;
+			if(!top->debug_bus_cmd_payload_wr){
+				rspFire = true;
+			}
+		}
+	}
+
+	virtual void postCycle(){
+		DebugPlugin::postCycle();
+
+		if(taskValid){
+			top->debug_bus_cmd_valid = 1;
+			top->debug_bus_cmd_payload_wr = task.wr;
+			top->debug_bus_cmd_payload_address = task.address;
+			top->debug_bus_cmd_payload_data = task.data;
+		}else {
+			top->debug_bus_cmd_valid = 0;
+			top->debug_bus_cmd_payload_wr = VL_RANDOM_I(1);
+			top->debug_bus_cmd_payload_address = VL_RANDOM_I(8);
+			top->debug_bus_cmd_payload_data = VL_RANDOM_I(32);
+		}
+	}
+};
+
+#endif
+
+#ifdef DEBUG_PLUGIN_AVALON
+class DebugPluginAvalon : public DebugPlugin{
+public:
+	DebugPluginAvalon(Workspace* ws) : DebugPlugin(ws){
+
+	}
+
+	virtual void onReset(){
+		DebugPlugin::onReset();
+		top->debugBusAvalon_read = 0;
+		top->debugBusAvalon_write = 0;
+	}
+
+	bool rspFire = false;
+
+	virtual void preCycle(){
+		DebugPlugin::preCycle();
+
+		if(rspFire){
+			sendRsp(top->debugBusAvalon_readData);
+			rspFire = false;
+		}
+
+		if((top->debugBusAvalon_read || top->debugBusAvalon_write) && top->debugBusAvalon_waitRequestn){
+			taskValid = false;
+			if(top->debugBusAvalon_read){
+				rspFire = true;
+			}
+		}
+	}
+
+	virtual void postCycle(){
+		DebugPlugin::postCycle();
+
+		if(taskValid){
+			top->debugBusAvalon_write = task.wr;
+			top->debugBusAvalon_read = !task.wr;
+			top->debugBusAvalon_address = task.address;
+			top->debugBusAvalon_writeData = task.data;
+		}else {
+			top->debugBusAvalon_write = 0;
+			top->debugBusAvalon_read = 0;
+			top->debugBusAvalon_address = VL_RANDOM_I(8);
+			top->debugBusAvalon_writeData = VL_RANDOM_I(32);
+		}
+	}
+};
+
 #endif
 
 void Workspace::fillSimELements(){
@@ -839,8 +1051,14 @@ void Workspace::fillSimELements(){
 	#ifdef DBUS_CACHED
 		simElements.push_back(new DBusCached(this));
 	#endif
-	#ifdef DEBUG_PLUGIN
-		simElements.push_back(new DebugPlugin(this));
+	#ifdef DBUS_CACHED_AVALON
+		simElements.push_back(new DBusCachedAvalon(this));
+	#endif
+	#ifdef DEBUG_PLUGIN_STD
+		simElements.push_back(new DebugPluginStd(this));
+	#endif
+	#ifdef DEBUG_PLUGIN_AVALON
+		simElements.push_back(new DebugPluginAvalon(this));
 	#endif
 }
 

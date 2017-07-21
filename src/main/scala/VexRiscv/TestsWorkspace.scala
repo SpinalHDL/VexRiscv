@@ -229,19 +229,19 @@ object TestsWorkspace {
       toplevel.rework {
         var iBus : AvalonMM = null
         for (plugin <- toplevel.config.plugins) plugin match {
-          /*case plugin: IBusCachedPlugin => {
+          case plugin: IBusCachedPlugin => {
             plugin.iBus.asDirectionLess() //Unset IO properties of iBus
             iBus = master(plugin.iBus.toAvalon())
               .setName("iBusAvalon")
               .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
-          }*/
-        /*  case plugin: DBusCachedPlugin => {
+          }
+          case plugin: DBusCachedPlugin => {
             plugin.dBus.asDirectionLess()
             master(plugin.dBus.toAvalon())
               .setName("dBusAvalon")
               .addTag(ClockDomainTag(ClockDomain.current))
-          }*/
-         /* case plugin: DebugPlugin => {
+          }
+          case plugin: DebugPlugin => {
             plugin.io.bus.asDirectionLess()
             slave(plugin.io.bus.fromAvalon())
               .setName("debugBusAvalon")
@@ -250,7 +250,7 @@ object TestsWorkspace {
             plugin.io.resetOut
               .addTag(ResetEmitterTag(plugin.debugClockDomain))
               .parent = null //Avoid the io bundle to be interpreted as a QSys conduit
-          }*/
+          }
           case _ =>
         }
         for (plugin <- toplevel.config.plugins) plugin match {
