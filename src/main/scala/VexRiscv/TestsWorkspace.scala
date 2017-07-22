@@ -226,7 +226,7 @@ object TestsWorkspace {
 //      val toplevel = new VexRiscv(configLight)
 //      val toplevel = new VexRiscv(configTest)
 
-      toplevel.rework {
+      /*toplevel.rework {
         var iBus : AvalonMM = null
         for (plugin <- toplevel.config.plugins) plugin match {
           case plugin: IBusSimplePlugin => {
@@ -274,7 +274,7 @@ object TestsWorkspace {
           }
           case _ =>
         }
-      }
+      }*/
 //      toplevel.writeBack.input(config.PC).addAttribute(Verilator.public)
 //      toplevel.service(classOf[DecoderSimplePlugin]).bench(toplevel)
 

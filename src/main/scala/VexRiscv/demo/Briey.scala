@@ -15,13 +15,13 @@ import spinal.lib.graphic.vga.{Vga, Axi4VgaCtrlGenerics, Axi4VgaCtrl}
 import spinal.lib.io.TriStateArray
 import spinal.lib.memory.sdram._
 import spinal.lib.soc.pinsec.{PinsecTimerCtrlExternal, PinsecTimerCtrl}
-import spinal.lib.system.debugger.{JtagAxi4SharedDebugger, SystemDebuggerConfig}
+import spinal.lib.system.debugger.{SystemDebugger, JtagBridge, JtagAxi4SharedDebugger, SystemDebuggerConfig}
 
 
 case class BrieyConfig(axiFrequency : HertzNumber,
-                        onChipRamSize : BigInt,
-                        sdramLayout: SdramLayout,
-                        sdramTimings: SdramTimings)
+                       onChipRamSize : BigInt,
+                       sdramLayout: SdramLayout,
+                       sdramTimings: SdramTimings)
 
 object BrieyConfig{
   def default = {
@@ -132,12 +132,6 @@ class Briey(config: BrieyConfig) extends Component{
       CAS          = 3
     )
 
-    val jtagCtrl = JtagAxi4SharedDebugger(SystemDebuggerConfig(
-      memAddressWidth = 32,
-      memDataWidth    = 32,
-      remoteCmdWidth  = 1
-    ))
-
 
     val apbBridge = Axi4SharedToApb3Bridge(
       addressWidth = 20,
@@ -208,10 +202,10 @@ class Briey(config: BrieyConfig) extends Component{
             //              portTlbSize = 4
             //            )
           ),
-//                    new DBusSimplePlugin(
-//                      catchAddressMisaligned = true,
-//                      catchAccessFault = true
-//                    ),
+          //                    new DBusSimplePlugin(
+          //                      catchAddressMisaligned = true,
+          //                      catchAccessFault = true
+          //                    ),
           new DBusCachedPlugin(
             config = new DataCacheConfig(
               cacheSize         = 4096,
@@ -292,7 +286,7 @@ class Briey(config: BrieyConfig) extends Component{
       val cpu = new VexRiscv(configLight)
       var iBus : Axi4ReadOnly = null
       var dBus : Axi4Shared = null
-      var debugBus : Apb3 = null
+      var debugBus : DebugExtensionBus = null
       for(plugin <- configLight.plugins) plugin match{
         case plugin : IBusSimplePlugin => iBus = plugin.iBus.toAxi4ReadOnly()
         case plugin : IBusCachedPlugin => iBus = plugin.iBus.toAxi4ReadOnly()
@@ -304,7 +298,7 @@ class Briey(config: BrieyConfig) extends Component{
         }
         case plugin : DebugPlugin      => {
           resetCtrl.coreResetUnbuffered setWhen(plugin.io.resetOut)
-          debugBus = plugin.io.bus.fromApb3()
+          debugBus = plugin.io.bus
         }
         case _ =>
       }
@@ -322,7 +316,6 @@ class Briey(config: BrieyConfig) extends Component{
     axiCrossbar.addConnections(
       core.iBus       -> List(ram.io.axi, sdramCtrl.io.axi),
       core.dBus       -> List(ram.io.axi, sdramCtrl.io.axi, apbBridge.io.axi),
-      jtagCtrl.io.axi -> List(ram.io.axi, sdramCtrl.io.axi, apbBridge.io.axi),
       vgaCtrl.io.axi  -> List(            sdramCtrl.io.axi)
     )
 
@@ -370,16 +363,32 @@ class Briey(config: BrieyConfig) extends Component{
         gpioBCtrl.io.apb -> (0x01000, 4 kB),
         uartCtrl.io.apb  -> (0x10000, 4 kB),
         timerCtrl.io.apb -> (0x20000, 4 kB),
-        vgaCtrl.io.apb   -> (0x30000, 4 kB),
-        core.debugBus    -> (0xF0000, 4 kB)
+        vgaCtrl.io.apb   -> (0x30000, 4 kB)
       )
     )
+
+    //Add JTAG
+    val jtagConfig = SystemDebuggerConfig(
+      memAddressWidth = 32,
+      memDataWidth    = 32,
+      remoteCmdWidth  = 1
+    )
+    val jtagBridge = new JtagBridge(jtagConfig)
+    val debugger = new SystemDebugger(jtagConfig)
+    debugger.io.remote <> jtagBridge.io.remote
+    debugger.io.mem.cmd.valid           <> core.debugBus.cmd.valid
+    debugger.io.mem.cmd.ready           <> core.debugBus.cmd.ready
+    debugger.io.mem.cmd.wr              <> core.debugBus.cmd.wr
+    debugger.io.mem.cmd.address.resized <> core.debugBus.cmd.address
+    debugger.io.mem.cmd.data            <> core.debugBus.cmd.data
+    debugger.io.mem.rsp.valid           <> RegNext(core.debugBus.cmd.fire).init(False)
+    debugger.io.mem.rsp.payload         <> core.debugBus.rsp.data
   }
 
   io.gpioA          <> axi.gpioACtrl.io.gpio
   io.gpioB          <> axi.gpioBCtrl.io.gpio
   io.timerExternal  <> axi.timerCtrl.io.external
-  io.jtag           <> axi.jtagCtrl.io.jtag
+  io.jtag           <> axi.jtagBridge.io.jtag
   io.uart           <> axi.uartCtrl.io.uart
   io.sdram          <> axi.sdramCtrl.io.sdram
   io.vga            <> axi.vgaCtrl.io.vga

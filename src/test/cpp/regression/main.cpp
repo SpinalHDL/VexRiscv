@@ -339,6 +339,10 @@ public:
 		top->timerInterrupt = 0;
 		top->externalInterrupt = 1;
 		#endif
+		#ifdef DEBUG_PLUGIN_EXTERNAL
+		top->timerInterrupt = 0;
+		top->externalInterrupt = 0;
+		#endif
 		dump(0);
 		top->reset = 0;
 		for(SimElement* simElement : simElements) simElement->postReset();
@@ -379,6 +383,7 @@ public:
 				top->timerInterrupt = mTime >= mTimeCmp ? 1 : 0;
 				//if(mTime == mTimeCmp) printf("SIM timer tick\n");
 				#endif
+
 				currentTime = i;
 
 
@@ -906,6 +911,10 @@ public:
 	DebugPlugin(Workspace* ws){
 		this->ws = ws;
 		this->top = ws->top;
+
+		#ifdef DEBUG_PLUGIN_EXTERNAL
+			ws->mTimeCmp = ~0;
+		#endif
 		top->debugReset = 0;
 
 
@@ -1003,13 +1012,13 @@ public:
 
 						if((address & ~ 0x4) == 0xF00F0000){
 							assert(size == 2);
-							timeSpacer = 50;
+							timeSpacer = 100;
 
 							taskValid = true;
 							task.wr = wr;
 							task.address = address;
 							task.data = data;
-						} else {
+						}/* else {
 							bool dummy;
 							//printf("wr=%d size=%d address=%x data=%x\n",wr,size,address,data);
 							ws->dBusAccess(address,wr,size,0xFFFFFFFF, &data, &dummy);
@@ -1017,7 +1026,7 @@ public:
 								//cout << hex << setw(8) << address << " -> " << hex << setw(8) << data << endl;
 								if(-1 == send(clientHandle,&data,4,0))  connectionReset();
 							}
-						}
+						}*/
 					}
 				} else {
 					int error = 0;
@@ -1575,8 +1584,8 @@ int main(int argc, char **argv, char **env) {
 				w.loadHex("../../resources/hex/debugPluginExternal.hex");
 				w.noInstructionReadCheck();
 				#if defined(TRACE) || defined(TRACE_ACCESS)
-					w.setCyclesPerSecond(5e3);
-					printf("Speed reduced 5Khz\n");
+					//w.setCyclesPerSecond(5e3);
+					//printf("Speed reduced 5Khz\n");
 				#endif
 				w.run(1e9);
 			}
