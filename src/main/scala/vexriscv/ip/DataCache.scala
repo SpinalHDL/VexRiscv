@@ -59,7 +59,7 @@ object Bypasser{
   }
 
 
-  //shot readValid path
+  //short readValid path
   def writeFirstMemWrap(readValid : Bool, readLastAddress : UInt, readLastData : Bits,writeValid : Bool, writeAddress : UInt, writeData : Bits,writeMask : Bits) : Bits = {
     val writeHit    = writeValid && writeAddress === readLastAddress
     val writeSample = readValid || writeHit
@@ -412,6 +412,8 @@ class DataCache(p : DataCacheConfig) extends Component{
   }
 
 
+  val cpuMemoryStageNeedReadData = Bool()
+
   val victim = new Area{
     val requestIn = Stream(cloneable(new Bundle{
       //      val way = UInt(log2Up(wayCount) bits)
@@ -438,7 +440,7 @@ class DataCache(p : DataCacheConfig) extends Component{
         dataReadCmd.payload := request.address(lineRange) @@ readLineCmdCounter(readLineCmdCounter.high - 1 downto 0)
         way.dataReadRspOneKeepAddress := True
       } otherwise {
-        when(!dataReadRestored) {
+        when(!dataReadRestored && cpuMemoryStageNeedReadData) {
           dataReadCmd.valid := True
           dataReadCmd.payload := way.dataReadRspOneAddress //Restore stage one readed value
         }
@@ -447,6 +449,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     }
 
     dataReadRestored clearWhen(request.ready)
+    io.cpu.memory.haltIt :=  cpuMemoryStageNeedReadData && request.valid && !dataReadRestored
 
     //Fill the buffer with line read responses
     val readLineRspCounter = Reg(UInt(log2Up(memTransactionPerLine + 1) bits)) init(0)
@@ -503,8 +506,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     io.cpu.memory.mmuBus.cmd.isValid := io.cpu.memory.isValid  && request.kind === MEMORY //TODO filter request kind
     io.cpu.memory.mmuBus.cmd.virtualAddress := request.address
     io.cpu.memory.mmuBus.cmd.bypassTranslation := request.way
-
-    io.cpu.memory.haltIt := io.cpu.memory.isValid && request.kind === MEMORY && !request.wr && victim.request.valid && !victim.dataReadRestored
+    cpuMemoryStageNeedReadData := io.cpu.memory.isValid && request.kind === MEMORY && !request.wr
   }
 
   val stageB = new Area {
@@ -567,7 +569,7 @@ class DataCache(p : DataCacheConfig) extends Component{
           when(delayedIsStuck && !mmuRsp.miss) {
             when(delayedWaysHitValid || (request.way && way.tagReadRspTwo.used)) {
               io.cpu.writeBack.haltIt.clearWhen(!(victim.requestIn.valid && !victim.requestIn.ready))
-              victim.requestIn.valid := request.clean && way.tagReadRspTwo.dirty
+              victim.requestIn.valid  := request.clean && way.tagReadRspTwo.dirty
               tagsWriteCmd.valid      := victim.requestIn.ready
             } otherwise{
               io.cpu.writeBack.haltIt := False

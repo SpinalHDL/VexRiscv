@@ -746,6 +746,9 @@ public:
 
 
 #ifdef DBUS_CACHED
+
+//#include "VVexRiscv_DataCache.h"
+
 class DBusCached : public SimElement{
 public:
 	uint32_t address;
@@ -766,6 +769,23 @@ public:
 	}
 
 	virtual void preCycle(){
+	    VL_IN8(io_cpu_execute_isValid,0,0);
+	    VL_IN8(io_cpu_execute_isStuck,0,0);
+	    VL_IN8(io_cpu_execute_args_kind,0,0);
+	    VL_IN8(io_cpu_execute_args_wr,0,0);
+	    VL_IN8(io_cpu_execute_args_size,1,0);
+	    VL_IN8(io_cpu_execute_args_forceUncachedAccess,0,0);
+	    VL_IN8(io_cpu_execute_args_clean,0,0);
+	    VL_IN8(io_cpu_execute_args_invalidate,0,0);
+	    VL_IN8(io_cpu_execute_args_way,0,0);
+
+//		if(top->VexRiscv->dataCache_1->io_cpu_execute_isValid && !top->VexRiscv->dataCache_1->io_cpu_execute_isStuck
+//				&& top->VexRiscv->dataCache_1->io_cpu_execute_args_wr){
+//			if(top->VexRiscv->dataCache_1->io_cpu_execute_args_address == 0x80025978)
+//				cout << "WR 0x80025978 = " << hex << setw(8) << top->VexRiscv->dataCache_1->io_cpu_execute_args_data << endl;
+//			if(top->VexRiscv->dataCache_1->io_cpu_execute_args_address == 0x8002596c)
+//				cout << "WR 0x8002596c = " << hex << setw(8) << top->VexRiscv->dataCache_1->io_cpu_execute_args_data << endl;
+//		}
 		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
 			if(pendingCount == 0){
 				pendingCount = top->dBus_cmd_payload_length+1;
@@ -1583,6 +1603,9 @@ int main(int argc, char **argv, char **env) {
 				Workspace w("debugPluginExternal");
 				w.loadHex("../../resources/hex/debugPluginExternal.hex");
 				w.noInstructionReadCheck();
+				//w.setIStall(false);
+				//w.setDStall(false);
+
 				#if defined(TRACE) || defined(TRACE_ACCESS)
 					//w.setCyclesPerSecond(5e3);
 					//printf("Speed reduced 5Khz\n");
@@ -1593,7 +1616,7 @@ int main(int argc, char **argv, char **env) {
 
 
 
-			TestA().run();
+			redo(REDO,TestA().run();)
 
 
 

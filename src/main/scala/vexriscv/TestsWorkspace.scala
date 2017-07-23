@@ -277,7 +277,7 @@ object TestsWorkspace {
       }*/
 //      toplevel.writeBack.input(config.PC).addAttribute(Verilator.public)
 //      toplevel.service(classOf[DecoderSimplePlugin]).bench(toplevel)
-
+     // toplevel.children.find(_.isInstanceOf[DataCache]).get.asInstanceOf[DataCache].io.cpu.execute.addAttribute(Verilator.public)
       toplevel
     }
   }
