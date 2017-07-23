@@ -24,7 +24,7 @@ This repository host an RISC-V implementation written in SpinalHDL. There is som
 - Optional MUL/DIV extension
 - Optional instruction and data caches
 - Optional MMU
-- Optional debug extension allowing GDB debugging via an openOCD JTAG connection
+- Optional debug extension allowing eclipse debugging via an GDB >> openOCD >> JTAG connection
 - Optional interrupts and exception handling with the Machine and the User mode from the riscv-privileged-v1.9.1 spec.
 - Two implementation of shift instructions, Single cycle / shiftNumber cycles
 - Each stage could have bypass or interlock hazard logic
@@ -40,7 +40,7 @@ The hardware description of this CPU is done by using an very software oriented 
 ## Area usage and maximal frequency 
 
 The following number where obtains by synthesis the CPU as toplevel without any specific synthesis option to save area or to get better maximal frequency (neutral).
-The used CPU corresponding configuration can be find in src/scala/VexRiscv/demo.
+The used CPU corresponding configuration can be find in src/scala/vexriscv/demo.
 
 ```
 VexRiscv smallest (RV32I, 0.47 DMIPS/Mhz, no datapath bypass, no interrupt) ->
@@ -110,8 +110,8 @@ sudo make install
 
 ## CPU generation
 You can find two example of CPU instantiation in :
-- src/main/scala/VexRiscv/GenFull.scala
-- src/main/scala/VexRiscv/GenSmallest.scala
+- src/main/scala/vexriscv/GenFull.scala
+- src/main/scala/vexriscv/GenSmallest.scala
 
 To generate the corresponding RTL as a VexRiscv.v file, run (it could take time the first time you run it):
 
@@ -119,10 +119,10 @@ NOTE :
 The VexRiscv could need the unreleased master-head of SpinalHDL. If it fail to compile, just get the SpinalHDL repository and do a "sbt publish-local" in it.
 
 ```sh
-sbt "run-main VexRiscv.demo.GenFull"
+sbt "run-main vexriscv.demo.GenFull"
 
 # or
-sbt "run-main VexRiscv.demo.GenSmallest"
+sbt "run-main vexriscv.demo.GenSmallest"
 ```
 
 ## Regression tests
@@ -144,7 +144,7 @@ Then you can use the https://github.com/SpinalHDL/openocd_riscv tool to create a
 
 ```sh
 #in the VexRiscv repository, to run the simulation on which one OpenOCD can connect itself =>
-sbt "run-main VexRiscv.demo.GenFull"
+sbt "run-main vexriscv.demo.GenFull"
 cd src/test/cpp/regression
 make run DEBUG_PLUGIN_EXTERNAL=yes
 
@@ -165,7 +165,7 @@ continue
 You can use the eclipse + zilin embedded CDT plugin to do it (http://opensource.zylin.com/embeddedcdt.html). Tested with Helios Service Release 2 and the corresponding zylin plugin.
 
 ## Briey SoC
-As a demonstrator, a SoC named Briey is implemented in src/main/scala/VexRiscv/demo/Briey.scala. This SoC is very similar to the Pinsec one  :
+As a demonstrator, a SoC named Briey is implemented in src/main/scala/vexriscv/demo/Briey.scala. This SoC is very similar to the Pinsec one  :
 
 <img src="http://cdn.rawgit.com/SpinalHDL/SpinalDoc/dd17971aa549ccb99168afd55aad274bbdff1e88/asset/picture/pinsec_hardware.svg"   align="middle" width="300">
 
@@ -173,7 +173,7 @@ As a demonstrator, a SoC named Briey is implemented in src/main/scala/VexRiscv/d
 To generate the Briey SoC Hardware :
 
 ```sh
-sbt "run-main VexRiscv.demo.Briey"
+sbt "run-main vexriscv.demo.Briey"
 ```
 
 To run the verilator simulation of the Briey SoC which can be then connected to OpenOCD/GDB, first get those dependencies :
@@ -240,9 +240,12 @@ echo -e "\\nRISC-V Toolchain installation completed!"
 
 ## CPU parametrization and instantiation example
 
-You can find many example of different config in the https://github.com/SpinalHDL/VexRiscv/tree/master/src/main/scala/VexRiscv/demo folder. There is one :
+You can find many example of different config in the https://github.com/SpinalHDL/VexRiscv/tree/master/src/main/scala/vexriscv/demo folder. There is one :
 
 ```scala
+import vexriscv._
+import vexriscv.plugin._
+
 //Instanciate one VexRiscv
 val cpu = new VexRiscv(
   //Provide a configuration instance
@@ -297,8 +300,8 @@ There is an example of an simple plugin which add an simple SIMD_ADD instruction
 
 ```scala
 import spinal.core._
-import VexRiscv.Plugin.Plugin
-import VexRiscv.{Stageable, DecoderService, VexRiscv}
+import vexriscv.plugin.Plugin
+import vexriscv.{Stageable, DecoderService, VexRiscv}
 
 //This plugin example will add a new instruction named SIMD_ADD which do the following :
 //
