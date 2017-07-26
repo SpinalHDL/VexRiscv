@@ -1635,6 +1635,7 @@ static void multiThreadedExecute(queue<std::function<void()>> &lambdas){
 	}
 	for(int id = 0;id < THREAD_COUNT;id++){
 		t[id]->join();
+		delete t[id];
 	}
 }
 
@@ -1722,9 +1723,11 @@ int main(int argc, char **argv, char **env) {
 			queue<std::function<void()>> tasks;
 
 			for(const string &name : freeRtosTests){
-				tasks.push([=]() { Workspace(name + "_rv32i").loadHex("../../resources/freertos/" + name + "_rv32i.hex")->bootAt(0x80000000u)->run(4e6*15);});
+				tasks.push([=]() { Workspace(name + "_rv32i_O0").loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
+				tasks.push([=]() { Workspace(name + "_rv32i_O3").loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
 				#if defined(MUL) && defined(DIV)
-				tasks.push([=]() { Workspace(name + "_rv32im").loadHex("../../resources/freertos/" + name + "_rv32im.hex")->bootAt(0x80000000u)->run(4e6*15);});
+				tasks.push([=]() { Workspace(name + "_rv32im_O0").loadHex("../../resources/freertos/" + name + "_rv32im_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
+				tasks.push([=]() { Workspace(name + "_rv32im_O3").loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
 				#endif
 			}
 
