@@ -58,7 +58,8 @@ object TestsWorkspace {
           ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = true,
-//            catchAccessFault = true
+//            catchAccessFault = true,
+//            earlyInjection = false
 //          ),
           new DBusCachedPlugin(
             config = new DataCacheConfig(

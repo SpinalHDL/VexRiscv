@@ -133,7 +133,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
 }
 
 
-class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Boolean) extends Plugin[VexRiscv]{
+class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Boolean, earlyInjection : Boolean = false) extends Plugin[VexRiscv]{
 
   var dBus  : DBusSimpleBus = null
 
@@ -161,7 +161,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
       SRC2_CTRL -> Src2CtrlEnum.IMI,
       REGFILE_WRITE_VALID -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
-      BYPASSABLE_MEMORY_STAGE  -> False
+      BYPASSABLE_MEMORY_STAGE  -> Bool(earlyInjection)
     )
 
     val storeActions = stdActions ++ List(
@@ -249,8 +249,9 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
     }
 
     //Reformat read responses, REGFILE_WRITE_DATA overriding
-    writeBack plug new Area {
-      import writeBack._
+    val injectionStage = if(earlyInjection) memory else writeBack
+    injectionStage plug new Area {
+      import injectionStage._
 
 
       val rspShifted = MEMORY_READ_DATA()
@@ -271,7 +272,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
         input(REGFILE_WRITE_DATA) := rspFormated
       }
 
-      assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
+      if(!earlyInjection)
+        assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
     }
   }
 }
