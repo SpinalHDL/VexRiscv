@@ -14,7 +14,7 @@
 #include <iostream>
 #include <fstream>
 #include <vector>
-
+#include <mutex>
 #include <iomanip>
 
 #include <time.h>
@@ -138,12 +138,8 @@ void loadHexImpl(string path,Memory* mem) {
 
 class success : public std::exception { };
 
-uint32_t testsCounter = 0, successCounter = 0;
 
-uint64_t currentTime = 22;
-double sc_time_stamp(){
-	return currentTime;
-}
+
 
 
 class SimElement{
@@ -160,15 +156,19 @@ public:
 
 class Workspace{
 public:
-	static uint32_t cycles;
+	static mutex staticMutex;
+	static uint32_t testsCounter, successCounter;
+	static uint64_t cycles;
+	uint64_t instanceCycles = 0;
 	vector<SimElement*> simElements;
 	Memory mem;
 	string name;
+	uint64_t currentTime = 22;
 	uint64_t mTimeCmp = 0;
 	uint64_t mTime = 0;
 	VVexRiscv* top;
 	bool resetDone = false;
-	int i;
+	uint64_t i;
 	double cyclesPerSecond = 10e6;
 	double allowedCycles = 0.0;
 	uint32_t bootPc = -1;
@@ -189,7 +189,9 @@ public:
 
 
 	Workspace(string name){
+		staticMutex.lock();
 		testsCounter++;
+		staticMutex.unlock();
 		this->name = name;
 		top = new VVexRiscv;
 		#ifdef TRACE_ACCESS
@@ -266,7 +268,14 @@ public:
 				logTraces << (char)mem[0xF00FFF00u];
 				break;
 			}
-			case 0xF00FFF20u: pass(); break;
+			#ifndef DEBUG_PLUGIN_EXTERNAL
+			case 0xF00FFF20u:
+				if(*data == 0)
+					pass();
+				else
+					fail();
+				break;
+			#endif
 			case 0xF00FFF48u: mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data;break;
 			case 0xF00FFF4Cu: mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32);  /*cout << "mTimeCmp <= " << mTimeCmp << endl; */break;
 			}
@@ -313,7 +322,7 @@ public:
 		if(i/2 >= TRACE_START) tfp->dump(i);
 		#endif
 	}
-	Workspace* run(uint32_t timeout = 5000){
+	Workspace* run(uint64_t timeout = 5000){
 //		cout << "Start " << name << endl;
 
 		currentTime = 4;
@@ -425,7 +434,7 @@ public:
 				top->clk = 1;
 				top->eval();
 
-				cycles += 1;
+				instanceCycles += 1;
 
 				for(SimElement* simElement : simElements) simElement->postCycle();
 
@@ -437,10 +446,16 @@ public:
 			cout << "timeout" << endl;
 			fail();
 		} catch (const success e) {
+			staticMutex.lock();
 			cout <<"SUCCESS " << name <<  endl;
 			successCounter++;
+			cycles += instanceCycles;
+			staticMutex.unlock();
 		} catch (const std::exception& e) {
+			staticMutex.lock();
 			cout << "FAIL " <<  name << endl;
+			cycles += instanceCycles;
+			staticMutex.unlock();
 		}
 
 
@@ -928,6 +943,7 @@ public:
 	bool taskValid = false;
 	DebugPluginTask task;
 
+
 	DebugPlugin(Workspace* ws){
 		this->ws = ws;
 		this->top = ws->top;
@@ -1007,23 +1023,25 @@ public:
 	}
 
 	virtual void postCycle(){
-		if(clientHandle == -1){
-			clientHandle = accept(serverSocket, (struct sockaddr *) &serverStorage, &addr_size);
-			if(clientHandle != -1)
-				printf("CONNECTED\n");
-		}
-
 		top->reset = top->debug_resetOut;
+		if(timeSpacer == 0){
+			if(clientHandle == -1){
+				clientHandle = accept(serverSocket, (struct sockaddr *) &serverStorage, &addr_size);
+				if(clientHandle != -1)
+					printf("CONNECTED\n");
+				timeSpacer = 1000;
+			}
 
-		if(clientHandle != -1 && taskValid == false){
-			if(timeSpacer == 0){
+
+			if(clientHandle != -1 && taskValid == false){
 				int requiredSize = 1 + 1 + 4 + 4;
 				int n;
+				timeSpacer = 20;
 				if(ioctl(clientHandle,FIONREAD,&n) != 0){
-			  		connectionReset();
+					connectionReset();
 				} else if(n >= requiredSize){
 					if(requiredSize != read(clientHandle,buffer,requiredSize)){
-			  			connectionReset();
+						connectionReset();
 					} else {
 						bool wr = buffer[0];
 						uint32_t size = buffer[1];
@@ -1038,27 +1056,19 @@ public:
 							task.wr = wr;
 							task.address = address;
 							task.data = data;
-						}/* else {
-							bool dummy;
-							//printf("wr=%d size=%d address=%x data=%x\n",wr,size,address,data);
-							ws->dBusAccess(address,wr,size,0xFFFFFFFF, &data, &dummy);
-							if(!wr){
-								//cout << hex << setw(8) << address << " -> " << hex << setw(8) << data << endl;
-								if(-1 == send(clientHandle,&data,4,0))  connectionReset();
-							}
-						}*/
+						}
 					}
 				} else {
 					int error = 0;
-                    socklen_t len = sizeof (error);
-                    int retval = getsockopt (clientHandle, SOL_SOCKET, SO_ERROR, &error, &len);
-                    if (retval != 0 || error != 0) {
-                    	connectionReset();
-                    }
+					socklen_t len = sizeof (error);
+					int retval = getsockopt (clientHandle, SOL_SOCKET, SO_ERROR, &error, &len);
+					if (retval != 0 || error != 0) {
+						connectionReset();
+					}
 				}
-			} else {
-				timeSpacer--;
 			}
+		} else {
+			timeSpacer--;
 		}
 	}
 
@@ -1202,8 +1212,9 @@ void Workspace::fillSimELements(){
 	#endif
 }
 
-
-uint32_t Workspace::cycles = 0;
+mutex Workspace::staticMutex;
+uint64_t Workspace::cycles = 0;
+uint32_t Workspace::testsCounter = 0, Workspace::successCounter = 0;
 
 #ifndef REF
 #define testA1ReagFileWriteRef {1,10},{2,20},{3,40},{4,60}
@@ -1572,21 +1583,61 @@ string riscvTestDiv[] = {
 	"rv32um-p-remu"
 };
 
+string freeRtosTests[] = {
+		"AltBlckQ", "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
+		"QueueSet", "recmutex", "semtest", "TaskNotify", "AltBlock", "AltQTest", "BlockQ", "crhook", "dynamic",
+		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
+		 //"flop", "sp_flop" // <- Simple test
+};
+
 
 struct timespec timer_start(){
     struct timespec start_time;
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
+    clock_gettime(CLOCK_REALTIME, &start_time); //CLOCK_PROCESS_CPUTIME_ID
     return start_time;
 }
 
 long timer_end(struct timespec start_time){
     struct timespec end_time;
-    clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
+    clock_gettime(CLOCK_REALTIME, &end_time);
     uint64_t diffInNanos = end_time.tv_sec*1e9 + end_time.tv_nsec -  start_time.tv_sec*1e9 - start_time.tv_nsec;
     return diffInNanos;
 }
 
 #define redo(count,that) for(uint32_t xxx = 0;xxx < count;xxx++) that
+#include <pthread.h>
+#include <queue>
+#include <functional>
+#include <thread>
+
+
+static void multiThreading(queue<std::function<void()>> *lambdas, std::mutex *mutex){
+	while(true){
+		mutex->lock();
+		if(lambdas->empty()){
+			mutex->unlock();
+			break;
+		}
+		std::function<void()> lambda = lambdas->front();
+		lambdas->pop();
+		mutex->unlock();
+
+		lambda();
+	}
+}
+
+
+static void multiThreadedExecute(queue<std::function<void()>> &lambdas){
+	std::mutex mutex;
+	std::thread * t[THREAD_COUNT];
+	for(int id = 0;id < THREAD_COUNT;id++){
+		t[id] = new thread(multiThreading,&lambdas,&mutex);
+	}
+	for(int id = 0;id < THREAD_COUNT;id++){
+		t[id]->join();
+	}
+}
+
 
 int main(int argc, char **argv, char **env) {
 	Verilated::randReset(2);
@@ -1596,28 +1647,27 @@ int main(int argc, char **argv, char **env) {
 	timespec startedAt = timer_start();
 
 	for(int idx = 0;idx < 1;idx++){
-		#ifndef  REF
 
-			#ifdef DEBUG_PLUGIN_EXTERNAL
-			{
-				Workspace w("debugPluginExternal");
-				w.loadHex("../../resources/hex/debugPluginExternal.hex");
-				w.noInstructionReadCheck();
-				//w.setIStall(false);
-				//w.setDStall(false);
+		#ifdef DEBUG_PLUGIN_EXTERNAL
+		{
+			Workspace w("debugPluginExternal");
+			w.loadHex("../../resources/hex/debugPluginExternal.hex");
+			w.noInstructionReadCheck();
+			//w.setIStall(false);
+			//w.setDStall(false);
 
-				#if defined(TRACE) || defined(TRACE_ACCESS)
-					//w.setCyclesPerSecond(5e3);
-					//printf("Speed reduced 5Khz\n");
-				#endif
-				w.run(1e9);
-			}
+			#if defined(TRACE) || defined(TRACE_ACCESS)
+				//w.setCyclesPerSecond(5e3);
+				//printf("Speed reduced 5Khz\n");
 			#endif
+			w.run(0xFFFFFFFFFFFF);
+		}
+		#endif
 
 
+		#ifdef ISA_TEST
 
 			redo(REDO,TestA().run();)
-
 
 
 
@@ -1650,36 +1700,45 @@ int main(int argc, char **argv, char **env) {
 					13, 0xC4000000,0x33333333, 6,7};
 				redo(REDO,TestX28("mmu",mmuRef, sizeof(mmuRef)/4).noInstructionReadCheck()->run(4e3);)
 			#endif
-		#endif
 
-		#ifdef DEBUG_PLUGIN
-			redo(REDO,DebugPluginTest().run(1e6););
+			#ifdef DEBUG_PLUGIN
+				redo(REDO,DebugPluginTest().run(1e6););
+			#endif
 		#endif
-
 		#ifdef DHRYSTONE
 			Dhrystone("dhrystoneO3_Stall","dhrystoneO3",true,true).run(1.1e6);
-			#if defined(MUL) || defined(DIV)
+			#if defined(MUL) && defined(DIV)
 				Dhrystone("dhrystoneO3M_Stall","dhrystoneO3M",true,true).run(1.5e6);
 			#endif
 			Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.5e6);
-			#if defined(MUL) || defined(DIV)
+			#if defined(MUL) && defined(DIV)
 				Dhrystone("dhrystoneO3M","dhrystoneO3M",false,false).run(1.2e6);
 			#endif
 		#endif
 
 
-		#ifdef FREE_RTOS
-			redo(1,Workspace("freeRTOS_demo").loadHex("../../resources/hex/freeRTOS_demo.hex")->bootAt(0x80000000u)->run(100e6);)
+		#ifdef FREERTOS
+			//redo(1,Workspace("freeRTOS_demo").loadHex("../../resources/hex/freeRTOS_demo.hex")->bootAt(0x80000000u)->run(100e6);)
+			queue<std::function<void()>> tasks;
+
+			for(const string &name : freeRtosTests){
+				tasks.push([=]() { Workspace(name + "_rv32i").loadHex("../../resources/freertos/" + name + "_rv32i.hex")->bootAt(0x80000000u)->run(4e6*15);});
+				#if defined(MUL) && defined(DIV)
+				tasks.push([=]() { Workspace(name + "_rv32im").loadHex("../../resources/freertos/" + name + "_rv32im.hex")->bootAt(0x80000000u)->run(4e6*15);});
+				#endif
+			}
+
+			multiThreadedExecute(tasks);
 		#endif
 	}
 
 	uint64_t duration = timer_end(startedAt);
 	cout << endl << "****************************************************************" << endl;
-	cout << "Had simulate " << Workspace::cycles << " clock cycles in " << duration*1e-9 << " s (" << Workspace::cycles / (duration*1e-9) << " Khz)" << endl;
-	if(successCounter == testsCounter)
-		cout << "SUCCESS " << successCounter << "/" << testsCounter << endl;
+	cout << "Had simulate " << Workspace::cycles << " clock cycles in " << duration*1e-9 << " s (" << Workspace::cycles / (duration*1e-6) << " Khz)" << endl;
+	if(Workspace::successCounter == Workspace::testsCounter)
+		cout << "SUCCESS " << Workspace::successCounter << "/" << Workspace::testsCounter << endl;
 	else
-		cout<< "FAILURE " << testsCounter - successCounter << "/"  << testsCounter << endl;
+		cout<< "FAILURE " << Workspace::testsCounter - Workspace::successCounter << "/"  << Workspace::testsCounter << endl;
 	cout << "****************************************************************" << endl << endl;
 
 

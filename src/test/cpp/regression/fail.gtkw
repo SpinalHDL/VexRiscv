@@ -1,36 +1,56 @@
 [*]
 [*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
-[*] Mon Jul 17 12:56:44 2017
+[*] Tue Jul 25 21:44:42 2017
 [*]
-[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/regression/dhrystoneO3M.vcd"
-[dumpfile_mtime] "Mon Jul 17 09:34:42 2017"
-[dumpfile_size] 711052321
+[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/regression/debugPluginExternal.vcd"
+[dumpfile_mtime] "Tue Jul 25 21:44:34 2017"
+[dumpfile_size] 961355289
 [savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/regression/fail.gtkw"
-[timestart] 100656
+[timestart] 3644000
 [size] 1776 953
 [pos] -775 -353
-*-9.000000 101506 62802 257426 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+*-19.000000 4619595 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.VexRiscv.
-[sst_width] 242
-[signals_width] 409
+[treeopen] TOP.VexRiscv.mixedDivider_1.
+[sst_width] 201
+[signals_width] 418
 [sst_expanded] 1
 [sst_vpaned_height] 279
-@22
-TOP.VexRiscv.CsrPlugin_mcycle[63:0]
-TOP.VexRiscv.dBus_cmd_payload_address[31:0]
 @28
+TOP.VexRiscv.DebugPlugin_haltIt
+@22
+TOP.VexRiscv.debug_bus_cmd_payload_address[7:0]
+TOP.VexRiscv.debug_bus_cmd_payload_data[31:0]
+@28
+TOP.VexRiscv.debug_bus_cmd_payload_wr
+TOP.VexRiscv.debug_bus_cmd_ready
+@29
+TOP.VexRiscv.debug_bus_cmd_valid
+@22
+TOP.VexRiscv.debug_bus_rsp_data[31:0]
+[color] 2
+TOP.VexRiscv.dBus_cmd_payload_address[31:0]
+[color] 2
+TOP.VexRiscv.dBus_cmd_payload_data[31:0]
+@28
+[color] 2
+TOP.VexRiscv.dBus_cmd_payload_size[1:0]
+[color] 2
 TOP.VexRiscv.dBus_cmd_payload_wr
+[color] 2
 TOP.VexRiscv.dBus_cmd_ready
+[color] 2
 TOP.VexRiscv.dBus_cmd_valid
 @22
-TOP.VexRiscv.CsrPlugin_minstret[63:0]
+[color] 2
+TOP.VexRiscv.dBus_rsp_data[31:0]
 @28
-TOP.VexRiscv.writeBack_IS_MUL
-TOP.VexRiscv.writeBack_arbitration_isFiring
-TOP.VexRiscv.memory_IS_DIV
-TOP.VexRiscv.memory_arbitration_isFiring
-@29
-TOP.VexRiscv.decode_arbitration_haltIt
+[color] 2
+TOP.VexRiscv.dBus_rsp_error
+[color] 2
+TOP.VexRiscv.dBus_rsp_ready
+@22
+TOP.VexRiscv.DebugPlugin_busReadDataReg[31:0]
 [pattern_trace] 1
 [pattern_trace] 0
