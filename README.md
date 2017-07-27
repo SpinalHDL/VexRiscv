@@ -136,6 +136,14 @@ make clean run
 make clean run IBUS=SIMPLE DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no
 ```
 
+Those self tested tests include :
+- ISA tests from https://github.com/riscv/riscv-tests/tree/master/isa
+- Dhrystone benchmark
+- 24 tests FreeRTOS tests
+- Some handwritten tests to check the CSR, debug module and MMU plugins
+
+You can enable FreeRTOS tests by adding 'FREERTOS=yes' in the command line, will take time. Also, it use THREAD_COUNT host CPU threads to run multiple regression in parallel.
+
 ## Interactive debug of the simulated CPU via GDB OpenOCD and Verilator
 It's as described to run tests, but you just have to add DEBUG_PLUGIN_EXTERNAL=yes in the make arguments.
 Work for the GenFull, but not for the GenSmallest as this configuration has no debug module.
