@@ -46,6 +46,7 @@ object DBusSimpleBus{
     maximumPendingReadTransactions = 1
   )
 }
+
 case class DBusSimpleBus() extends Bundle with IMasterSlave{
   val cmd = Stream(DBusSimpleCmd())
   val rsp = DBusSimpleRsp()
