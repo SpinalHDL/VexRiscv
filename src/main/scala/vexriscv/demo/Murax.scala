@@ -2,11 +2,13 @@ package vexriscv.demo
 
 import spinal.core._
 import spinal.lib._
-import spinal.lib.bus.amba3.apb.{Apb3Decoder, Apb3Gpio, Apb3}
+import spinal.lib.bus.amba3.apb.{Apb3SlaveFactory, Apb3Decoder, Apb3Gpio, Apb3}
 import spinal.lib.bus.misc.SizeMapping
 import spinal.lib.com.jtag.Jtag
 import spinal.lib.com.uart.Uart
 import spinal.lib.io.TriStateArray
+import spinal.lib.misc.{InterruptCtrl, Timer, Prescaler}
+import spinal.lib.soc.pinsec.{PinsecTimerCtrlExternal, PinsecTimerCtrl}
 import vexriscv.plugin._
 import vexriscv.{plugin, VexRiscvConfig, VexRiscv}
 
@@ -14,17 +16,25 @@ import vexriscv.{plugin, VexRiscvConfig, VexRiscv}
  * Created by PIC32F_USER on 28/07/2017.
  *
  * Murax is a very light SoC which could work without any external component.
- * Should fit in ICE40 devices
+ * Tested on ICE40-hx8k device, 35 Mhz, 2150 LC
+ * - 8 kB of on-chip ram
+ * - JTAG debugger (eclipse/GDB/openocd ready)
+ * - Interrupt support
+ * - APB bus for peripherals
+ * - 32 GPIO pin
+ * - one 16 bits prescaler, two 16 bits timers
  */
 
 
 case class MuraxConfig(coreFrequency : HertzNumber,
-                       onChipRamSize : BigInt)
+                       onChipRamSize : BigInt,
+                       pipelineDBus : Boolean)
 
 object MuraxConfig{
   def default =  MuraxConfig(
       coreFrequency = 12 MHz,
-      onChipRamSize  = 4 kB
+      onChipRamSize  = 8 kB,
+      pipelineDBus  = false
   )
 }
 
@@ -78,7 +88,7 @@ case class Murax(config : MuraxConfig) extends Component{
     val mainClkResetUnbuffered  = False
 
     //Implement an counter to keep the reset axiResetOrder high 64 cycles
-    // Also this counter will automaticly do a reset when the system boot.
+    // Also this counter will automatically do a reset when the system boot.
     val systemClkResetCounter = Reg(UInt(6 bits)) init(0)
     when(systemClkResetCounter =/= U(systemClkResetCounter.range -> true)){
       systemClkResetCounter := systemClkResetCounter + 1
@@ -107,12 +117,14 @@ case class Murax(config : MuraxConfig) extends Component{
   )
   
   val system = new ClockingArea(systemClockDomain) {
+
+    //Instanciate the CPU
     val cpu = new VexRiscv(
       config = VexRiscvConfig(
         plugins = List(
           new PcManagerSimplePlugin(
             resetVector = 0x00000000l,
-            fastPcCalculation = true
+            fastPcCalculation = false
           ),
           new IBusSimplePlugin(
             interfaceKeepData = false,
@@ -122,7 +134,7 @@ case class Murax(config : MuraxConfig) extends Component{
             catchAddressMisaligned = false,
             catchAccessFault = false
           ),
-         // new CsrPlugin(CsrPluginConfig.smallest),
+          new CsrPlugin(CsrPluginConfig.smallest),
           new DecoderSimplePlugin(
             catchIllegalInstruction = false
           ),
@@ -133,7 +145,7 @@ case class Murax(config : MuraxConfig) extends Component{
           new IntAluPlugin,
           new SrcPlugin(
             separatedAddSub = false,
-            executeInsertion = true
+            executeInsertion = false
           ),
           new LightShifterPlugin,
           new DebugPlugin(debugClockDomain),
@@ -156,16 +168,26 @@ case class Murax(config : MuraxConfig) extends Component{
       )
     )
 
+    //Checkout plugins used to instanciate the CPU to connect them to the SoC
+    val timerInterrupt = Bool
     var iBus : IBusSimpleBus = null
     var dBus : DBusSimpleBus = null
     var debugBus : DebugExtensionBus = null
     for(plugin <- cpu.plugins) plugin match{
       case plugin : IBusSimplePlugin => iBus = plugin.iBus
-      case plugin : DBusSimplePlugin => dBus = plugin.dBus
-   /*   case plugin : CsrPlugin        => {
-        plugin.externalInterrupt := BufferCC(io.coreInterrupt)
-        plugin.timerInterrupt := timerCtrl.io.interrupt
-      }*/
+      case plugin : DBusSimplePlugin => {
+        if(!pipelineDBus)
+          dBus = plugin.dBus
+        else {
+          dBus = cloneOf(plugin.dBus)
+          dBus.cmd <-< plugin.dBus.cmd
+          dBus.rsp <> plugin.dBus.rsp
+        }
+      }
+      case plugin : CsrPlugin        => {
+        plugin.externalInterrupt := False
+        plugin.timerInterrupt := timerInterrupt
+      }
       case plugin : DebugPlugin         => plugin.debugClockDomain{
         resetCtrl.systemReset setWhen(RegNext(plugin.io.resetOut))
         io.jtag <> plugin.io.bus.fromJtag()
@@ -176,8 +198,9 @@ case class Murax(config : MuraxConfig) extends Component{
 
     val mainBus = SimpleBus()
 
-    //Priority to dBus, cmd transactions can change on the fly !
-    val cpuToMainBusBridge = new Area{
+    //Arbiter of the cpu dBus/iBus to drive the mainBus
+    //Priority to dBus, !! cmd transactions can change on the fly !!
+    val mainBusArbiter = new Area{
       mainBus.cmd.valid   := iBus.cmd.valid || dBus.cmd.valid
       mainBus.cmd.wr      := dBus.cmd.valid && dBus.cmd.wr
       mainBus.cmd.address := dBus.cmd.valid ? dBus.cmd.address | iBus.cmd.pc
@@ -201,13 +224,9 @@ case class Murax(config : MuraxConfig) extends Component{
       dBus.rsp.ready := mainBus.rsp.valid && rspTarget
       dBus.rsp.data  := mainBus.rsp.data
       dBus.rsp.error := False
-
-      //Default states
-     /* mainBus.cmd.ready := False
-      mainBus.rsp.valid := False
-      mainBus.rsp.payload.assignDontCare()*/
     }
 
+    //Create an SimpleBus mapped RAM
     val ram = new Area{
       val bus = SimpleBus()
       val ram = Mem(Bits(32 bits), onChipRamSize / 4)
@@ -224,13 +243,14 @@ case class Murax(config : MuraxConfig) extends Component{
 
 
 
+    //Bridge simpleBus to apb
     val apbBridge = new Area{
-      val bus = SimpleBus()
+      val simpleBus = SimpleBus()
       val apb = Apb3(
         addressWidth = 20,
         dataWidth    = 32
       )
-      val cmdStage = bus.cmd.halfPipe()
+      val cmdStage = simpleBus.cmd.halfPipe()
       val state = RegInit(False)
       cmdStage.ready := False
 
@@ -240,24 +260,25 @@ case class Murax(config : MuraxConfig) extends Component{
       apb.PADDR   := cmdStage.address.resized
       apb.PWDATA  := cmdStage.data
 
-      bus.rsp.valid := False
-      bus.rsp.data  := apb.PRDATA
+      simpleBus.rsp.valid := False
+      simpleBus.rsp.data  := apb.PRDATA
       when(!state){
         state := cmdStage.valid
       } otherwise{
         when(apb.PREADY){
           state := False
-          bus.rsp.valid := !cmdStage.wr
+          simpleBus.rsp.valid := !cmdStage.wr
           cmdStage.ready := True
         }
       }
     }
 
-    val interconnect = new Area {
+    //Connect the mainBus to all slaves (ram, apbBridge)
+    val mainBusDecoder = new Area {
       def masterBus = mainBus
       val specification = List[(SimpleBus,SizeMapping)](
         ram.bus       -> (0x00000000l, onChipRamSize kB),
-        apbBridge.bus -> (0xF0000000l, 1 MB)
+        apbBridge.simpleBus -> (0xF0000000l, 1 MB)
       )
       
       val slaveBuses = specification.map(_._1)
@@ -287,14 +308,44 @@ case class Murax(config : MuraxConfig) extends Component{
     )
     io.gpioA <> gpioACtrl.io.gpio
 
+    val timer = new Area{
+      val apb = Apb3(
+        addressWidth = 8,
+        dataWidth = 32
+      )
+
+      val prescaler = Prescaler(16)
+      val timerA,timerB = Timer(16)
+
+      val busCtrl = Apb3SlaveFactory(apb)
+      val prescalerBridge = prescaler.driveFrom(busCtrl,0x00)
+
+      val timerABridge = timerA.driveFrom(busCtrl,0x40)(
+        ticks  = List(True, prescaler.io.overflow),
+        clears = List(timerA.io.full)
+      )
+
+      val timerBBridge = timerB.driveFrom(busCtrl,0x50)(
+        ticks  = List(True, prescaler.io.overflow),
+        clears = List(timerB.io.full)
+      )
+
+      val interruptCtrl = InterruptCtrl(2)
+      val interruptCtrlBridge = interruptCtrl.driveFrom(busCtrl,0x10)
+      interruptCtrl.io.inputs(0) := timerA.io.full
+      interruptCtrl.io.inputs(1) := timerB.io.full
+      timerInterrupt := interruptCtrl.io.pendings.orR
+    }
+
+
+
     val apbDecoder = Apb3Decoder(
       master = apbBridge.apb,
       slaves = List(
-        gpioACtrl.io.apb -> (0x00000, 4 kB)
+        gpioACtrl.io.apb -> (0x00000, 4 kB),
+        timer.apb        -> (0x20000, 4 kB)
       )
     )
-
-
   }
 }
 
