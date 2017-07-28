@@ -1291,17 +1291,22 @@ public:
 	}
 
 	virtual void checks(){
-		if(/*top->VexRiscv->writeBack_arbitration_isValid == 1 && */top->VexRiscv->writeBack_INSTRUCTION == 0x00000073){
-			uint32_t code = top->VexRiscv->RegFilePlugin_regFile[28];
-			if((code & 1) == 0){
-				cout << "Wrong error code"<< endl;
-				fail();
-			}
-			if(code == 1){
-				pass();
-			}else{
-				cout << "Error code " << code/2 << endl;
-				fail();
+		if(top->VexRiscv->writeBack_INSTRUCTION == 0x00000073){
+			uint32_t instruction;
+			bool error;
+			iBusAccess(top->VexRiscv->writeBack_PC, &instruction, &error);
+			if(instruction == 0x00000073){
+				uint32_t code = top->VexRiscv->RegFilePlugin_regFile[28];
+				if((code & 1) == 0){
+					cout << "Wrong error code"<< endl;
+					fail();
+				}
+				if(code == 1){
+					pass();
+				}else{
+					cout << "Error code " << code/2 << endl;
+					fail();
+				}
 			}
 		}
 	}

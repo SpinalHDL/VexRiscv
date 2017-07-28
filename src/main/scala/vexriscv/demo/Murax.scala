@@ -2,6 +2,8 @@ package vexriscv.demo
 
 import spinal.core._
 import spinal.lib._
+import spinal.lib.bus.amba3.apb.{Apb3Decoder, Apb3Gpio, Apb3}
+import spinal.lib.bus.misc.SizeMapping
 import spinal.lib.com.jtag.Jtag
 import spinal.lib.com.uart.Uart
 import spinal.lib.io.TriStateArray
@@ -60,7 +62,7 @@ case class Murax(config : MuraxConfig) extends Component{
     val jtag = slave(Jtag())
 
     //Peripherals IO
-   // val gpioA = master(TriStateArray(32 bits))
+    val gpioA = master(TriStateArray(32 bits))
    // val uart = master(Uart())
   }
 
@@ -164,7 +166,7 @@ case class Murax(config : MuraxConfig) extends Component{
         plugin.externalInterrupt := BufferCC(io.coreInterrupt)
         plugin.timerInterrupt := timerCtrl.io.interrupt
       }*/
-      case plugin : DebugPlugin      => {
+      case plugin : DebugPlugin         => plugin.debugClockDomain{
         resetCtrl.systemReset setWhen(RegNext(plugin.io.resetOut))
         io.jtag <> plugin.io.bus.fromJtag()
       }
@@ -192,11 +194,11 @@ case class Murax(config : MuraxConfig) extends Component{
       when(mainBus.cmd.fire){
         rspTarget := dBus.cmd.valid
       }
-      iBus.rsp.ready := mainBus.rsp.valid && rspTarget
+      iBus.rsp.ready := mainBus.rsp.valid && !rspTarget
       iBus.rsp.inst  := mainBus.rsp.data
       iBus.rsp.error := False
 
-      dBus.rsp.ready := mainBus.rsp.valid && !rspTarget
+      dBus.rsp.ready := mainBus.rsp.valid && rspTarget
       dBus.rsp.data  := mainBus.rsp.data
       dBus.rsp.error := False
 
@@ -207,11 +209,11 @@ case class Murax(config : MuraxConfig) extends Component{
     }
 
     val ram = new Area{
-      def bus = mainBus//SimpleBus()
-      val ram = Mem(Bits(32 bits), (onChipRamSize / 4).toInt)
+      val bus = SimpleBus()
+      val ram = Mem(Bits(32 bits), onChipRamSize / 4)
       bus.rsp.valid := RegNext(bus.cmd.fire && !bus.cmd.wr) init(False)
       bus.rsp.data := ram.readWriteSync(
-        address = bus.cmd.address.resized,
+        address = (bus.cmd.address >> 2).resized,
         data  = bus.cmd.data,
         enable  = bus.cmd.valid,
         write  = bus.cmd.wr,
@@ -221,12 +223,76 @@ case class Murax(config : MuraxConfig) extends Component{
     }
 
 
-   /* val interconnect = new Area {
-      ramPort.enable := iBus.cmd.valid || dBus.cmd.valid
-      ramPort.
-    }
-*/
 
+    val apbBridge = new Area{
+      val bus = SimpleBus()
+      val apb = Apb3(
+        addressWidth = 20,
+        dataWidth    = 32
+      )
+      val cmdStage = bus.cmd.halfPipe()
+      val state = RegInit(False)
+      cmdStage.ready := False
+
+      apb.PSEL(0) := cmdStage.valid
+      apb.PENABLE := state
+      apb.PWRITE  := cmdStage.wr
+      apb.PADDR   := cmdStage.address.resized
+      apb.PWDATA  := cmdStage.data
+
+      bus.rsp.valid := False
+      bus.rsp.data  := apb.PRDATA
+      when(!state){
+        state := cmdStage.valid
+      } otherwise{
+        when(apb.PREADY){
+          state := False
+          bus.rsp.valid := !cmdStage.wr
+          cmdStage.ready := True
+        }
+      }
+    }
+
+    val interconnect = new Area {
+      def masterBus = mainBus
+      val specification = List[(SimpleBus,SizeMapping)](
+        ram.bus       -> (0x00000000l, onChipRamSize kB),
+        apbBridge.bus -> (0xF0000000l, 1 MB)
+      )
+      
+      val slaveBuses = specification.map(_._1)
+      val memorySpaces = specification.map(_._2)
+
+      val hits = for((slaveBus, memorySpace) <- specification) yield {
+        val hit = memorySpace.hit(masterBus.cmd.address)
+        slaveBus.cmd.valid   := masterBus.cmd.valid && hit
+        slaveBus.cmd.payload := masterBus.cmd.payload
+        hit
+      }
+      masterBus.cmd.ready := (hits,slaveBuses).zipped.map(_ && _.cmd.ready).orR
+
+      val rspPending = RegInit(False) clearWhen(masterBus.rsp.valid) setWhen(masterBus.cmd.fire && !masterBus.cmd.wr)
+      val rspSourceId = RegNextWhen(OHToUInt(hits), masterBus.cmd.fire)
+      masterBus.rsp.valid   := slaveBuses.map(_.rsp.valid).orR
+      masterBus.rsp.payload := slaveBuses.map(_.rsp.payload).read(rspSourceId)
+
+      when(rspPending && !masterBus.rsp.valid) { //Only one pending read request is allowed
+        masterBus.cmd.ready := False
+        slaveBuses.foreach(_.cmd.valid := False)
+      }
+    }
+
+    val gpioACtrl = Apb3Gpio(
+      gpioWidth = 32
+    )
+    io.gpioA <> gpioACtrl.io.gpio
+
+    val apbDecoder = Apb3Decoder(
+      master = apbBridge.apb,
+      slaves = List(
+        gpioACtrl.io.apb -> (0x00000, 4 kB)
+      )
+    )
 
 
   }
