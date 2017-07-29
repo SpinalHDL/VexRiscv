@@ -8,6 +8,7 @@
 - [Interactive debug of the simulated CPU via GDB OpenOCD and Verilator](#interactive-debug-of-the-simulated-cpu-via-gdb-openocd-and-verilator)
 - [Using eclipse to run the software and debug it](#using-eclipse-to-run-the-software-and-debug-it)
 - [Briey SoC](#briey-soc)
+- [Murax SoC](#murax-soc)
 - [Build the RISC-V GCC](#build-the-risc-v-gcc)
 - [CPU parametrization and instantiation example](#cpu-parametrization-and-instantiation-example)
 - [Add a custom instruction to the CPU via the plugin system](#add-a-custom-instruction-to-the-cpu-via-the-plugin-system)
@@ -39,7 +40,9 @@ The hardware description of this CPU is done by using an very software oriented 
 
 ## Area usage and maximal frequency 
 
-The following number where obtains by synthesis the CPU as toplevel without any specific synthesis option to save area or to get better maximal frequency (neutral).
+The following number where obtains by synthesis the CPU as toplevel without any specific synthesis option to save area or to get better maximal frequency (neutral).<br>
+The clock constraint is set to a unattainable value, which tends to increase the design area.<br>
+
 The used CPU corresponding configuration can be find in src/scala/vexriscv/demo.
 
 ```
@@ -209,10 +212,56 @@ You can find some FPGA project which instantiate the Briey SoC there (DE1-SoC, D
 There is some measurements of Briey SoC timings and area : 
 
 ```
-  Artix 7    -> 230 Mhz 3551 LUT 3612 FF 
-  Cyclone V  -> 126 Mhz 2,608 ALMs
-  Cyclone IV -> 117 Mhz 5,196 LUT 3,784 FF 
-  Cyclone II -> 102 Mhz 5,321 LUT 3,787 FF 
+  Artix 7    -> 256 Mhz 3302 LUT 3524 FF
+  Cyclone V  -> 126 Mhz 2,295 ALMs
+  Cyclone IV -> 121 Mhz 4,781 LUT 3,713 FF
+  Cyclone II -> 104 Mhz 4,902 LUT 3,718 FF
+
+```
+
+## Murax SoC
+
+Murax is a very light SoC (fit in ICE40 FPGA) which could work without any external component.
+
+- ICE40-hx8k + icestorm =>  53 Mhz, 2142 LC
+- 0.37 DMIPS/Mhz
+- 8 kB of on-chip ram
+- JTAG debugger (eclipse/GDB/openocd ready)
+- Interrupt support
+- APB bus for peripherals
+- 32 GPIO pin
+- one 16 bits prescaler, two 16 bits timers
+
+You can find its implementation there : src/main/scala/vexriscv/demo/Murax.scala
+
+
+To generate the Murax SoC Hardware :
+
+```sh
+sbt "run-main vexriscv.demo.Murax"
+```
+
+Then go in src/test/cpp/murax and run the simulation with :
+
+```sh
+make clean run
+```
+
+To connect OpenOCD (https://github.com/SpinalHDL/openocd_riscv) to the simulation :
+
+```sh
+src/openocd -f tcl/interface/jtag_tcp.cfg -c "set MURAX_CPU0_YAML /home/spinalvm/Spinal/VexRiscv/cpu0.yaml" -f tcl/target/murax.cfg
+```
+
+There is some measurements of Murax SoC timings and area : 
+
+```
+Murax ->
+  Artix 7    -> 307 Mhz 884 LUT 1195 FF
+  Cyclone V  -> 149 Mhz 655 ALMs
+  Cyclone IV -> 148 Mhz 1255 LUT 1171 FF
+  Cyclone II -> 121 Mhz 1259 LUT 1170 FF
+  ICE40-HX   ->  53 Mhz 2142 LC (icestorm)
 ```
 
 ## Build the RISC-V GCC
