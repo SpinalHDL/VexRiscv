@@ -16,7 +16,7 @@ import vexriscv.{plugin, VexRiscvConfig, VexRiscv}
  * Created by PIC32F_USER on 28/07/2017.
  *
  * Murax is a very light SoC which could work without any external component.
- * Tested on ICE40-hx8k device, 35 Mhz, 2150 LC
+ * Tested on ICE40-hx8k device, 60 Mhz, 2150 LC
  * - 8 kB of on-chip ram
  * - JTAG debugger (eclipse/GDB/openocd ready)
  * - Interrupt support
