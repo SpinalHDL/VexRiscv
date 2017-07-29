@@ -19,8 +19,8 @@ public:
 		timeProcesses.push_back(jtag);
 
 		#ifdef TRACE
-		speedFactor = 10e-3;
-		cout << "Simulation caped to " << speedFactor << " of real time"<< endl;
+		//speedFactor = 10e-3;
+		//cout << "Simulation caped to " << speedFactor << " of real time"<< endl;
 		#endif
 	}
 };

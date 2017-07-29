@@ -16,7 +16,8 @@ import vexriscv.{plugin, VexRiscvConfig, VexRiscv}
  * Created by PIC32F_USER on 28/07/2017.
  *
  * Murax is a very light SoC which could work without any external component.
- * Tested on ICE40-hx8k device, 60 Mhz, 2150 LC
+ * - ICE40-hx8k + icestorm =>  53 Mhz, 2142 LC
+ * - 0.37 DMIPS/Mhz
  * - 8 kB of on-chip ram
  * - JTAG debugger (eclipse/GDB/openocd ready)
  * - Interrupt support
@@ -36,11 +37,11 @@ case class MuraxConfig(coreFrequency : HertzNumber,
 
 object MuraxConfig{
   def default =  MuraxConfig(
-      coreFrequency = 12 MHz,
-      onChipRamSize  = 8 kB,
-      pipelineDBus  = false,
-      pipelineMainBus  = true,
-      pipelineApbBridge = false
+      coreFrequency     = 12 MHz,
+      onChipRamSize     = 8 kB,
+      pipelineDBus      = true,
+      pipelineMainBus   = false,
+      pipelineApbBridge = true
   )
 }
 
@@ -130,7 +131,7 @@ case class Murax(config : MuraxConfig) extends Component{
         plugins = List(
           new PcManagerSimplePlugin(
             resetVector = 0x00000000l,
-            fastPcCalculation = false
+            relaxedPcCalculation = true
           ),
           new IBusSimplePlugin(
             interfaceKeepData = false,
@@ -138,7 +139,8 @@ case class Murax(config : MuraxConfig) extends Component{
           ),
           new DBusSimplePlugin(
             catchAddressMisaligned = false,
-            catchAccessFault = false
+            catchAccessFault = false,
+            earlyInjection = false
           ),
           new CsrPlugin(CsrPluginConfig.smallest),
           new DecoderSimplePlugin(
@@ -186,7 +188,7 @@ case class Murax(config : MuraxConfig) extends Component{
           dBus = plugin.dBus
         else {
           dBus = cloneOf(plugin.dBus)
-          dBus.cmd <-< plugin.dBus.cmd
+          dBus.cmd << plugin.dBus.cmd.halfPipe()
           dBus.rsp <> plugin.dBus.rsp
         }
       }

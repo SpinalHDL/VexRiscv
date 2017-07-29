@@ -14,7 +14,7 @@ object GenFullNoMmuNoCache extends App{
       plugins = List(
         new PcManagerSimplePlugin(
           resetVector = 0x00000000l,
-          fastPcCalculation = false
+          relaxedPcCalculation = false
         ),
         new IBusSimplePlugin(
           interfaceKeepData = false,

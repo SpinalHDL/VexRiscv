@@ -262,7 +262,7 @@ val cpu = new VexRiscv(
     plugins = List(
       new PcManagerSimplePlugin(
         resetVector = 0x00000000l,
-        fastPcCalculation = true
+        relaxedPcCalculation = true
       ),
       new IBusSimplePlugin(
         interfaceKeepData = false,

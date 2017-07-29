@@ -115,7 +115,7 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) 
       val pendingCmd = RegInit(False) clearWhen (iBus.rsp.ready) setWhen (iBus.cmd.fire)
 
       //Emit iBus.cmd request
-      iBus.cmd.valid := prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers && !(pendingCmd && !iBus.rsp.ready) //prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
+      iBus.cmd.valid := prefetch.arbitration.isValid && !prefetch.arbitration.removeIt && !prefetch.arbitration.isStuckByOthers && !(pendingCmd && !iBus.rsp.ready) //prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
       iBus.cmd.pc := prefetch.output(PC)
       prefetch.arbitration.haltIt setWhen (!iBus.cmd.ready || (pendingCmd && !iBus.rsp.ready))
     }
