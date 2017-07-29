@@ -187,7 +187,7 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
       }
 
       when(haltIt) {
-        prefetch.arbitration.haltIt := True
+        prefetch.arbitration.haltItByOther := True
       }
 
       when(stepIt && prefetch.arbitration.isFiring) {

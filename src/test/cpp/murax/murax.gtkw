@@ -1,10 +1,10 @@
 [*]
 [*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
-[*] Sat Jul 29 00:24:49 2017
+[*] Sat Jul 29 10:39:29 2017
 [*]
 [dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/murax/Murax.vcd"
-[dumpfile_mtime] "Sat Jul 29 00:24:44 2017"
-[dumpfile_size] 177335125
+[dumpfile_mtime] "Sat Jul 29 10:39:12 2017"
+[dumpfile_size] 230220943
 [savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/murax/murax.gtkw"
 [timestart] 56764536000
 [size] 1776 953

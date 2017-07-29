@@ -6,9 +6,8 @@ import spinal.lib._
 
 import scala.collection.mutable.ArrayBuffer
 
-class PcManagerSimplePlugin(resetVector : BigInt, fastPcCalculation : Boolean = false) extends Plugin[VexRiscv] with JumpService{
-
-
+class PcManagerSimplePlugin(resetVector       : BigInt,
+                            fastPcCalculation : Boolean = false) extends Plugin[VexRiscv] with JumpService{
   //FetchService interface
   case class JumpInfo(interface :  Flow[UInt], stage: Stage)
   val jumpInfos = ArrayBuffer[JumpInfo]()
