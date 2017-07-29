@@ -264,6 +264,8 @@ Murax ->
   ICE40-HX   ->  53 Mhz 2142 LC (icestorm)
 ```
 
+There is some scripts to generate the SoC and call the icestorm toolchain there : scripts/Murax/
+
 ## Build the RISC-V GCC
 
 To install in /opt/ the rv32i and rv32im gcc, do the following (will take hours):
