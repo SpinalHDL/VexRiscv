@@ -28,13 +28,19 @@ import vexriscv.{plugin, VexRiscvConfig, VexRiscv}
 
 case class MuraxConfig(coreFrequency : HertzNumber,
                        onChipRamSize : BigInt,
-                       pipelineDBus : Boolean)
+                       pipelineDBus : Boolean,
+                       pipelineMainBus : Boolean,
+                       pipelineApbBridge : Boolean){
+  require(pipelineApbBridge || pipelineMainBus, "At least pipelineMainBus or pipelineApbBridge should be enable to avoid wipe transactions")
+}
 
 object MuraxConfig{
   def default =  MuraxConfig(
       coreFrequency = 12 MHz,
       onChipRamSize  = 8 kB,
-      pipelineDBus  = false
+      pipelineDBus  = false,
+      pipelineMainBus  = true,
+      pipelineApbBridge = false
   )
 }
 
@@ -213,10 +219,20 @@ case class Murax(config : MuraxConfig) extends Component{
       iBus.cmd.ready := mainBus.cmd.ready && !dBus.cmd.valid
       dBus.cmd.ready := mainBus.cmd.ready
 
+
+      val rspPending = RegInit(False) clearWhen(mainBus.rsp.valid)
       val rspTarget = RegInit(False)
-      when(mainBus.cmd.fire){
-        rspTarget := dBus.cmd.valid
+      when(mainBus.cmd.fire && !mainBus.cmd.wr){
+        rspTarget  := dBus.cmd.valid
+        rspPending := True
       }
+
+      when(rspPending && !mainBus.rsp.valid){
+        iBus.cmd.ready := False
+        dBus.cmd.ready := False
+        mainBus.cmd.valid := False
+      }
+
       iBus.rsp.ready := mainBus.rsp.valid && !rspTarget
       iBus.rsp.inst  := mainBus.rsp.data
       iBus.rsp.error := False
@@ -250,32 +266,43 @@ case class Murax(config : MuraxConfig) extends Component{
         addressWidth = 20,
         dataWidth    = 32
       )
-      val cmdStage = simpleBus.cmd.halfPipe()
+      val simpleBusStage = SimpleBus()
+      simpleBusStage.cmd << (if(pipelineApbBridge) simpleBus.cmd.halfPipe() else simpleBus.cmd)
+      simpleBusStage.rsp >-> simpleBus.rsp
+
       val state = RegInit(False)
-      cmdStage.ready := False
+      simpleBusStage.cmd.ready := False
 
-      apb.PSEL(0) := cmdStage.valid
+      apb.PSEL(0) := simpleBusStage.cmd.valid
       apb.PENABLE := state
-      apb.PWRITE  := cmdStage.wr
-      apb.PADDR   := cmdStage.address.resized
-      apb.PWDATA  := cmdStage.data
+      apb.PWRITE  := simpleBusStage.cmd.wr
+      apb.PADDR   := simpleBusStage.cmd.address.resized
+      apb.PWDATA  := simpleBusStage.cmd.data
 
-      simpleBus.rsp.valid := False
-      simpleBus.rsp.data  := apb.PRDATA
+      simpleBusStage.rsp.valid := False
+      simpleBusStage.rsp.data  := apb.PRDATA
       when(!state){
-        state := cmdStage.valid
+        state := simpleBusStage.cmd.valid
       } otherwise{
         when(apb.PREADY){
           state := False
-          simpleBus.rsp.valid := !cmdStage.wr
-          cmdStage.ready := True
+          simpleBusStage.rsp.valid := !simpleBusStage.cmd.wr
+          simpleBusStage.cmd.ready := True
         }
       }
     }
 
     //Connect the mainBus to all slaves (ram, apbBridge)
     val mainBusDecoder = new Area {
-      def masterBus = mainBus
+      val masterBus = SimpleBus()
+      if(!pipelineMainBus) {
+        masterBus.cmd << mainBus.cmd
+        masterBus.rsp >> mainBus.rsp
+      } else {
+        masterBus.cmd <-< mainBus.cmd
+        masterBus.rsp >> mainBus.rsp
+      }
+
       val specification = List[(SimpleBus,SizeMapping)](
         ram.bus       -> (0x00000000l, onChipRamSize kB),
         apbBridge.simpleBus -> (0xF0000000l, 1 MB)
