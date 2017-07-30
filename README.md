@@ -89,7 +89,7 @@ On Ubuntu 14 :
 
 ```sh
 # JAVA JDK 7 or 8
-sudo apt-get install openjdk-7-jdk
+sudo apt-get install openjdk-8-jdk
 
 # SBT
 echo "deb https://dl.bintray.com/sbt/debian /" | sudo tee -a /etc/apt/sources.list.d/sbt.list
@@ -111,6 +111,17 @@ make
 sudo make install
 ```
 
+The VexRiscv need the unreleased master-head of SpinalHDL :
+
+```sh
+# Compile and localy publish the latest SpinalHDL
+rm -rf SpinalHDL
+git clone https://github.com/SpinalHDL/SpinalHDL.git
+cd SpinalHDL
+sbt clean compile publish-local
+cd ..
+```
+
 ## CPU generation
 You can find two example of CPU instantiation in :
 - src/main/scala/vexriscv/GenFull.scala
@@ -119,7 +130,7 @@ You can find two example of CPU instantiation in :
 To generate the corresponding RTL as a VexRiscv.v file, run (it could take time the first time you run it):
 
 NOTE :
-The VexRiscv could need the unreleased master-head of SpinalHDL. If it fail to compile, just get the SpinalHDL repository and do a "sbt publish-local" in it.
+The VexRiscv could need the unreleased master-head of SpinalHDL. If it fail to compile, just get the SpinalHDL repository and do a "sbt clean compile publish-local" in it as described in the dependencies chapter.
 
 ```sh
 sbt "run-main vexriscv.demo.GenFull"

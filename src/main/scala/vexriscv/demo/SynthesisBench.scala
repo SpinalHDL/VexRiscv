@@ -88,3 +88,34 @@ object BrieySynthesisBench {
     Bench(rtls, targets, "E:/tmp/")
   }
 }
+
+
+
+
+object MuraxSynthesisBench {
+  def main(args: Array[String]) {
+    val murax = new Rtl {
+      override def getName(): String = "Murax"
+      override def getRtlPath(): String = "Murax.v"
+      SpinalVerilog({
+        val murax = new Murax(MuraxConfig.default).setDefinitionName(getRtlPath().split("\\.").head)
+        murax.io.mainClk.setName("clk")
+        murax
+      })
+    }
+
+
+
+    val rtls = List(murax)
+
+    val targets = XilinxStdTargets(
+      vivadoArtix7Path = "E:\\Xilinx\\Vivado\\2016.3\\bin"
+    ) ++ AlteraStdTargets(
+      quartusCycloneIIPath = "D:/altera/13.0sp1/quartus/bin64",
+      quartusCycloneIVPath = "D:/altera_lite/15.1/quartus/bin64",
+      quartusCycloneVPath  = "D:/altera_lite/15.1/quartus/bin64"
+    )
+
+    Bench(rtls, targets, "E:/tmp/")
+  }
+}
