@@ -29,6 +29,10 @@ import vexriscv.{plugin, VexRiscvConfig, VexRiscv}
 
 case class MuraxConfig(coreFrequency : HertzNumber,
                        onChipRamSize : BigInt,
+                       bypassExecute : Boolean,
+                       bypassMemory: Boolean,
+                       bypassWriteBack: Boolean,
+                       bypassWriteBackBuffer : Boolean,
                        pipelineDBus : Boolean,
                        pipelineMainBus : Boolean,
                        pipelineApbBridge : Boolean){
@@ -37,11 +41,15 @@ case class MuraxConfig(coreFrequency : HertzNumber,
 
 object MuraxConfig{
   def default =  MuraxConfig(
-      coreFrequency     = 12 MHz,
-      onChipRamSize     = 8 kB,
-      pipelineDBus      = true,
-      pipelineMainBus   = false,
-      pipelineApbBridge = true
+      coreFrequency         = 12 MHz,
+      onChipRamSize         = 8 kB,
+      bypassExecute         = false,
+      bypassMemory          = false,
+      bypassWriteBack       = false,
+      bypassWriteBackBuffer = false,
+      pipelineDBus          = true,
+      pipelineMainBus       = false,
+      pipelineApbBridge     = true
   )
 }
 
@@ -158,10 +166,10 @@ case class Murax(config : MuraxConfig) extends Component{
           new LightShifterPlugin,
           new DebugPlugin(debugClockDomain),
           new HazardSimplePlugin(
-            bypassExecute = false,
-            bypassMemory = false,
-            bypassWriteBack = false,
-            bypassWriteBackBuffer = false,
+            bypassExecute = bypassExecute,
+            bypassMemory = bypassMemory,
+            bypassWriteBack = bypassWriteBack,
+            bypassWriteBackBuffer = bypassWriteBackBuffer,
             pessimisticUseSrc = false,
             pessimisticWriteRegFile = false,
             pessimisticAddressMatch = false

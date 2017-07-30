@@ -222,15 +222,17 @@ There is some measurements of Briey SoC timings and area :
 ## Murax SoC
 
 Murax is a very light SoC (fit in ICE40 FPGA) which could work without any external component.
-
-- ICE40-hx8k + icestorm =>  53 Mhz, 2142 LC
-- 0.37 DMIPS/Mhz
-- 8 kB of on-chip ram
+- VexRiscv RV32I[M]
 - JTAG debugger (eclipse/GDB/openocd ready)
+- 8 kB of on-chip ram
 - Interrupt support
 - APB bus for peripherals
 - 32 GPIO pin
 - one 16 bits prescaler, two 16 bits timers
+
+Depending the CPU configuration, on the ICE40-hx8k FPGA with icestorm for synthesis, the full SoC will get following area/performance :
+- RV32I interlocked stages => 53 Mhz, 2142 LC 0.37 DMIPS/Mhz
+- RV32I bypassed stages    => 53 Mhz, 2463 LC 0.55 DMIPS/Mhz
 
 You can find its implementation there : src/main/scala/vexriscv/demo/Murax.scala
 
@@ -253,7 +255,7 @@ To connect OpenOCD (https://github.com/SpinalHDL/openocd_riscv) to the simulatio
 src/openocd -f tcl/interface/jtag_tcp.cfg -c "set MURAX_CPU0_YAML /home/spinalvm/Spinal/VexRiscv/cpu0.yaml" -f tcl/target/murax.cfg
 ```
 
-There is some measurements of Murax SoC timings and area : 
+There is some measurements of Murax SoC timings and area for the 0.37 DMIPS/Mhz SoC version :
 
 ```
 Murax ->
