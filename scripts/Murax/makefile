@@ -21,3 +21,5 @@ time: bin/toplevel.bin
 prog : bin/toplevel.bin
 	sudo iceprog -S bin/toplevel.bin
 
+clean :
+	rm -rf bin

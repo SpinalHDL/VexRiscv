@@ -227,7 +227,6 @@ There is some measurements of Briey SoC timings and area :
   Cyclone V  -> 126 Mhz 2,295 ALMs
   Cyclone IV -> 121 Mhz 4,781 LUT 3,713 FF
   Cyclone II -> 104 Mhz 4,902 LUT 3,718 FF
-
 ```
 
 ## Murax SoC
@@ -240,10 +239,11 @@ Murax is a very light SoC (fit in ICE40 FPGA) which could work without any exter
 - APB bus for peripherals
 - 32 GPIO pin
 - one 16 bits prescaler, two 16 bits timers
+- one UART with tx/rx fifo
 
 Depending the CPU configuration, on the ICE40-hx8k FPGA with icestorm for synthesis, the full SoC will get following area/performance :
-- RV32I interlocked stages => 53 Mhz, 2142 LC 0.37 DMIPS/Mhz
-- RV32I bypassed stages    => 53 Mhz, 2463 LC 0.55 DMIPS/Mhz
+- RV32I interlocked stages => 51 Mhz, 2387 LC 0.37 DMIPS/Mhz
+- RV32I bypassed stages    => 45 Mhz, 2718 LC 0.55 DMIPS/Mhz
 
 You can find its implementation there : src/main/scala/vexriscv/demo/Murax.scala
 
@@ -269,12 +269,19 @@ src/openocd -f tcl/interface/jtag_tcp.cfg -c "set MURAX_CPU0_YAML /home/spinalvm
 There is some measurements of Murax SoC timings and area for the 0.37 DMIPS/Mhz SoC version :
 
 ```
-Murax ->
-  Artix 7    -> 307 Mhz 884 LUT 1195 FF
-  Cyclone V  -> 149 Mhz 655 ALMs
-  Cyclone IV -> 148 Mhz 1255 LUT 1171 FF
-  Cyclone II -> 121 Mhz 1259 LUT 1170 FF
-  ICE40-HX   ->  53 Mhz 2142 LC (icestorm)
+Murax interlocked stages (0.37 DMIPS/Mhz) ->
+  Artix 7    -> 306 Mhz 1021 LUT 1291 FF
+  Cyclone V  -> 173 Mhz 752 ALMs
+  Cyclone IV -> 140 Mhz 1483 LUT 1,250 FF
+  Cyclone II -> 127 Mhz 1484 LUT 1,249 FF
+  ICE40-HX   ->  51 Mhz 2387 LC (icestorm)
+
+MuraxFast bypassed stages (0.55 DMIPS/Mhz) ->
+  Artix 7    -> 310 Mhz 1192 LUT 1388 FF
+  Cyclone V  -> 160 Mhz 893 ALMs
+  Cyclone IV -> 142 Mhz 1726 LUT 1,284 FF
+  Cyclone II -> 106 Mhz 1714 LUT 1,283 FF
+  ICE40-HX   ->  45 Mhz, 2718 LC  (icestorm)
 ```
 
 There is some scripts to generate the SoC and call the icestorm toolchain there : scripts/Murax/
