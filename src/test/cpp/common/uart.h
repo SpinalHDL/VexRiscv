@@ -12,7 +12,7 @@ public:
 		schedule(uartTimeRate);
 	}
 
-	enum State {START, DATA, STOP,START_SUCCESS};
+	enum State {START, DATA, STOP};
 	State state = START;
 	char data;
 	uint32_t counter;
@@ -51,61 +51,76 @@ public:
 	}
 };
 
+#include<pthread.h>
+#include <mutex>
+#include <queue>
 
-/*
-class UartRx : public SensitiveProcess{
+class UartTx : public TimeProcess{
 public:
 
-	CData *rx;
+	CData *tx;
 	uint32_t uartTimeRate;
-	UartRx(CData *rx, uint32_t uartTimeRate){
-		this->rx = rx;
-		this->uartTimeRate = uartTimeRate;
-	}
 
-	enum State {START, DATA, STOP,START_SUCCESS};
+	enum State {START, DATA, STOP};
 	State state = START;
-	uint64_t holdTime = 0;
-	CData holdValue;
 	char data;
 	uint32_t counter;
-	virtual void tick(uint64_t time){
-		if(time < holdTime){
-			if(*rx != holdValue && time + (uartTimeRate>>7) < holdTime){
-				cout << "UART RX FRAME ERROR at " << time << endl;
-				holdTime = time;
-				state = START;
-			}
-		}else{
-			switch(state){
+	pthread_t inputThreadId;
+	queue<uint8_t> inputsQueue;
+	mutex inputsMutex;
+
+	UartTx(CData *tx, uint32_t uartTimeRate){
+		this->tx = tx;
+		this->uartTimeRate = uartTimeRate;
+		schedule(uartTimeRate);
+		pthread_create(&inputThreadId, NULL, &inputThreadWrapper, this);
+		*tx = 1;
+	}
+
+	static void* inputThreadWrapper(void *uartTx){
+		((UartTx*)uartTx)->inputThread();
+		return NULL;
+	}
+
+	void inputThread(){
+		while(1){
+			uint8_t c = getchar();
+			inputsMutex.lock();
+			inputsQueue.push(c);
+			inputsMutex.unlock();
+		}
+	}
+
+	virtual void tick(){
+		switch(state){
 			case START:
-			case START_SUCCESS:
-				if(state == START_SUCCESS){
-					cout << data << flush;
-					state = START;
-				}
-				if(*rx == 0 && time > uartTimeRate){
-					holdTime = time + uartTimeRate;
-					holdValue = *rx;
+				inputsMutex.lock();
+				if(!inputsQueue.empty()){
+					data = inputsQueue.front();
+					inputsQueue.pop();
+					inputsMutex.unlock();
 					state = DATA;
 					counter = 0;
-					data = 0;
+					*tx = 0;
+					schedule(uartTimeRate);
+				} else {
+					inputsMutex.unlock();
+					schedule(uartTimeRate*50);
 				}
-				break;
+			break;
 			case DATA:
-				data |= (*rx) << counter++;
+				*tx = (data >> counter) & 1;
+				counter++;
 				if(counter == 8){
 					state = STOP;
 				}
-				holdValue = *rx;
-				holdTime = time + uartTimeRate;
-				break;
+				schedule(uartTimeRate);
+			break;
 			case STOP:
-				holdTime = time + uartTimeRate;
-				holdValue = 1;
-				state = START_SUCCESS;
-				break;
-			}
+				*tx = 1;
+				schedule(uartTimeRate);
+				state = START;
+			break;
 		}
 	}
-};*/
+};

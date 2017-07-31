@@ -2,7 +2,7 @@ DEBUG?=no
 TRACE?=no
 PRINT_PERF?=no
 TRACE_START=0
-ADDCFLAGS += -CFLAGS -pthread 
+ADDCFLAGS += -CFLAGS -pthread -LDFLAGS -pthread
 
 
 ifeq ($(TRACE),yes)

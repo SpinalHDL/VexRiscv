@@ -13,10 +13,12 @@ public:
 		ClockDomain *mainClk = new ClockDomain(&top->io_mainClk,NULL,83333,300000);
 		AsyncReset *asyncReset = new AsyncReset(&top->io_asyncReset,50000);
 		UartRx *uartRx = new UartRx(&top->io_uart_txd,1.0e12/115200);
+		UartTx *uartTx = new UartTx(&top->io_uart_rxd,1.0e12/115200);
 
 		timeProcesses.push_back(mainClk);
 		timeProcesses.push_back(asyncReset);
 		timeProcesses.push_back(uartRx);
+		timeProcesses.push_back(uartTx);
 
 		Jtag *jtag = new Jtag(&top->io_jtag_tms,&top->io_jtag_tdi,&top->io_jtag_tdo,&top->io_jtag_tck,83333*4);
 		timeProcesses.push_back(jtag);

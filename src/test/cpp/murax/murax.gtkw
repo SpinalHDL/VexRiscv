@@ -1,88 +1,51 @@
 [*]
 [*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
-[*] Sat Jul 29 10:39:29 2017
+[*] Mon Jul 31 17:03:11 2017
 [*]
 [dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/murax/Murax.vcd"
-[dumpfile_mtime] "Sat Jul 29 10:39:12 2017"
-[dumpfile_size] 230220943
+[dumpfile_mtime] "Mon Jul 31 17:03:01 2017"
+[dumpfile_size] 1539276802
 [savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/murax/murax.gtkw"
-[timestart] 56764536000
+[timestart] 300964770000
 [size] 1776 953
-[pos] -775 -353
-*-19.000000 56765697000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[pos] -1 -353
+*-23.000000 300989600000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.Murax.
-[sst_width] 269
-[signals_width] 488
+[treeopen] TOP.Murax.system_uartCtrl.
+[treeopen] TOP.Murax.system_uartCtrl.uartCtrl_1.
+[sst_width] 454
+[signals_width] 327
 [sst_expanded] 1
-[sst_vpaned_height] 503
-@22
-TOP.io_gpioA_read[31:0]
-TOP.io_gpioA_writeEnable[31:0]
-TOP.io_gpioA_write[31:0]
-[color] 3
-TOP.Murax.system_mainBus_cmd_payload_address[31:0]
-[color] 3
-TOP.Murax.system_mainBus_cmd_payload_data[31:0]
-[color] 3
-TOP.Murax.system_mainBus_cmd_payload_mask[3:0]
+[sst_vpaned_height] 279
 @28
-[color] 3
-TOP.Murax.system_mainBus_cmd_valid
-[color] 3
-TOP.Murax.system_mainBus_cmd_ready
-[color] 3
-TOP.Murax.system_mainBus_cmd_payload_wr
+TOP.Murax.system_uartCtrl.io_uart_rxd
+TOP.Murax.system_uartCtrl.io_uart_txd
+TOP.Murax.system_uartCtrl.io_interrupt
+TOP.Murax.system_cpu.CsrPlugin_mstatus_MIE
 @22
-[color] 3
-TOP.Murax.system_mainBus_rsp_payload_data[31:0]
+TOP.Murax.system_uartCtrl.streamFifo_2.io_push_payload[7:0]
 @28
-[color] 3
-TOP.Murax.system_mainBus_rsp_valid
-TOP.Murax.system_ram_bus_cmd_valid
-TOP.Murax.system_ram_bus_cmd_ready
+TOP.Murax.system_uartCtrl.streamFifo_2.io_push_valid
+TOP.Murax.system_uartCtrl.streamFifo_2.io_pop_valid
+TOP.Murax.system_uartCtrl.streamFifo_2.io_pop_ready
 @22
-TOP.Murax.system_ram_bus_cmd_payload_address[31:0]
-TOP.Murax.system_ram_bus_cmd_payload_data[31:0]
-TOP.Murax.system_ram_bus_cmd_payload_mask[3:0]
+TOP.Murax.system_uartCtrl.streamFifo_2.io_pop_payload[7:0]
+TOP.Murax.system_uartCtrl.uartCtrl_1.rx.io_read_payload[7:0]
 @28
-TOP.Murax.system_ram_bus_cmd_payload_wr
+TOP.Murax.system_uartCtrl.uartCtrl_1.rx.io_read_valid
+TOP.Murax.system_uartCtrl.uartCtrl_1.rx.stateMachine_state[2:0]
 @22
-TOP.Murax.system_ram_bus_rsp_payload_data[31:0]
+TOP.Murax.system_uartCtrl.uartCtrl_1.rx.stateMachine_shifter[7:0]
 @28
-TOP.Murax.system_ram_bus_rsp_valid
-@22
-[color] 1
-TOP.Murax.system_apbBridge_apb_PADDR[19:0]
-@28
-TOP.Murax.system_apbBridge_apb_PSEL[0]
-TOP.Murax.system_apbBridge_apb_PENABLE
-@22
-TOP.Murax.system_apbBridge_apb_PRDATA[31:0]
-@28
-TOP.Murax.system_apbBridge_apb_PREADY
-@22
-TOP.Murax.system_apbBridge_apb_PWDATA[31:0]
-@28
-TOP.Murax.system_apbBridge_apb_PWRITE
-TOP.Murax.system_cpu.DebugPlugin_haltIt
-TOP.Murax.system_cpu.DebugPlugin_haltIt
-TOP.Murax.system_cpu.decode_arbitration_haltIt
-TOP.Murax.system_cpu.execute_arbitration_haltItByOther
-TOP.Murax.system_cpu.fetch_arbitration_haltIt
-TOP.Murax.system_cpu.memory_arbitration_haltIt
-TOP.Murax.system_cpu.prefetch_arbitration_haltIt
-TOP.Murax.system_cpu.writeBack_arbitration_haltIt
-TOP.Murax.system_cpu.prefetch_IBusSimplePlugin_pendingCmd
-@22
-TOP.Murax.system_cpu.iBus_cmd_payload_pc[31:0]
-@28
-TOP.Murax.system_cpu.iBus_cmd_ready
+TOP.Murax.system_uartCtrl.uartCtrl_1.rx.bitTimer_tick
+TOP.Murax.system_uartCtrl.uartCtrl_1.rx.bitTimer_counter[2:0]
 @29
-TOP.Murax.system_cpu.iBus_cmd_valid
-@22
-TOP.Murax.system_cpu.iBus_rsp_inst[31:0]
+TOP.Murax.system_uartCtrl.uartCtrl_1.rx.io_rxd
 @28
-TOP.Murax.system_cpu.iBus_rsp_ready
+TOP.Murax.system_uartCtrl.uartCtrl_1.rx.sampler_value
+TOP.Murax.system_uartCtrl.uartCtrl_1.rx.sampler_tick
+TOP.Murax.system_uartCtrl.uartCtrl_1.rx.sampler_samples_1
+TOP.Murax.system_uartCtrl.uartCtrl_1.rx.sampler_samples_2
 [pattern_trace] 1
 [pattern_trace] 0
