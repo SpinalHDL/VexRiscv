@@ -214,7 +214,7 @@ To connect OpenOCD (https://github.com/SpinalHDL/openocd_riscv) to the simulatio
 
 ```sh
 src/openocd -f tcl/interface/jtag_tcp.cfg -c "set BRIEY_CPU0_YAML /home/spinalvm/Spinal/VexRiscv/cpu0.yaml" -f tcl/target/briey.cfg
-```§
+```
 
 You can find multiples software examples and demo there : https://github.com/SpinalHDL/VexRiscvSocSoftware/tree/master/projects/briey
 
