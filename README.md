@@ -214,9 +214,9 @@ To connect OpenOCD (https://github.com/SpinalHDL/openocd_riscv) to the simulatio
 
 ```sh
 src/openocd -f tcl/interface/jtag_tcp.cfg -c "set BRIEY_CPU0_YAML /home/spinalvm/Spinal/VexRiscv/cpu0.yaml" -f tcl/target/briey.cfg
-```
+```§
 
-You can find multiples software examples and demo there : https://github.com/SpinalHDL/BrieySoftware
+You can find multiples software examples and demo there : https://github.com/SpinalHDL/VexRiscvSocSoftware/tree/master/projects/briey
 
 You can find some FPGA project which instantiate the Briey SoC there (DE1-SoC, DE0-Nano): https://drive.google.com/drive/folders/0B-CqLXDTaMbKZGdJZlZ5THAxRTQ?usp=sharing
 
@@ -265,6 +265,8 @@ To connect OpenOCD (https://github.com/SpinalHDL/openocd_riscv) to the simulatio
 ```sh
 src/openocd -f tcl/interface/jtag_tcp.cfg -c "set MURAX_CPU0_YAML /home/spinalvm/Spinal/VexRiscv/cpu0.yaml" -f tcl/target/murax.cfg
 ```
+
+You can find multiples software examples and demo there : https://github.com/SpinalHDL/VexRiscvSocSoftware/tree/master/projects/murax
 
 There is some measurements of Murax SoC timings and area for the 0.37 DMIPS/Mhz SoC version :
 
