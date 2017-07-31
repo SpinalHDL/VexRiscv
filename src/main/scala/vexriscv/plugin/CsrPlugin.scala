@@ -325,7 +325,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       //Used to make the pipeline empty softly (for interrupts)
       val pipelineLiberator = new Area{
         val enable = False
-        prefetch.arbitration.haltItByOther setWhen(enable)
+        prefetch.arbitration.haltByOther setWhen(enable)
         val done = ! List(fetch, decode, execute, memory).map(_.arbitration.isValid).orR
       }
 
@@ -413,7 +413,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
       //Manage MRET instructions
       when(memory.input(ENV_CTRL) === EnvCtrlEnum.MRET) {
-        memory.arbitration.haltIt := writeBack.arbitration.isValid
+        memory.arbitration.haltItself := writeBack.arbitration.isValid
         when(memory.arbitration.isFiring) {
           jumpInterface.valid := True
           jumpInterface.payload := mepc
@@ -432,7 +432,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       //Manage WFI instructions
       if(wfiGen) when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.WFI){
         when(!interrupt){
-          execute.arbitration.haltIt := True
+          execute.arbitration.haltItself := True
           decode.arbitration.flushAll := True
         }
       }
@@ -461,7 +461,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
                           || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
         val writeInstruction = arbitration.isValid && input(IS_CSR) && writeOpcode
 
-        arbitration.haltIt setWhen(writeInstruction && !readDataRegValid)
+        arbitration.haltItself setWhen(writeInstruction && !readDataRegValid)
         val writeEnable = writeInstruction && !arbitration.isStuckByOthers && !arbitration.removeIt && readDataRegValid
 
         when(arbitration.isValid && input(IS_CSR)) {

@@ -161,7 +161,7 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
             when(io.bus.cmd.wr) {
               insertDecodeInstruction := True
               decode.arbitration.isValid setWhen (firstCycle)
-              decode.arbitration.haltIt setWhen (secondCycle)
+              decode.arbitration.haltItself setWhen (secondCycle)
               io.bus.cmd.ready := !(firstCycle || secondCycle || decode.arbitration.isValid)
             }
           }
@@ -180,14 +180,14 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
 
 
       when(execute.arbitration.isFiring && execute.input(IS_EBREAK)) {
-        prefetch.arbitration.haltItByOther := True
+        prefetch.arbitration.haltByOther := True
         decode.arbitration.flushAll := True
         haltIt := True
         haltedByBreak := True
       }
 
       when(haltIt) {
-        prefetch.arbitration.haltItByOther := True
+        prefetch.arbitration.haltByOther := True
       }
 
       when(stepIt && prefetch.arbitration.isFiring) {

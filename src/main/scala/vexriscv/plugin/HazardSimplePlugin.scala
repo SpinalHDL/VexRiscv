@@ -92,7 +92,7 @@ class HazardSimplePlugin(bypassExecute : Boolean,
     }
 
     when(decode.arbitration.isValid && (src0Hazard || src1Hazard)){
-      decode.arbitration.haltIt := True
+      decode.arbitration.haltItself := True
     }
   }
 }

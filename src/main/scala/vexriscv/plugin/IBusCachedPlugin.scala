@@ -70,7 +70,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
     cache.io.cpu.prefetch.isValid := prefetch.arbitration.isValid
     cache.io.cpu.prefetch.isFiring := prefetch.arbitration.isFiring
     cache.io.cpu.prefetch.address := prefetch.output(PC)
-    prefetch.arbitration.haltIt setWhen(cache.io.cpu.prefetch.haltIt)
+    prefetch.arbitration.haltItself setWhen(cache.io.cpu.prefetch.haltIt)
 
     //Connect fetch cache side
     cache.io.cpu.fetch.isValid  := fetch.arbitration.isValid
@@ -78,7 +78,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
     if(!twoStageLogic) cache.io.cpu.fetch.isStuckByOthers  := fetch.arbitration.isStuckByOthers
     cache.io.cpu.fetch.address  := fetch.output(PC)
     if(!twoStageLogic) {
-      fetch.arbitration.haltIt setWhen (cache.io.cpu.fetch.haltIt)
+      fetch.arbitration.haltItself setWhen (cache.io.cpu.fetch.haltIt)
       fetch.insert(INSTRUCTION) := cache.io.cpu.fetch.data
       decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck,decode.input(INSTRUCTION),fetch.output(INSTRUCTION))
       decode.insert(INSTRUCTION_READY) := True
@@ -100,7 +100,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
 
     if(twoStageLogic){
       cache.io.cpu.decode.isValid := decode.arbitration.isValid && RegNextWhen(fetch.arbitration.isValid, !decode.arbitration.isStuck) //avoid inserted instruction from debug module
-      decode.arbitration.haltIt.setWhen(cache.io.cpu.decode.haltIt)
+      decode.arbitration.haltItself.setWhen(cache.io.cpu.decode.haltIt)
       cache.io.cpu.decode.isStuck := decode.arbitration.isStuck
       cache.io.cpu.decode.isUser  := (if(privilegeService != null) privilegeService.isUser(writeBack) else False)
       cache.io.cpu.decode.address := decode.input(PC)
@@ -132,7 +132,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
         cache.io.flush.cmd.valid := True
 
         when(!cache.io.flush.cmd.ready){
-          arbitration.haltIt := True
+          arbitration.haltItself := True
         } otherwise {
           decode.arbitration.flushAll := True
         }

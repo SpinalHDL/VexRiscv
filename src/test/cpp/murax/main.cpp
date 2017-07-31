@@ -5,15 +5,18 @@
 
 #include "../common/framework.h"
 #include "../common/jtag.h"
+#include "../common/uart.h"
 
 class MuraxWorkspace : public Workspace<VMurax>{
 public:
 	MuraxWorkspace() : Workspace("Murax"){
 		ClockDomain *mainClk = new ClockDomain(&top->io_mainClk,NULL,83333,300000);
 		AsyncReset *asyncReset = new AsyncReset(&top->io_asyncReset,50000);
+		UartRx *uartRx = new UartRx(&top->io_uart_txd,1.0e12/115200);
 
 		timeProcesses.push_back(mainClk);
 		timeProcesses.push_back(asyncReset);
+		timeProcesses.push_back(uartRx);
 
 		Jtag *jtag = new Jtag(&top->io_jtag_tms,&top->io_jtag_tdi,&top->io_jtag_tdo,&top->io_jtag_tck,83333*4);
 		timeProcesses.push_back(jtag);

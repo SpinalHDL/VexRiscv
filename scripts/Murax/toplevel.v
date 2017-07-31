@@ -6,6 +6,8 @@ module toplevel(
     input   io_G15,
     output  io_G16,
     input   io_F15,
+    output  io_B12,
+    input   io_B10,
     output [7:0] io_led
   );
   
@@ -36,6 +38,8 @@ module toplevel(
     .io_jtag_tms(io_F15),
     .io_gpioA_read       (io_gpioA_read),
     .io_gpioA_write      (io_gpioA_write),
-    .io_gpioA_writeEnable(io_gpioA_writeEnable) 
+    .io_gpioA_writeEnable(io_gpioA_writeEnable),
+    .io_uart_txd(io_B12),
+    .io_uart_rxd(io_B10)
   );		
 endmodule

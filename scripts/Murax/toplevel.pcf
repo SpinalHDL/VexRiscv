@@ -5,6 +5,8 @@ set_io io_H16 H16
 set_io io_G15 G15
 set_io io_G16 G16
 set_io io_F15 F15
+set_io io_B12 B12
+set_io io_B10 B10
 set_io io_led[0] B5
 set_io io_led[1] B4
 set_io io_led[2] A2

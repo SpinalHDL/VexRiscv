@@ -47,7 +47,7 @@ class DivPlugin extends Plugin[VexRiscv]{
 
        when(arbitration.isValid && input(IS_DIV)) {
          divider.io.cmd.valid := !arbitration.isStuckByOthers && !arbitration.removeIt
-         arbitration.haltIt := memory.arbitration.isValid && memory.input(IS_DIV)
+         arbitration.haltItself := memory.arbitration.isValid && memory.input(IS_DIV)
        }
      }
 
@@ -59,7 +59,7 @@ class DivPlugin extends Plugin[VexRiscv]{
        divider.io.rsp.ready := !arbitration.isStuckByOthers
 
        when(arbitration.isValid && input(IS_DIV)) {
-         arbitration.haltIt := !divider.io.rsp.valid
+         arbitration.haltItself := !divider.io.rsp.valid
 
          input(REGFILE_WRITE_DATA) := Mux(input(INSTRUCTION)(13), divider.io.rsp.remainder, divider.io.rsp.quotient).asBits
        }

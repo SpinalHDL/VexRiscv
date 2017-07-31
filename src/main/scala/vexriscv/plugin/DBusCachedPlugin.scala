@@ -123,7 +123,7 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       cache.io.cpu.memory.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.memory.isStuck := arbitration.isStuck
       cache.io.cpu.memory.isRemoved := arbitration.removeIt
-      arbitration.haltIt setWhen(cache.io.cpu.memory.haltIt)
+      arbitration.haltItself setWhen(cache.io.cpu.memory.haltIt)
 
       cache.io.cpu.memory.mmuBus <> mmuBus
     }
@@ -148,7 +148,7 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
           exceptionBus.code := 13
         }
       }
-      arbitration.haltIt.setWhen(cache.io.cpu.writeBack.haltIt)
+      arbitration.haltItself.setWhen(cache.io.cpu.writeBack.haltIt)
 
       val rspShifted = Bits(32 bits)
       rspShifted := cache.io.cpu.writeBack.data

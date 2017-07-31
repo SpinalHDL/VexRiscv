@@ -108,7 +108,7 @@ class MemoryTranslatorPlugin(tlbSize : Int,
           port.bus.rsp.allowWrite := cacheLine.allowWrite
           port.bus.rsp.allowExecute := cacheLine.allowExecute
           port.bus.rsp.allowUser := cacheLine.allowUser
-          port.stage.arbitration.haltIt setWhen (port.bus.cmd.isValid && !cacheHit && !sharedMiss)
+          port.stage.arbitration.haltItself setWhen (port.bus.cmd.isValid && !cacheHit && !sharedMiss)
         } otherwise {
           port.bus.rsp.physicalAddress := port.bus.cmd.virtualAddress
           port.bus.rsp.allowRead := True

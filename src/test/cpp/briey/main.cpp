@@ -25,6 +25,7 @@
 
 #include "../common/framework.h"
 #include "../common/jtag.h"
+#include "../common/uart.h"
 
 
 
@@ -214,62 +215,6 @@ public:
 	}
 };
 
-class UartRx : public SensitiveProcess{
-public:
-
-	CData *rx;
-	uint32_t uartTimeRate;
-	UartRx(CData *rx, uint32_t uartTimeRate){
-		this->rx = rx;
-		this->uartTimeRate = uartTimeRate;
-	}
-
-	enum State {START, DATA, STOP,START_SUCCESS};
-	State state = START;
-	uint64_t holdTime = 0;
-	CData holdValue;
-	char data;
-	uint32_t counter;
-	virtual void tick(uint64_t time){
-		if(time < holdTime){
-			if(*rx != holdValue && time + (uartTimeRate>>7) < holdTime){
-				cout << "UART RX FRAME ERROR at " << time << endl;
-				holdTime = time;
-				state = START;
-			}
-		}else{
-			switch(state){
-			case START:
-			case START_SUCCESS:
-				if(state == START_SUCCESS){
-					cout << data << flush;
-					state = START;
-				}
-				if(*rx == 0 && time > uartTimeRate){
-					holdTime = time + uartTimeRate;
-					holdValue = *rx;
-					state = DATA;
-					counter = 0;
-					data = 0;
-				}
-				break;
-			case DATA:
-				data |= (*rx) << counter++;
-				if(counter == 8){
-					state = STOP;
-				}
-				holdValue = *rx;
-				holdTime = time + uartTimeRate;
-				break;
-			case STOP:
-				holdTime = time + uartTimeRate;
-				holdValue = 1;
-				state = START_SUCCESS;
-				break;
-			}
-		}
-	}
-};
 
 class VexRiscvTracer : public SimElement{
 public:
@@ -432,12 +377,12 @@ public:
 		ClockDomain *vgaClk = new ClockDomain(&top->io_vgaClk,NULL,40000,100000);
 		AsyncReset *asyncReset = new AsyncReset(&top->io_asyncReset,50000);
 		Jtag *jtag = new Jtag(&top->io_jtag_tms,&top->io_jtag_tdi,&top->io_jtag_tdo,&top->io_jtag_tck,80000);
-		UartRx *uartRx = new UartRx(&top->io_uart_txd,(50000000/8/115200)*8*axiClk->tooglePeriod*2);
+		UartRx *uartRx = new UartRx(&top->io_uart_txd,1.0e12/115200);
 		timeProcesses.push_back(axiClk);
 		timeProcesses.push_back(vgaClk);
 		timeProcesses.push_back(asyncReset);
 		timeProcesses.push_back(jtag);
-		checkProcesses.push_back(uartRx);
+		timeProcesses.push_back(uartRx);
 
 		SdramConfig *sdramConfig = new SdramConfig(
 			2,  //byteCount

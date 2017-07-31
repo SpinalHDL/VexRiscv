@@ -117,8 +117,8 @@ trait Pipeline {
     }
 
     for(stageIndex <- 0 until stages.length; stage = stages(stageIndex)){
-      stage.arbitration.isStuckByOthers := stage.arbitration.haltItByOther || stages.takeRight(stages.length - stageIndex - 1).map(s => s.arbitration.haltIt/* && !s.arbitration.removeIt*/).foldLeft(False)(_ || _)
-      stage.arbitration.isStuck := stage.arbitration.haltIt || stage.arbitration.isStuckByOthers
+      stage.arbitration.isStuckByOthers := stage.arbitration.haltByOther || stages.takeRight(stages.length - stageIndex - 1).map(s => s.arbitration.haltItself/* && !s.arbitration.removeIt*/).foldLeft(False)(_ || _)
+      stage.arbitration.isStuck := stage.arbitration.haltItself || stage.arbitration.isStuckByOthers
       stage.arbitration.isFiring := stage.arbitration.isValid && !stage.arbitration.isStuck && !stage.arbitration.removeIt
     }
 

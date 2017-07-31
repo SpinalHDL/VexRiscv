@@ -5,7 +5,7 @@ import spinal.lib._
 import spinal.lib.bus.amba3.apb.{Apb3SlaveFactory, Apb3Decoder, Apb3Gpio, Apb3}
 import spinal.lib.bus.misc.SizeMapping
 import spinal.lib.com.jtag.Jtag
-import spinal.lib.com.uart.Uart
+import spinal.lib.com.uart._
 import spinal.lib.io.TriStateArray
 import spinal.lib.misc.{InterruptCtrl, Timer, Prescaler}
 import spinal.lib.soc.pinsec.{PinsecTimerCtrlExternal, PinsecTimerCtrl}
@@ -24,6 +24,7 @@ import vexriscv.{plugin, VexRiscvConfig, VexRiscv}
  * - APB bus for peripherals
  * - 32 GPIO pin
  * - one 16 bits prescaler, two 16 bits timers
+ * - one UART with tx/rx fifo
  */
 
 
@@ -88,7 +89,7 @@ case class Murax(config : MuraxConfig) extends Component{
 
     //Peripherals IO
     val gpioA = master(TriStateArray(32 bits))
-   // val uart = master(Uart())
+    val uart = master(Uart())
   }
 
 
@@ -345,6 +346,28 @@ case class Murax(config : MuraxConfig) extends Component{
     )
     io.gpioA <> gpioACtrl.io.gpio
 
+    val uartCtrlConfig = UartCtrlMemoryMappedConfig(
+      uartCtrlConfig = UartCtrlGenerics(
+        dataWidthMax      = 8,
+        clockDividerWidth = 20,
+        preSamplingSize   = 1,
+        samplingSize      = 3,
+        postSamplingSize  = 1
+      ),
+      initConfig = UartCtrlInitConfig(
+        baudrate = 115200,
+        dataLength = 7,  //7 => 8 bits
+        parity = UartParityType.NONE,
+        stop = UartStopType.ONE
+      ),
+      busCanWriteClockDividerConfig = false,
+      busCanWriteFrameConfig = false,
+      txFifoDepth = 16,
+      rxFifoDepth = 16
+    )
+    val uartCtrl = Apb3UartCtrl(uartCtrlConfig)
+    uartCtrl.io.uart <> io.uart
+
     val timer = new Area{
       val apb = Apb3(
         addressWidth = 8,
@@ -380,6 +403,7 @@ case class Murax(config : MuraxConfig) extends Component{
       master = apbBridge.apb,
       slaves = List(
         gpioACtrl.io.apb -> (0x00000, 4 kB),
+        uartCtrl.io.apb  -> (0x10000, 4 kB),
         timer.apb        -> (0x20000, 4 kB)
       )
     )

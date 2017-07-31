@@ -210,7 +210,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
         default -> input(RS2)(31 downto 0)
       )
       when(arbitration.isValid && input(MEMORY_ENABLE) && !dBus.cmd.ready && !input(ALIGNEMENT_FAULT)){
-        arbitration.haltIt := True
+        arbitration.haltItself := True
       }
 
       insert(MEMORY_ADDRESS_LOW) := dBus.cmd.address(1 downto 0)
@@ -222,7 +222,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
 
 
       insert(MEMORY_READ_DATA) := dBus.rsp.data
-      arbitration.haltIt setWhen(arbitration.isValid && input(MEMORY_ENABLE) && input(REGFILE_WRITE_VALID) && !dBus.rsp.ready)
+      arbitration.haltItself setWhen(arbitration.isValid && input(MEMORY_ENABLE) && input(REGFILE_WRITE_VALID) && !dBus.rsp.ready)
 
       if(catchAccessFault || catchAddressMisaligned){
         if(!catchAccessFault){

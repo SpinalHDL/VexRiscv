@@ -117,7 +117,7 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) 
       //Emit iBus.cmd request
       iBus.cmd.valid := prefetch.arbitration.isValid && !prefetch.arbitration.removeIt && !prefetch.arbitration.isStuckByOthers && !(pendingCmd && !iBus.rsp.ready) //prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
       iBus.cmd.pc := prefetch.output(PC)
-      prefetch.arbitration.haltIt setWhen (!iBus.cmd.ready || (pendingCmd && !iBus.rsp.ready))
+      prefetch.arbitration.haltItself setWhen (!iBus.cmd.ready || (pendingCmd && !iBus.rsp.ready))
     }
 
     //Bus rsp buffer
@@ -144,9 +144,9 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) 
     fetch.insert(IBUS_ACCESS_ERROR) clearWhen(!fetch.arbitration.isValid) //Avoid interference with instruction injection from the debug plugin
 
     if(interfaceKeepData)
-      fetch.arbitration.haltIt setWhen(fetch.arbitration.isValid && !iBus.rsp.ready)
+      fetch.arbitration.haltItself setWhen(fetch.arbitration.isValid && !iBus.rsp.ready)
     else
-      fetch.arbitration.haltIt setWhen(fetch.arbitration.isValid && !iBus.rsp.ready && !rspBuffer.valid)
+      fetch.arbitration.haltItself setWhen(fetch.arbitration.isValid && !iBus.rsp.ready && !rspBuffer.valid)
 
     decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck,decode.input(INSTRUCTION),fetch.output(INSTRUCTION))
     decode.insert(INSTRUCTION_READY) := True

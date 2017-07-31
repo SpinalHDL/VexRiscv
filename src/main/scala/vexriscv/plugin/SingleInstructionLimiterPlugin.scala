@@ -10,6 +10,6 @@ class SingleInstructionLimiterPlugin() extends Plugin[VexRiscv] {
     import pipeline._
     import pipeline.config._
 
-    prefetch.arbitration.haltItByOther.setWhen(List(fetch,decode,execute,memory,writeBack).map(_.arbitration.isValid).orR)
+    prefetch.arbitration.haltByOther.setWhen(List(fetch,decode,execute,memory,writeBack).map(_.arbitration.isValid).orR)
   }
 }

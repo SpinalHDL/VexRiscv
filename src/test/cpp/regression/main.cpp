@@ -421,7 +421,7 @@ public:
 				for(SimElement* simElement : simElements) simElement->preCycle();
 
 				if(withInstructionReadCheck){
-					if(top->VexRiscv->decode_arbitration_isValid && !top->VexRiscv->decode_arbitration_haltIt){
+					if(top->VexRiscv->decode_arbitration_isValid && !top->VexRiscv->decode_arbitration_haltItself){
 						uint32_t expectedData;
 						bool dummy;
 						iBusAccess(top->VexRiscv->decode_PC, &expectedData, &dummy);
