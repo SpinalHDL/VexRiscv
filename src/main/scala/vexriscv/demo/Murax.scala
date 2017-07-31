@@ -186,7 +186,8 @@ case class Murax(config : MuraxConfig) extends Component{
     )
 
     //Checkout plugins used to instanciate the CPU to connect them to the SoC
-    val timerInterrupt = Bool
+    val timerInterrupt = False
+    val externalInterrupt = False
     var iBus : IBusSimpleBus = null
     var dBus : DBusSimpleBus = null
     var debugBus : DebugExtensionBus = null
@@ -202,7 +203,7 @@ case class Murax(config : MuraxConfig) extends Component{
         }
       }
       case plugin : CsrPlugin        => {
-        plugin.externalInterrupt := False
+        plugin.externalInterrupt := externalInterrupt
         plugin.timerInterrupt := timerInterrupt
       }
       case plugin : DebugPlugin         => plugin.debugClockDomain{
@@ -315,7 +316,7 @@ case class Murax(config : MuraxConfig) extends Component{
       }
 
       val specification = List[(SimpleBus,SizeMapping)](
-        ram.bus       -> (0x00000000l, onChipRamSize kB),
+        ram.bus             -> (0x00000000l, onChipRamSize kB),
         apbBridge.simpleBus -> (0xF0000000l, 1 MB)
       )
       
@@ -365,8 +366,10 @@ case class Murax(config : MuraxConfig) extends Component{
       txFifoDepth = 16,
       rxFifoDepth = 16
     )
+
     val uartCtrl = Apb3UartCtrl(uartCtrlConfig)
     uartCtrl.io.uart <> io.uart
+    externalInterrupt setWhen(uartCtrl.io.interrupt)
 
     val timer = new Area{
       val apb = Apb3(
@@ -394,7 +397,7 @@ case class Murax(config : MuraxConfig) extends Component{
       val interruptCtrlBridge = interruptCtrl.driveFrom(busCtrl,0x10)
       interruptCtrl.io.inputs(0) := timerA.io.full
       interruptCtrl.io.inputs(1) := timerB.io.full
-      timerInterrupt := interruptCtrl.io.pendings.orR
+      timerInterrupt setWhen(interruptCtrl.io.pendings.orR)
     }
 
 
