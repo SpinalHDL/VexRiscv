@@ -20,7 +20,6 @@ object VexRiscvSynthesisBench {
       SpinalVerilog(GenSmallest.cpu().setDefinitionName(getRtlPath().split("\\.").head))
     }
 
-
     val smallAndProductive = new Rtl {
       override def getName(): String = "VexRiscv small and productive"
       override def getRtlPath(): String = "VexRiscvSmallAndProductive.v"
@@ -32,7 +31,6 @@ object VexRiscvSynthesisBench {
       override def getRtlPath(): String = "VexRiscvFullNoMmuNoCache.v"
       SpinalVerilog(GenFullNoMmuNoCache.cpu().setDefinitionName(getRtlPath().split("\\.").head))
     }
-
 
     val fullNoMmu = new Rtl {
       override def getName(): String = "VexRiscv full no MMU"
@@ -105,8 +103,22 @@ object MuraxSynthesisBench {
     }
 
 
+    val muraxFast = new Rtl {
+      override def getName(): String = "MuraxFast"
+      override def getRtlPath(): String = "MuraxFast.v"
+      SpinalVerilog({
+        val murax = new Murax(MuraxConfig.default.copy(
+          bypassExecute         = true,
+          bypassMemory          = true,
+          bypassWriteBack       = true,
+          bypassWriteBackBuffer = true
+        )).setDefinitionName(getRtlPath().split("\\.").head)
+        murax.io.mainClk.setName("clk")
+        murax
+      })
+    }
 
-    val rtls = List(murax)
+    val rtls = List(murax, muraxFast)
 
     val targets = XilinxStdTargets(
       vivadoArtix7Path = "E:\\Xilinx\\Vivado\\2016.3\\bin"
