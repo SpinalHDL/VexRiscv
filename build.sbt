@@ -1,5 +1,7 @@
 name := "VexRiscv"
 
+organization := "com.github.spinalhdl"
+
 version := "1.0"
 
 scalaVersion := "2.11.8"
