@@ -251,7 +251,12 @@ You can find its implementation there : src/main/scala/vexriscv/demo/Murax.scala
 To generate the Murax SoC Hardware :
 
 ```sh
+# To generate the SoC without any content in the ram
 sbt "run-main vexriscv.demo.Murax"
+
+# To generate the SoC with a demo program in the SoC
+# Will blink led and echo UART RX to UART TX   (in the verilator sim, type some text and press enter to send UART frames to the Murax RX pin)
+sbt "run-main vexriscv.demo.MuraxWithRamInit"
 ```
 
 Then go in src/test/cpp/murax and run the simulation with :
