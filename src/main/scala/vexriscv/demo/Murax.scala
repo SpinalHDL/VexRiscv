@@ -30,6 +30,7 @@ import vexriscv.{plugin, VexRiscvConfig, VexRiscv}
 
 case class MuraxConfig(coreFrequency : HertzNumber,
                        onChipRamSize : BigInt,
+                       onChipRamHexFile : String,
                        bypassExecute : Boolean,
                        bypassMemory: Boolean,
                        bypassWriteBack: Boolean,
@@ -44,6 +45,7 @@ object MuraxConfig{
   def default =  MuraxConfig(
       coreFrequency         = 12 MHz,
       onChipRamSize         = 8 kB,
+      onChipRamHexFile      = null,
       bypassExecute         = false,
       bypassMemory          = false,
       bypassWriteBack       = false,
@@ -267,6 +269,40 @@ case class Murax(config : MuraxConfig) extends Component{
         mask  = bus.cmd.mask
       )
       bus.cmd.ready := True
+
+      if(onChipRamHexFile != null){
+        def readHexFile(path : String, callback : (Int, Int) => Unit): Unit ={
+          import scala.io.Source
+          def hToI(that : String, start : Int, size : Int) = Integer.parseInt(that.substring(start,start + size), 16)
+
+          var offset = 0
+          for (line <- Source.fromFile(path).getLines) {
+            if (line.charAt(0) == ':'){
+              val byteCount = hToI(line, 1, 2)
+              val nextAddr = hToI(line, 3, 4) + offset
+              val key = hToI(line, 7, 2)
+              key match {
+                case 0 =>
+                  for(i <- 0 until byteCount){
+                    callback(nextAddr + i, hToI(line, 9 + i * 2, 2))
+                  }
+                case 2 =>
+                  offset = hToI(line, 9, 4) << 4
+                case 4 =>
+                  offset = hToI(line, 9, 4) << 16
+                case 3 =>
+                case 1 =>
+              }
+            }
+          }
+        }
+
+        val initContent = Array.fill[BigInt](ram.wordCount)(0)
+        readHexFile(onChipRamHexFile,(address,data) => {
+          initContent(address >> 2) |= BigInt(data) << ((address & 3)*8)
+        })
+        ram.initBigInt(initContent)
+      }
     }
 
 
@@ -418,5 +454,13 @@ case class Murax(config : MuraxConfig) extends Component{
 object Murax{
   def main(args: Array[String]) {
     SpinalVerilog(Murax(MuraxConfig.default))
+  }
+}
+
+
+//Will blink led and echo UART RX to UART TX   (in the verilator sim, type some text and press enter to send UART frame to the Murax RX pin)
+object MuraxWithRamInit{
+  def main(args: Array[String]) {
+    SpinalVerilog(Murax(MuraxConfig.default.copy(onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")))
   }
 }
