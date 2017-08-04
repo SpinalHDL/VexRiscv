@@ -107,12 +107,7 @@ object MuraxSynthesisBench {
       override def getName(): String = "MuraxFast"
       override def getRtlPath(): String = "MuraxFast.v"
       SpinalVerilog({
-        val murax = new Murax(MuraxConfig.default.copy(
-          bypassExecute         = true,
-          bypassMemory          = true,
-          bypassWriteBack       = true,
-          bypassWriteBackBuffer = true
-        )).setDefinitionName(getRtlPath().split("\\.").head)
+        val murax = new Murax(MuraxConfig.fast).setDefinitionName(getRtlPath().split("\\.").head)
         murax.io.mainClk.setName("clk")
         murax
       })

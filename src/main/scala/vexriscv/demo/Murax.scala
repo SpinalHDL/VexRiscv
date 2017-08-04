@@ -12,6 +12,8 @@ import spinal.lib.soc.pinsec.{PinsecTimerCtrlExternal, PinsecTimerCtrl}
 import vexriscv.plugin._
 import vexriscv.{plugin, VexRiscvConfig, VexRiscv}
 
+import scala.collection.mutable.ArrayBuffer
+
 /**
  * Created by PIC32F_USER on 28/07/2017.
  *
@@ -29,31 +31,105 @@ import vexriscv.{plugin, VexRiscvConfig, VexRiscv}
 
 
 case class MuraxConfig(coreFrequency : HertzNumber,
-                       onChipRamSize : BigInt,
-                       onChipRamHexFile : String,
-                       bypassExecute : Boolean,
-                       bypassMemory: Boolean,
-                       bypassWriteBack: Boolean,
-                       bypassWriteBackBuffer : Boolean,
-                       pipelineDBus : Boolean,
-                       pipelineMainBus : Boolean,
-                       pipelineApbBridge : Boolean){
+                       onChipRamSize      : BigInt,
+                       onChipRamHexFile   : String,
+                       pipelineDBus       : Boolean,
+                       pipelineMainBus    : Boolean,
+                       pipelineApbBridge  : Boolean,
+                       gpioWidth          : Int,
+                       uartCtrlConfig     : UartCtrlMemoryMappedConfig,
+                       cpuPlugins         : ArrayBuffer[Plugin[VexRiscv]]){
   require(pipelineApbBridge || pipelineMainBus, "At least pipelineMainBus or pipelineApbBridge should be enable to avoid wipe transactions")
 }
 
 object MuraxConfig{
   def default =  MuraxConfig(
-      coreFrequency         = 12 MHz,
-      onChipRamSize         = 8 kB,
-      onChipRamHexFile      = null,
-      bypassExecute         = false,
-      bypassMemory          = false,
-      bypassWriteBack       = false,
-      bypassWriteBackBuffer = false,
-      pipelineDBus          = true,
-      pipelineMainBus       = false,
-      pipelineApbBridge     = true
+    coreFrequency         = 12 MHz,
+    onChipRamSize         = 8 kB,
+    onChipRamHexFile      = null,
+    pipelineDBus          = true,
+    pipelineMainBus       = false,
+    pipelineApbBridge     = true,
+    gpioWidth = 32,
+    cpuPlugins = ArrayBuffer( //DebugPlugin added by the toplevel
+      new PcManagerSimplePlugin(
+        resetVector = 0x00000000l,
+        relaxedPcCalculation = true
+      ),
+      new IBusSimplePlugin(
+        interfaceKeepData = false,
+        catchAccessFault = false
+      ),
+      new DBusSimplePlugin(
+        catchAddressMisaligned = false,
+        catchAccessFault = false,
+        earlyInjection = false
+      ),
+      new CsrPlugin(CsrPluginConfig.smallest),
+      new DecoderSimplePlugin(
+        catchIllegalInstruction = false
+      ),
+      new RegFilePlugin(
+        regFileReadyKind = plugin.SYNC,
+        zeroBoot = true
+      ),
+      new IntAluPlugin,
+      new SrcPlugin(
+        separatedAddSub = false,
+        executeInsertion = false
+      ),
+      new LightShifterPlugin,
+      new HazardSimplePlugin(
+        bypassExecute = false,
+        bypassMemory = false,
+        bypassWriteBack = false,
+        bypassWriteBackBuffer = false,
+        pessimisticUseSrc = false,
+        pessimisticWriteRegFile = false,
+        pessimisticAddressMatch = false
+      ),
+      new BranchPlugin(
+        earlyBranch = false,
+        catchAddressMisaligned = false,
+        prediction = NONE
+      ),
+      new YamlPlugin("cpu0.yaml")
+    ),
+    uartCtrlConfig = UartCtrlMemoryMappedConfig(
+      uartCtrlConfig = UartCtrlGenerics(
+        dataWidthMax      = 8,
+        clockDividerWidth = 20,
+        preSamplingSize   = 1,
+        samplingSize      = 3,
+        postSamplingSize  = 1
+      ),
+      initConfig = UartCtrlInitConfig(
+        baudrate = 115200,
+        dataLength = 7,  //7 => 8 bits
+        parity = UartParityType.NONE,
+        stop = UartStopType.ONE
+      ),
+      busCanWriteClockDividerConfig = false,
+      busCanWriteFrameConfig = false,
+      txFifoDepth = 16,
+      rxFifoDepth = 16
+    )
+
   )
+
+  def fast = {
+    val config = default
+
+    //Replace HazardSimplePlugin to get datapath bypass
+    config.cpuPlugins(config.cpuPlugins.indexWhere(_.isInstanceOf[HazardSimplePlugin])) = new HazardSimplePlugin(
+      bypassExecute = true,
+      bypassMemory = true,
+      bypassWriteBack = true,
+      bypassWriteBackBuffer = true
+    )
+
+    config
+  }
 }
 
 case class SimpleBusCmd() extends Bundle{
@@ -139,51 +215,7 @@ case class Murax(config : MuraxConfig) extends Component{
     //Instanciate the CPU
     val cpu = new VexRiscv(
       config = VexRiscvConfig(
-        plugins = List(
-          new PcManagerSimplePlugin(
-            resetVector = 0x00000000l,
-            relaxedPcCalculation = true
-          ),
-          new IBusSimplePlugin(
-            interfaceKeepData = false,
-            catchAccessFault = false
-          ),
-          new DBusSimplePlugin(
-            catchAddressMisaligned = false,
-            catchAccessFault = false,
-            earlyInjection = false
-          ),
-          new CsrPlugin(CsrPluginConfig.smallest),
-          new DecoderSimplePlugin(
-            catchIllegalInstruction = false
-          ),
-          new RegFilePlugin(
-            regFileReadyKind = plugin.SYNC,
-            zeroBoot = true
-          ),
-          new IntAluPlugin,
-          new SrcPlugin(
-            separatedAddSub = false,
-            executeInsertion = false
-          ),
-          new LightShifterPlugin,
-          new DebugPlugin(debugClockDomain),
-          new HazardSimplePlugin(
-            bypassExecute = bypassExecute,
-            bypassMemory = bypassMemory,
-            bypassWriteBack = bypassWriteBack,
-            bypassWriteBackBuffer = bypassWriteBackBuffer,
-            pessimisticUseSrc = false,
-            pessimisticWriteRegFile = false,
-            pessimisticAddressMatch = false
-          ),
-          new BranchPlugin(
-            earlyBranch = false,
-            catchAddressMisaligned = false,
-            prediction = NONE
-          ),
-          new YamlPlugin("cpu0.yaml")
-        )
+        plugins = cpuPlugins += new DebugPlugin(debugClockDomain)
       )
     )
 
@@ -379,29 +411,9 @@ case class Murax(config : MuraxConfig) extends Component{
     }
 
     val gpioACtrl = Apb3Gpio(
-      gpioWidth = 32
+      gpioWidth = gpioWidth
     )
     io.gpioA <> gpioACtrl.io.gpio
-
-    val uartCtrlConfig = UartCtrlMemoryMappedConfig(
-      uartCtrlConfig = UartCtrlGenerics(
-        dataWidthMax      = 8,
-        clockDividerWidth = 20,
-        preSamplingSize   = 1,
-        samplingSize      = 3,
-        postSamplingSize  = 1
-      ),
-      initConfig = UartCtrlInitConfig(
-        baudrate = 115200,
-        dataLength = 7,  //7 => 8 bits
-        parity = UartParityType.NONE,
-        stop = UartStopType.ONE
-      ),
-      busCanWriteClockDividerConfig = false,
-      busCanWriteFrameConfig = false,
-      txFifoDepth = 16,
-      rxFifoDepth = 16
-    )
 
     val uartCtrl = Apb3UartCtrl(uartCtrlConfig)
     uartCtrl.io.uart <> io.uart
@@ -454,6 +466,7 @@ case class Murax(config : MuraxConfig) extends Component{
 object Murax{
   def main(args: Array[String]) {
     SpinalVerilog(Murax(MuraxConfig.default))
+//    SpinalVerilog(Murax(MuraxConfig.fast.copy(onChipRamSize = 256 kB))) //dhrystone config (more ram)
   }
 }
 
