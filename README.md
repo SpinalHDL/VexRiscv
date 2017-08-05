@@ -97,7 +97,7 @@ sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 2EE0EA64E40A89
 sudo apt-get update
 sudo apt-get install sbt
 
-# Verilator (for sim only)
+# Verilator (for sim only, realy need 3.9+, in general apt-get will give you 3.8)
 sudo apt-get install git make autoconf g++ flex bison
 git clone http://git.veripool.org/git/verilator   # Only first time
 unsetenv VERILATOR_ROOT  # For csh; ignore error if on bash
