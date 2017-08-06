@@ -17,19 +17,139 @@ import spinal.lib.memory.sdram._
 import spinal.lib.soc.pinsec.{PinsecTimerCtrlExternal, PinsecTimerCtrl}
 import spinal.lib.system.debugger.{SystemDebugger, JtagBridge, JtagAxi4SharedDebugger, SystemDebuggerConfig}
 
+import scala.collection.mutable.ArrayBuffer
+
 
 case class BrieyConfig(axiFrequency : HertzNumber,
                        onChipRamSize : BigInt,
                        sdramLayout: SdramLayout,
-                       sdramTimings: SdramTimings)
+                       sdramTimings: SdramTimings,
+                       cpuPlugins : ArrayBuffer[Plugin[VexRiscv]],
+                       uartCtrlConfig : UartCtrlMemoryMappedConfig)
 
 object BrieyConfig{
+
   def default = {
     val config = BrieyConfig(
       axiFrequency = 50 MHz,
       onChipRamSize  = 4 kB,
       sdramLayout = IS42x320D.layout,
-      sdramTimings = IS42x320D.timingGrade7
+      sdramTimings = IS42x320D.timingGrade7,
+      uartCtrlConfig = UartCtrlMemoryMappedConfig(
+        uartCtrlConfig = UartCtrlGenerics(
+          dataWidthMax      = 8,
+          clockDividerWidth = 20,
+          preSamplingSize   = 1,
+          samplingSize      = 5,
+          postSamplingSize  = 2
+        ),
+        txFifoDepth = 16,
+        rxFifoDepth = 16
+      ),
+      cpuPlugins = ArrayBuffer(
+        new PcManagerSimplePlugin(0x00000000l, false),
+        //          new IBusSimplePlugin(
+        //            interfaceKeepData = false,
+        //            catchAccessFault = false
+        //          ),
+        new IBusCachedPlugin(
+          config = InstructionCacheConfig(
+            cacheSize = 4096,
+            bytePerLine =32,
+            wayCount = 1,
+            wrappedMemAccess = true,
+            addressWidth = 32,
+            cpuDataWidth = 32,
+            memDataWidth = 32,
+            catchIllegalAccess = true,
+            catchAccessFault = true,
+            catchMemoryTranslationMiss = true,
+            asyncTagMemory = false,
+            twoStageLogic = true
+          )
+          //            askMemoryTranslation = true,
+          //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+          //              portTlbSize = 4
+          //            )
+        ),
+        //                    new DBusSimplePlugin(
+        //                      catchAddressMisaligned = true,
+        //                      catchAccessFault = true
+        //                    ),
+        new DBusCachedPlugin(
+          config = new DataCacheConfig(
+            cacheSize         = 4096,
+            bytePerLine       = 32,
+            wayCount          = 1,
+            addressWidth      = 32,
+            cpuDataWidth      = 32,
+            memDataWidth      = 32,
+            catchAccessError  = true,
+            catchIllegal      = true,
+            catchUnaligned    = true,
+            catchMemoryTranslationMiss = true
+          ),
+          memoryTranslatorPortConfig = null
+          //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+          //              portTlbSize = 6
+          //            )
+        ),
+        new StaticMemoryTranslatorPlugin(
+          ioRange      = _(31 downto 28) === 0xF
+        ),
+        new DecoderSimplePlugin(
+          catchIllegalInstruction = true
+        ),
+        new RegFilePlugin(
+          regFileReadyKind = plugin.SYNC,
+          zeroBoot = false
+        ),
+        new IntAluPlugin,
+        new SrcPlugin(
+          separatedAddSub = false,
+          executeInsertion = true
+        ),
+        new FullBarrielShifterPlugin,
+        new MulPlugin,
+        new DivPlugin,
+        new HazardSimplePlugin(
+          bypassExecute           = true,
+          bypassMemory            = true,
+          bypassWriteBack         = true,
+          bypassWriteBackBuffer   = true,
+          pessimisticUseSrc       = false,
+          pessimisticWriteRegFile = false,
+          pessimisticAddressMatch = false
+        ),
+        new BranchPlugin(
+          earlyBranch = false,
+          catchAddressMisaligned = true,
+          prediction = STATIC
+        ),
+        new CsrPlugin(
+          config = CsrPluginConfig(
+            catchIllegalAccess = false,
+            mvendorid      = null,
+            marchid        = null,
+            mimpid         = null,
+            mhartid        = null,
+            misaExtensionsInit = 66,
+            misaAccess     = CsrAccess.NONE,
+            mtvecAccess    = CsrAccess.NONE,
+            mtvecInit      = 0x00000020l,
+            mepcAccess     = CsrAccess.READ_WRITE,
+            mscratchGen    = false,
+            mcauseAccess   = CsrAccess.READ_ONLY,
+            mbadaddrAccess = CsrAccess.READ_ONLY,
+            mcycleAccess   = CsrAccess.NONE,
+            minstretAccess = CsrAccess.NONE,
+            ecallGen       = false,
+            wfiGen         = false,
+            ucycleAccess   = CsrAccess.NONE
+          )
+        ),
+        new YamlPlugin("cpu0.yaml")
+      )
     )
     config
   }
@@ -147,17 +267,7 @@ class Briey(config: BrieyConfig) extends Component{
     )
     val timerCtrl = PinsecTimerCtrl()
 
-    val uartCtrlConfig = UartCtrlMemoryMappedConfig(
-      uartCtrlConfig = UartCtrlGenerics(
-        dataWidthMax      = 8,
-        clockDividerWidth = 20,
-        preSamplingSize   = 1,
-        samplingSize      = 5,
-        postSamplingSize  = 2
-      ),
-      txFifoDepth = 16,
-      rxFifoDepth = 16
-    )
+
     val uartCtrl = Apb3UartCtrl(uartCtrlConfig)
 
 
@@ -176,111 +286,7 @@ class Briey(config: BrieyConfig) extends Component{
 
     val core = new ClockingArea(coreClockDomain){
       val configLight = VexRiscvConfig(
-        plugins = List(
-          new PcManagerSimplePlugin(0x00000000l, false),
-          //          new IBusSimplePlugin(
-          //            interfaceKeepData = false,
-          //            catchAccessFault = false
-          //          ),
-          new IBusCachedPlugin(
-            config = InstructionCacheConfig(
-              cacheSize = 4096,
-              bytePerLine =32,
-              wayCount = 1,
-              wrappedMemAccess = true,
-              addressWidth = 32,
-              cpuDataWidth = 32,
-              memDataWidth = 32,
-              catchIllegalAccess = true,
-              catchAccessFault = true,
-              catchMemoryTranslationMiss = true,
-              asyncTagMemory = false,
-              twoStageLogic = true
-            )
-            //            askMemoryTranslation = true,
-            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-            //              portTlbSize = 4
-            //            )
-          ),
-          //                    new DBusSimplePlugin(
-          //                      catchAddressMisaligned = true,
-          //                      catchAccessFault = true
-          //                    ),
-          new DBusCachedPlugin(
-            config = new DataCacheConfig(
-              cacheSize         = 4096,
-              bytePerLine       = 32,
-              wayCount          = 1,
-              addressWidth      = 32,
-              cpuDataWidth      = 32,
-              memDataWidth      = 32,
-              catchAccessError  = true,
-              catchIllegal      = true,
-              catchUnaligned    = true,
-              catchMemoryTranslationMiss = true
-            ),
-            memoryTranslatorPortConfig = null
-            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-            //              portTlbSize = 6
-            //            )
-          ),
-          new StaticMemoryTranslatorPlugin(
-            ioRange      = _(31 downto 28) === 0xF
-          ),
-          new DecoderSimplePlugin(
-            catchIllegalInstruction = true
-          ),
-          new RegFilePlugin(
-            regFileReadyKind = plugin.SYNC,
-            zeroBoot = false
-          ),
-          new IntAluPlugin,
-          new SrcPlugin(
-            separatedAddSub = false,
-            executeInsertion = true
-          ),
-          new FullBarrielShifterPlugin,
-          new MulPlugin,
-          new DivPlugin,
-          new HazardSimplePlugin(
-            bypassExecute           = true,
-            bypassMemory            = true,
-            bypassWriteBack         = true,
-            bypassWriteBackBuffer   = true,
-            pessimisticUseSrc       = false,
-            pessimisticWriteRegFile = false,
-            pessimisticAddressMatch = false
-          ),
-          new DebugPlugin(axiClockDomain),
-          new BranchPlugin(
-            earlyBranch = false,
-            catchAddressMisaligned = true,
-            prediction = STATIC
-          ),
-          new CsrPlugin(
-            config = CsrPluginConfig(
-              catchIllegalAccess = false,
-              mvendorid      = null,
-              marchid        = null,
-              mimpid         = null,
-              mhartid        = null,
-              misaExtensionsInit = 66,
-              misaAccess     = CsrAccess.NONE,
-              mtvecAccess    = CsrAccess.NONE,
-              mtvecInit      = 0x00000020l,
-              mepcAccess     = CsrAccess.READ_WRITE,
-              mscratchGen    = false,
-              mcauseAccess   = CsrAccess.READ_ONLY,
-              mbadaddrAccess = CsrAccess.READ_ONLY,
-              mcycleAccess   = CsrAccess.NONE,
-              minstretAccess = CsrAccess.NONE,
-              ecallGen       = false,
-              wfiGen         = false,
-              ucycleAccess   = CsrAccess.NONE
-            )
-          ),
-          new YamlPlugin("cpu0.yaml")
-        )
+        plugins = cpuPlugins += new DebugPlugin(axiClockDomain)
       )
 
       val cpu = new VexRiscv(configLight)
