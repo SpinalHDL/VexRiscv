@@ -477,6 +477,9 @@ This example is a very simple one, but each plugin can really have access to the
 As a demonstrator, this SimdAddPlugin was integrated in the src/main/scala/vexriscv/demo/GenCustomSimdAdd.scala CPU configuration and is self tested by the src/test/cpp/custom/simd_add application by running the following commands :
 
 ```sh
+# Generate the CPU
+sbt "run-main vexriscv.demo.GenCustomSimdAdd"
+
 cd src/test/cpp/regression/
 
 # Optionally add TRACE=yes if you want to get the VCD waveform from the simulation.
