@@ -40,4 +40,5 @@ obj_dir
 *.memTrace
 *.regTrace
 *.tcl
+*.o
 

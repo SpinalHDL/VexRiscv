@@ -79,6 +79,9 @@ uint32_t hToI(char *c, uint32_t size) {
 
 void loadHexImpl(string path,Memory* mem) {
 	FILE *fp = fopen(&path[0], "r");
+	if(fp == 0){
+		cout << path << " not found" << endl;
+	}
 	fseek(fp, 0, SEEK_END);
 	uint32_t size = ftell(fp);
 	fseek(fp, 0, SEEK_SET);
@@ -273,6 +276,10 @@ public:
 				if(*data == 0)
 					pass();
 				else
+					fail();
+				break;
+			case 0xF00FFF24u:
+					cout << "TEST ERROR CODE " << *data << endl;
 					fail();
 				break;
 			#endif
@@ -1711,6 +1718,11 @@ int main(int argc, char **argv, char **env) {
 				redo(REDO,DebugPluginTest().run(1e6););
 			#endif
 		#endif
+
+		#ifdef CUSTOM_SIMD_ADD
+			redo(REDO,Workspace("custom_simd_add").loadHex("../custom/simd_add/build/custom_simd_add.hex")->bootAt(0x00000000u)->run(50e3););
+		#endif
+
 		#ifdef DHRYSTONE
 			Dhrystone("dhrystoneO3_Stall","dhrystoneO3",true,true).run(1.1e6);
 			#if defined(MUL) && defined(DIV)

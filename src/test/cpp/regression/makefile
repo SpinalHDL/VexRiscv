@@ -10,6 +10,7 @@ CSR?=yes
 MMU?=yes
 DEBUG_PLUGIN?=STD
 DEBUG_PLUGIN_EXTERNAL?=no
+CUSTOM_SIMD_ADD?=no
 DHRYSTONE=yes
 FREERTOS=no
 REDO?=10
@@ -35,6 +36,10 @@ endif
 
 ifeq ($(CSR),yes)
 	ADDCFLAGS += -CFLAGS -DCSR
+endif
+
+ifeq ($(CUSTOM_SIMD_ADD),yes)
+	ADDCFLAGS += -CFLAGS -DCUSTOM_SIMD_ADD
 endif
 
 ifeq ($(TRACE_WITH_TIME),yes)
