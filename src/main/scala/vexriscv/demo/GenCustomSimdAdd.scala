@@ -36,12 +36,12 @@ object GenCustomSimdAdd extends App{
           separatedAddSub = false,
           executeInsertion = false
         ),
-        new LightShifterPlugin,
+        new FullBarrielShifterPlugin,
         new HazardSimplePlugin(
-          bypassExecute           = false,
-          bypassMemory            = false,
-          bypassWriteBack         = false,
-          bypassWriteBackBuffer   = false,
+          bypassExecute           = true,
+          bypassMemory            = true,
+          bypassWriteBack         = true,
+          bypassWriteBackBuffer   = true,
           pessimisticUseSrc       = false,
           pessimisticWriteRegFile = false,
           pessimisticAddressMatch = false
