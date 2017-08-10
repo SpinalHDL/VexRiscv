@@ -397,11 +397,13 @@ case class Murax(config : MuraxConfig) extends Component{
         slaveBus.cmd.payload := masterBus.cmd.payload
         hit
       }
-      masterBus.cmd.ready := (hits,slaveBuses).zipped.map(_ && _.cmd.ready).orR
+      val noHit = !hits.orR
+      masterBus.cmd.ready := (hits,slaveBuses).zipped.map(_ && _.cmd.ready).orR || noHit
 
-      val rspPending = RegInit(False) clearWhen(masterBus.rsp.valid) setWhen(masterBus.cmd.fire && !masterBus.cmd.wr)
+      val rspPending  = RegInit(False) clearWhen(masterBus.rsp.valid) setWhen(masterBus.cmd.fire && !masterBus.cmd.wr)
+      val rspNoHit    = RegNext(False) init(False) setWhen(noHit)
       val rspSourceId = RegNextWhen(OHToUInt(hits), masterBus.cmd.fire)
-      masterBus.rsp.valid   := slaveBuses.map(_.rsp.valid).orR
+      masterBus.rsp.valid   := slaveBuses.map(_.rsp.valid).orR || (rspPending && rspNoHit)
       masterBus.rsp.payload := slaveBuses.map(_.rsp.payload).read(rspSourceId)
 
       when(rspPending && !masterBus.rsp.valid) { //Only one pending read request is allowed
@@ -466,10 +468,14 @@ case class Murax(config : MuraxConfig) extends Component{
 object Murax{
   def main(args: Array[String]) {
     SpinalVerilog(Murax(MuraxConfig.default))
-//    SpinalVerilog(Murax(MuraxConfig.fast.copy(onChipRamSize = 256 kB))) //dhrystone config (more ram)
   }
 }
 
+object MuraxDhrystoneReady{
+  def main(args: Array[String]) {
+    SpinalVerilog(Murax(MuraxConfig.fast.copy(onChipRamSize = 256 kB)))
+  }
+}
 
 //Will blink led and echo UART RX to UART TX   (in the verilator sim, type some text and press enter to send UART frame to the Murax RX pin)
 object MuraxWithRamInit{
