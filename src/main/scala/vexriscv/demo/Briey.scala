@@ -50,7 +50,7 @@ object BrieyConfig{
         new PcManagerSimplePlugin(0x00000000l, false),
         //          new IBusSimplePlugin(
         //            interfaceKeepData = false,
-        //            catchAccessFault = false
+        //            catchAccessFault = true
         //          ),
         new IBusCachedPlugin(
           config = InstructionCacheConfig(
@@ -196,29 +196,24 @@ class Briey(config: BrieyConfig) extends Component{
   )
 
   val resetCtrl = new ClockingArea(resetCtrlClockDomain) {
-    val axiResetUnbuffered  = False
-    val coreResetUnbuffered = False
+    val systemResetUnbuffered  = False
+//    val coreResetUnbuffered = False
 
     //Implement an counter to keep the reset axiResetOrder high 64 cycles
     // Also this counter will automaticly do a reset when the system boot.
-    val axiResetCounter = Reg(UInt(6 bits)) init(0)
-    when(axiResetCounter =/= U(axiResetCounter.range -> true)){
-      axiResetCounter := axiResetCounter + 1
-      axiResetUnbuffered := True
+    val systemResetCounter = Reg(UInt(6 bits)) init(0)
+    when(systemResetCounter =/= U(systemResetCounter.range -> true)){
+      systemResetCounter := systemResetCounter + 1
+      systemResetUnbuffered := True
     }
     when(BufferCC(io.asyncReset)){
-      axiResetCounter := 0
-    }
-
-    //When an axiResetOrder happen, the core reset will as well
-    when(axiResetUnbuffered){
-      coreResetUnbuffered := True
+      systemResetCounter := 0
     }
 
     //Create all reset used later in the design
-    val axiReset  = RegNext(axiResetUnbuffered)
-    val coreReset = RegNext(coreResetUnbuffered)
-    val vgaReset  = BufferCC(axiResetUnbuffered)
+    val systemReset  = RegNext(systemResetUnbuffered)
+    val axiReset     = RegNext(systemResetUnbuffered)
+    val vgaReset     = BufferCC(axiReset)
   }
 
   val axiClockDomain = ClockDomain(
@@ -227,9 +222,10 @@ class Briey(config: BrieyConfig) extends Component{
     frequency = FixedFrequency(axiFrequency) //The frequency information is used by the SDRAM controller
   )
 
-  val coreClockDomain = ClockDomain(
+  val debugClockDomain = ClockDomain(
     clock = io.axiClk,
-    reset = resetCtrl.coreReset
+    reset = resetCtrl.systemReset,
+    frequency = FixedFrequency(axiFrequency)
   )
 
   val vgaClockDomain = ClockDomain(
@@ -284,16 +280,15 @@ class Briey(config: BrieyConfig) extends Component{
 
 
 
-    val core = new ClockingArea(coreClockDomain){
-      val configLight = VexRiscvConfig(
-        plugins = cpuPlugins += new DebugPlugin(axiClockDomain)
+    val core = new Area{
+      val config = VexRiscvConfig(
+        plugins = cpuPlugins += new DebugPlugin(debugClockDomain)
       )
 
-      val cpu = new VexRiscv(configLight)
+      val cpu = new VexRiscv(config)
       var iBus : Axi4ReadOnly = null
       var dBus : Axi4Shared = null
-      var debugBus : DebugExtensionBus = null
-      for(plugin <- configLight.plugins) plugin match{
+      for(plugin <- config.plugins) plugin match{
         case plugin : IBusSimplePlugin => iBus = plugin.iBus.toAxi4ReadOnly()
         case plugin : IBusCachedPlugin => iBus = plugin.iBus.toAxi4ReadOnly()
         case plugin : DBusSimplePlugin => dBus = plugin.dBus.toAxi4Shared()
@@ -302,9 +297,9 @@ class Briey(config: BrieyConfig) extends Component{
           plugin.externalInterrupt := BufferCC(io.coreInterrupt)
           plugin.timerInterrupt := timerCtrl.io.interrupt
         }
-        case plugin : DebugPlugin      => {
-          resetCtrl.coreResetUnbuffered setWhen(plugin.io.resetOut)
-          debugBus = plugin.io.bus
+        case plugin : DebugPlugin      => debugClockDomain{
+          resetCtrl.axiReset setWhen(RegNext(plugin.io.resetOut))
+          io.jtag <> plugin.io.bus.fromJtag()
         }
         case _ =>
       }
@@ -356,7 +351,7 @@ class Briey(config: BrieyConfig) extends Component{
       cpu.sharedCmd             >>  crossbar.sharedCmd
       cpu.writeData             >>  crossbar.writeData
       cpu.writeRsp              <<  crossbar.writeRsp
-      cpu.readRsp               <-< crossbar.readRsp
+      cpu.readRsp               <-< crossbar.readRsp //Data cache directly use read responses without buffering, so pipeline it for FMax
     })
 
     axiCrossbar.build()
@@ -372,8 +367,6 @@ class Briey(config: BrieyConfig) extends Component{
         vgaCtrl.io.apb   -> (0x30000, 4 kB)
       )
     )
-
-    io.jtag <> core.debugBus.fromJtag()
   }
 
   io.gpioA          <> axi.gpioACtrl.io.gpio

@@ -201,6 +201,11 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
           service(classOf[InterruptionInhibitor]).inhibateInterrupts()
         }
       }
+      if(serviceExist(classOf[ExceptionInhibitor])) {
+        when(haltIt) {
+          service(classOf[ExceptionInhibitor]).inhibateException()
+        }
+      }
     }}
   }
 }

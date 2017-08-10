@@ -536,11 +536,15 @@ class DataCache(p : DataCacheConfig) extends Component{
       default -> B"1111"
     ) |<< mmuRsp.physicalAddress(1 downto 0)
 
+    val hadMemRspErrorReg = RegInit(False)
+    val hadMemRspError = (io.mem.rsp.valid && io.mem.rsp.error) || hadMemRspErrorReg
+    hadMemRspErrorReg := hadMemRspError && io.cpu.writeBack.haltIt
+
     io.cpu.writeBack.haltIt := io.cpu.writeBack.isValid
     io.cpu.writeBack.mmuMiss := False
     io.cpu.writeBack.illegalAccess := False
     io.cpu.writeBack.unalignedAccess := False
-    io.cpu.writeBack.accessError := (if(catchAccessError) io.mem.rsp.valid && io.mem.rsp.error else False)
+    io.cpu.writeBack.accessError := (if(catchAccessError) hadMemRspError && !io.cpu.writeBack.haltIt else False)
     io.cpu.writeBack.badAddr := request.address
 
     //Evict the cache after reset logics

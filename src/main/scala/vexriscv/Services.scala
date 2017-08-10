@@ -34,6 +34,9 @@ trait InterruptionInhibitor{
   def inhibateInterrupts() : Unit
 }
 
+trait ExceptionInhibitor{
+  def inhibateException() : Unit
+}
 
 case class MemoryTranslatorCmd() extends Bundle{
   val isValid = Bool

@@ -140,7 +140,7 @@ case class CsrMapping(){
 
 
 
-class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor{
+class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor{
   import config._
   import CsrAccess._
 
@@ -172,7 +172,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
   object IS_CSR extends Stageable(Bool)
 
   var allowInterrupts : Bool = null
-
+  var allowException  : Bool = null
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
 
@@ -230,9 +230,11 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       selfException = newExceptionPort(pipeline.execute)
 
     allowInterrupts = True
+    allowException = True
   }
 
   def inhibateInterrupts() : Unit = allowInterrupts := False
+  def inhibateException() : Unit  = allowException  := False
 
   def isUser(stage : Stage) : Bool = privilege === 0
 
@@ -385,7 +387,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
 
       val interrupt = ((mip.MSIP && mie.MSIE) || (mip.MEIP && mie.MEIE) || (mip.MTIP && mie.MTIE)) && mstatus.MIE && allowInterrupts
-      val exception = if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValids.last else False
+      val exception = if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValids.last && allowException else False
       val writeBackWfi = if(wfiGen) writeBack.arbitration.isValid && writeBack.input(ENV_CTRL) === EnvCtrlEnum.WFI else False
 
       //Interrupt/Exception entry logic
