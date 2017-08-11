@@ -273,7 +273,7 @@ src/openocd -f tcl/interface/jtag_tcp.cfg -c "set MURAX_CPU0_YAML /home/spinalvm
 
 You can find multiples software examples and demo there : https://github.com/SpinalHDL/VexRiscvSocSoftware/tree/master/projects/murax
 
-There is some measurements of Murax SoC timings and area for the 0.37 DMIPS/Mhz SoC version :
+There is some measurements of Murax SoC timings and area  :
 
 ```
 Murax interlocked stages (0.37 DMIPS/Mhz) ->
