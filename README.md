@@ -295,7 +295,13 @@ There is some scripts to generate the SoC and call the icestorm toolchain there 
 
 ## Build the RISC-V GCC
 
-To install in /opt/ the rv32i and rv32im gcc, do the following (will take hours):
+In fact, you can find some prebuild GCC : <br>
+- https://www.sifive.com/products/tools/   =>   SiFive GNU Embedded Toolchain
+
+The VexRiscvSocSoftware makefiles are expecting to find this prebuild version in /opt/rv/__contentOfThisPreBuild__
+
+
+But if you want to compile from sources in /opt/ the rv32i and rv32im gcc, do the following (will take hours):
 
 ```sh
 # Be carefull, sometime the git clone has issue to successfully clone riscv-gnu-toolchain.
