@@ -1,9 +1,9 @@
 PROJ_NAME=custom_simd_add
 
 
-RISCV_PATH=/opt/rv32i/
+RISCV_PATH=/opt/riscv/
 CFLAGS += -march=rv32i   -mabi=ilp32
-RISCV_NAME = riscv32-unknown-elf
+RISCV_NAME = riscv64-unknown-elf
 RISCV_OBJCOPY = $(RISCV_PATH)/bin/$(RISCV_NAME)-objcopy
 RISCV_OBJDUMP = $(RISCV_PATH)/bin/$(RISCV_NAME)-objdump
 RISCV_CLIB=$(RISCV_PATH)$(RISCV_NAME)/lib/
