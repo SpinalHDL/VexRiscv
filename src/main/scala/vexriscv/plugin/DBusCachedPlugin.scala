@@ -165,7 +165,7 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       )
 
       when(arbitration.isValid && input(MEMORY_ENABLE)) {
-        input(REGFILE_WRITE_DATA) := rspFormated
+        output(REGFILE_WRITE_DATA) := rspFormated
       }
    }
   }

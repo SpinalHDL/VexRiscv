@@ -270,7 +270,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
       )
 
       when(arbitration.isValid && input(MEMORY_ENABLE)) {
-        input(REGFILE_WRITE_DATA) := rspFormated
+        output(REGFILE_WRITE_DATA) := rspFormated
       }
 
       if(!earlyInjection)

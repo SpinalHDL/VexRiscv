@@ -63,9 +63,9 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = fals
       import writeBack._
 
       val regFileWrite = global.regFile.writePort.addAttribute(Verilator.public)
-      regFileWrite.valid := input(REGFILE_WRITE_VALID) && arbitration.isFiring
-      regFileWrite.address := input(INSTRUCTION)(rdRange).asUInt
-      regFileWrite.data := input(REGFILE_WRITE_DATA)
+      regFileWrite.valid := output(REGFILE_WRITE_VALID) && arbitration.isFiring
+      regFileWrite.address := output(INSTRUCTION)(rdRange).asUInt
+      regFileWrite.data := output(REGFILE_WRITE_DATA)
 
       //CPU will initialise constant register zero in the first cycle
       regFileWrite.valid setWhen(RegNext(False) init(True))

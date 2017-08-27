@@ -92,10 +92,10 @@ class MulPlugin extends Plugin[VexRiscv]{
       when(arbitration.isValid && input(IS_MUL)){
         switch(input(INSTRUCTION)(13 downto 12)){
           is(B"00"){
-            input(REGFILE_WRITE_DATA) := input(MUL_LOW)(31 downto 0).asBits
+            output(REGFILE_WRITE_DATA) := input(MUL_LOW)(31 downto 0).asBits
           }
           is(B"01",B"10",B"11"){
-            input(REGFILE_WRITE_DATA) := result(63 downto 32).asBits
+            output(REGFILE_WRITE_DATA) := result(63 downto 32).asBits
           }
         }
       }

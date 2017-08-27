@@ -61,7 +61,7 @@ class DivPlugin extends Plugin[VexRiscv]{
        when(arbitration.isValid && input(IS_DIV)) {
          arbitration.haltItself := !divider.io.rsp.valid
 
-         input(REGFILE_WRITE_DATA) := Mux(input(INSTRUCTION)(13), divider.io.rsp.remainder, divider.io.rsp.quotient).asBits
+         output(REGFILE_WRITE_DATA) := Mux(input(INSTRUCTION)(13), divider.io.rsp.remainder, divider.io.rsp.quotient).asBits
        }
 
 

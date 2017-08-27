@@ -84,7 +84,7 @@ object BrieySynthesisBench {
 //    )
 //
 //    Bench(rtls, targets, "/eda/tmp/")
-    
+
     val targets = XilinxStdTargets(
       vivadoArtix7Path = "E:\\Xilinx\\Vivado\\2016.3\\bin"
     ) ++ AlteraStdTargets(
