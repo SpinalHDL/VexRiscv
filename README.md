@@ -143,7 +143,8 @@ sbt "run-main vexriscv.demo.GenSmallest"
 To run tests (need the verilator simulator), go in the src/test/cpp/regression folder and run :
 
 ```sh
-# To test the GenFull CPU
+# To test the GenFull CPU 
+# (Don't worry about the CSR test not passing, basicaly the GenFull isn't the truly full version of the CPU, some CSR feature are disable in it)
 make clean run
 
 # To test the GenSmallest CPU
