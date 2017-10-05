@@ -12,6 +12,8 @@
 #include <time.h>
 #include <unistd.h>
 
+using namespace std;
+
 class SimElement{
 public:
 	virtual ~SimElement(){}
