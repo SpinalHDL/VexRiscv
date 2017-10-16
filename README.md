@@ -12,6 +12,8 @@
 - [Build the RISC-V GCC](#build-the-risc-v-gcc)
 - [CPU parametrization and instantiation example](#cpu-parametrization-and-instantiation-example)
 - [Add a custom instruction to the CPU via the plugin system](#add-a-custom-instruction-to-the-cpu-via-the-plugin-system)
+- [CPU clock and resets](#cpu-clock-and-resets)
+
 
 ## Description
 
@@ -296,7 +298,7 @@ There is some scripts to generate the SoC and call the icestorm toolchain there 
 
 ## Build the RISC-V GCC
 
-In fact, you can find some prebuild GCC : <br>
+In fact, now you can find some prebuild GCC : <br>
 - https://www.sifive.com/products/tools/   =>   SiFive GNU Embedded Toolchain
 The VexRiscvSocSoftware makefiles are expecting to find this prebuild version in /opt/riscv/__contentOfThisPreBuild__
 
@@ -502,3 +504,27 @@ make clean run IBUS=SIMPLE DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=
 ```
 
 To retrieve the plugin related signals in the wave, just filter with `simd`.
+
+## CPU clock and resets
+
+Without the debug plugin, the CPU will have `clk` input and a `reset` input, which is very standard. But with the debug plugin the situation is the following :
+
+- clk : As before, the clock which drive the whole CPU design, including the debug logic
+- reset : Reset all the CPU states excepted the debug logics
+- debugReset : Reset the debug logic of the CPU
+- debug_resetOut : It is a CPU output signal which allow the JTAG to reset the CPU + the memory interconnect + the peripherals
+
+So there is the reset interconnect in case you use the debug plugin :
+
+```
+                                VexRiscv
+                         +------------------+
+                         |                  |
+toplevelReset >----+-----> debugReset       |
+                   |     |                  |
+                   |  +--< debug_resetOut   |
+                   |  |  |                  |
+                   +--+--> reset            |
+                         |                  |
+                         +------------------+
+```
