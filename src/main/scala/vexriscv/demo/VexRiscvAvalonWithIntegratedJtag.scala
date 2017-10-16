@@ -1,14 +1,13 @@
 package vexriscv.demo
 
-import vexriscv.plugin._
-import vexriscv.{VexRiscv, plugin, VexRiscvConfig}
-import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import spinal.core._
 import spinal.lib._
-import spinal.lib.bus.amba3.apb.Apb3
-import spinal.lib.bus.amba4.axi.{Axi4Shared, Axi4ReadOnly}
 import spinal.lib.bus.avalon.AvalonMM
-import spinal.lib.eda.altera.{ResetEmitterTag, InterruptReceiverTag, QSysify}
+import spinal.lib.com.jtag.Jtag
+import spinal.lib.eda.altera.{InterruptReceiverTag, QSysify, ResetEmitterTag}
+import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
+import vexriscv.plugin._
+import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
 
 /**
  * Created by spinalvm on 14.07.17.
@@ -18,14 +17,22 @@ import spinal.lib.eda.altera.{ResetEmitterTag, InterruptReceiverTag, QSysify}
 //}
 
 
-object VexRiscvAvalon{
+object VexRiscvAvalonWithIntegratedJtag{
   def main(args: Array[String]) {
-    val report = SpinalVhdl{
+    val report = SpinalVerilog{
 
       //CPU configuration
       val cpuConfig = VexRiscvConfig(
         plugins = List(
           new PcManagerSimplePlugin(0x00000000l, false),
+//          new IBusSimplePlugin(
+//            interfaceKeepData = false,
+//            catchAccessFault = false
+//          ),
+//          new DBusSimplePlugin(
+//            catchAddressMisaligned = false,
+//            catchAccessFault = false
+//          ),
           new IBusCachedPlugin(
             config = InstructionCacheConfig(
               cacheSize = 4096,
@@ -157,10 +164,9 @@ object VexRiscvAvalon{
           }
           case plugin: DebugPlugin => {
             plugin.io.bus.asDirectionLess()
-            slave(plugin.io.bus.fromAvalon())
-              .setName("debugBusAvalon")
-              .addTag(ClockDomainTag(plugin.debugClockDomain))
-              .parent = null  //Avoid the io bundle to be interpreted as a QSys conduit
+            val jtag = slave(new Jtag())
+              .setName("jtag")
+            jtag <> plugin.io.bus.fromJtag()
             plugin.io.resetOut
               .addTag(ResetEmitterTag(plugin.debugClockDomain))
               .parent = null //Avoid the io bundle to be interpreted as a QSys conduit

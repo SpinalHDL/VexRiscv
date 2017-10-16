@@ -73,7 +73,7 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
     debugger.io.mem.cmd.valid           <> cmd.valid
     debugger.io.mem.cmd.ready           <> cmd.ready
     debugger.io.mem.cmd.wr              <> cmd.wr
-    debugger.io.mem.cmd.address.resized <> cmd.address
+    cmd.address := debugger.io.mem.cmd.address.resized
     debugger.io.mem.cmd.data            <> cmd.data
     debugger.io.mem.rsp.valid           <> RegNext(cmd.fire).init(False)
     debugger.io.mem.rsp.payload         <> rsp.data
