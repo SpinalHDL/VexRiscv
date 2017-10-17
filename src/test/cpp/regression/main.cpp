@@ -19,6 +19,8 @@
 
 #include <time.h>
 
+using namespace std;
+
 struct timespec timer_get(){
     struct timespec start_time;
     clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
