@@ -54,5 +54,5 @@ object GenSmallestNoCsr extends App{
       )
     )
   )
-  SpinalVerilog(cpu())
+  SpinalConfig(mergeAsyncProcess = false).generateVerilog(cpu())
 }

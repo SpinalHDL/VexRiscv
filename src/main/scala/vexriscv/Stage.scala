@@ -12,13 +12,12 @@ class Stageable[T <: Data](val dataType : T) extends HardType[T](dataType) with 
 
 class Stage() extends Area{
   def outsideCondScope[T](that : => T) : T = {
-    val condStack = GlobalData.get.conditionalAssignStack.stack.toList
-    val switchStack = GlobalData.get.switchStack.stack.toList
-    GlobalData.get.conditionalAssignStack.stack.clear()
-    GlobalData.get.switchStack.stack.clear()
+    val body = Component.current.dslBody
+    body.push()
+    val swapContext = body.swap()
     val ret = that
-    GlobalData.get.conditionalAssignStack.stack.pushAll(condStack.reverseIterator)
-    GlobalData.get.switchStack.stack.pushAll(switchStack.reverseIterator)
+    body.pop()
+    swapContext.appendBack()
     ret
   }
 
