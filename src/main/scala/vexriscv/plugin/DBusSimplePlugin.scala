@@ -214,6 +214,17 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
       }
 
       insert(MEMORY_ADDRESS_LOW) := dBus.cmd.address(1 downto 0)
+
+      //formal
+      val formalMask = dBus.cmd.size.mux(
+        U(0) -> B"0001",
+        U(1) -> B"0011",
+        default -> B"1111"
+      )
+      insert(FORMAL_MEM_ADDR) := dBus.cmd.address
+      insert(FORMAL_MEM_WMASK) := (dBus.cmd.valid &&  dBus.cmd.wr) ? formalMask | B"0000"
+      insert(FORMAL_MEM_RMASK) := (dBus.cmd.valid && !dBus.cmd.wr) ? formalMask | B"0000"
+      insert(FORMAL_MEM_WDATA) := dBus.cmd.payload.data
     }
 
     //Collect dBus.rsp read responses
@@ -275,6 +286,9 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
 
       if(!earlyInjection)
         assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
+
+      //formal
+      insert(FORMAL_MEM_RDATA) := rspFormated
     }
   }
 }

@@ -24,16 +24,27 @@ class PcManagerSimplePlugin(resetVector       : BigInt,
 
 
   override def build(pipeline: VexRiscv): Unit = {
+    import pipeline.config._
+    import pipeline._
+
     if(relaxedPcCalculation)
       relaxedImpl(pipeline)
     else
       cycleEffectiveImpl(pipeline)
+
+    //Formal verification signals generation
+    prefetch.insert(FORMAL_PC_NEXT) := prefetch.input(PC) + 4
+    jumpInfos.foreach(info => {
+      when(info.interface.valid){
+        info.stage.output(FORMAL_PC_NEXT) := info.interface.payload
+      }
+    })
   }
 
   //reduce combinatorial path, and expose the PC to the pipeline as a register
   def relaxedImpl(pipeline: VexRiscv): Unit = {
     import pipeline.config._
-    import pipeline.prefetch
+    import pipeline._
 
     prefetch plug new Area {
       import prefetch._

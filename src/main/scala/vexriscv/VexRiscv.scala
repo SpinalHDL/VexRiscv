@@ -31,6 +31,14 @@ case class VexRiscvConfig(plugins : Seq[Plugin[VexRiscv]]){
   object SRC_USE_SUB_LESS extends Stageable(Bool)
   object SRC_LESS_UNSIGNED extends Stageable(Bool)
 
+  //Formal verification purposes
+  object FORMAL_PC_NEXT    extends Stageable(UInt(32 bits))
+  object FORMAL_MEM_ADDR   extends Stageable(UInt(32 bits))
+  object FORMAL_MEM_RMASK  extends Stageable(Bits(4 bits))
+  object FORMAL_MEM_WMASK  extends Stageable(Bits(4 bits))
+  object FORMAL_MEM_RDATA  extends Stageable(Bits(32 bits))
+  object FORMAL_MEM_WDATA  extends Stageable(Bits(32 bits))
+
 
   object Src1CtrlEnum extends SpinalEnum(binarySequential){
     val RS, IMU, FOUR = newElement()   //IMU, IMZ IMJB
