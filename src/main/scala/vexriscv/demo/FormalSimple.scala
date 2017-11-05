@@ -12,6 +12,7 @@ object FormalSimple extends App{
     config = VexRiscvConfig(
       plugins = List(
         new FomalPlugin,
+        new HaltOnExceptionPlugin,
         new PcManagerSimplePlugin(
           resetVector = 0x00000000l,
           relaxedPcCalculation = false
@@ -25,11 +26,12 @@ object FormalSimple extends App{
           catchAccessFault = false
         ),
         new DecoderSimplePlugin(
-          catchIllegalInstruction = false
+          catchIllegalInstruction = true,
+          forceLegalInstructionComputation = true
         ),
         new RegFilePlugin(
           regFileReadyKind = plugin.SYNC,
-          zeroBoot = true
+          zeroBoot = false
         ),
         new IntAluPlugin,
         new SrcPlugin(
@@ -48,12 +50,12 @@ object FormalSimple extends App{
         ),
         new BranchPlugin(
           earlyBranch = false,
-          catchAddressMisaligned = false,
+          catchAddressMisaligned = true,
           prediction = NONE
         ),
         new YamlPlugin("cpu0.yaml")
       )
     )
   )
-  SpinalVerilog(cpu())
+  SpinalConfig(defaultConfigForClockDomains = ClockDomainConfig(resetKind = spinal.core.SYNC)).generateVerilog(cpu())
 }

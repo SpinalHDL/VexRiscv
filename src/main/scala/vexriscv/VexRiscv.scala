@@ -32,6 +32,7 @@ case class VexRiscvConfig(plugins : Seq[Plugin[VexRiscv]]){
   object SRC_LESS_UNSIGNED extends Stageable(Bool)
 
   //Formal verification purposes
+  object FORMAL_HALT       extends Stageable(Bool)
   object FORMAL_PC_NEXT    extends Stageable(UInt(32 bits))
   object FORMAL_MEM_ADDR   extends Stageable(UInt(32 bits))
   object FORMAL_MEM_RMASK  extends Stageable(Bits(4 bits))
