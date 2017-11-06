@@ -53,11 +53,14 @@ case class RvfiPort() extends Bundle with IMasterSlave {
 //feature added
 //Halt CPU on decoding exception
 
+//VexRiscv changes
+//input(INSTRUCTION)(5)  REGFILE_WRITE_VALID
+
 //VexRiscv bug
 //1) pcManagerService.createJumpInterface(pipeline.execute)
 //   pcManagerService.createJumpInterface(if(earlyBranch) pipeline.execute else pipeline.memory)
-//2) input(INSTRUCTION)(5)  REGFILE_WRITE_VALID
-//3) JALR => clear PC(0)
+//2) JALR => clear PC(0)
+
 class FomalPlugin extends Plugin[VexRiscv]{
 
   var rvfi : RvfiPort = null
@@ -114,11 +117,14 @@ class FomalPlugin extends Plugin[VexRiscv]{
         }
       })
 
-      when(Delay(haltRequest, 5)){ //Give time for value propagation from decode stage to writeback stage
+      when(Delay(haltRequest, 5, init=False)){ //Give time for value propagation from decode stage to writeback stage
         rvfi.valid := True
         rvfi.trap := True
         rvfi.halt := True
       }
+
+      val haltFired = RegInit(False) setWhen(rvfi.valid && rvfi.halt)
+      rvfi.valid clearWhen(haltFired)
     }
   }
 }
