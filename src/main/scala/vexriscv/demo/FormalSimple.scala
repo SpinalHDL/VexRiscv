@@ -38,7 +38,7 @@ object FormalSimple extends App{
           separatedAddSub = false,
           executeInsertion = false
         ),
-        new LightShifterPlugin,
+        new FullBarrielShifterPlugin,
         new HazardSimplePlugin(
           bypassExecute           = false,
           bypassMemory            = false,
@@ -57,5 +57,10 @@ object FormalSimple extends App{
       )
     )
   )
-  SpinalConfig(defaultConfigForClockDomains = ClockDomainConfig(resetKind = spinal.core.SYNC)).generateVerilog(cpu())
+  SpinalConfig(
+    defaultConfigForClockDomains = ClockDomainConfig(
+      resetKind = spinal.core.SYNC,
+      resetActiveLevel = spinal.core.HIGH
+    )
+  ).generateVerilog(cpu())
 }
