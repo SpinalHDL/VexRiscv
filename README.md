@@ -518,13 +518,15 @@ So there is the reset interconnect in case you use the debug plugin :
 
 ```
                                 VexRiscv
-                         +------------------+
-                         |                  |
-toplevelReset >----+-----> debugReset       |
-                   |     |                  |
-                   |  +--< debug_resetOut   |
-                   |  |  |                  |
-                   +--+--> reset            |
-                         |                  |
-                         +------------------+
+                            +------------------+
+                            |                  |
+toplevelReset >----+--------> debugReset       |
+                   |        |                  |
+                   |  +-----< debug_resetOut   |
+                   |  |     |                  |
+                   +--or>-+-> reset            |
+                          | |                  |
+                          | +------------------+
+                          |
+                          +-> Interconnect / Peripherals
 ```
