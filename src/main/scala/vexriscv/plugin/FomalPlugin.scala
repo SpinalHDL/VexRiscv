@@ -54,12 +54,13 @@ case class RvfiPort() extends Bundle with IMasterSlave {
 //Halt CPU on decoding exception
 
 //VexRiscv changes
-//input(INSTRUCTION)(5)  REGFILE_WRITE_VALID
+//
 
 //VexRiscv bug
 //1) pcManagerService.createJumpInterface(pipeline.execute)
 //   pcManagerService.createJumpInterface(if(earlyBranch) pipeline.execute else pipeline.memory)
 //2) JALR => clear PC(0)
+//3) input(INSTRUCTION)(5)  REGFILE_WRITE_VALID  memory read with exception would not fire properly
 
 class FomalPlugin extends Plugin[VexRiscv]{
 
