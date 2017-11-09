@@ -260,10 +260,10 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
       //Define CSR registers
       val misa = new Area{
-        val base = Reg(UInt(2 bits)) init(U"01")
-        val extensions = Reg(Bits(26 bits)) init(misaExtensionsInit)
+        val base = Reg(UInt(2 bits)) init(U"01") unsetRegIfNoAssignement
+        val extensions = Reg(Bits(26 bits)) init(misaExtensionsInit) unsetRegIfNoAssignement
       }
-      val mtvec = RegInit(U(mtvecInit,xlen bits))
+      val mtvec = RegInit(U(mtvecInit,xlen bits)) unsetRegIfNoAssignement
       val mepc = Reg(UInt(xlen bits))
       val mstatus = new Area{
         val MIE, MPIE = RegInit(False)

@@ -147,8 +147,8 @@ class BranchPlugin(earlyBranch : Boolean,
     import pipeline._
     import pipeline.config._
 
-    val historyCache = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2) setName("branchCache")
-    val historyCacheWrite = historyCache.writePort
+    val historyCache = if(prediction == DYNAMIC) Mem(BranchPredictorLine(), 1 << historyRamSizeLog2) setName("branchCache") else null
+    val historyCacheWrite = if(prediction == DYNAMIC) historyCache.writePort else null
 
     //Read historyCache
     if(prediction == DYNAMIC) fetch plug new Area{
