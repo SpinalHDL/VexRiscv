@@ -337,7 +337,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       val exceptionPortCtrl = if(exceptionPortsInfos.nonEmpty) new Area{
         val firstStageIndexWithExceptionPort = exceptionPortsInfos.map(i => indexOf(i.stage)).min
         val exceptionValids = Vec(Bool,stages.length)
-        val exceptionValidsRegs = Vec(Reg(Bool) init(False), stages.length)
+        val exceptionValidsRegs = Vec(Reg(Bool) init(False), stages.length).unsetRegIfNoAssignement
         val exceptionContext = Reg(ExceptionCause())
         val pipelineHasException = exceptionValids.orR   //TODO FMAX maybe could be partialy pipelined
 
