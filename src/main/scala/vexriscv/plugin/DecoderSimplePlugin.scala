@@ -2,6 +2,7 @@ package vexriscv.plugin
 
 import vexriscv._
 import spinal.core._
+import spinal.core.internals.Literal
 import spinal.lib._
 
 import scala.collection.mutable
