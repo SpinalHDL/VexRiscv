@@ -2,6 +2,7 @@ package vexriscv.plugin
 
 import vexriscv._
 import spinal.core._
+import spinal.core.internals.Literal
 import spinal.lib._
 
 import scala.collection.mutable
@@ -83,11 +84,11 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
     stageables.foreach(e => {
       defaults.get(e) match {
         case Some(value) => {
-          value.input match {
+          value.head.source match {
             case literal: EnumLiteral[_] => literal.fixEncoding(e.dataType.asInstanceOf[SpinalEnumCraft[_]].getEncoding)
             case _ =>
           }
-          defaultValue += value.input.asInstanceOf[Literal].getValue << offset
+          defaultValue += value.head.source .asInstanceOf[Literal].getValue << offset
           defaultCare += ((BigInt(1) << e.dataType.getBitsWidth) - 1) << offset
 
         }
@@ -102,12 +103,12 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
       var decodedValue = defaultValue
       var decodedCare = defaultCare
       for((e, literal) <- values){
-        literal.input match{
+        literal.head.source  match{
           case literal : EnumLiteral[_] => literal.fixEncoding(e.dataType.asInstanceOf[SpinalEnumCraft[_]].getEncoding)
           case _ =>
         }
         val offset = offsetOf(e)
-        decodedValue |= literal.input.asInstanceOf[Literal].getValue << offset
+        decodedValue |= literal.head.source.asInstanceOf[Literal].getValue << offset
         decodedCare  |= ((BigInt(1) << e.dataType.getBitsWidth)-1) << offset
       }
       (Masked(key.value,key.careAbout),Masked(decodedValue,decodedCare))
@@ -145,7 +146,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean) extends Plugin[VexR
       val stageables = encodings.flatMap(_._2.map(_._1)).toSet
       stageables.foreach(e => out(RegNext(RegNext(toplevel.decode.insert(e)).setName(e.getName()))))
       if(catchIllegalInstruction) out(RegNext(RegNext(toplevel.decode.insert(LEGAL_INSTRUCTION)).setName(LEGAL_INSTRUCTION.getName())))
-      toplevel.getAdditionalNodesRoot.clear()
+    //  toplevel.getAdditionalNodesRoot.clear()
     }
   }
 }

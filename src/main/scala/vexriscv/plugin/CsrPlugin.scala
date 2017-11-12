@@ -260,10 +260,10 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
       //Define CSR registers
       val misa = new Area{
-        val base = Reg(UInt(2 bits)) init(U"01")
-        val extensions = Reg(Bits(26 bits)) init(misaExtensionsInit)
+        val base = Reg(UInt(2 bits)) init(U"01") allowUnsetRegToAvoidLatch
+        val extensions = Reg(Bits(26 bits)) init(misaExtensionsInit) allowUnsetRegToAvoidLatch
       }
-      val mtvec = RegInit(U(mtvecInit,xlen bits))
+      val mtvec = RegInit(U(mtvecInit,xlen bits)) allowUnsetRegToAvoidLatch
       val mepc = Reg(UInt(xlen bits))
       val mstatus = new Area{
         val MIE, MPIE = RegInit(False)
@@ -337,7 +337,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       val exceptionPortCtrl = if(exceptionPortsInfos.nonEmpty) new Area{
         val firstStageIndexWithExceptionPort = exceptionPortsInfos.map(i => indexOf(i.stage)).min
         val exceptionValids = Vec(Bool,stages.length)
-        val exceptionValidsRegs = Vec(Reg(Bool) init(False), stages.length)
+        val exceptionValidsRegs = Vec(Reg(Bool) init(False), stages.length).allowUnsetRegToAvoidLatch
         val exceptionContext = Reg(ExceptionCause())
         val pipelineHasException = exceptionValids.orR   //TODO FMAX maybe could be partialy pipelined
 
