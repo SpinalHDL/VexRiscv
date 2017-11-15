@@ -371,7 +371,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
           }
         }
         for(stageId <- firstStageIndexWithExceptionPort until stages.length; stage = stages(stageId) ){
-        when(stage.arbitration.isFlushed){
+          when(stage.arbitration.isFlushed){
             exceptionValids(stageId) := False
           }
           when(!stage.arbitration.isStuck){
