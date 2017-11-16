@@ -145,7 +145,7 @@ case class Murax(config : MuraxConfig) extends Component{
     val jtag = slave(Jtag())
 
     //Peripherals IO
-    val gpioA = master(TriStateArray(32 bits))
+    val gpioA = master(TriStateArray(gpioWidth bits))
     val uart = master(Uart())
   }
 
@@ -266,7 +266,7 @@ case class Murax(config : MuraxConfig) extends Component{
     //******** Memory mappings *********
     val apbDecoder = Apb3Decoder(
       master = apbBridge.io.apb,
-      slaves = List(
+      slaves = List[(Apb3, SizeMapping)](
         gpioACtrl.io.apb -> (0x00000, 4 kB),
         uartCtrl.io.apb  -> (0x10000, 4 kB),
         timer.io.apb     -> (0x20000, 4 kB)
