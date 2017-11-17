@@ -49,7 +49,7 @@ The used CPU corresponding configuration can be find in src/scala/vexriscv/demo.
 
 ```
 VexRiscv smallest (RV32I, 0.47 DMIPS/Mhz, no datapath bypass, no interrupt) ->
-  Artix 7    -> 372 Mhz 568 LUT 603 FF 
+  Artix 7    -> 346 Mhz 481 LUT 539 FF
   Cyclone V  -> 201 Mhz 347 ALMs
   Cyclone IV -> 190 Mhz 673 LUT 529 FF 
   Cyclone II -> 154 Mhz 673 LUT 528 FF 

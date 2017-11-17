@@ -49,7 +49,6 @@ object VexRiscvSynthesisBench {
     val targets = XilinxStdTargets(
       vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
     ) ++ AlteraStdTargets(
-      quartusCycloneIIPath = null,
       quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin",
       quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin"
     )
@@ -72,28 +71,16 @@ object BrieySynthesisBench {
     }
 
 
-
     val rtls = List(briey)
 
-//    val targets = XilinxStdTargets(
-//      vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
-//    ) ++ AlteraStdTargets(
-//      quartusCycloneIIPath = null,
-//      quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin",
-//      quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin"
-//    )
-//
-//    Bench(rtls, targets, "/eda/tmp/")
-
     val targets = XilinxStdTargets(
-      vivadoArtix7Path = "E:\\Xilinx\\Vivado\\2016.3\\bin"
+      vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
     ) ++ AlteraStdTargets(
-      quartusCycloneIIPath = "D:/altera/13.0sp1/quartus/bin64",
-      quartusCycloneIVPath = "D:/altera_lite/15.1/quartus/bin64",
-      quartusCycloneVPath  = "D:/altera_lite/15.1/quartus/bin64"
+      quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin/",
+      quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin/"
     )
 
-    Bench(rtls, targets, "E:/tmp/")
+    Bench(rtls, targets, "/eda/tmp/")
   }
 }
 
@@ -126,13 +113,12 @@ object MuraxSynthesisBench {
     val rtls = List(murax, muraxFast)
 
     val targets = XilinxStdTargets(
-      vivadoArtix7Path = "E:\\Xilinx\\Vivado\\2016.3\\bin"
+      vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
     ) ++ AlteraStdTargets(
-      quartusCycloneIIPath = "D:/altera/13.0sp1/quartus/bin64",
-      quartusCycloneIVPath = "D:/altera_lite/15.1/quartus/bin64",
-      quartusCycloneVPath  = "D:/altera_lite/15.1/quartus/bin64"
+      quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin/",
+      quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin/"
     )
 
-    Bench(rtls, targets, "E:/tmp/")
+    Bench(rtls, targets, "/eda/tmp/")
   }
 }
