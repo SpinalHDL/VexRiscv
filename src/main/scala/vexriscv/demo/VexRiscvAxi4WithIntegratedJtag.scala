@@ -141,13 +141,13 @@ object VexRiscvAxi4WithIntegratedJtag{
         for (plugin <- cpuConfig.plugins) plugin match {
           case plugin: IBusSimplePlugin => {
             plugin.iBus.asDirectionLess() //Unset IO properties of iBus
-            iBus = master(plugin.iBus.toAxi4ReadOnly())
+            iBus = master(plugin.iBus.toAxi4ReadOnly().toFullConfig())
               .setName("iBusAxi")
               .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
           }
           case plugin: IBusCachedPlugin => {
             plugin.iBus.asDirectionLess() //Unset IO properties of iBus
-            iBus = master(plugin.iBus.toAxi4ReadOnly())
+            iBus = master(plugin.iBus.toAxi4ReadOnly().toFullConfig())
               .setName("iBusAxi")
               .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
           }
