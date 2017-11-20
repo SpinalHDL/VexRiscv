@@ -9,7 +9,7 @@ scalaVersion := "2.11.8"
 EclipseKeys.withSource := true
 
 libraryDependencies ++= Seq(
-  "com.github.spinalhdl" % "spinalhdl-core_2.11" % "0.11.2",
-  "com.github.spinalhdl" % "spinalhdl-lib_2.11" % "0.11.2",
+  "com.github.spinalhdl" % "spinalhdl-core_2.11" % "0.11.3",
+  "com.github.spinalhdl" % "spinalhdl-lib_2.11" % "0.11.3",
   "org.yaml" % "snakeyaml" % "1.8"
 )
