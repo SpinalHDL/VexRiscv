@@ -326,7 +326,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
       //Used to make the pipeline empty softly (for interrupts)
       val pipelineLiberator = new Area{
-        val enable = False
+        val enable = False.noBackendCombMerge //Verilator Perf
         prefetch.arbitration.haltByOther setWhen(enable)
         val done = ! List(fetch, decode, execute, memory).map(_.arbitration.isValid).orR
       }

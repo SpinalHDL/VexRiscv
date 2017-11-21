@@ -62,6 +62,9 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   writeBack.input(config.PC) keep() addAttribute(Verilator.public)
   writeBack.arbitration.isValid keep() addAttribute(Verilator.public)
   writeBack.arbitration.isFiring keep() addAttribute(Verilator.public)
+  decode.arbitration.removeIt.noBackendCombMerge //Verilator perf
+  memory.arbitration.removeIt.noBackendCombMerge
+  execute.arbitration.flushAll.noBackendCombMerge
 }
 
 

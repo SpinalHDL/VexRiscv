@@ -29,7 +29,7 @@ run: compile
 	./obj_dir/VMurax
 
 verilate:
-	verilator -cc  ../../../../Murax.v -CFLAGS -std=c++11  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-WIDTH --x-assign unique --exe main.cpp
+	verilator -cc  ../../../../Murax.v -CFLAGS -std=c++11  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-WIDTH -Wno-UNOPTFLAT --x-assign unique --exe main.cpp
  	
 compile: verilate
 	make  -j  -C obj_dir/ -f VMurax.mk VMurax
