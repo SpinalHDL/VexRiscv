@@ -65,7 +65,7 @@ class BranchPlugin(earlyBranch : Boolean,
     ))
 
     val pcManagerService = pipeline.service(classOf[JumpService])
-    jumpInterface = pcManagerService.createJumpInterface(pipeline.execute)
+    jumpInterface = pcManagerService.createJumpInterface(if(earlyBranch) pipeline.execute else pipeline.memory)
     if (prediction != NONE)
       predictionJumpInterface = pcManagerService.createJumpInterface(pipeline.decode)
 
@@ -114,7 +114,9 @@ class BranchPlugin(earlyBranch : Boolean,
         BranchCtrlEnum.JALR -> imm.i_sext,
         default             -> imm.b_sext
       ).asUInt
-      insert(BRANCH_CALC) := branch_src1 + branch_src2
+
+      val branchAdder = branch_src1 + branch_src2
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ ((input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? False | branchAdder(0))
     }
 
     //Apply branchs (JAL,JALR, Bxx)
@@ -220,7 +222,8 @@ class BranchPlugin(earlyBranch : Boolean,
           branch_src2 := (input(PREDICTION_HAD_BRANCHED) ? B(4) | imm.b_sext).asUInt
         }
       }
-      insert(BRANCH_CALC) := branch_src1 + branch_src2
+      val branchAdder = branch_src1 + branch_src2
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ ((input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? False | branchAdder(0))
     }
 
 
