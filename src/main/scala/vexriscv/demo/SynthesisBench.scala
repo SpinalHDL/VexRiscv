@@ -122,3 +122,12 @@ object MuraxSynthesisBench {
     Bench(rtls, targets, "/eda/tmp/")
   }
 }
+
+object AllSynthesisBench {
+  def main(args: Array[String]): Unit = {
+    VexRiscvSynthesisBench.main(args)
+    BrieySynthesisBench.main(args)
+    MuraxSynthesisBench.main(args)
+
+  }
+}

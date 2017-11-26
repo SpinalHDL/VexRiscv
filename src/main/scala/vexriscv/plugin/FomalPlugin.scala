@@ -99,7 +99,7 @@ class FomalPlugin extends Plugin[VexRiscv]{
       rvfi.rs2.addr := output(RS2_USE) ? output(INSTRUCTION)(rs2Range).asUInt | U(0)
       rvfi.rs1.rdata := output(RS1_USE) ? output(RS1) | B(0)
       rvfi.rs2.rdata := output(RS2_USE) ? output(RS2) | B(0)
-      rvfi.rd.addr := output(REGFILE_WRITE_VALID) ? output(INSTRUCTION)(rdRange).asUInt | U(0)
+      rvfi.rd.addr := output(REGFILE_WRITE_VALID) ? (output(INSTRUCTION)(rdRange).asUInt) | U(0)
       rvfi.rd.wdata := output(REGFILE_WRITE_VALID) ? output(REGFILE_WRITE_DATA) | B(0)
       rvfi.pc.rdata := output(PC)
       rvfi.pc.wdata := output(FORMAL_PC_NEXT)

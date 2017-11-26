@@ -22,7 +22,7 @@ object FormalSimple extends App{
           catchAccessFault = false
         ),
         new DBusSimplePlugin(
-          catchAddressMisaligned = false,
+          catchAddressMisaligned = true,
           catchAccessFault = false
         ),
         new DecoderSimplePlugin(

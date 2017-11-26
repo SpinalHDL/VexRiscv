@@ -220,8 +220,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
         U(0) -> B"0001",
         U(1) -> B"0011",
         default -> B"1111"
-      )
-      insert(FORMAL_MEM_ADDR) := dBus.cmd.address
+      ) |<< dBus.cmd.address(1 downto 0)
+      insert(FORMAL_MEM_ADDR) := dBus.cmd.address & U"xFFFFFFFC"
       insert(FORMAL_MEM_WMASK) := (dBus.cmd.valid &&  dBus.cmd.wr) ? formalMask | B"0000"
       insert(FORMAL_MEM_RMASK) := (dBus.cmd.valid && !dBus.cmd.wr) ? formalMask | B"0000"
       insert(FORMAL_MEM_WDATA) := dBus.cmd.payload.data
@@ -288,7 +288,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
         assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
 
       //formal
-      insert(FORMAL_MEM_RDATA) := rspFormated
+      insert(FORMAL_MEM_RDATA) := input(MEMORY_READ_DATA)
     }
   }
 }

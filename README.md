@@ -226,10 +226,9 @@ You can find some FPGA project which instantiate the Briey SoC there (DE1-SoC, D
 There is some measurements of Briey SoC timings and area : 
 
 ```
-  Artix 7    -> 256 Mhz 3302 LUT 3524 FF
-  Cyclone V  -> 126 Mhz 2,295 ALMs
-  Cyclone IV -> 121 Mhz 4,781 LUT 3,713 FF
-  Cyclone II -> 104 Mhz 4,902 LUT 3,718 FF
+  Artix 7    -> 231 Mhz 3339 LUT 3533 FF
+  Cyclone V  -> 124 Mhz 2,264 ALMs
+  Cyclone IV -> 124 Mhz 4,709 LUT 3,716 FF
 ```
 
 ## Murax SoC
@@ -280,17 +279,15 @@ There is some measurements of Murax SoC timings and area  :
 
 ```
 Murax interlocked stages (0.37 DMIPS/Mhz) ->
-  Artix 7    -> 306 Mhz 1021 LUT 1291 FF
-  Cyclone V  -> 173 Mhz 752 ALMs
-  Cyclone IV -> 140 Mhz 1483 LUT 1,250 FF
-  Cyclone II -> 127 Mhz 1484 LUT 1,249 FF
+  Artix 7    -> 304 Mhz 1016 LUT 1296 FF
+  Cyclone V  -> 165 Mhz 736 ALMs
+  Cyclone IV -> 151 Mhz 1,463 LUT 1,254 FF
   ICE40-HX   ->  51 Mhz 2387 LC (icestorm)
 
 MuraxFast bypassed stages (0.55 DMIPS/Mhz) ->
-  Artix 7    -> 310 Mhz 1192 LUT 1388 FF
-  Cyclone V  -> 160 Mhz 893 ALMs
-  Cyclone IV -> 142 Mhz 1726 LUT 1,284 FF
-  Cyclone II -> 106 Mhz 1714 LUT 1,283 FF
+  Artix 7    -> 301 Mhz 1248 LUT 1393 FF
+  Cyclone V  -> 163 Mhz 872 ALMs
+  Cyclone IV -> 145 Mhz 1,712 LUT 1,288 FF
   ICE40-HX   ->  45 Mhz, 2718 LC  (icestorm)
 ```
 
