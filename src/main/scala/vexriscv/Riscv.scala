@@ -14,7 +14,7 @@ object Riscv{
   case class IMM(instruction  : Bits) extends Area{
     // immediates
     def i = instruction(31 downto 20)
-    def s = instruction(31, 25) ## instruction(11, 7)
+    def s = instruction(31 downto 25) ## instruction(11 downto 7)
     def b = instruction(31) ## instruction(7) ## instruction(30 downto 25) ## instruction(11 downto 8)
     def u = instruction(31 downto 12) ## U"x000"
     def j = instruction(31) ## instruction(19 downto 12) ## instruction(20) ## instruction(30 downto 21)
