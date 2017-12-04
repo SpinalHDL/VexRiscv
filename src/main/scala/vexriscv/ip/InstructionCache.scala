@@ -29,7 +29,7 @@ case class InstructionCacheConfig( cacheSize : Int,
     useRegion = false,
     useLock = false,
     useQos = false,
-    useSize = false
+    useSize = true
   )
 
   def getAvalonConfig() = AvalonMMConfig.bursted(
@@ -134,6 +134,7 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
     mm.readCmd.addr := cmd.address
     mm.readCmd.prot  := "110"
     mm.readCmd.cache := "1111"
+    mm.readCmd.size := log2Up(p.memDataWidth/8)
     if(p.wrappedMemAccess)
       mm.readCmd.setBurstWRAP()
     else
