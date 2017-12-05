@@ -44,7 +44,7 @@ The hardware description of this CPU is done by using an very software oriented 
 
 The following number where obtains by synthesis the CPU as toplevel without any specific synthesis option to save area or to get better maximal frequency (neutral).<br>
 The clock constraint is set to a unattainable value, which tends to increase the design area.<br>
-
+The dhrystone benchmark were compiled with -O3 -fno-inline<br>
 The used CPU corresponding configuration can be find in src/scala/vexriscv/demo.
 
 ```
