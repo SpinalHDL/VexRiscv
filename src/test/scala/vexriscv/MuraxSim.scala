@@ -145,7 +145,7 @@ object MuraxSim {
         }
 
         while(true){
-          sleep(100000)
+          sleep(mainClkPeriod*100000)
           ledsValue = dut.io.gpioA.write.toLong
           ledsFrame.repaint()
         }
