@@ -16,7 +16,7 @@ import scala.concurrent.ExecutionContext.Implicits.global
 object MuraxSim {
   def main(args: Array[String]): Unit = {
 //    val config = MuraxConfig.default.copy(onChipRamSize = 256 kB)
-        val config = MuraxConfig.default.copy(onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")
+    val config = MuraxConfig.default.copy(onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")
 
     SimConfig(new Murax(config)).doManagedSim{dut =>
       val mainClkPeriod = (1e12/dut.config.coreFrequency.toDouble).toLong
