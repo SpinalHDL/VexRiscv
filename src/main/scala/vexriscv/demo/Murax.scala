@@ -127,6 +127,7 @@ object MuraxConfig{
       bypassWriteBack = true,
       bypassWriteBackBuffer = true
     )
+//    config.cpuPlugins(config.cpuPlugins.indexWhere(_.isInstanceOf[LightShifterPlugin])) = new FullBarrielShifterPlugin()
 
     config
   }
