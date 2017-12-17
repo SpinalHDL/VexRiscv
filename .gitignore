@@ -42,3 +42,5 @@ obj_dir
 *.tcl
 *.o
 
+
+*verilatorSim/
