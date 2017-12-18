@@ -1,8 +1,8 @@
 package vexriscv
 
 import spinal.sim._
+import spinal.core.sim._
 import spinal.core.Bool
-import spinal.core.SimManagedApi._
 
 object UartEncoder {
   def apply(uartPin : Bool, baudPeriod : Long) = fork{

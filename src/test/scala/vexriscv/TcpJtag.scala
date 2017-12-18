@@ -3,7 +3,7 @@ package vexriscv
 import java.io.{InputStream, OutputStream}
 import java.net.ServerSocket
 
-import spinal.core.SimManagedApi._
+import spinal.core.sim._
 import spinal.lib.com.jtag.Jtag
 
 import scala.concurrent.Future

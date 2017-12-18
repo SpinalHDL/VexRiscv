@@ -2,7 +2,7 @@ package vexriscv
 
 import spinal.sim._
 import spinal.core._
-import spinal.core.SimManagedApi._
+import spinal.core.sim._
 import vexriscv.demo.{Murax, MuraxConfig}
 
 import java.awt.Graphics

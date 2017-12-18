@@ -1,7 +1,7 @@
 package vexriscv
 
 import spinal.sim._
-import spinal.core.SimManagedApi._
+import spinal.core.sim._
 import spinal.core.{Bool, assert}
 
 object UartDecoder {
