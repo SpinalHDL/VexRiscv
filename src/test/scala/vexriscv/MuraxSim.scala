@@ -4,16 +4,18 @@ import spinal.sim._
 import spinal.core._
 import spinal.core.sim._
 import vexriscv.demo.{Murax, MuraxConfig}
-
 import java.awt.Graphics
 import javax.swing.{JFrame, JPanel}
+
+import spinal.lib.com.jtag.sim.JtagTcp
+import spinal.lib.com.uart.sim.{UartDecoder, UartEncoder}
 
 
 
 object MuraxSim {
   def main(args: Array[String]): Unit = {
 //    val config = MuraxConfig.default.copy(onChipRamSize = 256 kB)
-    val config = MuraxConfig.default.copy(onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")
+    val config = MuraxConfig.default.copy(onChipRamSize = 4 kB, onChipRamHexFile = "/home/spinalvm/hdl/VexRiscv/src/main/ressource/hex/muraxDemo.hex")
 
     SimConfig(new Murax(config)).allOptimisation.doManagedSim{dut =>
       val mainClkPeriod = (1e12/dut.config.coreFrequency.toDouble).toLong
@@ -38,14 +40,14 @@ object MuraxSim {
           cycleCounter += 1
           if(cycleCounter == 100000){
             val currentTime = System.nanoTime()
-            println(f"${cycleCounter/((currentTime - lastTime)*1e-9)*1e-3}%4.0f kHz")
+//            println(f"${cycleCounter/((currentTime - lastTime)*1e-9)*1e-3}%4.0f kHz")
             lastTime = currentTime
             cycleCounter = 0
           }
         }
       }
 
-      val tcpJtag = TcpJtag(
+      val tcpJtag = JtagTcp(
         jtag = dut.io.jtag,
         jtagClkPeriod = jtagClkPeriod
       )
