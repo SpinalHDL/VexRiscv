@@ -14,8 +14,8 @@ import spinal.lib.com.uart.sim.{UartDecoder, UartEncoder}
 
 object MuraxSim {
   def main(args: Array[String]): Unit = {
-//    val config = MuraxConfig.default.copy(onChipRamSize = 256 kB)
-    val config = MuraxConfig.default.copy(onChipRamSize = 4 kB, onChipRamHexFile = "/home/spinalvm/hdl/VexRiscv/src/main/ressource/hex/muraxDemo.hex")
+//    def config = MuraxConfig.default.copy(onChipRamSize = 256 kB)
+    def config = MuraxConfig.default.copy(onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")
 
     SimConfig(new Murax(config)).allOptimisation.doManagedSim{dut =>
       val mainClkPeriod = (1e12/dut.config.coreFrequency.toDouble).toLong
