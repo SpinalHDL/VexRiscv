@@ -1,0 +1,5 @@
+set_io CLK J3
+set_io BUT1 K11
+set_io BUT2 P13
+set_io LED1 M12
+set_io LED2 R16
