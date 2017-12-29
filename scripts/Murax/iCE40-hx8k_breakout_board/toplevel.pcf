@@ -1,4 +1,4 @@
-## ICE40-hx8k breakout board
+## iCE40-hx8k breakout board
 
 set_io io_J3  J3
 set_io io_H16 H16

@@ -1,12 +1,12 @@
 
 
-VERILOG = ../../Murax.v toplevel.v
+VERILOG = ../../../Murax.v toplevel.v toplevel_pll.v
 
 generate :
-	(cd ../..; sbt "run-main vexriscv.demo.Murax")
+	(cd ../../..; sbt "run-main vexriscv.demo.MuraxWithRamInit")
 
-../../Murax.v :
-	(cd ../..; sbt "run-main vexriscv.demo.Murax")
+../../../Murax.v :
+	(cd ../../..; sbt "run-main vexriscv.demo.MuraxWithRamInit")
 
 bin/toplevel.blif : ${VERILOG}
 	mkdir -p bin
@@ -24,7 +24,10 @@ time: bin/toplevel.bin
 	icetime -tmd hx8k bin/toplevel.asc
 
 prog : bin/toplevel.bin
-	sudo iceprog -S bin/toplevel.bin
+	iceprogduino bin/toplevel.bin
+
+sudo-prog : bin/toplevel.bin
+	sudo iceprogduino bin/toplevel.bin
 
 clean :
 	rm -rf bin
