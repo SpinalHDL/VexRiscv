@@ -17,35 +17,14 @@ object MuraxSim {
 //    def config = MuraxConfig.default.copy(onChipRamSize = 256 kB)
     def config = MuraxConfig.default.copy(onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")
 
-    SimConfig.allOptimisation.compile(new Murax(config)).doSim{dut =>
+    SimConfig.allOptimisation.compile(new Murax(config)).doSimUntilVoid{dut =>
       val mainClkPeriod = (1e12/dut.config.coreFrequency.toDouble).toLong
       val jtagClkPeriod = mainClkPeriod*4
       val uartBaudRate = 115200
       val uartBaudPeriod = (1e12/uartBaudRate).toLong
 
-      val genClock = fork{
-        dut.io.asyncReset #= true
-        dut.io.mainClk #= false
-        sleep(mainClkPeriod)
-        dut.io.asyncReset #= false
-        sleep(mainClkPeriod)
-
-        var cycleCounter = 0l
-        var lastTime = System.nanoTime()
-        while(true){
-          dut.io.mainClk #= false
-          sleep(mainClkPeriod/2)
-          dut.io.mainClk #= true
-          sleep(mainClkPeriod/2)
-          cycleCounter += 1
-          if(cycleCounter == 100000){
-            val currentTime = System.nanoTime()
-//            println(f"${cycleCounter/((currentTime - lastTime)*1e-9)*1e-3}%4.0f kHz")
-            lastTime = currentTime
-            cycleCounter = 0
-          }
-        }
-      }
+      val clockDomain = ClockDomain(dut.io.mainClk, dut.io.asyncReset)
+      clockDomain.forkStimulus(mainClkPeriod)
 
       val tcpJtag = JtagTcp(
         jtag = dut.io.jtag,
@@ -89,9 +68,6 @@ object MuraxSim {
           ledsFrame.repaint()
         }
       }
-
-
-      genClock.join()
     }
   }
 }
