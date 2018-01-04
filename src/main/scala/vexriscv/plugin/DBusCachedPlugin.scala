@@ -7,7 +7,6 @@ import spinal.lib._
 
 
 
-
 class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : Any = null)  extends Plugin[VexRiscv]{
   import config._
   var dBus  : DataCacheMemBus = null
@@ -17,6 +16,7 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
 
   object MEMORY_ENABLE extends Stageable(Bool)
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
+  object MEMORY_ATOMIC extends Stageable(Bool)
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -48,6 +48,30 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       List(LB, LH, LW, LBU, LHU, LWU).map(_ -> loadActions) ++
       List(SB, SH, SW).map(_ -> storeActions)
     )
+
+    if(genAtomic){
+      List(LB, LH, LW, LBU, LHU, LWU, SB, SH, SW).foreach(e =>
+        decoderService.add(e, Seq(MEMORY_ATOMIC -> False))
+      )
+      decoderService.add(
+        key = LR,
+        values = loadActions.filter(_._1 != SRC2_CTRL) ++ Seq(
+          RS2_USE -> True,
+          SRC2_CTRL -> Src2CtrlEnum.RS,
+          MEMORY_ATOMIC -> True
+        )
+      )
+      decoderService.add(
+        key = SC,
+        values = storeActions.filter(_._1 != SRC2_CTRL) ++ Seq(
+          SRC2_CTRL -> Src2CtrlEnum.RS,
+          REGFILE_WRITE_VALID -> True,
+          BYPASSABLE_EXECUTE_STAGE -> False,
+          BYPASSABLE_MEMORY_STAGE -> False,
+          MEMORY_ATOMIC -> True
+        )
+      )
+    }
 
     def MANAGEMENT  = M"-------00000-----101-----0001111"
     decoderService.add(MANAGEMENT, stdActions ++ List(
@@ -114,6 +138,7 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       cache.io.cpu.execute.args.clean := input(INSTRUCTION)(28)
       cache.io.cpu.execute.args.invalidate := input(INSTRUCTION)(29)
       cache.io.cpu.execute.args.way := input(INSTRUCTION)(30)
+      if(genAtomic) cache.io.cpu.execute.args.isAtomic := input(MEMORY_ATOMIC)
 
       insert(MEMORY_ADDRESS_LOW) := cache.io.cpu.execute.args.address(1 downto 0)
     }
@@ -133,6 +158,7 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       cache.io.cpu.writeBack.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser(writeBack) else False)
+      if(genAtomic) cache.io.cpu.writeBack.clearAtomicEntries := service(classOf[IContextSwitching]).isContextSwitching
 
       if(catchSomething) {
         exceptionBus.valid := cache.io.cpu.writeBack.mmuMiss || cache.io.cpu.writeBack.accessError || cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.unalignedAccess

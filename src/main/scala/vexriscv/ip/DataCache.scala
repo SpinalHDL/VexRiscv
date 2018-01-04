@@ -19,10 +19,12 @@ case class DataCacheConfig( cacheSize : Int,
                             catchMemoryTranslationMiss : Boolean,
                             clearTagsAfterReset : Boolean = true,
                             waysHitRetime : Boolean = true,
-                            tagSizeShift : Int = 0){ //Used to force infering ram
+                            tagSizeShift : Int = 0, //Used to force infering ram
+                            atomicEntriesCount : Int = 0){
   def burstSize = bytePerLine*8/memDataWidth
   val burstLength = bytePerLine/(memDataWidth/8)
   def catchSomething = catchUnaligned || catchMemoryTranslationMiss || catchIllegal || catchAccessError
+  def genAtomic = atomicEntriesCount != 0
 
   def getAxi4SharedConfig() = Axi4Config(
     addressWidth = addressWidth,
@@ -147,6 +149,7 @@ case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
   val size = UInt(2 bits)
   val forceUncachedAccess = Bool
   val clean, invalidate, way = Bool
+  val isAtomic = ifGen(p.genAtomic){Bool}
   //  val all = Bool                      //Address should be zero when "all" is used
 }
 
@@ -173,11 +176,13 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   val data = Bits(p.cpuDataWidth bit)
   val mmuMiss, illegalAccess, unalignedAccess , accessError = Bool
   val badAddr = UInt(32 bits)
+  val clearAtomicEntries = ifGen(p.genAtomic) {Bool}
   //  val exceptionBus = if(p.catchSomething) Flow(ExceptionCause()) else null
 
   override def asMaster(): Unit = {
     out(isValid,isStuck,isUser)
     in(haltIt, data, mmuMiss,illegalAccess , unalignedAccess, accessError, badAddr)
+    outWithNull(clearAtomicEntries)
   }
 }
 
@@ -564,6 +569,38 @@ class DataCache(p : DataCacheConfig) extends Component{
       }
     }
 
+
+    val atomic = if(genAtomic) new Area{
+      case class AtomicEntry() extends Bundle{
+        val valid = Bool()
+        val size = UInt(2 bits)
+        val address = UInt(addressWidth bits)
+
+        def init: this.type ={
+          valid init(False)
+          this
+        }
+      }
+      val entries = Vec(Reg(AtomicEntry()).init, atomicEntriesCount)
+      val entriesAllocCounter = Counter(atomicEntriesCount)
+      val entriesHit = entries.map(e => e.valid && e.size === request.size && e.address === request.address).orR
+      when(io.cpu.writeBack.isValid && request.isAtomic && !request.wr){
+        entries(entriesAllocCounter).valid := True
+        entries(entriesAllocCounter).size := request.size
+        entries(entriesAllocCounter).address := request.address
+        when(!io.cpu.writeBack.isStuck){
+          entriesAllocCounter.increment()
+        }
+      }
+      when(io.cpu.writeBack.clearAtomicEntries){
+        entries.foreach(_.valid := False)
+      }
+
+      when(request.isAtomic && ! entriesHit){
+        writeMask := 0
+      }
+    } else null
+
     when(io.cpu.writeBack.isValid) {
       if (catchMemoryTranslationMiss) {
         io.cpu.writeBack.mmuMiss := mmuRsp.miss
@@ -638,6 +675,11 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     assert(!(io.cpu.writeBack.isValid && !io.cpu.writeBack.haltIt && io.cpu.writeBack.isStuck), "writeBack stuck by another plugin is not allowed")
     io.cpu.writeBack.data := (request.forceUncachedAccess || mmuRsp.isIoAccess) ? io.mem.rsp.data | way.dataReadRspTwo //not multi ways
+    if(genAtomic){
+      when(request.isAtomic && request.wr){
+        io.cpu.writeBack.data := (!atomic.entriesHit).asBits.resized
+      }
+    }
   }
 
   //The whole life of a loading task, the corresponding manager request is present

@@ -138,9 +138,13 @@ case class CsrMapping(){
 }
 
 
+trait IContextSwitching{
+  def isContextSwitching : Bool
+}
 
 
-class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor{
+
+class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching{
   import config._
   import CsrAccess._
 
@@ -161,6 +165,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
   var externalInterrupt : Bool = null
   var privilege : Bits = null
   var selfException : Flow[ExceptionCause] = null
+  var contextSwitching : Bool = null
+  override def isContextSwitching = contextSwitching
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
     val NONE, EBREAK, MRET= newElement()
@@ -223,6 +229,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
     timerInterrupt    = in Bool() setName("timerInterrupt")
     externalInterrupt = in Bool() setName("externalInterrupt")
+    contextSwitching = Bool().setName("contextSwitching")
 
     privilege = RegInit(B"11")
 
@@ -438,6 +445,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
           decode.arbitration.flushAll := True
         }
       }
+
+      contextSwitching := jumpInterface.valid
 
       //CSR read/write instructions management
       execute plug new Area {

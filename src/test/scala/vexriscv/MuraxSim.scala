@@ -25,6 +25,7 @@ object MuraxSim {
 
       val clockDomain = ClockDomain(dut.io.mainClk, dut.io.asyncReset)
       clockDomain.forkStimulus(mainClkPeriod)
+//      clockDomain.forkSimSpeedPrinter()
 
       val tcpJtag = JtagTcp(
         jtag = dut.io.jtag,
