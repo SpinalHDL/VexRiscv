@@ -15,6 +15,8 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
   var privilegeService : PrivilegeService = null
 
   object MEMORY_ENABLE extends Stageable(Bool)
+  object MEMORY_MANAGMENT extends Stageable(Bool)
+  object MEMORY_WR extends Stageable(Bool)
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
   object MEMORY_ATOMIC extends Stageable(Bool)
 
@@ -35,12 +37,16 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       SRC2_CTRL -> Src2CtrlEnum.IMI,
       REGFILE_WRITE_VALID -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
-      BYPASSABLE_MEMORY_STAGE -> False
+      BYPASSABLE_MEMORY_STAGE -> False,
+      MEMORY_WR -> False,
+      MEMORY_MANAGMENT -> False
     )
 
     val storeActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMS,
-      RS2_USE -> True
+      RS2_USE -> True,
+      MEMORY_WR -> True,
+      MEMORY_MANAGMENT -> False
     )
 
     decoderService.addDefault(MEMORY_ENABLE, False)
@@ -56,7 +62,6 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       decoderService.add(
         key = LR,
         values = loadActions.filter(_._1 != SRC2_CTRL) ++ Seq(
-          RS2_USE -> True,
           SRC2_CTRL -> Src2CtrlEnum.RS,
           MEMORY_ATOMIC -> True
         )
@@ -64,7 +69,6 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       decoderService.add(
         key = SC,
         values = storeActions.filter(_._1 != SRC2_CTRL) ++ Seq(
-          SRC2_CTRL -> Src2CtrlEnum.RS,
           REGFILE_WRITE_VALID -> True,
           BYPASSABLE_EXECUTE_STAGE -> False,
           BYPASSABLE_MEMORY_STAGE -> False,
@@ -76,7 +80,8 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
     def MANAGEMENT  = M"-------00000-----101-----0001111"
     decoderService.add(MANAGEMENT, stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.RS,
-      RS2_USE -> True
+      RS2_USE -> True,
+      MEMORY_MANAGMENT -> True
     ))
 
     mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(pipeline.memory,memoryTranslatorPortConfig)
@@ -119,13 +124,11 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
 
     execute plug new Area {
       import execute._
-      //TODO manage removeIt
 
       val size = input(INSTRUCTION)(13 downto 12).asUInt
       cache.io.cpu.execute.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.execute.isStuck := arbitration.isStuck
-//      arbitration.haltIt.setWhen(cache.io.cpu.execute.haltIt)
-      cache.io.cpu.execute.args.wr := input(INSTRUCTION)(5)
+      cache.io.cpu.execute.args.wr := input(MEMORY_WR)
       cache.io.cpu.execute.args.address := input(SRC_ADD).asUInt
       cache.io.cpu.execute.args.data := size.mux(
         U(0)    -> input(RS2)( 7 downto 0) ## input(RS2)( 7 downto 0) ## input(RS2)(7 downto 0) ## input(RS2)(7 downto 0),
@@ -134,11 +137,17 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       )
       cache.io.cpu.execute.args.size := size
       cache.io.cpu.execute.args.forceUncachedAccess := False 
-      cache.io.cpu.execute.args.kind := input(INSTRUCTION)(2) ? DataCacheCpuCmdKind.MANAGMENT | DataCacheCpuCmdKind.MEMORY
+      cache.io.cpu.execute.args.kind := input(MEMORY_MANAGMENT) ? DataCacheCpuCmdKind.MANAGMENT | DataCacheCpuCmdKind.MEMORY
       cache.io.cpu.execute.args.clean := input(INSTRUCTION)(28)
       cache.io.cpu.execute.args.invalidate := input(INSTRUCTION)(29)
       cache.io.cpu.execute.args.way := input(INSTRUCTION)(30)
-      if(genAtomic) cache.io.cpu.execute.args.isAtomic := input(MEMORY_ATOMIC)
+      if(genAtomic) {
+        cache.io.cpu.execute.args.isAtomic := False
+        when(input(MEMORY_ATOMIC)){
+          cache.io.cpu.execute.args.isAtomic := True
+          cache.io.cpu.execute.args.address := input(SRC1).asUInt
+        }
+      }
 
       insert(MEMORY_ADDRESS_LOW) := cache.io.cpu.execute.args.address(1 downto 0)
     }
@@ -165,10 +174,10 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
         exceptionBus.badAddr := cache.io.cpu.writeBack.badAddr
         exceptionBus.code.assignDontCare()
         when(cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.accessError){
-          exceptionBus.code := (input(INSTRUCTION)(5) ? U(7) | U(5)).resized
+          exceptionBus.code := (input(MEMORY_WR) ? U(7) | U(5)).resized
         }
         when(cache.io.cpu.writeBack.unalignedAccess){
-          exceptionBus.code := (input(INSTRUCTION)(5) ? U(6) | U(4)).resized
+          exceptionBus.code := (input(MEMORY_WR) ? U(6) | U(4)).resized
         }
         when(cache.io.cpu.writeBack.mmuMiss){
           exceptionBus.code := 13

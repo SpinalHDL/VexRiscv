@@ -16,15 +16,15 @@ END GROUP
 LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/libgcc.a
                 0x0000000000000000                . = 0x0
 
-.crt_section    0x0000000000000000       0x84
+.crt_section    0x0000000000000000       0xf0
                 0x0000000000000000                . = ALIGN (0x4)
  *crt.o(.text)
- .text          0x0000000000000000       0x84 build/src/crt.o
+ .text          0x0000000000000000       0xf0 build/src/crt.o
                 0x0000000000000000                _start
 OUTPUT(build/atomic.elf elf32-littleriscv)
 
-.data           0x0000000000000084        0x0
- .data          0x0000000000000084        0x0 build/src/crt.o
+.data           0x00000000000000f0        0x0
+ .data          0x00000000000000f0        0x0 build/src/crt.o
 
-.bss            0x0000000000000084        0x0
- .bss           0x0000000000000084        0x0 build/src/crt.o
+.bss            0x00000000000000f0        0x0
+ .bss           0x00000000000000f0        0x0 build/src/crt.o
