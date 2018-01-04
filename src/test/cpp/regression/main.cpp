@@ -1727,7 +1727,7 @@ int main(int argc, char **argv, char **env) {
 
 
 		#ifdef ATOMIC
-			redo(REDO,Workspace("atomic").loadHex("../custom/atomic/build/atomic.hex")->bootAt(0x00000000u)->run(50e3););
+			redo(REDO,Workspace("atomic").loadHex("../custom/atomic/build/atomic.hex")->bootAt(0x00000000u)->run(10e3););
 		#endif
 
 		#ifdef DHRYSTONE

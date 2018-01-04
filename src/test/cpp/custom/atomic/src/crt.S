@@ -12,6 +12,14 @@
 
 .global  trap_entry
 trap_entry:
+    csrr x29, mstatus
+    and x29, x29, 0x080
+    beqz x29, notExternalInterrupt
+    li x29, 0x1800     //000 disable interrupts
+    csrw mstatus,x29
+    mret
+
+notExternalInterrupt:
     csrr x29, mepc
     addi x29, x29, 4
     csrw mepc, x29
@@ -167,7 +175,7 @@ test7:
 
 
 //Test 10  SC should fail if the address doesn't match
-    li x28, 9
+    li x28, 10
     li a0, 0x10000200
     li a6, 0x10000204
     li a1, 126
@@ -182,6 +190,58 @@ test7:
     bne a2, a4, fail
     lw a4, 0(a6)
     bne a7, a4, fail
+
+
+
+//Test 11  SC should fail after a external interrupt context switching
+    li x28, 11
+    li a0, 0x10000300
+    li a1, 130
+    li a2, 131
+    li a3, 132
+    sw a3, 0(a0)
+    li x29, 0x800     //800  external interrupts
+    csrw mie,x29
+    li x29, 0x008     //008 enable interrupts
+    lr.w a5, (a0)
+    csrw mstatus,x29 //Enable external interrupt (will jump instantly due to testbench setup)
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    sc.w a2, a1, (a0)
+    li a4, 1
+    bne a2, a4, fail
+    lw a4, 0(a0)
+    bne a3, a4, fail
+
+
+//Test 12  SC should fail after a external interrupt context switching (callback on lr)
+    li x28, 12
+    li a0, 0x10000400
+    li a1, 140
+    li a2, 141
+    li a3, 142
+    sw a3, 0(a0)
+    li x29, 0x800     //800  external interrupts
+    csrw mie,x29
+    li x29, 0x1808     //008 enable interrupts
+    lr.w a5, (a0)
+    csrw mstatus,x29 //Enable external interrupt (will jump instantly due to testbench setup)
+    nop
+    nop
+    nop
+    nop
+    nop
+    nop
+    sc.w a2, a1, (a0)
+    li a4, 1
+    bne a2, a4, fail
+    lw a4, 0(a0)
+    bne a3, a4, fail
+
 
 
     j pass

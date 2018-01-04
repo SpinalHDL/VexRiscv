@@ -335,7 +335,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       val pipelineLiberator = new Area{
         val enable = False.noBackendCombMerge //Verilator Perf
         prefetch.arbitration.haltByOther setWhen(enable)
-        val done = ! List(fetch, decode, execute, memory).map(_.arbitration.isValid).orR
+        val done = ! List(fetch, decode, execute, memory, writeBack).map(_.arbitration.isValid).orR
       }
 
 
@@ -395,7 +395,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
       val interrupt = ((mip.MSIP && mie.MSIE) || (mip.MEIP && mie.MEIE) || (mip.MTIP && mie.MTIE)) && mstatus.MIE && allowInterrupts
       val exception = if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValids.last && allowException else False
-      val writeBackWfi = if(wfiGen) writeBack.arbitration.isValid && writeBack.input(ENV_CTRL) === EnvCtrlEnum.WFI else False
+      val writeBackWasWfi = if(wfiGen) RegNext(writeBack.arbitration.isFiring && writeBack.input(ENV_CTRL) === EnvCtrlEnum.WFI) init(False) else False
 
       //Interrupt/Exception entry logic
       pipelineLiberator.enable setWhen(interrupt)
@@ -407,7 +407,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         mstatus.MPP  := privilege
         mepc := exception mux(
           True  -> writeBack.input(PC),
-          False -> (writeBackWfi ? (writeBack.input(PC) + 4) | prefetch.input(PC_CALC_WITHOUT_JUMP)) //TODO ? WFI could emulate J PC + 4
+          False -> (writeBackWasWfi ? writeBack.input(PC) | prefetch.input(PC_CALC_WITHOUT_JUMP))
         )
 
         mcause.interrupt := interrupt
