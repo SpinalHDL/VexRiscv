@@ -1,0 +1,30 @@
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+onChipRam        0x0000000000000000 0x0000000000002000 w !xr
+*default*        0x0000000000000000 0xffffffffffffffff
+
+Linker script and memory map
+
+LOAD build/src/crt.o
+LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/libgcc.a
+START GROUP
+LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/../../../../riscv64-unknown-elf/lib/libc.a
+LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/../../../../riscv64-unknown-elf/lib/libgloss.a
+END GROUP
+LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/libgcc.a
+                0x0000000000000000                . = 0x0
+
+.crt_section    0x0000000000000000       0x84
+                0x0000000000000000                . = ALIGN (0x4)
+ *crt.o(.text)
+ .text          0x0000000000000000       0x84 build/src/crt.o
+                0x0000000000000000                _start
+OUTPUT(build/atomic.elf elf32-littleriscv)
+
+.data           0x0000000000000084        0x0
+ .data          0x0000000000000084        0x0 build/src/crt.o
+
+.bss            0x0000000000000084        0x0
+ .bss           0x0000000000000084        0x0 build/src/crt.o

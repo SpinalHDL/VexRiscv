@@ -1725,6 +1725,11 @@ int main(int argc, char **argv, char **env) {
 			redo(REDO,Workspace("custom_simd_add").loadHex("../custom/simd_add/build/custom_simd_add.hex")->bootAt(0x00000000u)->run(50e3););
 		#endif
 
+
+		#ifdef ATOMIC
+			redo(REDO,Workspace("atomic").loadHex("../custom/atomic/build/atomic.hex")->bootAt(0x00000000u)->run(50e3););
+		#endif
+
 		#ifdef DHRYSTONE
 			Dhrystone("dhrystoneO3_Stall","dhrystoneO3",true,true).run(1.1e6);
 			#if defined(MUL) && defined(DIV)

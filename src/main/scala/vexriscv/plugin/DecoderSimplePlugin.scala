@@ -43,11 +43,23 @@ case class Masked(value : BigInt,care : BigInt){
 class DecoderSimplePlugin(catchIllegalInstruction : Boolean, forceLegalInstructionComputation : Boolean = false) extends Plugin[VexRiscv] with DecoderService {
   override def add(encoding: Seq[(MaskedLiteral, Seq[(Stageable[_ <: BaseType], Any)])]): Unit = encoding.foreach(e => this.add(e._1,e._2))
   override def add(key: MaskedLiteral, values: Seq[(Stageable[_ <: BaseType], Any)]): Unit = {
-    assert(!encodings.contains(key))
-    encodings.getOrElseUpdate(key,ArrayBuffer[(Stageable[_ <: BaseType], BaseType)]()) ++= values.map{case (a,b) => (a,b match{
-      case e : SpinalEnumElement[_] => e()
-      case e : BaseType => e
-    })}
+//    val instructionModel = encodings.getOrElseUpdate(key,ArrayBuffer[(Stageable[_ <: BaseType], BaseType)]())
+    val instructionModel = encodings.find(x => x._1.careAbout == key.careAbout && x._1.width == key.width && x._1.value == key.value) match {
+      case Some(x) => x._2
+      case _ => {
+        val model = ArrayBuffer[(Stageable[_ <: BaseType], BaseType)]()
+        encodings.put(key, model)
+        model
+      }
+    }
+    values.map{case (a,b) => {
+      assert(!instructionModel.contains(a), s"Over specification of $a")
+      val value = b match {
+        case e: SpinalEnumElement[_] => e()
+        case e: BaseType => e
+      }
+      instructionModel += (a->value)
+    }}
   }
 
   override def addDefault(key: Stageable[_  <: BaseType], value: Any): Unit = {

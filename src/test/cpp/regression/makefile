@@ -8,6 +8,7 @@ MUL?=yes
 DIV?=yes
 CSR?=yes
 MMU?=yes
+ATOMIC?=no
 DEBUG_PLUGIN?=STD
 DEBUG_PLUGIN_EXTERNAL?=no
 CUSTOM_SIMD_ADD?=no
@@ -36,6 +37,11 @@ endif
 
 ifeq ($(CSR),yes)
 	ADDCFLAGS += -CFLAGS -DCSR
+endif
+
+
+ifeq ($(ATOMIC),yes)
+	ADDCFLAGS += -CFLAGS -DATOMIC
 endif
 
 ifeq ($(CUSTOM_SIMD_ADD),yes)
