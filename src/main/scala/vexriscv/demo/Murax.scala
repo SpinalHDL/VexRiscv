@@ -301,6 +301,25 @@ object MuraxDhrystoneReady{
   }
 }
 
+object MuraxDhrystoneReadyMulDivStatic{
+  def main(args: Array[String]) {
+    SpinalVerilog({
+      val config = MuraxConfig.fast.copy(onChipRamSize = 256 kB)
+      config.cpuPlugins += new MulPlugin
+      config.cpuPlugins += new DivPlugin
+      config.cpuPlugins.remove(config.cpuPlugins.indexWhere(_.isInstanceOf[BranchPlugin]))
+      config.cpuPlugins +=new BranchPlugin(
+        earlyBranch = false,
+        catchAddressMisaligned = false,
+        prediction = STATIC
+      )
+      config.cpuPlugins.remove(config.cpuPlugins.indexWhere(_.isInstanceOf[LightShifterPlugin]))
+      config.cpuPlugins += new FullBarrielShifterPlugin
+      Murax(config)
+    })
+  }
+}
+
 //Will blink led and echo UART RX to UART TX   (in the verilator sim, type some text and press enter to send UART frame to the Murax RX pin)
 object MuraxWithRamInit{
   def main(args: Array[String]) {
