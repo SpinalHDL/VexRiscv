@@ -302,6 +302,15 @@ MuraxFast bypassed stages (0.55 DMIPS/Mhz) ->
 
 There is some scripts to generate the SoC and call the icestorm toolchain there : scripts/Murax/
 
+Note that now a toplevel simulation testbench with the same feature + a GUI is implemented with SpinalSim. You can find it in src/test/scala/vexriscv/MuraxSim.scala.
+
+To run it : 
+
+```sh
+#This will generate the Murax RTL + run its testbench. You need Verilator 3.9xx installated.
+sbt "test:runMain vexriscv.MuraxSim"
+```
+
 ## Build the RISC-V GCC
 
 In fact, now you can find some prebuild GCC : <br>
