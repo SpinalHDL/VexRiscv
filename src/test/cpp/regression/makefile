@@ -99,7 +99,9 @@ all: clean run
 run: compile
 	./obj_dir/VVexRiscv
 
-verilate:
+verilate: ../../../../VexRiscv.v
+	rm -f VexRiscv.v*.bin
+	cp ../../../../VexRiscv.v*.bin . | true
 	verilator -cc  ../../../../VexRiscv.v  -O3 -CFLAGS -std=c++11 -LDFLAGS -pthread  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-UNOPTFLAT -Wno-WIDTH --x-assign unique --exe main.cpp
  	
 compile: verilate
@@ -107,4 +109,5 @@ compile: verilate
  	
 clean:
 	rm -rf obj_dir
+	rm -f VexRiscv.v*.bin
  	

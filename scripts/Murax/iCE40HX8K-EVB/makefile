@@ -10,6 +10,8 @@ generate :
 
 bin/toplevel.blif : ${VERILOG}
 	mkdir -p bin
+	rm -f Murax.v*.bin
+	cp ../../../Murax.v*.bin . | true
 	yosys -v3 -p "synth_ice40 -top toplevel -blif bin/toplevel.blif" ${VERILOG}
 
 bin/toplevel.asc : toplevel.pcf bin/toplevel.blif
@@ -31,3 +33,4 @@ sudo-prog : bin/toplevel.bin
 
 clean :
 	rm -rf bin
+	rm -f Murax.v*.bin

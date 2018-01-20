@@ -29,7 +29,7 @@ object GenCustomSimdAdd extends App{
         ),
         new RegFilePlugin(
           regFileReadyKind = plugin.SYNC,
-          zeroBoot = true
+          zeroBoot = false
         ),
         new IntAluPlugin,
         new SrcPlugin(

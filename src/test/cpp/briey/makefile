@@ -45,12 +45,15 @@ all: clean compile
 run: compile
 	./obj_dir/VBriey
 
-verilate:
+verilate: ../../../../Briey.v
+	rm -f Briey.v*.bin
+	cp ../../../../Briey.v*.bin . | true
 	verilator -cc  ../../../../Briey.v -CFLAGS -std=c++11  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-WIDTH -Wno-UNOPTFLAT --x-assign unique --exe main.cpp
  	
 compile: verilate
 	make  -j  -C obj_dir/ -f VBriey.mk VBriey
  	
 clean:
+	rm -f Briey.v*.bin
 	rm -rf obj_dir
  	

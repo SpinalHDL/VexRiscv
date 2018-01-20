@@ -28,12 +28,15 @@ all: clean compile
 run: compile
 	./obj_dir/VMurax
 
-verilate:
-	verilator -cc  ../../../../Murax.v -CFLAGS -std=c++11  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-WIDTH -Wno-UNOPTFLAT --x-assign unique --exe main.cpp
+verilate: ../../../../Murax.v
+	rm -f Murax.v*.bin
+	cp ../../../../Murax.v*.bin . | true
+	verilator -I../../../.. -cc  ../../../../Murax.v -CFLAGS -std=c++11  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-WIDTH -Wno-UNOPTFLAT --x-assign unique --exe main.cpp
  	
 compile: verilate
 	make  -j  -C obj_dir/ -f VMurax.mk VMurax
  	
 clean:
 	rm -rf obj_dir
+	rm -f Murax.v*.bin
  	

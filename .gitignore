@@ -41,7 +41,7 @@ obj_dir
 *.regTrace
 *.tcl
 *.o
-
+*.bin
 
 simWorkspace/
 tmp/

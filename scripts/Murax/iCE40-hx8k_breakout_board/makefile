@@ -8,8 +8,10 @@ generate :
 ../../../Murax.v :
 	(cd ../../..; sbt "run-main vexriscv.demo.Murax")
 
-bin/toplevel.blif : ${VERILOG}
+bin/toplevel.blif : ${VERILOG} ../../../Murax.v*.bin
 	mkdir -p bin
+	rm -f Murax.v*.bin
+	cp ../../../Murax.v*.bin . | true
 	yosys -v3 -p "synth_ice40 -top toplevel -blif bin/toplevel.blif" ${VERILOG}
 
 bin/toplevel.asc : toplevel.pcf bin/toplevel.blif
@@ -28,3 +30,4 @@ prog : bin/toplevel.bin
 
 clean :
 	rm -rf bin
+	rm -f Murax.v*.bin

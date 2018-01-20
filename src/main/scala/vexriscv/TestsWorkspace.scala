@@ -96,7 +96,7 @@ object TestsWorkspace {
           ),
           new RegFilePlugin(
             regFileReadyKind = plugin.SYNC,
-            zeroBoot = true
+            zeroBoot = false
           ),
           new IntAluPlugin,
           new SrcPlugin(
@@ -197,7 +197,7 @@ object TestsWorkspace {
           ),
           new RegFilePlugin(
             regFileReadyKind = plugin.SYNC,
-            zeroBoot = true
+            zeroBoot = false
           ),
           new IntAluPlugin,
           new SrcPlugin(
