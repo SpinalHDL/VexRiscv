@@ -8,6 +8,8 @@ generate :
 ../../../Murax.v :
 	(cd ../../..; sbt "run-main vexriscv.demo.Murax")
 
+../../../Murax.v*.bin:
+
 bin/toplevel.blif : ${VERILOG} ../../../Murax.v*.bin
 	mkdir -p bin
 	rm -f Murax.v*.bin
