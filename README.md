@@ -21,8 +21,8 @@ This repository host an RISC-V implementation written in SpinalHDL. There is som
 
 - RV32IM instruction set
 - Pipelined on 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
-- 1.16 DMIPS/Mhz when all features are enabled
-- Optimized for FPGA
+- 1.29 DMIPS/Mhz when all features are enabled
+- Optimized for FPGA, fully portable
 - AXI4 and Avalon ready
 - Optional MUL/DIV extension
 - Optional instruction and data caches
@@ -45,45 +45,61 @@ The hardware description of this CPU is done by using an very software oriented 
 The following number where obtains by synthesis the CPU as toplevel without any specific synthesis option to save area or to get better maximal frequency (neutral).<br>
 The clock constraint is set to a unattainable value, which tends to increase the design area.<br>
 The dhrystone benchmark were compiled with -O3 -fno-inline<br>
+All the cached configuration have some cache trashing during the dhrystone benchmark except the `VexRiscv full max perf` one. This of course reduce the performance. It is possible to produce dhrystone binaries which fit inside a 4KB I$ and 4KB D$ (I already had this case once) but currently it isn't the case.<br>
 The used CPU corresponding configuration can be find in src/scala/vexriscv/demo.
 
 ```
-VexRiscv smallest (RV32I, 0.47 DMIPS/Mhz, no datapath bypass, no interrupt) ->
+VexRiscv smallest (RV32I, 0.51 DMIPS/Mhz, no datapath bypass, no interrupt) ->
   Artix 7    -> 346 Mhz 481 LUT 539 FF
   Cyclone V  -> 201 Mhz 347 ALMs
   Cyclone IV -> 190 Mhz 673 LUT 529 FF 
   Cyclone II -> 154 Mhz 673 LUT 528 FF 
   
-VexRiscv smallest (RV32I, 0.47 DMIPS/Mhz, no datapath bypass) ->
+VexRiscv smallest (RV32I, 0.51 DMIPS/Mhz, no datapath bypass) ->
   Artix 7    -> 340 Mhz 562 LUT 589 FF 
   Cyclone V  -> 202 Mhz 387 ALMs
   Cyclone IV -> 180 Mhz 780 LUT 579 FF 
   Cyclone II -> 149 Mhz 780 LUT 578 FF 
   
-VexRiscv small and productive (RV32I, 0.78 DMIPS/Mhz)  ->
+VexRiscv small and productive (RV32I, 0.82 DMIPS/Mhz)  ->
   Artix 7    -> 309 Mhz 703 LUT 557 FF 
   Cyclone V  -> 152 Mhz 502 ALMs
   Cyclone IV -> 147 Mhz 1,062 LUT 552 FF 
   Cyclone II -> 120 Mhz 1,072 LUT 551 FF 
 
-VexRiscv full no cache (RV32IM, 1.14 DMIPS/Mhz, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
-  Artix 7     -> 310 Mhz 1391 LUT 934 FF 
+VexRiscv full no cache (RV32IM, 1.20 DMIPS/Mhz, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
+  Artix 7    -> 310 Mhz 1391 LUT 934 FF 
   Cyclone V  -> 143 Mhz 935 ALMs
   Cyclone IV -> 123 Mhz 1,916 LUT 960 FF 
   Cyclone II -> 108 Mhz 1,939 LUT 959 FF 
-
-VexRiscv full (RV32IM, 1.14 DMIPS/Mhz, I$, D$, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
+  
+VexRiscv full (RV32IM, 1.13 DMIPS/Mhz with cache trashing, 4KB-I$,4KB-D$, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
   Artix 7    -> 250 Mhz 1911 LUT 1501 FF 
   Cyclone V  -> 132 Mhz 1,266 ALMs
   Cyclone IV -> 127 Mhz 2,733 LUT 1,762 FF 
   Cyclone II -> 103 Mhz 2,791 LUT 1,760 FF 
-    
-VexRiscv full with MMU (RV32IM, 1.16 DMIPS/Mhz, I$, D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, MMU) ->
+  
+VexRiscv full max perf -> (RV32IM, 1.29 DMIPS/Mhz, 16KB-I$,16KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, branch and shift operations done in the Execute stage) ->
+  Artix 7    -> 216 Mhz 1978 LUT 1442 FF 
+  Cyclone V  -> 105 Mhz 1,222 ALMs
+  Cyclone IV -> 94 Mhz 2,735 LUT 1,702 FF 
+
+VexRiscv full with MMU (RV32IM, 1.17 DMIPS/Mhz with cache trashing, 4KB-I$, 4KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, MMU) ->
   Artix 7    -> 223 Mhz 2085 LUT 2020 FF 
   Cyclone V  -> 110 Mhz 1,503 ALMs
   Cyclone IV -> 108 Mhz 3,153 LUT 2,281 FF 
   Cyclone II -> 94 Mhz 3,187 LUT 2,281 FF 
 ```
+
+There is the a summary of the configuration which produce 1.29 DMIPS : 
+
+- 5 stage : F -> D -> E -> M  -> WB
+- single cycle ADD/SUB/Bitwise/Shift ALU
+- branch/jump done in the E stage
+- memory load values are bypassed in the WB stage (late result) 
+- 33 cycle division with bypassing in the M stage (late result)
+- single cycle multiplication with bypassing in the WB stage (late result)
+- dynamic branch prediction done in the D stage with an direct mapped 2 bit branch history cache
 
 ## Dependencies
 
@@ -337,7 +353,7 @@ sudo mv /opt/riscv64-unknown-elf-gcc-20170612-x86_64-linux-centos6 /opt/riscv
 echo 'export PATH=/opt/riscv/bin:$PATH' >> ~/.bashrc 
 ```
 
-But if you want to compile from sources in /opt/ the rv32i and rv32im gcc, do the following (will take hours):
+But if you want to compile from sources in /opt/ the rv32i and rv32im gcc, do the following (will take one hour):
 
 ```sh
 # Be carefull, sometime the git clone has issue to successfully clone riscv-gnu-toolchain.

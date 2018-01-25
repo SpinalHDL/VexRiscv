@@ -6,7 +6,7 @@ import spinal.lib.Reverse
 
 
 
-class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
+class FullBarrielShifterPlugin(earlyInjection : Boolean = false) extends Plugin[VexRiscv]{
   object ShiftCtrlEnum extends SpinalEnum(binarySequential){
     val DISABLE, SLL, SRL, SRA = newElement()
   }
@@ -24,7 +24,7 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.IMI,
       REGFILE_WRITE_VALID      -> True,
-      BYPASSABLE_EXECUTE_STAGE -> False,
+      BYPASSABLE_EXECUTE_STAGE -> Bool(earlyInjection),
       BYPASSABLE_MEMORY_STAGE  -> True,
       RS1_USE                 -> True
     )
@@ -33,7 +33,7 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
       REGFILE_WRITE_VALID      -> True,
-      BYPASSABLE_EXECUTE_STAGE -> False,
+      BYPASSABLE_EXECUTE_STAGE -> Bool(earlyInjection),
       BYPASSABLE_MEMORY_STAGE  -> True,
       RS1_USE                 -> True,
       RS2_USE                 -> True
@@ -66,8 +66,9 @@ class FullBarrielShifterPlugin extends Plugin[VexRiscv]{
       insert(SHIFT_RIGHT) := (Cat(input(SHIFT_CTRL) === ShiftCtrlEnum.SRA & reversed.msb, reversed).asSInt >> amplitude)(31 downto 0).asBits
     }
 
-    memory plug new Area{
-      import memory._
+    val injectionStage = if(earlyInjection) execute else memory
+    injectionStage plug new Area{
+      import injectionStage._
       switch(input(SHIFT_CTRL)){
         is(ShiftCtrlEnum.SLL){
           output(REGFILE_WRITE_DATA) := Reverse(input(SHIFT_RIGHT))
