@@ -91,7 +91,7 @@ VexRiscv full with MMU (RV32IM, 1.17 DMIPS/Mhz with cache trashing, 4KB-I$, 4KB-
   Cyclone II -> 94 Mhz 3,187 LUT 2,281 FF 
 ```
 
-There is the a summary of the configuration which produce 1.29 DMIPS : 
+There is a summary of the configuration which produce 1.29 DMIPS : 
 
 - 5 stage : F -> D -> E -> M  -> WB
 - single cycle ADD/SUB/Bitwise/Shift ALU
