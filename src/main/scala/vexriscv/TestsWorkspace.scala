@@ -41,7 +41,7 @@ object TestsWorkspace {
 //          ),
           new IBusCachedPlugin(
             config = InstructionCacheConfig(
-              cacheSize = 4096*4,
+              cacheSize = 4096,
               bytePerLine =32,
               wayCount = 1,
               wrappedMemAccess = true,
@@ -66,7 +66,7 @@ object TestsWorkspace {
 //          ),
           new DBusCachedPlugin(
             config = new DataCacheConfig(
-              cacheSize         = 4096*4,
+              cacheSize         = 4096,
               bytePerLine       = 32,
               wayCount          = 1,
               addressWidth      = 32,
@@ -83,14 +83,14 @@ object TestsWorkspace {
               portTlbSize = 6
             )
           ),
-          new StaticMemoryTranslatorPlugin(
-            ioRange      = _(31 downto 28) === 0xF
-          ),
-//          new MemoryTranslatorPlugin(
-//            tlbSize = 32,
-//            virtualRange = _(31 downto 28) === 0xC,
+//          new StaticMemoryTranslatorPlugin(
 //            ioRange      = _(31 downto 28) === 0xF
 //          ),
+          new MemoryTranslatorPlugin(
+            tlbSize = 32,
+            virtualRange = _(31 downto 28) === 0xC,
+            ioRange      = _(31 downto 28) === 0xF
+          ),
           new DecoderSimplePlugin(
             catchIllegalInstruction = true
           ),
@@ -102,7 +102,7 @@ object TestsWorkspace {
           new SrcPlugin(
             separatedAddSub = false
           ),
-          new FullBarrielShifterPlugin(earlyInjection = true),
+          new FullBarrielShifterPlugin(earlyInjection = false),
   //        new LightShifterPlugin,
           new HazardSimplePlugin(
             bypassExecute           = true,
@@ -120,7 +120,7 @@ object TestsWorkspace {
           new CsrPlugin(CsrPluginConfig.all),
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
-            earlyBranch = true,
+            earlyBranch = false,
             catchAddressMisaligned = true,
             prediction = DYNAMIC
           ),

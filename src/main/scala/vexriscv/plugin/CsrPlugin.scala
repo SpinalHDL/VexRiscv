@@ -452,9 +452,11 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       execute plug new Area {
         import execute._
 
-        val illegalAccess = True
+        val illegalAccess =  arbitration.isValid && input(IS_CSR)
         if(catchIllegalAccess) {
-          selfException.valid := arbitration.isValid && input(IS_CSR) && illegalAccess
+          val illegalInstruction = arbitration.isValid && privilege === 0 && (input(ENV_CTRL) === EnvCtrlEnum.EBREAK || input(ENV_CTRL) === EnvCtrlEnum.MRET)
+
+          selfException.valid := illegalAccess || illegalInstruction
           selfException.code := 2
           selfException.badAddr.assignDontCare()
         }
