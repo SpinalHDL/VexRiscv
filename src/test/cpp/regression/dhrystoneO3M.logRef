@@ -22,7 +22,7 @@ Arr_1_Glob[8]:       7
 Arr_2_Glob[8][7]:    210
         should be:   Number_Of_Runs + 10
 Ptr_Glob->
-  Ptr_Comp:          1073807824
+  Ptr_Comp:          89136
         should be:   (implementation-dependent)
   Discr:             0
         should be:   0
@@ -33,7 +33,7 @@ Ptr_Glob->
   Str_Comp:          DHRYSTONE PROGRAM, SOME STRING
         should be:   DHRYSTONE PROGRAM, SOME STRING
 Next_Ptr_Glob->
-  Ptr_Comp:          1073807824
+  Ptr_Comp:          89136
         should be:   (implementation-dependent), same as above
   Discr:             0
         should be:   0
