@@ -9,6 +9,7 @@ trait BranchPrediction
 object NONE extends BranchPrediction
 object STATIC  extends BranchPrediction
 object DYNAMIC extends BranchPrediction
+object DYNAMIC_TARGET extends BranchPrediction
 
 class BranchPlugin(earlyBranch : Boolean,
                    catchAddressMisaligned : Boolean,
@@ -66,14 +67,20 @@ class BranchPlugin(earlyBranch : Boolean,
 
     val pcManagerService = pipeline.service(classOf[JumpService])
     jumpInterface = pcManagerService.createJumpInterface(if(earlyBranch) pipeline.execute else pipeline.memory)
-    if (prediction != NONE)
-      predictionJumpInterface = pcManagerService.createJumpInterface(pipeline.decode)
+
+    prediction match {
+      case NONE =>
+      case STATIC | DYNAMIC => predictionJumpInterface = pcManagerService.createJumpInterface(pipeline.decode)
+      case DYNAMIC_TARGET => predictionJumpInterface = pcManagerService.createJumpInterface(pipeline.fetch)
+    }
 
     if (catchAddressMisaligned) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       branchExceptionPort = exceptionService.newExceptionPort(if (earlyBranch) pipeline.execute else pipeline.memory)
-      if (prediction != NONE) {
-        predictionExceptionPort = exceptionService.newExceptionPort(pipeline.decode)
+      prediction match {
+        case NONE =>
+        case STATIC | DYNAMIC => predictionExceptionPort = exceptionService.newExceptionPort(pipeline.decode)
+        case DYNAMIC_TARGET =>
       }
     }
   }
@@ -82,6 +89,7 @@ class BranchPlugin(earlyBranch : Boolean,
     case `NONE` => buildWithoutPrediction(pipeline)
     case `STATIC` => buildWithPrediction(pipeline)
     case `DYNAMIC` => buildWithPrediction(pipeline)
+    case `DYNAMIC_TARGET` => buildDynamicTargetPrediction(pipeline)
   }
 
   def buildWithoutPrediction(pipeline: VexRiscv): Unit = {
@@ -138,14 +146,15 @@ class BranchPlugin(earlyBranch : Boolean,
     }
   }
 
-  case class BranchPredictorLine()  extends Bundle{
-    val history = SInt(historyWidth bits)
-  }
-
-  object PREDICTION_HAD_BRANCHED extends Stageable(Bool)
-  object HISTORY_LINE extends Stageable(BranchPredictorLine())
 
   def buildWithPrediction(pipeline: VexRiscv): Unit = {
+    case class BranchPredictorLine()  extends Bundle{
+      val history = SInt(historyWidth bits)
+    }
+
+    object PREDICTION_HAD_BRANCHED extends Stageable(Bool)
+    object HISTORY_LINE extends Stageable(BranchPredictorLine())
+
     import pipeline._
     import pipeline.config._
 
@@ -254,6 +263,130 @@ class BranchPlugin(earlyBranch : Boolean,
       historyCacheWrite.valid := arbitration.isFiring && input(BRANCH_CTRL) === BranchCtrlEnum.B && noOverflow
       historyCacheWrite.address := input(PC)(2, historyRamSizeLog2 bits)
       historyCacheWrite.data.history := newHistory.resized
+    }
+  }
+
+
+
+
+
+  def buildDynamicTargetPrediction(pipeline: VexRiscv): Unit = {
+    import pipeline._
+    import pipeline.config._
+
+    case class BranchPredictorLine()  extends Bundle{
+      val enable = Bool
+      val target = UInt(32 bits)
+    }
+
+    object PREDICTION_HAD_HAZARD extends Stageable(Bool)
+    object PREDICTION extends Stageable(Flow(UInt(32 bits)))
+
+    val history = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
+    val historyWrite = history.writePort
+
+
+    fetch plug new Area{
+      import fetch._
+//      val line = predictorLines.readSync(prefetch.output(PC), prefetch.arbitration.isFiring)
+      val line = history.readAsync((fetch.output(PC) >> 2).resized)
+      predictionJumpInterface.valid := line.enable && arbitration.isFiring
+      predictionJumpInterface.payload := line.target
+
+      //Avoid write to read hazard
+      val historyWriteLast = RegNext(historyWrite)
+      insert(PREDICTION_HAD_HAZARD) := historyWriteLast.valid && historyWriteLast.address === (fetch.output(PC) >> 2).resized
+      predictionJumpInterface.valid clearWhen(input(PREDICTION_HAD_HAZARD))
+
+      fetch.insert(PREDICTION) := predictionJumpInterface
+    }
+
+
+
+    //Do branch calculations (conditions + target PC)
+    execute plug new Area {
+      import execute._
+
+      val less = input(SRC_LESS)
+      val eq = input(SRC1) === input(SRC2)
+
+      insert(BRANCH_DO) := input(BRANCH_CTRL).mux(
+        BranchCtrlEnum.INC  -> False,
+        BranchCtrlEnum.JAL  -> True,
+        BranchCtrlEnum.JALR -> True,
+        BranchCtrlEnum.B    -> input(INSTRUCTION)(14 downto 12).mux(
+          B"000"  -> eq  ,
+          B"001"  -> !eq  ,
+          M"1-1"  -> !less,
+          default -> less
+        )
+      )
+
+      val imm = IMM(input(INSTRUCTION))
+      val branch_src1 = (input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? input(RS1).asUInt | input(PC)
+      val branch_src2 = input(BRANCH_CTRL).mux(
+        BranchCtrlEnum.JAL  -> imm.j_sext,
+        BranchCtrlEnum.JALR -> imm.i_sext,
+        default             -> imm.b_sext
+      ).asUInt
+
+      val branchAdder = branch_src1 + branch_src2
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ ((input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? False | branchAdder(0))
+    }
+
+    //Apply branchs (JAL,JALR, Bxx)
+    val branchStage = if(earlyBranch) execute else memory
+    branchStage plug new Area {
+      import branchStage._
+
+      historyWrite.valid := False
+      historyWrite.address := (branchStage.output(PC) >> 2).resized
+      historyWrite.data.enable := input(BRANCH_DO)
+      historyWrite.data.target := input(BRANCH_CALC)
+
+      jumpInterface.valid := False
+      jumpInterface.payload := input(BRANCH_CALC)
+
+
+      when(!input(BRANCH_DO)){
+        when(input(PREDICTION).valid) {
+          jumpInterface.valid := arbitration.isFiring
+          jumpInterface.payload := input(PC) + 4
+          historyWrite.valid := arbitration.isFiring
+        }
+      } otherwise{
+        when (!input(PREDICTION).valid || input(PREDICTION).payload =/= input(BRANCH_CALC)) {
+          jumpInterface.valid := arbitration.isFiring
+          historyWrite.valid := arbitration.isFiring
+        }
+      }
+
+      //Prevent rewriting an history which already had hazard
+      historyWrite.valid clearWhen(input(PREDICTION_HAD_HAZARD))
+
+
+
+      when(jumpInterface.valid) {
+        stages(indexOf(branchStage) - 1).arbitration.flushAll := True
+      }
+
+      if(catchAddressMisaligned) {
+        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
+        branchExceptionPort.code := 0
+        branchExceptionPort.badAddr := jumpInterface.payload
+      }
+    }
+
+    //Init History
+    val historyInit = pipeline plug new Area{
+      val counter = Reg(UInt(historyRamSizeLog2 + 1 bits)) init(0)
+      when(!counter.msb){
+        prefetch.arbitration.haltByOther := True
+        historyWrite.valid := True
+        historyWrite.address := counter.resized
+        historyWrite.data.enable := False
+        counter := counter + 1
+      }
     }
   }
 }

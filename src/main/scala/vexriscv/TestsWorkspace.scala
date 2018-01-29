@@ -41,7 +41,7 @@ object TestsWorkspace {
 //          ),
           new IBusCachedPlugin(
             config = InstructionCacheConfig(
-              cacheSize = 4096,
+              cacheSize = 4096*4,
               bytePerLine =32,
               wayCount = 1,
               wrappedMemAccess = true,
@@ -66,7 +66,7 @@ object TestsWorkspace {
 //          ),
           new DBusCachedPlugin(
             config = new DataCacheConfig(
-              cacheSize         = 4096,
+              cacheSize         = 4096*4,
               bytePerLine       = 32,
               wayCount          = 1,
               addressWidth      = 32,
@@ -102,7 +102,7 @@ object TestsWorkspace {
           new SrcPlugin(
             separatedAddSub = false
           ),
-          new FullBarrielShifterPlugin(earlyInjection = false),
+          new FullBarrielShifterPlugin(earlyInjection = true),
   //        new LightShifterPlugin,
           new HazardSimplePlugin(
             bypassExecute           = true,
@@ -120,9 +120,10 @@ object TestsWorkspace {
           new CsrPlugin(CsrPluginConfig.all),
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
-            earlyBranch = false,
+            earlyBranch = true,
             catchAddressMisaligned = true,
-            prediction = DYNAMIC
+            prediction = DYNAMIC_TARGET,
+            historyRamSizeLog2 = 12
           ),
           new YamlPlugin("cpu0.yaml")
         )
