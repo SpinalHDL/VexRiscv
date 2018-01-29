@@ -21,7 +21,7 @@ This repository host an RISC-V implementation written in SpinalHDL. There is som
 
 - RV32IM instruction set
 - Pipelined on 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
-- 1.29 DMIPS/Mhz when all features are enabled
+- 1.40 DMIPS/Mhz when all features are enabled
 - Optimized for FPGA, fully portable
 - AXI4 and Avalon ready
 - Optional MUL/DIV extension
@@ -79,10 +79,11 @@ VexRiscv full (RV32IM, 1.13 DMIPS/Mhz with cache trashing, 4KB-I$,4KB-D$, single
   Cyclone IV -> 127 Mhz 2,733 LUT 1,762 FF 
   Cyclone II -> 103 Mhz 2,791 LUT 1,760 FF 
   
-VexRiscv full max perf -> (RV32IM, 1.29 DMIPS/Mhz, 16KB-I$,16KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, branch and shift operations done in the Execute stage) ->
-  Artix 7    -> 216 Mhz 1978 LUT 1442 FF 
-  Cyclone V  -> 105 Mhz 1,222 ALMs
-  Cyclone IV -> 94 Mhz 2,735 LUT 1,702 FF 
+VexRiscv full max perf -> (RV32IM, 1.40 DMIPS/Mhz, 16KB-I$,16KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch prediction in the fetch stage, branch and shift operations done in the Execute stage) ->
+  Artix 7 -> 198 Mhz 1920 LUT 1528 FF 
+  Cyclone V -> 90 Mhz 1,261 ALMs
+  Cyclone IV -> 88 Mhz 2,780 LUT 1,788 FF 
+
 
 VexRiscv full with MMU (RV32IM, 1.17 DMIPS/Mhz with cache trashing, 4KB-I$, 4KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, MMU) ->
   Artix 7    -> 223 Mhz 2085 LUT 2020 FF 
@@ -91,7 +92,7 @@ VexRiscv full with MMU (RV32IM, 1.17 DMIPS/Mhz with cache trashing, 4KB-I$, 4KB-
   Cyclone II -> 94 Mhz 3,187 LUT 2,281 FF 
 ```
 
-There is a summary of the configuration which produce 1.29 DMIPS : 
+There is a summary of the configuration which produce 1.40 DMIPS : 
 
 - 5 stage : F -> D -> E -> M  -> WB
 - single cycle ADD/SUB/Bitwise/Shift ALU
