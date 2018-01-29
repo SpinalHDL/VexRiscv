@@ -78,7 +78,8 @@ object GenFullNoMmuMaxPerf extends App{
         new BranchPlugin(
           earlyBranch = true,
           catchAddressMisaligned = true,
-          prediction = DYNAMIC
+          prediction = DYNAMIC_TARGET,
+          historyRamSizeLog2 = 8
         ),
         new YamlPlugin("cpu0.yaml")
       )

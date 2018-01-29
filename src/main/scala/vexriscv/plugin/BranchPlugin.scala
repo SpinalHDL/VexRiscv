@@ -275,12 +275,14 @@ class BranchPlugin(earlyBranch : Boolean,
     import pipeline.config._
 
     case class BranchPredictorLine()  extends Bundle{
-      val enable = Bool
+      val source = Bits(31 - historyRamSizeLog2 bits)
+      val confidence = UInt(2 bits)
       val target = UInt(32 bits)
     }
 
-    object PREDICTION_HAD_HAZARD extends Stageable(Bool)
-    object PREDICTION extends Stageable(Flow(UInt(32 bits)))
+    object PREDICTION_WRITE_HAZARD extends Stageable(Bool)
+    object PREDICTION extends Stageable(BranchPredictorLine())
+    object PREDICTION_HIT extends Stageable(Bool)
 
     val history = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
     val historyWrite = history.writePort
@@ -288,17 +290,20 @@ class BranchPlugin(earlyBranch : Boolean,
 
     fetch plug new Area{
       import fetch._
-//      val line = predictorLines.readSync(prefetch.output(PC), prefetch.arbitration.isFiring)
-      val line = history.readAsync((fetch.output(PC) >> 2).resized)
-      predictionJumpInterface.valid := line.enable && arbitration.isFiring
-      predictionJumpInterface.payload := line.target
+      val line = history.readSync((prefetch.output(PC) >> 2).resized, prefetch.arbitration.isFiring)
+//      val line = history.readAsync((fetch.output(PC) >> 2).resized)
+      val hit = line.source === (input(PC).asBits >>  1 + historyRamSizeLog2)
 
       //Avoid write to read hazard
       val historyWriteLast = RegNext(historyWrite)
-      insert(PREDICTION_HAD_HAZARD) := historyWriteLast.valid && historyWriteLast.address === (fetch.output(PC) >> 2).resized
-      predictionJumpInterface.valid clearWhen(input(PREDICTION_HAD_HAZARD))
+      val hazard = historyWriteLast.valid && historyWriteLast.address === (output(PC) >> 2).resized
+      insert(PREDICTION_WRITE_HAZARD) := hazard
 
-      fetch.insert(PREDICTION) := predictionJumpInterface
+      predictionJumpInterface.valid := line.confidence.msb && hit && arbitration.isFiring && !hazard
+      predictionJumpInterface.payload := line.target
+
+      insert(PREDICTION) := line
+      insert(PREDICTION_HIT) := hit
     }
 
 
@@ -339,9 +344,11 @@ class BranchPlugin(earlyBranch : Boolean,
     branchStage plug new Area {
       import branchStage._
 
+      val predictionMissmatch = input(PREDICTION).confidence.msb =/= input(BRANCH_DO) || (input(BRANCH_DO) && input(PREDICTION).target =/= input(BRANCH_CALC))
+
       historyWrite.valid := False
       historyWrite.address := (branchStage.output(PC) >> 2).resized
-      historyWrite.data.enable := input(BRANCH_DO)
+      historyWrite.data.source := input(PC).asBits >> 1 + historyRamSizeLog2
       historyWrite.data.target := input(BRANCH_CALC)
 
       jumpInterface.valid := False
@@ -349,20 +356,29 @@ class BranchPlugin(earlyBranch : Boolean,
 
 
       when(!input(BRANCH_DO)){
-        when(input(PREDICTION).valid) {
-          jumpInterface.valid := arbitration.isFiring
-          jumpInterface.payload := input(PC) + 4
-          historyWrite.valid := arbitration.isFiring
-        }
+        historyWrite.valid := arbitration.isFiring && input(PREDICTION_HIT)
+        historyWrite.data.confidence := input(PREDICTION).confidence - (input(PREDICTION).confidence =/= 0).asUInt
+        historyWrite.data.target := input(BRANCH_CALC)
+
+
+        jumpInterface.valid := input(PREDICTION_HIT) && input(PREDICTION).confidence.msb && !input(PREDICTION_WRITE_HAZARD) && arbitration.isFiring
+        jumpInterface.payload := input(PC) + 4
       } otherwise{
-        when (!input(PREDICTION).valid || input(PREDICTION).payload =/= input(BRANCH_CALC)) {
+        when(!input(PREDICTION_HIT) || input(PREDICTION_WRITE_HAZARD)){
           jumpInterface.valid := arbitration.isFiring
           historyWrite.valid := arbitration.isFiring
+          historyWrite.data.confidence := "10"
+        } otherwise {
+          historyWrite.valid := arbitration.isFiring
+          historyWrite.data.confidence := input(PREDICTION).confidence + (input(PREDICTION).confidence =/= 3).asUInt
+          when(!input(PREDICTION).confidence.msb || input(PREDICTION).target =/= input(BRANCH_CALC)){
+            jumpInterface.valid := arbitration.isFiring
+          }
         }
       }
 
       //Prevent rewriting an history which already had hazard
-      historyWrite.valid clearWhen(input(PREDICTION_HAD_HAZARD))
+      historyWrite.valid clearWhen(input(PREDICTION_WRITE_HAZARD))
 
 
 
@@ -384,7 +400,7 @@ class BranchPlugin(earlyBranch : Boolean,
         prefetch.arbitration.haltByOther := True
         historyWrite.valid := True
         historyWrite.address := counter.resized
-        historyWrite.data.enable := False
+        historyWrite.data.confidence := 0
         counter := counter + 1
       }
     }

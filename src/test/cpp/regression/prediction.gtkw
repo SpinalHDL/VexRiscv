@@ -1,0 +1,43 @@
+[*]
+[*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
+[*] Mon Jan 29 13:38:19 2018
+[*]
+[dumpfile] "/home/spinalvm/hdl/VexRiscv/src/test/cpp/regression/dhrystoneO3M.vcd"
+[dumpfile_mtime] "Mon Jan 29 13:37:19 2018"
+[dumpfile_size] 1215443558
+[savefile] "/home/spinalvm/hdl/VexRiscv/src/test/cpp/regression/prediction.gtkw"
+[timestart] 127017
+[size] 1784 950
+[pos] -383 -155
+*-3.000000 127032 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[sst_width] 400
+[signals_width] 583
+[sst_expanded] 1
+[sst_vpaned_height] 492
+@28
+TOP.VexRiscv.iBus_cmd_valid
+TOP.VexRiscv.decode_arbitration_flushAll
+TOP.VexRiscv.execute_arbitration_flushAll
+TOP.VexRiscv.fetch_arbitration_flushAll
+TOP.VexRiscv.memory_arbitration_flushAll
+TOP.VexRiscv.prefetch_arbitration_flushAll
+TOP.VexRiscv.writeBack_arbitration_flushAll
+TOP.VexRiscv.execute_BranchPlugin_predictionMissmatch
+TOP.VexRiscv.execute_PREDICTION2_confidence[1:0]
+@22
+TOP.VexRiscv.execute_PREDICTION2_source[18:0]
+TOP.VexRiscv.execute_PREDICTION2_target[31:0]
+@28
+TOP.VexRiscv.execute_PREDICTION_HIT2
+TOP.VexRiscv.execute_PREDICTION_WRITE_HAZARD2
+@23
+TOP.VexRiscv.execute_PC[31:0]
+@28
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_jump_pcLoad_valid
+@22
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_jump_pcLoad_payload[31:0]
+@29
+TOP.VexRiscv.execute_arbitration_isFiring
+[pattern_trace] 1
+[pattern_trace] 0

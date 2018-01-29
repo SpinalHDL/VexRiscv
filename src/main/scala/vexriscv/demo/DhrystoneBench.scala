@@ -32,14 +32,14 @@ object DhrystoneBench extends App{
   getDmips(
     name = "GenSmallest",
     gen = GenSmallest.main(null),
-    test = "make clean run REDO=0 IBUS=SIMPLE DBUS=SIMPLE MMU=no DEBUG_PLUGIN=no MUL=no DIV=no"
+    test = "make clean run REDO=0 IBUS=SIMPLE DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no"
   )
 
 
   getDmips(
     name = "GenSmallAndProductive",
     gen = GenSmallAndProductive.main(null),
-    test = "make clean run REDO=0 IBUS=SIMPLE DBUS=SIMPLE  MMU=no DEBUG_PLUGIN=no MUL=no DIV=no"
+    test = "make clean run REDO=0 IBUS=SIMPLE DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no"
   )
 
 

@@ -123,7 +123,7 @@ object TestsWorkspace {
             earlyBranch = true,
             catchAddressMisaligned = true,
             prediction = DYNAMIC_TARGET,
-            historyRamSizeLog2 = 12
+            historyRamSizeLog2 = 8
           ),
           new YamlPlugin("cpu0.yaml")
         )
