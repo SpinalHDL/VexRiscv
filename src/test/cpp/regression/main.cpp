@@ -1725,6 +1725,10 @@ int main(int argc, char **argv, char **env) {
 			redo(REDO,Workspace("custom_simd_add").loadHex("../custom/simd_add/build/custom_simd_add.hex")->bootAt(0x00000000u)->run(50e3););
 		#endif
 
+		#ifdef CUSTOM_CSR
+			redo(REDO,Workspace("custom_csr").loadHex("../custom/custom_csr/build/custom_csr.hex")->bootAt(0x00000000u)->run(50e3););
+		#endif
+
 
 		#ifdef ATOMIC
 			redo(REDO,Workspace("atomic").loadHex("../custom/atomic/build/atomic.hex")->bootAt(0x00000000u)->run(10e3););

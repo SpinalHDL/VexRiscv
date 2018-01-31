@@ -9,8 +9,8 @@ import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable
 
 /**
- * Created by spinalvm on 21.03.17.
- */
+  * Created by spinalvm on 21.03.17.
+  */
 
 trait CsrAccess{
   def canWrite : Boolean = false
@@ -32,25 +32,25 @@ object CsrAccess {
 
 case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage, priority : Int)
 case class CsrPluginConfig(
-  catchIllegalAccess  : Boolean,
-  mvendorid           : BigInt,
-  marchid             : BigInt,
-  mimpid              : BigInt,
-  mhartid             : BigInt,
-  misaExtensionsInit   : Int,
-  misaAccess          : CsrAccess,
-  mtvecAccess         : CsrAccess,
-  mtvecInit           : BigInt,
-  mepcAccess          : CsrAccess,
-  mscratchGen         : Boolean,
-  mcauseAccess        : CsrAccess,
-  mbadaddrAccess      : CsrAccess,
-  mcycleAccess        : CsrAccess,
-  minstretAccess      : CsrAccess,
-  ucycleAccess        : CsrAccess,
-  wfiGen              : Boolean,
-  ecallGen            : Boolean
-){
+                            catchIllegalAccess  : Boolean,
+                            mvendorid           : BigInt,
+                            marchid             : BigInt,
+                            mimpid              : BigInt,
+                            mhartid             : BigInt,
+                            misaExtensionsInit   : Int,
+                            misaAccess          : CsrAccess,
+                            mtvecAccess         : CsrAccess,
+                            mtvecInit           : BigInt,
+                            mepcAccess          : CsrAccess,
+                            mscratchGen         : Boolean,
+                            mcauseAccess        : CsrAccess,
+                            mbadaddrAccess      : CsrAccess,
+                            mcycleAccess        : CsrAccess,
+                            minstretAccess      : CsrAccess,
+                            ucycleAccess        : CsrAccess,
+                            wfiGen              : Boolean,
+                            ecallGen            : Boolean
+                          ){
   assert(!ucycleAccess.canWrite)
 }
 
@@ -121,11 +121,22 @@ object CsrPluginConfig{
 }
 case class CsrWrite(that : Data, bitOffset : Int)
 case class CsrRead(that : Data , bitOffset : Int)
-case class CsrMapping(){
+case class CsrMapping() extends CsrInterface{
   val mapping = mutable.HashMap[Int,ArrayBuffer[Any]]()
   def addMappingAt(address : Int,that : Any) = mapping.getOrElseUpdate(address,new ArrayBuffer[Any]) += that
   def r(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrRead(that,bitOffset))
   def w(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrWrite(that,bitOffset))
+}
+
+
+trait IContextSwitching{
+  def isContextSwitching : Bool
+}
+
+
+trait CsrInterface{
+  def r(csrAddress : Int, bitOffset : Int, that : Data): Unit
+  def w(csrAddress : Int, bitOffset : Int, that : Data): Unit
   def rw(csrAddress : Int, bitOffset : Int,that : Data): Unit ={
     r(csrAddress,bitOffset,that)
     w(csrAddress,bitOffset,that)
@@ -138,13 +149,7 @@ case class CsrMapping(){
 }
 
 
-trait IContextSwitching{
-  def isContextSwitching : Bool
-}
-
-
-
-class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching{
+class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface{
   import config._
   import CsrAccess._
 
@@ -179,6 +184,13 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
   var allowInterrupts : Bool = null
   var allowException  : Bool = null
+
+  val csrMapping = new CsrMapping()
+
+
+  override def r(csrAddress: Int, bitOffset: Int, that: Data): Unit = csrMapping.r(csrAddress, bitOffset, that)
+  override def w(csrAddress: Int, bitOffset: Int, that: Data): Unit = csrMapping.w(csrAddress, bitOffset, that)
+
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
 
@@ -210,7 +222,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       CSRRWI -> immediatActions,
       CSRRSI -> immediatActions,
       CSRRCI -> immediatActions,
-     // EBREAK -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.EBREAK)), //TODO
+      // EBREAK -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.EBREAK)), //TODO
       MRET   -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.MRET))
     ))
     if(wfiGen)   decoderService.add(WFI,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.WFI))
@@ -252,7 +264,6 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
     pipeline plug new Area{
       //Define CSR mapping utilities
-      val csrMapping = new CsrMapping()
       implicit class CsrAccessPimper(csrAccess : CsrAccess){
         def apply(csrAddress : Int, thats : (Int, Data)*) : Unit = {
           if(csrAccess == `WRITE_ONLY` || csrAccess ==  `READ_WRITE`) for(that <- thats) csrMapping.w(csrAddress,that._1, that._2)
@@ -452,11 +463,9 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       execute plug new Area {
         import execute._
 
-        val illegalAccess =  arbitration.isValid && input(IS_CSR)
+        val illegalAccess = True
         if(catchIllegalAccess) {
-          val illegalInstruction = arbitration.isValid && privilege === 0 && (input(ENV_CTRL) === EnvCtrlEnum.EBREAK || input(ENV_CTRL) === EnvCtrlEnum.MRET)
-
-          selfException.valid := illegalAccess || illegalInstruction
+          selfException.valid := arbitration.isValid && input(IS_CSR) && illegalAccess
           selfException.code := 2
           selfException.badAddr.assignDontCare()
         }
@@ -471,7 +480,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
           True -> Mux(input(INSTRUCTION)(12), readDataReg & ~writeSrc, readDataReg | writeSrc)
         )
         val writeOpcode = (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
-                          || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
+          || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
         val writeInstruction = arbitration.isValid && input(IS_CSR) && writeOpcode
 
         arbitration.haltItself setWhen(writeInstruction && !readDataRegValid)

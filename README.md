@@ -84,7 +84,6 @@ VexRiscv full max perf -> (RV32IM, 1.40 DMIPS/Mhz, 16KB-I$,16KB-D$, single cycle
   Cyclone V -> 90 Mhz 1,261 ALMs
   Cyclone IV -> 88 Mhz 2,780 LUT 1,788 FF 
 
-
 VexRiscv full with MMU (RV32IM, 1.17 DMIPS/Mhz with cache trashing, 4KB-I$, 4KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, MMU) ->
   Artix 7    -> 223 Mhz 2085 LUT 2020 FF 
   Cyclone V  -> 110 Mhz 1,503 ALMs

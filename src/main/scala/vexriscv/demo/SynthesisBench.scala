@@ -37,6 +37,12 @@ object VexRiscvSynthesisBench {
       SpinalVerilog(GenFullNoMmu.cpu().setDefinitionName(getRtlPath().split("\\.").head))
     }
 
+    val noCacheNoMmuMaxPerf= new Rtl {
+      override def getName(): String = "VexRiscv no cache no MMU max perf"
+      override def getRtlPath(): String = "VexRiscvNoCacheNoMmuMaxPerf.v"
+      SpinalVerilog(GenNoCacheNoMmuMaxPerf.cpu().setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
     val fullNoMmuMaxPerf= new Rtl {
       override def getName(): String = "VexRiscv full no MMU max perf"
       override def getRtlPath(): String = "VexRiscvFullNoMmuMaxPerf.v"
@@ -49,8 +55,8 @@ object VexRiscvSynthesisBench {
       SpinalVerilog(GenFull.cpu().setDefinitionName(getRtlPath().split("\\.").head))
     }
 
-//    val rtls = List(smallestNoCsr, smallest, smallAndProductive, fullNoMmuNoCache, fullNoMmuMaxPerf, fullNoMmu, full)
-    val rtls = List(fullNoMmuMaxPerf)
+//    val rtls = List(smallestNoCsr, smallest, smallAndProductive, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full)
+    val rtls = List(noCacheNoMmuMaxPerf, fullNoMmuMaxPerf)
 
     val targets = XilinxStdTargets(
       vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"

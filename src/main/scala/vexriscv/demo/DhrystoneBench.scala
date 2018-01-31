@@ -50,17 +50,22 @@ object DhrystoneBench extends App{
   )
 
   getDmips(
-    name = "GenFullNoMmu",
-    gen = GenFullNoMmu.main(null),
-    test = "make clean run REDO=0 MMU=no "
+    name = "GenNoCacheNoMmuMaxPerf",
+    gen = GenNoCacheNoMmuMaxPerf.main(null),
+    test = "make clean run REDO=0 MMU=no CSR=no DBUS=SIMPLE IBUS=SIMPLE"
   )
+
 
   getDmips(
     name = "GenFullNoMmuMaxPerf",
     gen = GenFullNoMmuMaxPerf.main(null),
     test = "make clean run REDO=0 MMU=no"
   )
-
+  getDmips(
+    name = "GenFullNoMmu",
+    gen = GenFullNoMmu.main(null),
+    test = "make clean run REDO=0 MMU=no "
+  )
 
   getDmips(
     name = "GenFull",
