@@ -6,10 +6,8 @@ _start:
     csrr x1, 0xB04
     csrr x2, 0xB04
     csrr x3, 0xB04
-    add x1, x1, 2
-    add x2, x2, 1
-    bne x1, x3, fail
-    bne x2, x3, fail
+    blt x2, x1, fail
+    blt x3, x2, fail
 
 
 //Test 2
@@ -17,7 +15,7 @@ _start:
     li x1, 6142346
     csrw 0xB04, x1
     csrr x2, 0xB04
-    bne x1, x2, fail
+    blt x2, x1, fail
 
 
 //Test 3
