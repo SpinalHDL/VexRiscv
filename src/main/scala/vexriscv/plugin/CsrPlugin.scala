@@ -129,11 +129,6 @@ case class CsrMapping() extends CsrInterface{
 }
 
 
-trait IContextSwitching{
-  def isContextSwitching : Bool
-}
-
-
 trait CsrInterface{
   def r(csrAddress : Int, bitOffset : Int, that : Data): Unit
   def w(csrAddress : Int, bitOffset : Int, that : Data): Unit
@@ -148,6 +143,10 @@ trait CsrInterface{
   def r [T <: Data](csrAddress : Int, that : T): Unit = r(csrAddress,0,that)
 }
 
+
+trait IContextSwitching{
+  def isContextSwitching : Bool
+}
 
 class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface{
   import config._
@@ -463,9 +462,11 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       execute plug new Area {
         import execute._
 
-        val illegalAccess = True
+        val illegalAccess =  arbitration.isValid && input(IS_CSR)
         if(catchIllegalAccess) {
-          selfException.valid := arbitration.isValid && input(IS_CSR) && illegalAccess
+          val illegalInstruction = arbitration.isValid && privilege === 0 && (input(ENV_CTRL) === EnvCtrlEnum.EBREAK || input(ENV_CTRL) === EnvCtrlEnum.MRET)
+
+          selfException.valid := illegalAccess || illegalInstruction
           selfException.code := 2
           selfException.badAddr.assignDontCare()
         }

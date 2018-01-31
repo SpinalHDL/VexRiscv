@@ -8,7 +8,7 @@ import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
  * Created by spinalvm on 15.06.17.
  */
 
-//make clean run DBUS=SIMPLE IBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no
+//make clean run DBUS=SIMPLE IBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no CUSTOM_CSR=yes
 object GenCustomCsr extends App{
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
