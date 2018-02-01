@@ -121,15 +121,21 @@ object CsrPluginConfig{
 }
 case class CsrWrite(that : Data, bitOffset : Int)
 case class CsrRead(that : Data , bitOffset : Int)
+case class CsrOnWrite(doThat :() => Unit)
+case class CsrOnRead(doThat : () => Unit)
 case class CsrMapping() extends CsrInterface{
   val mapping = mutable.HashMap[Int,ArrayBuffer[Any]]()
   def addMappingAt(address : Int,that : Any) = mapping.getOrElseUpdate(address,new ArrayBuffer[Any]) += that
-  def r(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrRead(that,bitOffset))
-  def w(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrWrite(that,bitOffset))
+  override def r(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrRead(that,bitOffset))
+  override def w(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrWrite(that,bitOffset))
+  override def onWrite(csrAddress: Int)(body: => Unit): Unit = addMappingAt(csrAddress, CsrOnWrite(() => body))
+  override def onRead(csrAddress: Int)(body: => Unit): Unit =  addMappingAt(csrAddress, CsrOnRead(() => {body}))
 }
 
 
 trait CsrInterface{
+  def onWrite(csrAddress : Int)(doThat : => Unit) : Unit
+  def onRead(csrAddress : Int)(doThat : => Unit) : Unit
   def r(csrAddress : Int, bitOffset : Int, that : Data): Unit
   def w(csrAddress : Int, bitOffset : Int, that : Data): Unit
   def rw(csrAddress : Int, bitOffset : Int,that : Data): Unit ={
@@ -141,6 +147,21 @@ trait CsrInterface{
   def r [T <: Data](csrAddress : Int, thats : (Int, Data)*) : Unit = for(that <- thats) r(csrAddress,that._1, that._2)
   def rw[T <: Data](csrAddress : Int, that : T): Unit = rw(csrAddress,0,that)
   def r [T <: Data](csrAddress : Int, that : T): Unit = r(csrAddress,0,that)
+  def isWriting(csrAddress : Int) : Bool = {
+    val ret = False
+    onWrite(csrAddress){
+      ret := True
+    }
+    ret
+  }
+
+  def isReading(csrAddress : Int) : Bool = {
+    val ret = False
+    onRead(csrAddress){
+      ret := True
+    }
+    ret
+  }
 }
 
 
@@ -189,6 +210,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
   override def r(csrAddress: Int, bitOffset: Int, that: Data): Unit = csrMapping.r(csrAddress, bitOffset, that)
   override def w(csrAddress: Int, bitOffset: Int, that: Data): Unit = csrMapping.w(csrAddress, bitOffset, that)
+  override def onWrite(csrAddress: Int)(body: => Unit): Unit = csrMapping.onWrite(csrAddress)(body)
+  override def onRead(csrAddress: Int)(body: => Unit): Unit = csrMapping.onRead(csrAddress)(body)
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -483,9 +506,11 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         val writeOpcode = (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
           || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
         val writeInstruction = arbitration.isValid && input(IS_CSR) && writeOpcode
+        val readInstruction = arbitration.isValid && input(IS_CSR) && !writeOpcode
 
         arbitration.haltItself setWhen(writeInstruction && !readDataRegValid)
         val writeEnable = writeInstruction && !arbitration.isStuckByOthers && !arbitration.removeIt && readDataRegValid
+        val readEnable = readInstruction && !arbitration.isStuckByOthers && !arbitration.removeIt
 
         when(arbitration.isValid && input(IS_CSR)) {
           output(REGFILE_WRITE_DATA) := readData
@@ -493,33 +518,45 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
         //Translation of the csrMapping into real logic
         val csrAddress = input(INSTRUCTION)(csrRange)
-        switch(csrAddress) {
-          for ((address, jobs) <- csrMapping.mapping) {
-            is(address) {
-              val withWrite = jobs.exists(_.isInstanceOf[CsrWrite])
-              val withRead = jobs.exists(_.isInstanceOf[CsrRead])
-              if(withRead && withWrite) {
-                illegalAccess := False
-              } else {
-                if (withWrite) illegalAccess.clearWhen(writeOpcode)
-                if (withRead) illegalAccess.clearWhen(!writeOpcode)
-              }
+        Component.current.addPrePopTask(() => {
+          switch(csrAddress) {
+            for ((address, jobs) <- csrMapping.mapping) {
+              is(address) {
+                val withWrite = jobs.exists(j => j.isInstanceOf[CsrWrite] || j.isInstanceOf[CsrOnWrite])
+                val withRead = jobs.exists(j => j.isInstanceOf[CsrRead] || j.isInstanceOf[CsrOnRead])
+                if(withRead && withWrite) {
+                  illegalAccess := False
+                } else {
+                  if (withWrite) illegalAccess.clearWhen(writeOpcode)
+                  if (withRead) illegalAccess.clearWhen(!writeOpcode)
+                }
 
-              when(writeEnable) {
+                when(writeEnable) {
+                  for (element <- jobs) element match {
+                    case element: CsrWrite => element.that.assignFromBits(writeData(element.bitOffset, element.that.getBitsWidth bits))
+                    case element: CsrOnWrite =>
+                      element.doThat()
+                    case _ =>
+                  }
+                }
+
                 for (element <- jobs) element match {
-                  case element: CsrWrite => element.that.assignFromBits(writeData(element.bitOffset, element.that.getBitsWidth bits))
+                  case element: CsrRead if element.that.getBitsWidth != 0 => readData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
                   case _ =>
                 }
-              }
 
-              for (element <- jobs) element match {
-                case element: CsrRead if element.that.getBitsWidth != 0 => readData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
-                case _ =>
+                when(readEnable) {
+                  for (element <- jobs) element match {
+                    case element: CsrOnRead =>
+                      element.doThat()
+                    case _ =>
+                  }
+                }
               }
             }
           }
-        }
-        illegalAccess setWhen(privilege.asUInt < csrAddress(9 downto 8).asUInt)
+          illegalAccess setWhen(privilege.asUInt < csrAddress(9 downto 8).asUInt)
+        })
       }
     }
   }

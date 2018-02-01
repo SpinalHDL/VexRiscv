@@ -26,6 +26,24 @@ _start:
     bge x1, x2, fail
     bge x2, x3, fail
 
+
+
+//Test 4
+    li x28, 4
+    csrw 0xB06, x1
+    csrr x1, 0xB04
+    li x2, 0x100
+    bgeu x1, x2, fail
+
+//Test 5
+    li x28, 5
+    csrr x1, 0xB07
+    csrr x1, 0xB04
+    li x2, 0x40000100
+    li x3, 0x40000000
+    bgeu x1, x2, fail
+    bltu x1, x3, fail
+
     j pass
 
 fail: //x28 => error code

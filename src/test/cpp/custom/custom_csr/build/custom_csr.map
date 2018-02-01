@@ -8,23 +8,23 @@ onChipRam        0x0000000000000000 0x0000000000002000 w !xr
 Linker script and memory map
 
 LOAD build/src/crt.o
-LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/rv32i/ilp32/libgcc.a
+LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.2.0/rv32i/ilp32/libgcc.a
 START GROUP
-LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/../../../../riscv64-unknown-elf/lib/rv32i/ilp32/libc.a
-LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/../../../../riscv64-unknown-elf/lib/rv32i/ilp32/libgloss.a
+LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.2.0/../../../../riscv64-unknown-elf/lib/rv32i/ilp32/libc.a
+LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.2.0/../../../../riscv64-unknown-elf/lib/rv32i/ilp32/libgloss.a
 END GROUP
-LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/rv32i/ilp32/libgcc.a
+LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.2.0/rv32i/ilp32/libgcc.a
                 0x0000000000000000                . = 0x0
 
-.crt_section    0x0000000000000000       0x7c
+.crt_section    0x0000000000000000       0xb0
                 0x0000000000000000                . = ALIGN (0x4)
  *crt.o(.text)
- .text          0x0000000000000000       0x7c build/src/crt.o
+ .text          0x0000000000000000       0xb0 build/src/crt.o
                 0x0000000000000000                _start
 OUTPUT(build/custom_csr.elf elf32-littleriscv)
 
-.data           0x000000000000007c        0x0
- .data          0x000000000000007c        0x0 build/src/crt.o
+.data           0x00000000000000b0        0x0
+ .data          0x00000000000000b0        0x0 build/src/crt.o
 
-.bss            0x000000000000007c        0x0
- .bss           0x000000000000007c        0x0 build/src/crt.o
+.bss            0x00000000000000b0        0x0
+ .bss           0x00000000000000b0        0x0 build/src/crt.o
