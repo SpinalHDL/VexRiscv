@@ -55,7 +55,11 @@ case class CsrPluginConfig(
 }
 
 object CsrPluginConfig{
-  val all = CsrPluginConfig(
+  def all : CsrPluginConfig = all(0x00000020l)
+  def small : CsrPluginConfig = small(0x00000020l)
+  def smallest : CsrPluginConfig = smallest(0x00000020l)
+
+  def all(mtvecInit : BigInt) : CsrPluginConfig = CsrPluginConfig(
     catchIllegalAccess = true,
     mvendorid      = 11,
     marchid        = 22,
@@ -64,7 +68,7 @@ object CsrPluginConfig{
     misaExtensionsInit = 66,
     misaAccess     = CsrAccess.READ_WRITE,
     mtvecAccess    = CsrAccess.READ_WRITE,
-    mtvecInit      = 0x00000020l,
+    mtvecInit      = mtvecInit,
     mepcAccess     = CsrAccess.READ_WRITE,
     mscratchGen    = true,
     mcauseAccess   = CsrAccess.READ_WRITE,
@@ -76,7 +80,7 @@ object CsrPluginConfig{
     ucycleAccess   = CsrAccess.READ_ONLY
   )
 
-  val small = CsrPluginConfig(
+  def small(mtvecInit : BigInt)  = CsrPluginConfig(
     catchIllegalAccess = false,
     mvendorid      = null,
     marchid        = null,
@@ -85,7 +89,7 @@ object CsrPluginConfig{
     misaExtensionsInit = 66,
     misaAccess     = CsrAccess.NONE,
     mtvecAccess    = CsrAccess.NONE,
-    mtvecInit      = 0x00000020l,
+    mtvecInit      = mtvecInit,
     mepcAccess     = CsrAccess.READ_WRITE,
     mscratchGen    = false,
     mcauseAccess   = CsrAccess.READ_ONLY,
@@ -97,7 +101,7 @@ object CsrPluginConfig{
     ucycleAccess   = CsrAccess.NONE
   )
 
-  val smallest = CsrPluginConfig(
+  def smallest(mtvecInit : BigInt)  = CsrPluginConfig(
     catchIllegalAccess = false,
     mvendorid      = null,
     marchid        = null,
@@ -106,7 +110,7 @@ object CsrPluginConfig{
     misaExtensionsInit = 66,
     misaAccess     = CsrAccess.NONE,
     mtvecAccess    = CsrAccess.NONE,
-    mtvecInit      = 0x00000020l,
+    mtvecInit      = mtvecInit,
     mepcAccess     = CsrAccess.NONE,
     mscratchGen    = false,
     mcauseAccess   = CsrAccess.READ_ONLY,
@@ -146,6 +150,7 @@ trait CsrInterface{
   def rw(csrAddress : Int, thats : (Int, Data)*) : Unit = for(that <- thats) rw(csrAddress,that._1, that._2)
   def r [T <: Data](csrAddress : Int, thats : (Int, Data)*) : Unit = for(that <- thats) r(csrAddress,that._1, that._2)
   def rw[T <: Data](csrAddress : Int, that : T): Unit = rw(csrAddress,0,that)
+  def w[T <: Data](csrAddress : Int, that : T): Unit = w(csrAddress,0,that)
   def r [T <: Data](csrAddress : Int, that : T): Unit = r(csrAddress,0,that)
   def isWriting(csrAddress : Int) : Bool = {
     val ret = False
