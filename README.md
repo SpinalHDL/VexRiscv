@@ -99,7 +99,7 @@ There is a summary of the configuration which produce 1.40 DMIPS :
 - memory load values are bypassed in the WB stage (late result) 
 - 33 cycle division with bypassing in the M stage (late result)
 - single cycle multiplication with bypassing in the WB stage (late result)
-- dynamic branch prediction done in the D stage with an direct mapped 2 bit branch history cache
+- dynamic branch prediction done in the F stage with an direct mapped target buffer cache (no penalities on corrects predictions)
 
 ## Dependencies
 
