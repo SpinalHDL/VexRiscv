@@ -281,8 +281,8 @@ Murax is a very light SoC (fit in ICE40 FPGA) which could work without any exter
 - one UART with tx/rx fifo
 
 Depending the CPU configuration, on the ICE40-hx8k FPGA with icestorm for synthesis, the full SoC will get following area/performance :
-- RV32I interlocked stages => 51 Mhz, 2387 LC 0.37 DMIPS/Mhz
-- RV32I bypassed stages    => 45 Mhz, 2718 LC 0.55 DMIPS/Mhz
+- RV32I interlocked stages => 51 Mhz, 2387 LC 0.45 DMIPS/Mhz
+- RV32I bypassed stages    => 45 Mhz, 2718 LC 0.65 DMIPS/Mhz
 
 You can find its implementation there : src/main/scala/vexriscv/demo/Murax.scala
 
