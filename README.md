@@ -341,48 +341,47 @@ sbt "test:runMain vexriscv.MuraxSim"
 
 ## Build the RISC-V GCC
 
-To compile the Riscv GCC :
+In fact, now you can find some prebuild GCC : <br>
+- https://www.sifive.com/products/tools/   =>   SiFive GNU Embedded Toolchain
+The VexRiscvSocSoftware makefiles are expecting to find this prebuild version in /opt/riscv/__contentOfThisPreBuild__
+
+```sh
+wget https://static.dev.sifive.com/dev-tools/riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6.tar.gz
+tar -xzvf riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6.tar.gz
+sudo mv riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6 /opt/riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6
+sudo mv /opt/riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6 /opt/riscv
+echo 'export PATH=/opt/riscv/bin:$PATH' >> ~/.bashrc 
+```
+
+But if you want to compile from sources in /opt/ the rv32i and rv32im gcc, do the following (will take one hour):
 
 ```sh
 # Be carefull, sometime the git clone has issue to successfully clone riscv-gnu-toolchain.
 sudo apt-get install autoconf automake autotools-dev curl libmpc-dev libmpfr-dev libgmp-dev gawk build-essential bison flex texinfo gperf libtool patchutils bc zlib1g-dev -y
 
-git clone https://github.com/riscv/riscv-gnu-toolchain riscv-gnu-toolchain
+git clone --recursive https://github.com/riscv/riscv-gnu-toolchain riscv-gnu-toolchain
 cd riscv-gnu-toolchain
-git checkout bf5697a
-git submodule update --init --recursive
 
-sudo mkdir /opt/riscv32im
-sudo chown $USER /opt/riscv32im
+echo "Starting RISC-V Toolchain build process"
 
-mkdir build; cd build
-../configure --with-arch=rv32im --prefix=/opt/riscv32im
-make -j$(nproc)
+ARCH=rv32im
+rmdir -rf $ARCH
+mkdir $ARCH; cd $ARCH
+../configure  --prefix=/opt/$ARCH --with-arch=$ARCH --with-abi=ilp32
+sudo make -j4
 cd ..
 
-sudo mkdir /opt/riscv32i
-sudo chown $USER /opt/riscv32i
 
-rm -rf build
-mkdir build; cd build
-../configure --with-arch=rv32i --prefix=/opt/riscv32i
-make -j$(nproc)
+ARCH=rv32i
+rmdir -rf $ARCH
+mkdir $ARCH; cd $ARCH
+../configure  --prefix=/opt/$ARCH --with-arch=$ARCH --with-abi=ilp32
+sudo make -j4
+cd ..
+
+echo -e "\\nRISC-V Toolchain installation completed!"
 ```
 
-
-Else you can use a prebuild GCC : <br>
-- https://www.sifive.com/products/tools/   =>   SiFive GNU Embedded Toolchain
-The VexRiscvSocSoftware makefiles are expecting to find this prebuild version in /opt/riscv/__contentOfThisPreBuild__ . You will also have to set the SIFIVE_GCC_PACK environnement variable to yes to make it working with the VexRiscvSocSoftware.
-
-Note : It look like that this prebuild pack has performances issues with the dhrystone benchmark, so i don't realy recommand to use it.
-
-```sh
-wget https://static.dev.sifive.com/dev-tools/riscv64-unknown-elf-gcc-20170612-x86_64-linux-centos6.tar.gz
-tar -xzvf riscv64-unknown-elf-gcc-20170612-x86_64-linux-centos6.tar.gz
-sudo mv riscv64-unknown-elf-gcc-20170612-x86_64-linux-centos6 /opt/riscv64-unknown-elf-gcc-20170612-x86_64-linux-centos6
-sudo mv /opt/riscv64-unknown-elf-gcc-20170612-x86_64-linux-centos6 /opt/riscv
-echo 'export PATH=/opt/riscv/bin:$PATH' >> ~/.bashrc 
-```
 
 ## CPU parametrization and instantiation example
 
