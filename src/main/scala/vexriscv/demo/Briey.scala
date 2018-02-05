@@ -47,7 +47,7 @@ object BrieyConfig{
         rxFifoDepth = 16
       ),
       cpuPlugins = ArrayBuffer(
-        new PcManagerSimplePlugin(0x00000000l, false),
+        new PcManagerSimplePlugin(0x80000000l, false),
         //          new IBusSimplePlugin(
         //            interfaceKeepData = false,
         //            catchAccessFault = true
@@ -136,7 +136,7 @@ object BrieyConfig{
             misaExtensionsInit = 66,
             misaAccess     = CsrAccess.NONE,
             mtvecAccess    = CsrAccess.NONE,
-            mtvecInit      = 0x00000020l,
+            mtvecInit      = 0x80000020l,
             mepcAccess     = CsrAccess.READ_WRITE,
             mscratchGen    = false,
             mcauseAccess   = CsrAccess.READ_ONLY,
@@ -309,7 +309,7 @@ class Briey(config: BrieyConfig) extends Component{
     val axiCrossbar = Axi4CrossbarFactory()
 
     axiCrossbar.addSlaves(
-      ram.io.axi       -> (0x00000000L,   onChipRamSize),
+      ram.io.axi       -> (0x80000000L,   onChipRamSize),
       sdramCtrl.io.axi -> (0x40000000L,   sdramLayout.capacity),
       apbBridge.io.axi -> (0xF0000000L,   1 MB)
     )

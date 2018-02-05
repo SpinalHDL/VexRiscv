@@ -53,7 +53,7 @@ object MuraxConfig{
     gpioWidth = 32,
     cpuPlugins = ArrayBuffer( //DebugPlugin added by the toplevel
       new PcManagerSimplePlugin(
-        resetVector = 0x00000000l,
+        resetVector = 0x80000000l,
         relaxedPcCalculation = true
       ),
       new IBusSimplePlugin(
@@ -65,7 +65,7 @@ object MuraxConfig{
         catchAccessFault = false,
         earlyInjection = false
       ),
-      new CsrPlugin(CsrPluginConfig.smallest),
+      new CsrPlugin(CsrPluginConfig.smallest(mtvecInit = 0x80000020l)),
       new DecoderSimplePlugin(
         catchIllegalInstruction = false
       ),
@@ -278,7 +278,7 @@ case class Murax(config : MuraxConfig) extends Component{
       val logic = new MuraxSimpleBusDecoder(
         master = mainBusArbiter.io.masterBus,
         specification = List[(SimpleBus,SizeMapping)](
-          ram.io.bus             -> (0x00000000l, onChipRamSize kB),
+          ram.io.bus             -> (0x80000000l, onChipRamSize kB),
           apbBridge.io.simpleBus -> (0xF0000000l, 1 MB)
         ),
         pipelineMaster = pipelineMainBus

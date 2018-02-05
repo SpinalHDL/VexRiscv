@@ -84,6 +84,11 @@ void loadHexImpl(string path,Memory* mem) {
 	if(fp == 0){
 		cout << path << " not found" << endl;
 	}
+	//Preload 0x0 <-> 0x80000000 jumps
+	((uint32_t*)mem->get(0))[0] = 0x800000b7;
+	((uint32_t*)mem->get(0))[1] = 0x000080e7;
+	((uint32_t*)mem->get(0x80000000))[0] = 0x00000097;
+
 	fseek(fp, 0, SEEK_END);
 	uint32_t size = ftell(fp);
 	fseek(fp, 0, SEEK_SET);
@@ -1455,7 +1460,7 @@ public:
 		while(resetDone != true){usleep(100);}
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
-		if((readValue = readCmd(2,debugAddress + 4)) != 0x0000000C){
+		if((readValue = readCmd(2,debugAddress + 4)) != 0x8000000C){
 			printf("wrong break PC %x\n",readValue);
 			clientFail = true; return;
 		}
@@ -1479,12 +1484,13 @@ public:
 		}
 
 		writeCmd(2, debugAddress + 4, 0x13 + (1 << 7) + (40 << 20)); //Write x1 with 40
-		writeCmd(2, debugAddress + 4, 0x13 + (29 << 7) + (0x10 << 20)); //Write x29 with 0x10
+		writeCmd(2, debugAddress + 4, 0x80000eb7); //Write x29 with 0x10
+		writeCmd(2, debugAddress + 4, 0x010e8e93); //Write x29 with 0x10
 		writeCmd(2, debugAddress + 4, 0x67 + (29 << 15)); //Branch x29
 		writeCmd(2, debugAddress + 0, RISCV_SPINAL_FLAGS_HALT_CLEAR); //Run CPU
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
-		if((readValue = readCmd(2,debugAddress + 4)) != 0x00000014){
+		if((readValue = readCmd(2,debugAddress + 4)) != 0x80000014){
 			printf("wrong break PC 2 %x\n",readValue);
 			clientFail = true; return;
 		}
@@ -1496,14 +1502,16 @@ public:
 			clientFail = true; return;
 		}
 
-		writeCmd(2, debugAddress + 4, 0x13 + (29 << 7) + (0x18 << 20)); //Write x29 with 0x10
+
+		writeCmd(2, debugAddress + 4, 0x80000eb7); //Write x29 with 0x10
+		writeCmd(2, debugAddress + 4, 0x018e8e93); //Write x29 with 0x10
 		writeCmd(2, debugAddress + 4, 0x67 + (29 << 15)); //Branch x29
 		writeCmd(2, debugAddress + 0, RISCV_SPINAL_FLAGS_HALT_CLEAR); //Run CPU
 
 
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
-		if((readValue = readCmd(2,debugAddress + 4)) != 0x00000024){
+		if((readValue = readCmd(2,debugAddress + 4)) != 0x80000024){
 			printf("wrong break PC 2 %x\n",readValue);
 			clientFail = true; return;
 		}
@@ -1682,7 +1690,7 @@ int main(int argc, char **argv, char **env) {
 
 		#ifdef ISA_TEST
 
-			redo(REDO,TestA().run();)
+//			redo(REDO,TestA().run();)
 
 
 

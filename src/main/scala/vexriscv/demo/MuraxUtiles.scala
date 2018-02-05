@@ -112,6 +112,7 @@ class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpl
             case 4 =>
               offset = hToI(line, 9, 4) << 16
             case 3 =>
+            case 5 =>
             case 1 =>
           }
         }
@@ -120,7 +121,8 @@ class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpl
 
     val initContent = Array.fill[BigInt](ram.wordCount)(0)
     readHexFile(onChipRamHexFile,(address,data) => {
-      initContent(address >> 2) |= BigInt(data) << ((address & 3)*8)
+      val addressWithoutOffset = address + Int.MinValue
+      initContent(addressWithoutOffset >> 2) |= BigInt(data) << ((addressWithoutOffset & 3)*8)
     })
     ram.initBigInt(initContent)
   }

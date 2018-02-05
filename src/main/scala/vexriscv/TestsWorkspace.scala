@@ -32,7 +32,7 @@ object TestsWorkspace {
       val configFull = VexRiscvConfig(
         plugins = List(
           new PcManagerSimplePlugin(
-            resetVector = 0x00000000l,
+            resetVector = 0x80000000l,
             relaxedPcCalculation = false
           ),
 //          new IBusSimplePlugin(
@@ -117,7 +117,7 @@ object TestsWorkspace {
   //        new HazardSimplePlugin(false, false, false, false),
           new MulPlugin,
           new DivPlugin,
-          new CsrPlugin(CsrPluginConfig.all),
+          new CsrPlugin(CsrPluginConfig.all(0x80000020l)),
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = true,
@@ -192,7 +192,7 @@ object TestsWorkspace {
             catchAddressMisaligned = true,
             catchAccessFault = true
           ),
-          new CsrPlugin(CsrPluginConfig.small),
+          new CsrPlugin(CsrPluginConfig.small(0x80000020l)),
           new DecoderSimplePlugin(
             catchIllegalInstruction = true
           ),

@@ -1,0 +1,96 @@
+[*]
+[*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
+[*] Thu Feb  1 00:52:25 2018
+[*]
+[dumpfile] "/home/spinalvm/hdl/VexRiscv/src/test/cpp/regression/rv32ui-p-lui.vcd"
+[dumpfile_mtime] "Thu Feb  1 00:52:17 2018"
+[dumpfile_size] 183735
+[savefile] "/home/spinalvm/hdl/VexRiscv/src/test/cpp/regression/debug.gtkw"
+[timestart] 0
+[size] 1784 950
+[pos] -1 -1
+*-3.000000 0 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.VexRiscv.
+[sst_width] 409
+[signals_width] 540
+[sst_expanded] 1
+[sst_vpaned_height] 271
+@22
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_jump_pcLoad_payload[31:0]
+@28
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_jump_pcLoad_valid
+@22
+TOP.VexRiscv.prefetch_PC[31:0]
+@28
+TOP.VexRiscv.debug_bus_cmd_valid
+TOP.VexRiscv.reset
+TOP.VexRiscv.clk
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_samplePcNext
+@22
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_pcBeforeJumps[31:0]
+@28
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_jump_pcLoad_valid
+TOP.VexRiscv.fetch_BranchPlugin_hit
+TOP.VexRiscv.execute_BRANCH_DO
+@22
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_pcReg[31:0]
+TOP.VexRiscv.prefetch_PcManagerSimplePlugin_pc[31:0]
+@28
+TOP.VexRiscv.prefetch_arbitration_isValid
+TOP.VexRiscv.fetch_arbitration_isValid
+TOP.VexRiscv.decode_arbitration_isValid
+TOP.VexRiscv.execute_arbitration_isValid
+TOP.VexRiscv.memory_arbitration_isValid
+TOP.VexRiscv.writeBack_arbitration_isValid
+TOP.VexRiscv.CsrPlugin_interrupt
+TOP.VexRiscv.CsrPlugin_exception
+TOP.VexRiscv.decode_arbitration_isStuck
+TOP.VexRiscv.decode_arbitration_isStuckByOthers
+TOP.VexRiscv.execute_arbitration_isStuck
+TOP.VexRiscv.execute_arbitration_isStuckByOthers
+TOP.VexRiscv.fetch_arbitration_isStuck
+TOP.VexRiscv.fetch_arbitration_isStuckByOthers
+TOP.VexRiscv.memory_arbitration_isStuck
+TOP.VexRiscv.memory_arbitration_isStuckByOthers
+TOP.VexRiscv.prefetch_arbitration_isStuck
+TOP.VexRiscv.prefetch_arbitration_isStuckByOthers
+TOP.VexRiscv.writeBack_arbitration_isStuck
+TOP.VexRiscv.writeBack_arbitration_isStuckByOthers
+TOP.VexRiscv.iBus_cmd_valid
+TOP.VexRiscv.iBus_cmd_ready
+@22
+TOP.VexRiscv.iBus_cmd_payload_pc[31:0]
+@28
+TOP.VexRiscv.iBus_rsp_error
+@22
+TOP.VexRiscv.iBus_rsp_inst[31:0]
+@28
+TOP.VexRiscv.iBus_rsp_ready
+TOP.VexRiscv.debug_bus_cmd_valid
+@22
+TOP.VexRiscv.BranchPlugin_counter[8:0]
+@28
+TOP.VexRiscv.decode_IS_EBREAK
+TOP.VexRiscv.execute_IS_EBREAK
+TOP.VexRiscv.CsrPlugin_pipelineLiberator_done
+TOP.VexRiscv.CsrPlugin_pipelineLiberator_enable
+TOP.VexRiscv.DebugPlugin_haltIt
+@22
+TOP.VexRiscv.writeBack_INSTRUCTION[31:0]
+@29
+TOP.VexRiscv.DebugPlugin_stepIt
+@22
+TOP.VexRiscv.debug_bus_cmd_payload_address[7:0]
+TOP.VexRiscv.debug_bus_cmd_payload_data[31:0]
+@28
+TOP.VexRiscv.debug_bus_cmd_payload_wr
+TOP.VexRiscv.debug_bus_cmd_ready
+TOP.VexRiscv.debug_bus_cmd_valid
+@22
+TOP.VexRiscv.debug_bus_rsp_data[31:0]
+@28
+TOP.VexRiscv.debug_resetOut
+TOP.VexRiscv.debugReset
+[pattern_trace] 1
+[pattern_trace] 0

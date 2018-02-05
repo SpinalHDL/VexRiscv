@@ -88,6 +88,9 @@ object Riscv{
   def MRET               = M"00110000001000000000000001110011"
   def WFI                = M"00010000010100000000000001110011"
 
+  def FENCE              = M"-----------------000-----0001111"
+  def FENCE_I            = M"-----------------001-----0001111"
+
   object CSR{
     def MVENDORID = 0xF11 // MRO Vendor ID.
     def MARCHID   = 0xF12 // MRO Architecture ID.
