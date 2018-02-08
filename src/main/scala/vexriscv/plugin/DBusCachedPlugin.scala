@@ -4,8 +4,19 @@ import vexriscv.ip._
 import vexriscv._
 import spinal.core._
 import spinal.lib._
+import spinal.lib.bus.amba4.axi.Axi4
 
 
+class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : Any = null) extends DBusCachedPlugin(config, memoryTranslatorPortConfig){
+  var dAxi  : Axi4 = null
+
+  override def build(pipeline: VexRiscv): Unit = {
+    super.build(pipeline)
+    dBus.asDirectionLess()
+    dAxi = master(dBus.toAxi4Shared().toAxi4()).setName("dAxi")
+    dBus = null //For safety, as nobody should use it anymore :)
+  }
+}
 
 class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : Any = null)  extends Plugin[VexRiscv]{
   import config._

@@ -103,6 +103,8 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     axi2
   }
 
+  def toAxi4(stageCmd : Boolean = true) = this.toAxi4Shared(stageCmd).toAxi4()
+
 
 
   def toAvalon(stageCmd : Boolean = true): AvalonMM = {
