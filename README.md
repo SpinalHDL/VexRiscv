@@ -12,6 +12,7 @@
 - [Build the RISC-V GCC](#build-the-risc-v-gcc)
 - [CPU parametrization and instantiation example](#cpu-parametrization-and-instantiation-example)
 - [Add a custom instruction to the CPU via the plugin system](#add-a-custom-instruction-to-the-cpu-via-the-plugin-system)
+- [Adding a new CSR via the plugin system](#adding-a-new-csr-via-the-plugin-system)
 - [CPU clock and resets](#cpu-clock-and-resets)
 
 
@@ -551,6 +552,14 @@ make clean run IBUS=SIMPLE DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=
 ```
 
 To retrieve the plugin related signals in the wave, just filter with `simd`.
+
+## Adding a new CSR via the plugin system
+
+You can find two example about how to add custom CSR into the CPU via the plugin system there : 
+https://github.com/SpinalHDL/VexRiscv/blob/master/src/main/scala/vexriscv/demo/CustomCsrDemoPlugin.scala
+
+The first one (CustomCsrDemoPlugin) is adding an instruction counter and an clock cycle counter into the CSR mapping (and also do tricky stuff as a demonstration).<br>
+While the second one (CustomCsrDemoGpioPlugin) is creating an GPIO peripheral directly mapped into the CSR.
 
 ## CPU clock and resets
 
