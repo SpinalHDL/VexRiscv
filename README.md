@@ -1,5 +1,6 @@
 ## Index
 
+- [Index](#index)
 - [Description](#description)
 - [Area usage and maximal frequency](#area-usage-and-maximal-frequency)
 - [Dependencies](#dependencies)
@@ -7,6 +8,8 @@
 - [Regression tests](#regression-tests)
 - [Interactive debug of the simulated CPU via GDB OpenOCD and Verilator](#interactive-debug-of-the-simulated-cpu-via-gdb-openocd-and-verilator)
 - [Using eclipse to run the software and debug it](#using-eclipse-to-run-the-software-and-debug-it)
+  * [By using Zylin plugin](#by-using-zylin-plugin)
+  * [By using FreedomStudio](#by-using-freedomstudio)
 - [Briey SoC](#briey-soc)
 - [Murax SoC](#murax-soc)
 - [Build the RISC-V GCC](#build-the-risc-v-gcc)
@@ -14,6 +17,29 @@
 - [Add a custom instruction to the CPU via the plugin system](#add-a-custom-instruction-to-the-cpu-via-the-plugin-system)
 - [Adding a new CSR via the plugin system](#adding-a-new-csr-via-the-plugin-system)
 - [CPU clock and resets](#cpu-clock-and-resets)
+- [VexRiscv Architecture](#vexriscv-architecture)
+  * [Plugins](#plugins)
+    + [PcManagerSimplePlugin](#pcmanagersimpleplugin)
+    + [IBusSimplePlugin](#ibussimpleplugin)
+    + [IBusCachedPlugin](#ibuscachedplugin)
+    + [DecoderSimplePlugin](#decodersimpleplugin)
+    + [RegFilePlugin](#regfileplugin)
+    + [HazardSimplePlugin](#hazardsimpleplugin)
+    + [SrcPlugin](#srcplugin)
+    + [IntAluPlugin](#intaluplugin)
+    + [LightShifterPlugin](#lightshifterplugin)
+    + [FullBarrielShifterPlugin](#fullbarrielshifterplugin)
+    + [BranchPlugin](#branchplugin)
+    + [DBusSimplePlugin](#dbussimpleplugin)
+    + [DBusCachedPlugin](#dbuscachedplugin)
+    + [MulPlugin](#mulplugin)
+    + [DivPlugin](#divplugin)
+    + [CsrPlugin](#csrplugin)
+    + [StaticMemoryTranslatorPlugin](#staticmemorytranslatorplugin)
+    + [MemoryTranslatorPlugin](#memorytranslatorplugin)
+    + [DebugPlugin](#debugplugin)
+    + [YamlPlugin](#yamlplugin)
+
 
 
 ## Description
@@ -586,3 +612,366 @@ toplevelReset >----+--------> debugReset       |
                           |
                           +-> Interconnect / Peripherals
 ```
+
+
+## VexRiscv Architecture
+
+VexRiscv is implemented via an 5 stages in order pipeline on which many optional and complementary plugins will add functionalities to provide a functional RISC-V CPU. This approach is completely unconventional and only possible on meta hardware description languages (SpinalHDL in the current case) but had proved its advantages via the VexRiscv implementation :
+
+- You can swap/turn on/turn off parts of the CPU directly via the plugin system
+- You can add new functionalities/instruction without having to modify any sources code of the CPU
+- It allow the CPU configuration to cover a very large spectrum of implementation without cooking spagetti code  
+- To resume it allow your code base to truly produce a parametrized CPU design
+
+### Plugins
+
+This chapter (WIP) will describe plugins currently implemented
+
+#### PcManagerSimplePlugin
+
+This plugin implement the programme counter and over an jump service to all plugins.
+
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| resetVector | BigInt | Address of the program counter after the reset |
+| relaxedPcCalculation | Boolean | By default jump have an asynchronous immediate effect on the program counter, which allow to reduce the branch penalties by one cycle but could reduce the FMax as it will combinatorialy drive the instruction bus address signal. To avoid this you can set this parameter to true, which will make the jump affecting the programm counter in a sequancial way, which will cut the combinatorial path but add one additional cycle of penalty when a jump occur. |
+
+
+The jump interface implemented by this plugin allow all other plugin to request jumps. The stage argument specify from which stage the jump is asked, which will allow the PcManagerSimplePlugin plugin to manage priorities between jump requests.
+
+```scala
+trait JumpService{
+  def createJumpInterface(stage : Stage) : Flow[UInt]
+}
+```
+
+This plugin operate into the prefetch stage.
+
+#### IBusSimplePlugin
+
+This plugin fetch instruction via a very simple and neutral memory interface going outside the CPU.
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| interfaceKeepData | Boolean | Specify if the read response interface keep the data until the next one, or if it's only present a single cycle.|
+| catchAccessFault | Boolean | If an the read response specify an read error and this parameter is true, it will generate an CPU exception trap |
+
+There is the SimpleBus interface definition 
+
+```scala
+case class IBusSimpleCmd() extends Bundle{
+  val pc = UInt(32 bits)
+}
+
+case class IBusSimpleRsp() extends Bundle with IMasterSlave{
+  val ready = Bool 
+  val error = Bool
+  val inst  = Bits(32 bits)
+
+  override def asMaster(): Unit = {
+    out(ready,error,inst)
+  }
+}
+
+case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMasterSlave{
+  var cmd = Stream(IBusSimpleCmd())
+  var rsp = IBusSimpleRsp()
+
+  override def asMaster(): Unit = {
+    master(cmd)
+    slave(rsp)
+  }
+}
+```
+
+There is at least one cycle latency between que cmd and the rsp. the rsp.ready flag should be false after a cmd until the rsp is present.
+
+Note that bridges are implemented to convert this interface into AXI4 and Avalon
+
+This plugin fit in the fetch stage
+
+#### IBusCachedPlugin
+
+Single way cache implementation, documentation WIP
+
+#### DecoderSimplePlugin
+
+This plugin will provide instruction decoding capabilities to others plugins. <br>
+As instance, the pipeline hazard plugin will need to know, for a given instruction, if it is using the register file source 1/2 in order stall the pipeline until the hazard is gone. So to provide this kind of information, each plugin which implement an instruction will document to the DecoderSimplePlugin plugin this kind of informations. 
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| catchIllegalInstruction | Boolean | If set to true, instruction which have no decoding specification will generate an trap exception  |
+
+There is an usage example : 
+
+```scala
+    //Specify the instruction decoding which should be applied when the instruction match the 'key' pattern
+    decoderService.add(
+      //Bit pattern of the new instruction
+      key = M"0000011----------000-----0110011",
+
+      //Decoding specification when the 'key' pattern is recognized in the instruction
+      List(
+        IS_SIMD_ADD              -> True,
+        REGFILE_WRITE_VALID      -> True, //Enable the register file write
+        BYPASSABLE_EXECUTE_STAGE -> True, //Notify the hazard management unit that the instruction result is already accessible in the EXECUTE stage (Bypass ready)
+        BYPASSABLE_MEMORY_STAGE  -> True, //Same as above but for the memory stage
+        RS1_USE                  -> True, //Notify the hazard management unit that this instruction use the RS1 value
+        RS2_USE                  -> True  //Same than above but for RS2.
+      )
+    )
+  }
+```
+
+This plugin operate in the Decode stage
+
+#### RegFilePlugin
+
+This plugin implement the register file.
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| regFileReadyKind | RegFileReadKind | Can bet set to ASYNC or SYNC. Specify the kind of memory read used to implement the register file. ASYNC mean zero cycle latency memory read, while SYNC mean one cycle latency memory read which can be mapped into standard FPGA memory blocks   |
+| zeroBoot | Boolean | Load all registers with zeroes at the beginning of simulations to keep everything deterministic in logs/traces|
+
+
+This register file use an `don't care` read during write policy, so the bypassing/hazard plugin should take care of this.
+
+#### HazardSimplePlugin
+
+This plugin check the pipeline instruction dependencies and depending them, it will stop the instruction in the decoding stage or bypass the instruction results from the following stages to the decode stage.
+
+As the register file is implemented with a `don't care` read during write policy, this plugin also have to manage hazard comming from this.
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| bypassExecute | Boolean | Enable the bypassing of instruction results comming from the Execute stage |
+| bypassMemory | Boolean | Enable the bypassing of instruction results comming from the Memory stage |
+| bypassWriteBack | Boolean | Enable the bypassing of instruction results comming from the WriteBack stage |
+| bypassWriteBackBuffer | Boolean | Enable the bypassing of the previous cycle register file written value  |
+
+
+#### SrcPlugin
+
+This plugin muxes different inputs values to produce SRC1/SRC2/SRC_ADD/SRC_SUB/SRC_LESS values which are common values used by many plugins in the exectue stage (ALU / Branch / Load / Store).
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| separatedAddSub | RegFileReadKind | By default SRC_ADD/SRC_SUB are generated from a single controllable adder/substractor, but if this is set to true, it use separated adder/substractors |
+| executeInsertion | Boolean | By default SRC1/SRC2 are generated in the Decode stage, but if this parameter is true, it is done in the Execute stage (It will relax the bypassing network) |
+
+Excepted SRC1/SRC2, this plugin do everything at the begining of Execute stage.
+
+#### IntAluPlugin
+
+This plugin implement all ADD/SUB/SLT/SLTU/XOR/OR/AND/LUI/AUIPC instructions in the execute stage by using the SrcPlugin outputs. It is a realy simple plugin.
+
+The result is injected into the pipeline directly at the end of the execute stage.
+
+#### LightShifterPlugin
+
+Implement SLL/SRL/SRA instructions by using an iterative shifter register, whill use one cycle per bit shift.
+
+The result is injected into the pipeline directly at the end of the execute stage.
+
+#### FullBarrielShifterPlugin
+
+Implement SLL/SRL/SRA instructions by using an full barriel shifter, so it execute all shifts in a single cycle.
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| earlyInjection | Boolean | By default the result of the shift is injected into the pipeline in the Memory stage to relax timings, but if this option is true it will be done in the Execute stage |
+
+#### BranchPlugin
+
+This plugin implement all branch/jump instructions (JAL/JALR/BEQ/BNE/BLT/BGE/BLTU/BGEU) with some optional branch prediction. Each of those branch prediction could have been implemented into separated plugins.
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| earlyBranch | Boolean | By default the branch is done in the Memory stage to relax timings, but if this option is set it's done in the Execute stage|
+| catchAddressMisaligned | Boolean | If a jump/branch is done in an unaligned PC address, it will fire an trap exception |
+| prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation, see bellow for more descriptions |
+| historyRamSizeLog2 | Int | Specify the number of entries in the direct mapped prediction cache of DYNAMIC/DYNAMIC_TARGET implementation. 2 pow historyRamSizeLog2 entries |
+
+Each miss predicted jumps will produce between 2 and 4 cycles penalty depending the `earlyBranch` and the `PcManagerSimplePlugin.relaxedPcCalculation` configurations
+
+
+##### Prediction NONE
+
+No prediction, each PC changes due to a jump/branch will produce a penalty.
+
+##### Prediction STATIC
+
+In the decode stage, if the instruction is an conditional branch pointing backward or an JAL, it branch it speculatively. If the speculation is right it the branch penality is reduced to a single cycle, else the standard penalty is applied.
+
+##### Prediction DYNAMIC
+
+It is the same than the STATIC prediction, excepted that to do the prediction, it use a direct mapped 2 bit history cache (BHT) which remember if the branch is more likely to be taken or not.
+
+##### Prediction DYNAMIC_TARGET
+
+This predictor is using a direct mapped branch target buffer (BTB) in the Fetch stage which store the PC of the instruction, the target PC of the instruction and a 2 bit history to remember if the branch is more likely to be taken or not. This is the most efficient branch predictor actualy implemented on VexRiscv as when the branch prediction is right, is produce no branch penalty. The down side is that this predictor has a long combinatorial path comming from the prediction cache read port to the programm counter by passing through the jump interface.
+
+#### DBusSimplePlugin
+
+This plugin implement the load and store instructions (LB/LH/LW/LBU/LHU/LWU/SB/SH/SW) via a simple and neutral memory bus going out of the CPU.
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| catchAddressMisaligned | Boolean | If a memory access is done in an unaligned memory address, it will fire an trap exception |
+| catchAccessFault | Boolean | If a memory read return an error, it will fire an trap exception  |
+| earlyInjection | Boolean | By default, the memory read values are injected into the pipeline in the WriteBack stage to relax the timings, if this parameter is true it's done in the Memory stage |
+
+There is the DBusSimpleBus
+
+```scala
+case class DBusSimpleCmd() extends Bundle{
+  val wr = Bool
+  val address = UInt(32 bits)
+  val data = Bits(32 bit)
+  val size = UInt(2 bit)
+}
+
+case class DBusSimpleRsp() extends Bundle with IMasterSlave{
+  val ready = Bool
+  val error = Bool
+  val data = Bits(32 bit)
+
+  override def asMaster(): Unit = {
+    out(ready,error,data)
+  }
+}
+
+
+case class DBusSimpleBus() extends Bundle with IMasterSlave{
+  val cmd = Stream(DBusSimpleCmd())
+  val rsp = DBusSimpleRsp()
+
+  override def asMaster(): Unit = {
+    master(cmd)
+    slave(rsp)
+  }
+}
+```
+
+Note that bridges are implemented to convert this interface into AXI4 and Avalon
+
+There is at least one cycle latency between que cmd and the rsp. the rsp.ready flag should be false after a read cmd until the rsp is present.
+
+
+#### DBusCachedPlugin
+
+Single way cache implementation with a victime buffer, documentation WIP
+
+#### MulPlugin
+
+Implement the multiplication instruction from the RISC-V M extension. Its implementation was done in a FPGA friendly way by using 4 multiplication of 17*17 bits. The processing is fully pipelined between the Execute/Memory/Writeback stage. The results of the instructions is always inserted in the WriteBack stage.
+
+#### DivPlugin
+
+Implement the division/modulo instruction from the RISC-V M extension. It is done by a simple iterative manner which always take 34 cycles. The result is inserted into the Memory stage. 
+
+#### CsrPlugin
+
+Implement most of the Machine mode and a very little bit of the User mode specified in the RISC-V previlegied spec. The access mode of most of the CSR is parameterizable (NONE/READ_ONLY/WRITE_ONLY/READ_WRITE) to reduce the area usage of useless features.
+
+(CsrAccess can be NONE/READ_ONLY/WRITE_ONLY/READ_WRITE)
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| catchIllegalAccess   | Boolean |  |
+| mvendorid            | BigInt |  |
+| marchid              | BigInt |  |
+| mimpid               | BigInt |  |
+| mhartid              | BigInt |  |
+| misaExtensionsInit   | Int |  |
+| misaAccess           | CsrAccess |  |
+| mtvecAccess          | CsrAccess |  |
+| mtvecInit            | BigInt |  |
+| mepcAccess           | CsrAccess |  |
+| mscratchGen          | Boolean |  |
+| mcauseAccess         | CsrAccess |  |
+| mbadaddrAccess       | CsrAccess |  |
+| mcycleAccess         | CsrAccess |  |
+| minstretAccess       | CsrAccess |  |
+| ucycleAccess         | CsrAccess |  |
+| wfiGen               | Boolean |  |
+| ecallGen             | Boolean |  |
+
+If an interrupt occur, before jumping to mtvec, the plugin will stop the Prefetch stage and wait that all the instructions in the following stages end their execution.
+
+If an exception occur, the plugin will kill the corresponding instruction, flush all previous instruction, and wait until the previously killed instruction reach the WriteBack stage before jumping to mtvec.
+
+
+#### StaticMemoryTranslatorPlugin
+
+Static memory translator plugin which allow to specify which range of the memory addresses is IO mapped and shouldn't be cached
+
+#### MemoryTranslatorPlugin
+
+Simple software refilled MMU implementation. Allow others plugins as DBusCachedPlugin/IBusCachedPlugin to instanciate memory address translation ports. Each port has a small dedicated fully associative TLB cache which is refilled from a larger software filled TLB cache via an query which will look up one entry per cycle.
+
+#### DebugPlugin
+
+This plugin implement enough CPU debug feature to allow a comfortable GDB/eclipse debugging. To access those debug feature it provide a simple memory bus interface, the JTAG interface is provided by another bridge, which allow to efficiently connect multiple CPU to the same JTAG.
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| debugClockDomain   | ClockDomain | As the debug unit is able to reset the CPU itself, it should use another clock domain to avoid killing itself (only the reset wire should differ) |
+
+The internals of the debug plugin are done in a manner which reduce the area usage and the FMax impact of this plugin. 
+
+There is the simple bus to access it, the rsp come one cycle after the request : 
+
+```scala
+case class DebugExtensionCmd() extends Bundle{
+  val wr = Bool
+  val address = UInt(8 bit)
+  val data = Bits(32 bit)
+}
+case class DebugExtensionRsp() extends Bundle{
+  val data = Bits(32 bit)
+}
+
+case class DebugExtensionBus() extends Bundle with IMasterSlave{
+  val cmd = Stream(DebugExtensionCmd())
+  val rsp = DebugExtensionRsp() 
+
+  override def asMaster(): Unit = {
+    master(cmd)
+    in(rsp)
+  }
+}
+``` 
+
+
+There is the register mapping : 
+
+```
+Read address 0x00 ->
+  bit 0  : resetIt
+  bit 1  : haltIt
+  bit 2  : isPipBusy
+  bit 3  : haltedByBreak
+  bit 4  : stepIt
+Write address 0x00 ->
+  bit 4  : stepIt
+  bit 16 : set resetIt
+  bit 17 : set haltIt
+  bit 24 : clear resetIt
+  bit 25 : clear haltIt and haltedByBreak
+  
+Read Address 0x04 ->
+  bits (31 downto 0) : Last value written into the register file
+Write Address 0x04 ->
+  bits (31 downto 0) : Instruction that should be pushed into the CPU pipeline for debug purposes
+```
+
+The OpenOCD port is there :
+https://github.com/SpinalHDL/openocd_riscv
+
+#### YamlPlugin
+
+This plugin offer a service to others plugin to generate an usefull Yaml file about the CPU configuration, it will contain, for instance, the sequence of instruction required to flush the data cache (information used by openocd)

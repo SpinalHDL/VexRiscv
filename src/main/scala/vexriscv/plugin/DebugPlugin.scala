@@ -22,7 +22,7 @@ case class DebugExtensionRsp() extends Bundle{
 
 case class DebugExtensionBus() extends Bundle with IMasterSlave{
   val cmd = Stream(DebugExtensionCmd())
-  val rsp = DebugExtensionRsp() //zero cycle latency
+  val rsp = DebugExtensionRsp() //one cycle latency
 
   override def asMaster(): Unit = {
     master(cmd)
