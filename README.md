@@ -623,6 +623,8 @@ VexRiscv is implemented via an 5 stages in order pipeline on which many optional
 - It allow the CPU configuration to cover a very large spectrum of implementation without cooking spagetti code  
 - To resume it allow your code base to truly produce a parametrized CPU design
 
+So again, if you generate the CPU without any plugin, it will only contain the 5 stages definition and their basic arbitration, but nothing else, as everything else, including the program counter is added into the CPU via plugins.
+
 ### Plugins
 
 This chapter (WIP) will describe plugins currently implemented
