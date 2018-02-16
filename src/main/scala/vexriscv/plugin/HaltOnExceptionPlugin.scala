@@ -28,11 +28,15 @@ class HaltOnExceptionPlugin() extends Plugin[VexRiscv] with ExceptionService {
     stages.head.insert(FORMAL_HALT) := False
     stages.foreach(stage => {
       val stagePorts = exceptionPortsInfos.filter(_.stage == stage)
-      if(stagePorts.nonEmpty)
-        when(stagePorts.map(_.port.valid).orR){
+      if(stagePorts.nonEmpty) {
+        when(stagePorts.map(info => info.port.valid).orR) {
           stage.output(FORMAL_HALT) := True
           stage.arbitration.haltItself := True
         }
+        for(stage <- stages){
+          stage.output(FORMAL_HALT) clearWhen(stage.arbitration.isFlushed)
+        }
+      }
     })
   }
 }

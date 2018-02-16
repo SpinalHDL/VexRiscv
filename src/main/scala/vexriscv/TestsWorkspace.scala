@@ -41,9 +41,9 @@ object TestsWorkspace {
 //          ),
           new IBusCachedPlugin(
             config = InstructionCacheConfig(
-              cacheSize = 4096*4,
-              bytePerLine =32,
-              wayCount = 1,
+              cacheSize = 4096,
+              bytePerLine = 32,
+              wayCount = 4,
               wrappedMemAccess = true,
               addressWidth = 32,
               cpuDataWidth = 32,
@@ -52,10 +52,11 @@ object TestsWorkspace {
               catchAccessFault = true,
               catchMemoryTranslationMiss = true,
               asyncTagMemory = false,
-              twoStageLogic = true
+              twoStageLogic = false,
+              twoCycleRam = true
             ),
             askMemoryTranslation = true,
-            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+              memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
               portTlbSize = 4
             )
           ),
@@ -95,7 +96,7 @@ object TestsWorkspace {
             catchIllegalInstruction = true
           ),
           new RegFilePlugin(
-            regFileReadyKind = plugin.SYNC,
+            regFileReadyKind = plugin.ASYNC,
             zeroBoot = false
           ),
           new IntAluPlugin,
@@ -122,7 +123,7 @@ object TestsWorkspace {
           new BranchPlugin(
             earlyBranch = true,
             catchAddressMisaligned = true,
-            prediction = DYNAMIC_TARGET,
+            prediction = NONE,
             historyRamSizeLog2 = 8
           ),
           new YamlPlugin("cpu0.yaml")

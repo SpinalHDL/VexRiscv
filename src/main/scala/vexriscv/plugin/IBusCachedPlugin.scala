@@ -8,15 +8,17 @@ import spinal.lib._
 
 class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : Boolean = false, memoryTranslatorPortConfig : Any = null) extends Plugin[VexRiscv] {
   import config._
-  assert(twoStageLogic || !askMemoryTranslation)
 
   var iBus  : InstructionCacheMemBus = null
   var mmuBus : MemoryTranslatorBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
   var privilegeService : PrivilegeService = null
+  var redoBranch : Flow[UInt] = null
 
   object FLUSH_ALL extends Stageable(Bool)
   object IBUS_ACCESS_ERROR extends Stageable(Bool)
+  object IBUS_MMU_MISS extends Stageable(Bool)
+  object IBUS_ILLEGAL_ACCESS extends Stageable(Bool)
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
     import pipeline.config._
@@ -28,6 +30,9 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
     decoderService.add(MANAGEMENT,  List(
         FLUSH_ALL -> True
     ))
+
+    //TODO manage priority with branch prediction
+    redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.decode)
 
     if(catchSomething) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
@@ -68,59 +73,55 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
 
     //Connect prefetch cache side
     cache.io.cpu.prefetch.isValid := prefetch.arbitration.isValid
-    cache.io.cpu.prefetch.isFiring := prefetch.arbitration.isFiring
-    cache.io.cpu.prefetch.address := prefetch.output(PC)
+    cache.io.cpu.prefetch.pc := prefetch.output(PC)
     prefetch.arbitration.haltItself setWhen(cache.io.cpu.prefetch.haltIt)
 
     //Connect fetch cache side
     cache.io.cpu.fetch.isValid  := fetch.arbitration.isValid
     cache.io.cpu.fetch.isStuck  := fetch.arbitration.isStuck
-    if(!twoStageLogic) cache.io.cpu.fetch.isStuckByOthers  := fetch.arbitration.isStuckByOthers
-    cache.io.cpu.fetch.address  := fetch.output(PC)
-    if(!twoStageLogic) {
-      fetch.arbitration.haltItself setWhen (cache.io.cpu.fetch.haltIt)
+    cache.io.cpu.fetch.pc  := fetch.output(PC)
+
+    if (mmuBus != null) {
+      cache.io.cpu.fetch.mmuBus <> mmuBus
+    } else {
+      cache.io.cpu.fetch.mmuBus.rsp.physicalAddress := cache.io.cpu.fetch.mmuBus.cmd.virtualAddress
+      cache.io.cpu.fetch.mmuBus.rsp.allowExecute := True
+      cache.io.cpu.fetch.mmuBus.rsp.allowRead := True
+      cache.io.cpu.fetch.mmuBus.rsp.allowWrite := True
+      cache.io.cpu.fetch.mmuBus.rsp.allowUser := True
+      cache.io.cpu.fetch.mmuBus.rsp.isIoAccess := False
+      cache.io.cpu.fetch.mmuBus.rsp.miss := False
+    }
+
+    if(dataOnDecode){
+      decode.insert(INSTRUCTION) := cache.io.cpu.decode.data
+    }else{
       fetch.insert(INSTRUCTION) := cache.io.cpu.fetch.data
       decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck,decode.input(INSTRUCTION),fetch.output(INSTRUCTION))
-      decode.insert(INSTRUCTION_READY) := True
-    }else {
-      if (mmuBus != null) {
-        cache.io.cpu.fetch.mmuBus <> mmuBus
-      } else {
-        cache.io.cpu.fetch.mmuBus.rsp.physicalAddress := cache.io.cpu.fetch.mmuBus.cmd.virtualAddress
-        cache.io.cpu.fetch.mmuBus.rsp.allowExecute := True
-        cache.io.cpu.fetch.mmuBus.rsp.allowRead := True
-        cache.io.cpu.fetch.mmuBus.rsp.allowWrite := True
-        cache.io.cpu.fetch.mmuBus.rsp.allowUser := True
-        cache.io.cpu.fetch.mmuBus.rsp.isIoAccess := False
-        cache.io.cpu.fetch.mmuBus.rsp.miss := False
-      }
     }
+    decode.insert(INSTRUCTION_READY) := True
 
+    cache.io.cpu.decode.pc  := decode.output(PC)
 
+    val ownDecode = pipeline.plugins.filter(_.isInstanceOf[InstructionInjector]).foldLeft(True)(_ && !_.asInstanceOf[InstructionInjector].isInjecting(decode))
+    cache.io.cpu.decode.isValid  := decode.arbitration.isValid && ownDecode
+    cache.io.cpu.decode.isStuck  := decode.arbitration.isStuck
+    cache.io.cpu.decode.isUser  := (if(privilegeService != null) privilegeService.isUser(decode) else False)
+//    cache.io.cpu.decode.pc  := decode.input(PC)
 
-    if(twoStageLogic){
-      cache.io.cpu.decode.isValid := decode.arbitration.isValid && RegNextWhen(fetch.arbitration.isValid, !decode.arbitration.isStuck) //avoid inserted instruction from debug module
-      decode.arbitration.haltItself.setWhen(cache.io.cpu.decode.haltIt)
-      cache.io.cpu.decode.isStuck := decode.arbitration.isStuck
-      cache.io.cpu.decode.isUser  := (if(privilegeService != null) privilegeService.isUser(writeBack) else False)
-      cache.io.cpu.decode.address := decode.input(PC)
-      decode.insert(INSTRUCTION)  := cache.io.cpu.decode.data
-      decode.insert(INSTRUCTION_ANTICIPATED) := cache.io.cpu.decode.dataAnticipated
-      decode.insert(INSTRUCTION_READY) := !cache.io.cpu.decode.haltIt
+    redoBranch.valid := cache.io.cpu.decode.redo
+    redoBranch.payload := decode.input(PC)
+    when(redoBranch.valid){
+      decode.arbitration.redoIt := True
+      decode.arbitration.flushAll := True
     }
-
 
     if(catchSomething){
-      if(catchAccessFault) {
-        if (!twoStageLogic) fetch.insert(IBUS_ACCESS_ERROR) := cache.io.cpu.fetch.error
-        if (twoStageLogic) decode.insert(IBUS_ACCESS_ERROR) := cache.io.cpu.decode.error
-      }
-
-      val accessFault = if(catchAccessFault) decode.input(IBUS_ACCESS_ERROR) else False
+      val accessFault = if(catchAccessFault) cache.io.cpu.decode.error else False
       val mmuMiss = if(catchMemoryTranslationMiss) cache.io.cpu.decode.mmuMiss else False
       val illegalAccess = if(catchIllegalAccess) cache.io.cpu.decode.illegalAccess else False
 
-      decodeExceptionPort.valid   := decode.arbitration.isValid && (accessFault || mmuMiss || illegalAccess)
+      decodeExceptionPort.valid   := decode.arbitration.isValid && ownDecode && (accessFault || mmuMiss || illegalAccess)
       decodeExceptionPort.code    := mmuMiss ? U(14) | 1
       decodeExceptionPort.badAddr := decode.input(PC)
     }
@@ -130,11 +131,10 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
       cache.io.flush.cmd.valid := False
       when(arbitration.isValid && input(FLUSH_ALL)){
         cache.io.flush.cmd.valid := True
+        decode.arbitration.flushAll := True
 
         when(!cache.io.flush.cmd.ready){
           arbitration.haltItself := True
-        } otherwise {
-          decode.arbitration.flushAll := True
         }
       }
     }

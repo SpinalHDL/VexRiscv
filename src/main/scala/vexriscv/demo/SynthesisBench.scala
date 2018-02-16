@@ -12,24 +12,24 @@ object VexRiscvSynthesisBench {
   def main(args: Array[String]) {
 
     def wrap(that : => Component) : Component = that
-    //Wrap with input/output registers
-    //    def wrap(that : => Component) : Component = {
-    //      //new WrapWithReg.Wrapper(that)
-    //      val c = that
-    //      c.rework {
-    //        for (e <- c.getOrdredNodeIo) {
-    //          if (e.isInput) {
-    //            e.asDirectionLess()
-    //            e := RegNext(RegNext(in(cloneOf(e))))
-    //
-    //          } else {
-    //            e.asDirectionLess()
-    //            out(cloneOf(e)) := RegNext(RegNext(e))
-    //          }
-    //        }
-    //      }
-    //      c
-    //    }
+//    Wrap with input/output registers
+//        def wrap(that : => Component) : Component = {
+//          //new WrapWithReg.Wrapper(that)
+//          val c = that
+//          c.rework {
+//            for (e <- c.getOrdredNodeIo) {
+//              if (e.isInput) {
+//                e.asDirectionLess()
+//                e := RegNext(RegNext(in(cloneOf(e))))
+//
+//              } else {
+//                e.asDirectionLess()
+//                out(cloneOf(e)) := RegNext(RegNext(e))
+//              }
+//            }
+//          }
+//          c
+//        }
 
     val smallestNoCsr = new Rtl {
       override def getName(): String = "VexRiscv smallest no CSR"
