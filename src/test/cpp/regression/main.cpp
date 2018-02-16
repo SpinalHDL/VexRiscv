@@ -199,6 +199,8 @@ public:
 
 
 	Workspace(string name){
+        //setIStall(false);
+        //setDStall(false);
 		staticMutex.lock();
 		testsCounter++;
 		staticMutex.unlock();

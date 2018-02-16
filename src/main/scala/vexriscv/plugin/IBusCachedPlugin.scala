@@ -32,7 +32,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
     ))
 
     //TODO manage priority with branch prediction
-    redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.decode)
+    redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.decode, priority = 1) //Priority 1 will win against branch predictor
 
     if(catchSomething) {
       val exceptionService = pipeline.service(classOf[ExceptionService])

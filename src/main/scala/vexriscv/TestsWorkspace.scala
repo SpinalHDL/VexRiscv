@@ -41,9 +41,9 @@ object TestsWorkspace {
 //          ),
           new IBusCachedPlugin(
             config = InstructionCacheConfig(
-              cacheSize = 4096,
+              cacheSize = 1024,
               bytePerLine = 32,
-              wayCount = 4,
+              wayCount = 2,
               wrappedMemAccess = true,
               addressWidth = 32,
               cpuDataWidth = 32,
