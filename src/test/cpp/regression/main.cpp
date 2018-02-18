@@ -199,8 +199,8 @@ public:
 
 
 	Workspace(string name){
-        //setIStall(false);
-        //setDStall(false);
+    //    setIStall(false);
+   //     setDStall(false);
 		staticMutex.lock();
 		testsCounter++;
 		staticMutex.unlock();
@@ -406,7 +406,11 @@ public:
 
 
 				#ifndef REF_TIME
-				mTime = i/2;
+                #ifndef MTIME_INSTR_FACTOR
+                mTime = i/2;
+                #else
+				mTime += top->VexRiscv->writeBack_arbitration_isFiring*MTIME_INSTR_FACTOR;
+                #endif
 				#endif
 				#ifdef CSR
 				top->timerInterrupt = mTime >= mTimeCmp ? 1 : 0;
@@ -1612,10 +1616,11 @@ string riscvTestDiv[] = {
 };
 
 string freeRtosTests[] = {
-		"AltBlckQ", "AltBlock", "AltQTest", "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
+		"AltBlock", "AltQTest", "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
 		"QueueSet", "recmutex", "semtest", "TaskNotify", "BlockQ", "crhook", "dynamic",
 		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
 		 //"flop", "sp_flop" // <- Simple test
+		 // "AltBlckQ" ???
 };
 
 

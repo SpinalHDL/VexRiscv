@@ -41,10 +41,9 @@ object TestsWorkspace {
 //          ),
           new IBusCachedPlugin(
             config = InstructionCacheConfig(
-              cacheSize = 1024,
+              cacheSize = 2048,
               bytePerLine = 32,
-              wayCount = 2,
-              wrappedMemAccess = true,
+              wayCount = 1,
               addressWidth = 32,
               cpuDataWidth = 32,
               memDataWidth = 32,
@@ -52,8 +51,7 @@ object TestsWorkspace {
               catchAccessFault = true,
               catchMemoryTranslationMiss = true,
               asyncTagMemory = false,
-              twoStageLogic = false,
-              twoCycleRam = true
+              twoCycleRam = false
             ),
             askMemoryTranslation = true,
               memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
@@ -118,12 +116,12 @@ object TestsWorkspace {
   //        new HazardSimplePlugin(false, false, false, false),
           new MulPlugin,
           new DivPlugin,
-          new CsrPlugin(CsrPluginConfig.all(0x80000020l)),
+          new CsrPlugin(CsrPluginConfig.all(0x80000020l).copy(deterministicInteruptionEntry = false)),
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = true,
             catchAddressMisaligned = true,
-            prediction = NONE,
+            prediction = DYNAMIC_TARGET,
             historyRamSizeLog2 = 8
           ),
           new YamlPlugin("cpu0.yaml")

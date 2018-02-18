@@ -14,7 +14,6 @@ object PlayGen extends App{
             cacheSize = 16,
             bytePerLine = 4,
             wayCount = 1,
-            wrappedMemAccess = false,
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 32,
@@ -22,7 +21,7 @@ object PlayGen extends App{
             catchAccessFault = false,
             catchMemoryTranslationMiss = false,
             asyncTagMemory = false,
-            twoStageLogic = false,
+            twoCycleRam = false,
             preResetFlush = false
           ),
           askMemoryTranslation = false

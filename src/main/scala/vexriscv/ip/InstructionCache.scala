@@ -10,7 +10,6 @@ import spinal.lib.bus.avalon.{AvalonMMConfig, AvalonMM}
 case class InstructionCacheConfig( cacheSize : Int,
                                    bytePerLine : Int,
                                    wayCount : Int,
-                                   wrappedMemAccess : Boolean,
                                    addressWidth : Int,
                                    cpuDataWidth : Int,
                                    memDataWidth : Int,
@@ -18,7 +17,6 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    catchAccessFault : Boolean,
                                    catchMemoryTranslationMiss : Boolean,
                                    asyncTagMemory : Boolean,
-                                   twoStageLogic : Boolean,
                                    twoCycleRam : Boolean = false,
                                    preResetFlush : Boolean = false){
 
@@ -40,7 +38,6 @@ case class InstructionCacheConfig( cacheSize : Int,
     addressWidth = addressWidth,
     dataWidth = memDataWidth,
     burstCountWidth = log2Up(burstSize + 1)).getReadOnlyConfig.copy(
-    linewrapBursts = wrappedMemAccess,
     useResponse = true,
     constantBurstBehavior = true
   )
@@ -131,10 +128,7 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
     mm.readCmd.addr := cmd.address
     mm.readCmd.prot  := "110"
     mm.readCmd.cache := "1111"
-    if(p.wrappedMemAccess)
-      mm.readCmd.setBurstWRAP()
-    else
-      mm.readCmd.setBurstINCR()
+    mm.readCmd.setBurstINCR()
     cmd.ready := mm.readCmd.ready
     rsp.valid := mm.readRsp.valid
     rsp.data  := mm.readRsp.data

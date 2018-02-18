@@ -1,14 +1,14 @@
 package vexriscv.demo
 
-import spinal.core._
-import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import vexriscv.plugin._
 import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
+import spinal.core._
+import vexriscv.ip.InstructionCacheConfig
 
 /**
  * Created by spinalvm on 15.06.17.
  */
-object GenFullNoMmuMaxPerf extends App{
+object GenSmallAndProductiveICache extends App{
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       plugins = List(
@@ -18,38 +18,27 @@ object GenFullNoMmuMaxPerf extends App{
         ),
         new IBusCachedPlugin(
           config = InstructionCacheConfig(
-            cacheSize = 4096*4,
-            bytePerLine =32,
+            cacheSize = 4096,
+            bytePerLine = 32,
             wayCount = 1,
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 32,
-            catchIllegalAccess = true,
-            catchAccessFault = true,
+            catchIllegalAccess = false,
+            catchAccessFault = false,
             catchMemoryTranslationMiss = false,
             asyncTagMemory = false,
-            twoCycleRam = true
-          )
+            twoCycleRam = false
+          ),
+          askMemoryTranslation = false
         ),
-        new DBusCachedPlugin(
-          config = new DataCacheConfig(
-            cacheSize         = 4096*4,
-            bytePerLine       = 32,
-            wayCount          = 1,
-            addressWidth      = 32,
-            cpuDataWidth      = 32,
-            memDataWidth      = 32,
-            catchAccessError  = true,
-            catchIllegal      = true,
-            catchUnaligned    = true,
-            catchMemoryTranslationMiss = false
-          )
+        new DBusSimplePlugin(
+          catchAddressMisaligned = false,
+          catchAccessFault = false
         ),
-        new StaticMemoryTranslatorPlugin(
-          ioRange      = _(31 downto 28) === 0xF
-        ),
+        new CsrPlugin(CsrPluginConfig.smallest),
         new DecoderSimplePlugin(
-          catchIllegalInstruction = true
+          catchIllegalInstruction = false
         ),
         new RegFilePlugin(
           regFileReadyKind = plugin.SYNC,
@@ -60,7 +49,7 @@ object GenFullNoMmuMaxPerf extends App{
           separatedAddSub = false,
           executeInsertion = true
         ),
-        new FullBarrielShifterPlugin(earlyInjection = true),
+        new LightShifterPlugin,
         new HazardSimplePlugin(
           bypassExecute           = true,
           bypassMemory            = true,
@@ -70,15 +59,10 @@ object GenFullNoMmuMaxPerf extends App{
           pessimisticWriteRegFile = false,
           pessimisticAddressMatch = false
         ),
-        new MulPlugin,
-        new DivPlugin,
-        new CsrPlugin(CsrPluginConfig.small),
-        new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
-          earlyBranch = true,
-          catchAddressMisaligned = true,
-          prediction = DYNAMIC_TARGET,
-          historyRamSizeLog2 = 8
+          earlyBranch = false,
+          catchAddressMisaligned = false,
+          prediction = NONE
         ),
         new YamlPlugin("cpu0.yaml")
       )

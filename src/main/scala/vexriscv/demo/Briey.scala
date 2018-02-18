@@ -57,7 +57,6 @@ object BrieyConfig{
             cacheSize = 4096,
             bytePerLine =32,
             wayCount = 1,
-            wrappedMemAccess = true,
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 32,
@@ -65,7 +64,7 @@ object BrieyConfig{
             catchAccessFault = true,
             catchMemoryTranslationMiss = true,
             asyncTagMemory = false,
-            twoStageLogic = true
+            twoCycleRam = true
           )
           //            askMemoryTranslation = true,
           //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(

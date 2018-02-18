@@ -31,7 +31,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
         FLUSH_ALL -> True
     ))
 
-    //TODO manage priority with branch prediction
+
     redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.decode, priority = 1) //Priority 1 will win against branch predictor
 
     if(catchSomething) {
@@ -52,6 +52,9 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
         val c = new CacheReport()
         e.kind = "cached"
         e.flushInstructions.add(0x400F) //invalid instruction cache
+        e.flushInstructions.add(0x13)
+        e.flushInstructions.add(0x13)
+        e.flushInstructions.add(0x13)
 
         e.info = c
         c.size = cacheSize
@@ -65,26 +68,26 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
-
+//    val debugAddressOffset = 28
     val cache = new InstructionCache(this.config)
     iBus = master(new InstructionCacheMemBus(this.config)).setName("iBus")
     iBus <> cache.io.mem
-
+    iBus.cmd.address.allowOverride := cache.io.mem.cmd.address // - debugAddressOffset
 
     //Connect prefetch cache side
     cache.io.cpu.prefetch.isValid := prefetch.arbitration.isValid
-    cache.io.cpu.prefetch.pc := prefetch.output(PC)
+    cache.io.cpu.prefetch.pc := prefetch.output(PC)// + debugAddressOffset
     prefetch.arbitration.haltItself setWhen(cache.io.cpu.prefetch.haltIt)
 
     //Connect fetch cache side
     cache.io.cpu.fetch.isValid  := fetch.arbitration.isValid
     cache.io.cpu.fetch.isStuck  := fetch.arbitration.isStuck
-    cache.io.cpu.fetch.pc  := fetch.output(PC)
+    cache.io.cpu.fetch.pc  := fetch.output(PC) // + debugAddressOffset
 
     if (mmuBus != null) {
       cache.io.cpu.fetch.mmuBus <> mmuBus
     } else {
-      cache.io.cpu.fetch.mmuBus.rsp.physicalAddress := cache.io.cpu.fetch.mmuBus.cmd.virtualAddress
+      cache.io.cpu.fetch.mmuBus.rsp.physicalAddress := cache.io.cpu.fetch.mmuBus.cmd.virtualAddress //- debugAddressOffset
       cache.io.cpu.fetch.mmuBus.rsp.allowExecute := True
       cache.io.cpu.fetch.mmuBus.rsp.allowRead := True
       cache.io.cpu.fetch.mmuBus.rsp.allowWrite := True
@@ -115,6 +118,11 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
       decode.arbitration.redoIt := True
       decode.arbitration.flushAll := True
     }
+
+//    val redo = RegInit(False) clearWhen(decode.arbitration.isValid) setWhen(redoBranch.valid)
+//    when(redoBranch.valid || redo){
+//      service(classOf[InterruptionInhibitor]).inhibateInterrupts()
+//    }
 
     if(catchSomething){
       val accessFault = if(catchAccessFault) cache.io.cpu.decode.error else False
