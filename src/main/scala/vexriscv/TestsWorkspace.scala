@@ -41,10 +41,9 @@ object TestsWorkspace {
 //          ),
           new IBusCachedPlugin(
             config = InstructionCacheConfig(
-              cacheSize = 4096*4,
-              bytePerLine =32,
+              cacheSize = 2048,
+              bytePerLine = 32,
               wayCount = 1,
-              wrappedMemAccess = true,
               addressWidth = 32,
               cpuDataWidth = 32,
               memDataWidth = 32,
@@ -52,10 +51,10 @@ object TestsWorkspace {
               catchAccessFault = true,
               catchMemoryTranslationMiss = true,
               asyncTagMemory = false,
-              twoStageLogic = true
+              twoCycleRam = false
             ),
             askMemoryTranslation = true,
-            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+              memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
               portTlbSize = 4
             )
           ),
@@ -95,7 +94,7 @@ object TestsWorkspace {
             catchIllegalInstruction = true
           ),
           new RegFilePlugin(
-            regFileReadyKind = plugin.SYNC,
+            regFileReadyKind = plugin.ASYNC,
             zeroBoot = false
           ),
           new IntAluPlugin,
@@ -117,7 +116,7 @@ object TestsWorkspace {
   //        new HazardSimplePlugin(false, false, false, false),
           new MulPlugin,
           new DivPlugin,
-          new CsrPlugin(CsrPluginConfig.all(0x80000020l)),
+          new CsrPlugin(CsrPluginConfig.all(0x80000020l).copy(deterministicInteruptionEntry = false)),
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = true,

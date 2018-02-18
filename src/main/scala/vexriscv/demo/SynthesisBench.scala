@@ -12,24 +12,24 @@ object VexRiscvSynthesisBench {
   def main(args: Array[String]) {
 
     def wrap(that : => Component) : Component = that
-    //Wrap with input/output registers
-    //    def wrap(that : => Component) : Component = {
-    //      //new WrapWithReg.Wrapper(that)
-    //      val c = that
-    //      c.rework {
-    //        for (e <- c.getOrdredNodeIo) {
-    //          if (e.isInput) {
-    //            e.asDirectionLess()
-    //            e := RegNext(RegNext(in(cloneOf(e))))
-    //
-    //          } else {
-    //            e.asDirectionLess()
-    //            out(cloneOf(e)) := RegNext(RegNext(e))
-    //          }
-    //        }
-    //      }
-    //      c
-    //    }
+//    Wrap with input/output registers
+//        def wrap(that : => Component) : Component = {
+//          //new WrapWithReg.Wrapper(that)
+//          val c = that
+//          c.rework {
+//            for (e <- c.getOrdredNodeIo) {
+//              if (e.isInput) {
+//                e.asDirectionLess()
+//                e := RegNext(RegNext(in(cloneOf(e))))
+//
+//              } else {
+//                e.asDirectionLess()
+//                out(cloneOf(e)) := RegNext(RegNext(e))
+//              }
+//            }
+//          }
+//          c
+//        }
 
     val smallestNoCsr = new Rtl {
       override def getName(): String = "VexRiscv smallest no CSR"
@@ -47,6 +47,12 @@ object VexRiscvSynthesisBench {
       override def getName(): String = "VexRiscv small and productive"
       override def getRtlPath(): String = "VexRiscvSmallAndProductive.v"
       SpinalVerilog(wrap(GenSmallAndProductive.cpu()).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
+    val smallAndProductiveWithICache = new Rtl {
+      override def getName(): String = "VexRiscv small and productive with instruction cache"
+      override def getRtlPath(): String = "VexRiscvSmallAndProductiveICache.v"
+      SpinalVerilog(wrap(GenSmallAndProductiveICache.cpu()).setDefinitionName(getRtlPath().split("\\.").head))
     }
 
     val fullNoMmuNoCache = new Rtl {
@@ -78,8 +84,9 @@ object VexRiscvSynthesisBench {
       SpinalVerilog(wrap(GenFull.cpu()).setDefinitionName(getRtlPath().split("\\.").head))
     }
 
-    val rtls = List(smallestNoCsr, smallest, smallAndProductive, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full)
-   // val rtls = List(noCacheNoMmuMaxPerf, fullNoMmuMaxPerf)
+//    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full)
+//    val rtls = List(noCacheNoMmuMaxPerf, fullNoMmuMaxPerf)
+      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
 
     val targets = XilinxStdTargets(
       vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"

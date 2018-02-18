@@ -46,6 +46,12 @@ object DhrystoneBench extends App{
     test = "make clean run REDO=10 IBUS=SIMPLE DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no"
   )
 
+  getDmips(
+    name = "GenSmallAndProductiveWithICache",
+    gen = GenSmallAndProductiveICache.main(null),
+    test = "make clean run REDO=10 IBUS=CACHED DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no"
+  )
+
 
   getDmips(
     name = "GenFullNoMmuNoCache",

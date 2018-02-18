@@ -9,11 +9,11 @@ import scala.collection.mutable.ArrayBuffer
 class PcManagerSimplePlugin(resetVector       : BigInt,
                             relaxedPcCalculation : Boolean = false) extends Plugin[VexRiscv] with JumpService{
   //FetchService interface
-  case class JumpInfo(interface :  Flow[UInt], stage: Stage)
+  case class JumpInfo(interface :  Flow[UInt], stage: Stage, priority : Int)
   val jumpInfos = ArrayBuffer[JumpInfo]()
-  override def createJumpInterface(stage: Stage): Flow[UInt] = {
+  override def createJumpInterface(stage: Stage, priority : Int = 0): Flow[UInt] = {
     val interface = Flow(UInt(32 bits))
-    jumpInfos += JumpInfo(interface,stage)
+    jumpInfos += JumpInfo(interface,stage, priority)
     interface
   }
   var prefetchExceptionPort : Flow[ExceptionCause] = null
@@ -59,7 +59,10 @@ class PcManagerSimplePlugin(resetVector       : BigInt,
 
       //JumpService hardware implementation
       val jump = if(jumpInfos.length != 0) new Area {
-        val sortedByStage = jumpInfos.sortWith((a, b) => pipeline.indexOf(a.stage) > pipeline.indexOf(b.stage))
+        val sortedByStage = jumpInfos.sortWith((a, b) => {
+          (pipeline.indexOf(a.stage) > pipeline.indexOf(b.stage)) ||
+          (pipeline.indexOf(a.stage) == pipeline.indexOf(b.stage) && a.priority > b.priority)
+        })
         val valids = sortedByStage.map(_.interface.valid)
         val pcs = sortedByStage.map(_.interface.payload)
 

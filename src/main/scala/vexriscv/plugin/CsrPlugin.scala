@@ -49,7 +49,9 @@ case class CsrPluginConfig(
                             minstretAccess      : CsrAccess,
                             ucycleAccess        : CsrAccess,
                             wfiGen              : Boolean,
-                            ecallGen            : Boolean
+                            ecallGen            : Boolean,
+                            deterministicInteruptionEntry : Boolean = false //Only used for simulatation purposes
+
                           ){
   assert(!ucycleAccess.canWrite)
 }
@@ -431,9 +433,50 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
 
 
-      val interrupt = ((mip.MSIP && mie.MSIE) || (mip.MEIP && mie.MEIE) || (mip.MTIP && mie.MTIE)) && mstatus.MIE && allowInterrupts
+      val interruptRequest = ((mip.MSIP && mie.MSIE) || (mip.MEIP && mie.MEIE) || (mip.MTIP && mie.MTIE)) && mstatus.MIE
+      val interrupt = interruptRequest && allowInterrupts
       val exception = if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValids.last && allowException else False
       val writeBackWasWfi = if(wfiGen) RegNext(writeBack.arbitration.isFiring && writeBack.input(ENV_CTRL) === EnvCtrlEnum.WFI) init(False) else False
+
+
+
+      val deteriministicLogic = if(deterministicInteruptionEntry) new Area{
+        val counter = Reg(UInt(4 bits)) init(0)
+
+        when(!interruptRequest || !mstatus.MIE){
+          counter := 0
+        } otherwise {
+          when(counter < 6){
+            when(writeBack.arbitration.isFiring){
+              counter := counter + 1
+            }
+          }
+          val counterPlusPending = counter + CountOne(stages.tail.map(_.arbitration.isValid))
+          when(counterPlusPending < 6){
+            inhibateInterrupts()
+          }
+        }
+      }
+//      val deteriministicLogic = if(deterministicInteruptionEntry) new Area{
+//        val counter = Reg(UInt(4 bits)) init(0)
+//        val limit = Reg(UInt(4 bits)) init(5)
+//        when(interruptRequest.rise()){
+//          limit :=  CountOne(stages.tail.map(_.arbitration.isValid)).resized
+//        }
+//        when(!interruptRequest || !mstatus.MIE){
+//          counter := 0
+//        } otherwise {
+//          when(counter < limit){
+//            when(writeBack.arbitration.isFiring){
+//              counter := counter + 1
+//            }
+//          }
+//          val counterPlusPending = counter + CountOne(stages.tail.map(_.arbitration.isValid)) + 1
+//          when(counterPlusPending < limit){
+//            inhibateInterrupts()
+//          }
+//        }
+//      }
 
       //Interrupt/Exception entry logic
       pipelineLiberator.enable setWhen(interrupt)

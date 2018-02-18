@@ -92,10 +92,14 @@ VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass) ->
   Cyclone II -> 149 Mhz 780 LUT 578 FF 
   
 VexRiscv small and productive (RV32I, 0.82 DMIPS/Mhz)  ->
-  Artix 7    -> 309 Mhz 703 LUT 557 FF 
-  Cyclone V  -> 152 Mhz 502 ALMs
-  Cyclone IV -> 147 Mhz 1,062 LUT 552 FF 
-  Cyclone II -> 120 Mhz 1,072 LUT 551 FF 
+  Artix 7    -> 327 Mhz 698 LUT 558 FF 
+  Cyclone V  -> 158 Mhz 524 ALMs
+  Cyclone IV -> 146 Mhz 1,061 LUT 552 FF 
+
+VexRiscv small and productive with I$ (RV32I, 0.72 DMIPS/Mhz, 4KB-I$)  ->
+  Artix 7 -> 331 Mhz 727 LUT 600 FF 
+  Cyclone V -> 152 Mhz 536 ALMs
+  Cyclone IV -> 156 Mhz 1,075 LUT 565 FF 
 
 VexRiscv full no cache (RV32IM, 1.22 DMIPS/Mhz, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
   Artix 7    -> 310 Mhz 1391 LUT 934 FF 
@@ -104,21 +108,19 @@ VexRiscv full no cache (RV32IM, 1.22 DMIPS/Mhz, single cycle barrel shifter, deb
   Cyclone II -> 108 Mhz 1,939 LUT 959 FF 
   
 VexRiscv full (RV32IM, 1.21 DMIPS/Mhz with cache trashing, 4KB-I$,4KB-D$, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
-  Artix 7    -> 250 Mhz 1911 LUT 1501 FF 
-  Cyclone V  -> 132 Mhz 1,266 ALMs
-  Cyclone IV -> 127 Mhz 2,733 LUT 1,762 FF 
-  Cyclone II -> 103 Mhz 2,791 LUT 1,760 FF 
+  Artix 7    -> 249 Mhz 1822 LUT 1362 FF 
+  Cyclone V  -> 128 Mhz 1,187 ALMs
+  Cyclone IV -> 107 Mhz 2,560 LUT 1,671 FF 
   
 VexRiscv full max perf -> (RV32IM, 1.44 DMIPS/Mhz, 16KB-I$,16KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch prediction in the fetch stage, branch and shift operations done in the Execute stage) ->
-  Artix 7 -> 198 Mhz 1920 LUT 1528 FF 
-  Cyclone V -> 90 Mhz 1,261 ALMs
-  Cyclone IV -> 88 Mhz 2,780 LUT 1,788 FF 
+  Artix 7    -> 192 Mhz 1858 LUT 1392 FF 
+  Cyclone V  -> 89 Mhz 1,246 ALMs
+  Cyclone IV -> 85 Mhz 2,673 LUT 1,679 FF 
 
 VexRiscv full with MMU (RV32IM, 1.26 DMIPS/Mhz with cache trashing, 4KB-I$, 4KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, MMU) ->
-  Artix 7    -> 223 Mhz 2085 LUT 2020 FF 
-  Cyclone V  -> 110 Mhz 1,503 ALMs
-  Cyclone IV -> 108 Mhz 3,153 LUT 2,281 FF 
-  Cyclone II -> 94 Mhz 3,187 LUT 2,281 FF 
+  Artix 7    -> 208 Mhz 2092 LUT 1881 FF 
+  Cyclone V - > 112 Mhz 1,435 ALMs
+  Cyclone IV -> 94 Mhz 2,980 LUT 2,169 FF 
 ```
 
 There is a summary of the configuration which produce 1.44 DMIPS : 
@@ -293,9 +295,9 @@ You can find some FPGA project which instantiate the Briey SoC there (DE1-SoC, D
 There is some measurements of Briey SoC timings and area : 
 
 ```
-  Artix 7    -> 231 Mhz 3339 LUT 3533 FF
-  Cyclone V  -> 124 Mhz 2,264 ALMs
-  Cyclone IV -> 124 Mhz 4,709 LUT 3,716 FF
+  Artix 7    -> 239 Mhz 3227 LUT 3410 FF 
+  Cyclone V  -> 125 Mhz 2,207 ALMs
+  Cyclone IV -> 112 Mhz 4,594 LUT 3,620
 ```
 
 ## Murax SoC
@@ -695,7 +697,23 @@ This plugin fit in the fetch stage
 
 #### IBusCachedPlugin
 
-Single way cache implementation, documentation WIP
+Simple and light multi way instruction cache.
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| cacheSize  | Int | Total storage capacity of the cache |
+| bytePerLine  | Int | Number of byte per cache line  |
+| wayCount  | Int | Number of cache way |
+| twoCycleRam  | Boolean | Check the tags values in the decode stage instead of the fetch stage to relax timings |
+| asyncTagMemory  | Boolean | Read the cache tags in a asyncronus manner instead of syncronous one |
+| addressWidth  | Int | Address width, should be 32 |
+| cpuDataWidth  | Int | Cpu data width, should be 32 |
+| memDataWidth  | Int | Memory data width, could potentialy be something else than 32, but only 32 is currently tested |
+| catchIllegalAccess  | Boolean  | Catch when an memory access is done on non valid memory address (MMU) |
+| catchAccessFault  | Boolean | Catch when the memeory bus is responding with an error  |
+| catchMemoryTranslationMiss  | Boolean  |  Catch when the MMU miss a TLB |
+
+Note : If you enable the twoCycleRam and and the wayCount is bigger than one, then the register file plugin should be configured to read the regFile in a asyncronus manner.
 
 #### DecoderSimplePlugin
 

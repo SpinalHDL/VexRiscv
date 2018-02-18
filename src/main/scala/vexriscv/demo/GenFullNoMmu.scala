@@ -21,7 +21,6 @@ object GenFullNoMmu extends App{
             cacheSize = 4096,
             bytePerLine =32,
             wayCount = 1,
-            wrappedMemAccess = true,
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 32,
@@ -29,7 +28,7 @@ object GenFullNoMmu extends App{
             catchAccessFault = true,
             catchMemoryTranslationMiss = true,
             asyncTagMemory = false,
-            twoStageLogic = true
+            twoCycleRam = true
           )
         ),
         new DBusCachedPlugin(

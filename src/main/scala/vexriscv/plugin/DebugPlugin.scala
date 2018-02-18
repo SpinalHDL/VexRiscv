@@ -1,14 +1,16 @@
 package vexriscv.plugin
 
 import spinal.lib.com.jtag.Jtag
-import spinal.lib.system.debugger.{SystemDebugger, JtagBridge, SystemDebuggerConfig}
-import vexriscv.plugin.IntAluPlugin.{AluCtrlEnum, ALU_CTRL}
+import spinal.lib.system.debugger.{JtagBridge, SystemDebugger, SystemDebuggerConfig}
+import vexriscv.plugin.IntAluPlugin.{ALU_CTRL, AluCtrlEnum}
 import vexriscv._
 import vexriscv.ip._
 import spinal.core._
 import spinal.lib._
-import spinal.lib.bus.amba3.apb.{Apb3Config, Apb3}
-import spinal.lib.bus.avalon.{AvalonMMConfig, AvalonMM}
+import spinal.lib.bus.amba3.apb.{Apb3, Apb3Config}
+import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
+
+import scala.collection.mutable.ArrayBuffer
 
 
 case class DebugExtensionCmd() extends Bundle{
@@ -92,10 +94,18 @@ case class DebugExtensionIo() extends Bundle with IMasterSlave{
   }
 }
 
-class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
+
+//Allow to avoid instruction cache plugin to be confused by new instruction poping in the pipeline
+trait InstructionInjector{
+  def isInjecting(stage : Stage) : Bool
+}
+
+class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] with InstructionInjector {
 
   var io : DebugExtensionIo = null
-
+  val injectionAsks = ArrayBuffer[(Stage, Bool)]()
+  var isInjectingOnDecode : Bool = null
+  override def isInjecting(stage: Stage) : Bool = if(stage == pipeline.decode) isInjectingOnDecode else False
 
   object IS_EBREAK extends Stageable(Bool)
   override def setup(pipeline: VexRiscv): Unit = {
@@ -114,13 +124,15 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
       SRC2_CTRL -> Src2CtrlEnum.PC,
       ALU_CTRL  -> AluCtrlEnum.ADD_SUB //Used to get the PC value in busReadDataReg
     ))
+
+    isInjectingOnDecode = Bool()
   }
 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
 
-    debugClockDomain {pipeline plug new Area{
+    val logic = debugClockDomain {pipeline plug new Area{
       val insertDecodeInstruction = False
       val firstCycle = RegNext(False) setWhen (io.bus.cmd.ready)
       val secondCycle = RegNext(firstCycle)
@@ -168,12 +180,21 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
         }
       }
 
-      //Assign the bus write data into the register who drive the decode instruction, even if it need to cross some hierarchy (caches)
       Component.current.addPrePopTask(() => {
-        val reg = decode.input(INSTRUCTION).getDrivingReg
-        reg.component.rework {
-          when(insertDecodeInstruction.pull()) {
-            reg := io.bus.cmd.data.pull()
+        //Check if the decode instruction is driven by a register
+        val instructionDriver = try {decode.input(INSTRUCTION).getDrivingReg} catch { case _ : Throwable => null}
+        if(instructionDriver != null){ //If yes =>
+          //Insert the instruction by writing the "fetch to decode instruction register",
+          // Work even if it need to cross some hierarchy (caches)
+          instructionDriver.component.rework {
+            when(insertDecodeInstruction.pull()) {
+              instructionDriver := io.bus.cmd.data.pull()
+            }
+          }
+        } else{
+          //Insert the instruction via a mux in the decode stage
+          when(RegNext(insertDecodeInstruction)){
+            decode.input(INSTRUCTION) := RegNext(io.bus.cmd.data)
           }
         }
       })
@@ -193,7 +214,9 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
       when(stepIt && prefetch.arbitration.isFiring) {
         haltIt := True
       }
-
+      when(stepIt && Cat(pipeline.stages.map(_.arbitration.redoIt)).asBits.orR) {
+        haltIt := False
+      }
       io.resetOut := RegNext(resetIt)
 
       if(serviceExist(classOf[InterruptionInhibitor])) {
@@ -207,5 +230,8 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
         }
       }
     }}
+
+
+    isInjectingOnDecode := RegNext(logic.insertDecodeInstruction) init(False)
   }
 }

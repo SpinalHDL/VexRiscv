@@ -11,7 +11,7 @@ object FormalSimple extends App{
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       plugins = List(
-        new FomalPlugin,
+        new FormalPlugin,
         new HaltOnExceptionPlugin,
         new PcManagerSimplePlugin(
           resetVector = 0x00000000l,

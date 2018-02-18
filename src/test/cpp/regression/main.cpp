@@ -199,6 +199,8 @@ public:
 
 
 	Workspace(string name){
+    //    setIStall(false);
+   //     setDStall(false);
 		staticMutex.lock();
 		testsCounter++;
 		staticMutex.unlock();
@@ -358,6 +360,10 @@ public:
 
 		top->reset = 1;
 		top->eval();
+		top->clk = 1;
+		top->eval();
+		top->clk = 0;
+		top->eval();
 		#ifdef CSR
 		top->timerInterrupt = 0;
 		top->externalInterrupt = 1;
@@ -400,7 +406,11 @@ public:
 
 
 				#ifndef REF_TIME
-				mTime = i/2;
+                #ifndef MTIME_INSTR_FACTOR
+                mTime = i/2;
+                #else
+				mTime += top->VexRiscv->writeBack_arbitration_isFiring*MTIME_INSTR_FACTOR;
+                #endif
 				#endif
 				#ifdef CSR
 				top->timerInterrupt = mTime >= mTimeCmp ? 1 : 0;
@@ -435,7 +445,7 @@ public:
 				for(SimElement* simElement : simElements) simElement->preCycle();
 
 				if(withInstructionReadCheck){
-					if(top->VexRiscv->decode_arbitration_isValid && !top->VexRiscv->decode_arbitration_haltItself){
+					if(top->VexRiscv->decode_arbitration_isValid && !top->VexRiscv->decode_arbitration_haltItself && !top->VexRiscv->decode_arbitration_flushAll){
 						uint32_t expectedData;
 						bool dummy;
 						iBusAccess(top->VexRiscv->decode_PC, &expectedData, &dummy);
@@ -598,7 +608,7 @@ public:
 	virtual void preCycle(){
 		if (top->iBus_cmd_valid && top->iBus_cmd_ready && pendingCount == 0) {
 			assertEq(top->iBus_cmd_payload_address & 3,0);
-			pendingCount = 8;
+			pendingCount = (1 << top->iBus_cmd_payload_size)/4;
 			address = top->iBus_cmd_payload_address;
 		}
 	}
@@ -610,7 +620,7 @@ public:
 			ws->iBusAccess(address,&top->iBus_rsp_payload_data,&error);
 			top->iBus_rsp_payload_error = error;
 			pendingCount--;
-			address = (address & ~0x1F) + ((address + 4) & 0x1F);
+			address = address + 4;
 			top->iBus_rsp_valid = 1;
 		}
 		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100 && pendingCount == 0;
@@ -1606,10 +1616,11 @@ string riscvTestDiv[] = {
 };
 
 string freeRtosTests[] = {
-		"AltBlock", "AltQTest", "AltBlckQ", "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
+		"AltBlock", "AltQTest", "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
 		"QueueSet", "recmutex", "semtest", "TaskNotify", "BlockQ", "crhook", "dynamic",
 		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
 		 //"flop", "sp_flop" // <- Simple test
+		 // "AltBlckQ" ???
 };
 
 
@@ -1714,7 +1725,7 @@ int main(int argc, char **argv, char **env) {
 			#ifdef CSR
 				uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
-				redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(4e4);)
+				redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
 			#endif
 			#ifdef MMU
 				uint32_t mmuRef[] = {1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,

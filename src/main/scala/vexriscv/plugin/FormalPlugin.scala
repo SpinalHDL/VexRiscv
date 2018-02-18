@@ -62,7 +62,7 @@ case class RvfiPort() extends Bundle with IMasterSlave {
 //2) JALR => clear PC(0)
 //3) input(INSTRUCTION)(5)  REGFILE_WRITE_VALID  memory read with exception would not fire properly
 
-class FomalPlugin extends Plugin[VexRiscv]{
+class FormalPlugin extends Plugin[VexRiscv]{
 
   var rvfi : RvfiPort = null
 
