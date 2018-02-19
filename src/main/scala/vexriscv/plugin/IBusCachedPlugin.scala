@@ -112,7 +112,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
     cache.io.cpu.decode.isUser  := (if(privilegeService != null) privilegeService.isUser(decode) else False)
 //    cache.io.cpu.decode.pc  := decode.input(PC)
 
-    redoBranch.valid := cache.io.cpu.decode.redo
+    redoBranch.valid := decode.arbitration.isValid && ownDecode && cache.io.cpu.decode.cacheMiss && !cache.io.cpu.decode.mmuMiss && !cache.io.cpu.decode.illegalAccess
     redoBranch.payload := decode.input(PC)
     when(redoBranch.valid){
       decode.arbitration.redoIt := True

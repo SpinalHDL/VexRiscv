@@ -77,15 +77,15 @@ case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle 
   val isUser  = Bool
   val isStuck  = Bool
   val pc = UInt(p.addressWidth bits)
-  val redo  = Bool
+  val cacheMiss  = Bool
   val data  =  ifGen(p.dataOnDecode) (Bits(p.cpuDataWidth bits))
-  val error   = if(p.catchAccessFault) Bool else null
-  val mmuMiss   = if(p.catchMemoryTranslationMiss) Bool else null
-  val illegalAccess = if(p.catchIllegalAccess) Bool else null
+  val error   =  Bool
+  val mmuMiss   =  Bool
+  val illegalAccess =Bool
 
   override def asMaster(): Unit = {
     out(isValid, isUser, isStuck, pc)
-    in(redo)
+    in(cacheMiss)
     inWithNull(error,mmuMiss,illegalAccess,data)
   }
 }
@@ -334,16 +334,16 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       }
     }
 
-    io.cpu.decode.redo := io.cpu.decode.isValid && !hit.valid
-    when(io.cpu.decode.redo){
+    io.cpu.decode.cacheMiss := !hit.valid
+    when( io.cpu.decode.isValid && io.cpu.decode.cacheMiss){
       io.cpu.prefetch.haltIt := True
       lineLoader.valid := True
       lineLoader.address := mmuRsp.physicalAddress //Could be optimise if mmu not used
     }
 
-    if(catchAccessFault) io.cpu.decode.error := hit.error
-    if(catchMemoryTranslationMiss) io.cpu.decode.mmuMiss := mmuRsp.miss
-    if(catchIllegalAccess) io.cpu.decode.illegalAccess := !mmuRsp.allowExecute || (io.cpu.decode.isUser && !mmuRsp.allowUser)
+    io.cpu.decode.error := hit.error
+    io.cpu.decode.mmuMiss := mmuRsp.miss
+    io.cpu.decode.illegalAccess := !mmuRsp.allowExecute || (io.cpu.decode.isUser && !mmuRsp.allowUser)
   }
 }
 
