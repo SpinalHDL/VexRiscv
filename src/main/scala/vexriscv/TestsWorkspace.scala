@@ -53,8 +53,7 @@ object TestsWorkspace {
               asyncTagMemory = false,
               twoCycleRam = false
             ),
-            askMemoryTranslation = true,
-              memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
               portTlbSize = 4
             )
           ),

@@ -6,7 +6,7 @@ import spinal.core._
 import spinal.lib._
 
 
-class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : Boolean = false, memoryTranslatorPortConfig : Any = null) extends Plugin[VexRiscv] {
+class IBusCachedPlugin(config : InstructionCacheConfig, memoryTranslatorPortConfig : Any = null) extends Plugin[VexRiscv] {
   import config._
 
   var iBus  : InstructionCacheMemBus = null
@@ -39,7 +39,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, askMemoryTranslation : B
       decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1)
     }
 
-    if(askMemoryTranslation)
+    if(pipeline.serviceExist(classOf[MemoryTranslator]))
       mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(pipeline.fetch, memoryTranslatorPortConfig)
 
     if(pipeline.serviceExist(classOf[PrivilegeService]))

@@ -30,7 +30,6 @@ object GenFull extends App{
             asyncTagMemory = false,
             twoCycleRam = true
           ),
-          askMemoryTranslation = true,
           memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
             portTlbSize = 4
           )

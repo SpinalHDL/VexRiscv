@@ -4,12 +4,14 @@ import vexriscv._
 import spinal.core._
 import spinal.core.internals.Literal
 import spinal.lib._
+import vexriscv.demo.GenFull
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
 
 case class Masked(value : BigInt,care : BigInt){
+  assert((value & ~care) == 0)
   var isPrime = true
 
   def < (that: Masked) = value < that.value || value == that.value && ~care < ~that.care
@@ -23,13 +25,15 @@ case class Masked(value : BigInt,care : BigInt){
     this
   }
 
-  def merge(x: Masked) = {
+  def mergeOneBitDifSmaller(x: Masked) = {
+    val bit = value - x.value
+    val ret = new Masked(value &~ bit, care & ~bit)
+//    ret.isPrime = isPrime || x.isPrime
     isPrime = false
     x.isPrime = false
-    val bit = value - x.value
-    new Masked(value &~ bit, care & ~bit)
+    ret
   }
-  def similar(x: Masked) = {
+  def isSimilarOneBitDifSmaller(x: Masked) = {
     val diff = value - x.value
     care == x.care && value > x.value && (diff & diff - 1) == 0
   }
@@ -123,7 +127,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean, forceLegalInstructi
     // logic implementation
     val decodedBits = Bits(stageables.foldLeft(0)(_ + _.dataType.getBitsWidth) bits)
     decodedBits := Symplify(input(INSTRUCTION),spec, decodedBits.getWidth)
-    if(catchIllegalInstruction || forceLegalInstructionComputation) insert(LEGAL_INSTRUCTION) := Symplify.logicOf(input(INSTRUCTION), SymplifyBit.getPrimeImplicants(spec.unzip._1.toSeq, 32))
+    if(catchIllegalInstruction || forceLegalInstructionComputation) insert(LEGAL_INSTRUCTION) := Symplify.logicOf(input(INSTRUCTION), SymplifyBit.getPrimeImplicantsByTrueAndDontCare(spec.unzip._1.toSeq, Nil, 32))
 
 
     //Unpack decodedBits and insert fields in the pipeline
@@ -145,7 +149,11 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean, forceLegalInstructi
   def bench(toplevel : VexRiscv): Unit ={
     toplevel.rework{
       import toplevel.config._
-      toplevel.getAllIo.toList.foreach(_.asDirectionLess())
+      toplevel.getAllIo.foreach{io =>
+        if(io.isInput) io.assignDontCare()
+        io.asDirectionLess()
+      }
+      toplevel.decode.input(INSTRUCTION).removeAssignments()
       toplevel.decode.input(INSTRUCTION) := Delay((in Bits(32 bits)).setName("instruction"),2)
       val stageables = encodings.flatMap(_._2.map(_._1)).toSet
       stageables.foreach(e => out(RegNext(RegNext(toplevel.decode.insert(e)).setName(e.getName()))))
@@ -155,12 +163,19 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean, forceLegalInstructi
   }
 }
 
+object DecodingBench extends App{
+  SpinalVerilog{
+    val top = GenFull.cpu()
+    top.service(classOf[DecoderSimplePlugin]).bench(top)
+    top
+  }
+}
 
 
 object Symplify{
   val cache = mutable.HashMap[Bits,mutable.HashMap[Masked,Bool]]()
   def getCache(addr : Bits) = cache.getOrElseUpdate(addr,mutable.HashMap[Masked,Bool]())
-  
+
   //Generate terms logic for the given input
   def logicOf(input : Bits,terms : Seq[Masked]) = terms.map(t => getCache(input).getOrElseUpdate(t,t === input)).asBits.orR
 
@@ -170,7 +185,7 @@ object Symplify{
     (for(bitId <- 0 until resultWidth) yield{
       val trueTerm = mapping.filter { case (k,t) => (t.care.testBit(bitId) && t.value.testBit(bitId))}.map(_._1)
       val falseTerm = mapping.filter { case (k,t) => (t.care.testBit(bitId) &&  !t.value.testBit(bitId))}.map(_._1)
-      val symplifiedTerms = SymplifyBit.getPrimeImplicants(trueTerm.toSeq, falseTerm.toSeq, addrWidth)
+      val symplifiedTerms = SymplifyBit.getPrimeImplicantsByTrueAndFalse(trueTerm.toSeq, falseTerm.toSeq, addrWidth)
       logicOf(input, symplifiedTerms)
     }).asBits
   }
@@ -196,28 +211,31 @@ object SymplifyBit{
   }
 
   //Return primes implicants for the trueTerms, falseTerms spec. Default value is don't care
-  def getPrimeImplicants(trueTerms: Seq[Masked],falseTerms: Seq[Masked],inputWidth : Int): Seq[Masked] = {
+  def getPrimeImplicantsByTrueAndFalse(trueTerms: Seq[Masked], falseTerms: Seq[Masked], inputWidth : Int): Seq[Masked] = {
     val primes = ArrayBuffer[Masked]()
     trueTerms.foreach(_.isPrime = true)
     falseTerms.foreach(_.isPrime = true)
     val trueTermByCareCount = (inputWidth to 0 by -1).map(b => trueTerms.filter(b == _.care.bitCount))
+    //table[Vector[HashSet[Masked]]](careCount)(bitSetCount)
     val table = trueTermByCareCount.map(c => (0 to inputWidth).map(b => collection.mutable.Set(c.filter(b == _.value.bitCount): _*)))
     for (i <- 0 to inputWidth) {
+      //Expends explicit terms
       for (j <- 0 until inputWidth - i){
         for(term <- table(i)(j)){
-          table(i+1)(j) ++= table(i)(j+1).filter(_.similar(term)).map(_.merge(term))
+          table(i+1)(j) ++= table(i)(j+1).withFilter(_.isSimilarOneBitDifSmaller(term)).map(_.mergeOneBitDifSmaller(term))
         }
       }
+      //Expends implicit don't care terms
       for (j <- 0 until inputWidth-i) {
-        for (a <- table(i)(j).filter(_.isPrime)) {
-          val dc = genImplicitDontCare(falseTerms, a, inputWidth, true)
+        for (prime <- table(i)(j).withFilter(_.isPrime)) {
+          val dc = genImplicitDontCare(falseTerms, prime, inputWidth, true)
           if (dc != null)
-            table(i+1)(j) += dc merge a
+            table(i+1)(j) += dc mergeOneBitDifSmaller prime
         }
-        for (a <- table(i)(j+1).filter(_.isPrime)) {
-          val dc = genImplicitDontCare(falseTerms, a, inputWidth, false)
+        for (prime <- table(i)(j+1).withFilter(_.isPrime)) {
+          val dc = genImplicitDontCare(falseTerms, prime, inputWidth, false)
           if (dc != null)
-            table(i+1)(j) += a merge dc
+            table(i+1)(j) += prime mergeOneBitDifSmaller dc
         }
       }
       for (r <- table(i))
@@ -226,6 +244,14 @@ object SymplifyBit{
     }
 
     verify(primes, trueTerms, falseTerms)
+    for(prime <- primes){
+      try{
+        verify(primes.filterNot(_ == prime), trueTerms, falseTerms)
+        assert(false)
+      } catch {
+        case _ : Throwable =>
+      }
+    }
     primes
   }
 
@@ -235,16 +261,20 @@ object SymplifyBit{
     require(falseTerms.forall(falseTerm => !terms.exists(_ covers falseTerm)))
   }
 
-  //Return primes implicants for the trueTerms, default value is False
-  def getPrimeImplicants(trueTerms: Seq[Masked],inputWidth : Int): Seq[Masked] = {
+  // Return primes implicants for the trueTerms, default value is False.
+  // You can insert don't care values by adding non-prime implicants in the trueTerms
+  // Will simplify the trueTerms from the most constrained ones to the least constrained ones
+  def getPrimeImplicantsByTrueAndDontCare(trueTerms: Seq[Masked],dontCareTerms: Seq[Masked], inputWidth : Int): Seq[Masked] = {
     val primes = ArrayBuffer[Masked]()
     trueTerms.foreach(_.isPrime = true)
-    val trueTermByCareCount = (inputWidth to 0 by -1).map(b => trueTerms.filter(b == _.care.bitCount))
-    val table = trueTermByCareCount.map(c => (0 to inputWidth).map(b => collection.mutable.Set(c.filter(b == _.value.bitCount): _*)))
+    dontCareTerms.foreach(_.isPrime = false)
+    val termsByCareCount = (inputWidth to 0 by -1).map(b => (trueTerms ++ dontCareTerms).filter(b == _.care.bitCount))
+    //table[Vector[HashSet[Masked]]](careCount)(bitSetCount)
+    val table = termsByCareCount.map(c => (0 to inputWidth).map(b => collection.mutable.Set(c.filter(m => b == m.value.bitCount): _*)))
     for (i <- 0 to inputWidth) {
       for (j <- 0 until inputWidth - i){
         for(term <- table(i)(j)){
-          table(i+1)(j) ++= table(i)(j+1).filter(_.similar(term)).map(_.merge(term))
+          table(i+1)(j) ++= table(i)(j+1).withFilter(_.isSimilarOneBitDifSmaller(term)).map(_.mergeOneBitDifSmaller(term))
         }
       }
       for (r <- table(i))
@@ -255,13 +285,29 @@ object SymplifyBit{
   }
 
   def main(args: Array[String]) {
-    val default = Masked(0,0xF)
-    val primeImplicants = List(4,8,10,11,12,15).map(v => Masked(v,0xF))
-    val dcImplicants = List(9,14).map(v => Masked(v,0xF).setPrime(false))
-    val reducedPrimeImplicants = getPrimeImplicants(primeImplicants ++ dcImplicants,4)
-    println("UUT")
-    println(reducedPrimeImplicants.map(_.toString(4)).mkString("\n"))
-    println("REF")
-    println("-100\n10--\n1--0\n1-1-")
+    {
+//      val default = Masked(0, 0xF)
+//      val primeImplicants = List(4, 8, 10, 11, 12, 15).map(v => Masked(v, 0xF))
+//      val dcImplicants = List(9, 14).map(v => Masked(v, 0xF).setPrime(false))
+//      val reducedPrimeImplicants = getPrimeImplicantsByTrueAndDontCare(primeImplicants, dcImplicants, 4)
+//      println("UUT")
+//      println(reducedPrimeImplicants.map(_.toString(4)).mkString("\n"))
+//      println("REF")
+//      println("-100\n10--\n1--0\n1-1-")
+    }
+
+    {
+      val primeImplicants = List(0).map(v => Masked(v, 0xF))
+      val dcImplicants = (1 to 15).map(v => Masked(v, 0xF))
+      val reducedPrimeImplicants = getPrimeImplicantsByTrueAndDontCare(primeImplicants, dcImplicants, 4)
+      println("UUT")
+      println(reducedPrimeImplicants.map(_.toString(4)).mkString("\n"))
+    }
+//    {
+//      val trueTerms = List(0, 15).map(v => Masked(v, 0xF))
+//      val falseTerms = List(3).map(v => Masked(v, 0xF))
+//      val primes =  getPrimeImplicants(trueTerms, falseTerms, 4)
+//      println(primes.map(_.toString(4)).mkString("\n"))
+//    }
   }
 }

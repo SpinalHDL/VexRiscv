@@ -29,8 +29,7 @@ object GenSmallAndProductiveICache extends App{
             catchMemoryTranslationMiss = false,
             asyncTagMemory = false,
             twoCycleRam = false
-          ),
-          askMemoryTranslation = false
+          )
         ),
         new DBusSimplePlugin(
           catchAddressMisaligned = false,

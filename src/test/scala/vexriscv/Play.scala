@@ -23,8 +23,7 @@ object PlayGen extends App{
             asyncTagMemory = false,
             twoCycleRam = false,
             preResetFlush = false
-          ),
-          askMemoryTranslation = false
+          )
         ),
         new FormalPlugin,
         new HaltOnExceptionPlugin,

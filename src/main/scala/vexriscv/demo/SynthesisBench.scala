@@ -2,6 +2,8 @@ package vexriscv.demo
 
 import spinal.core._
 import spinal.lib.eda.bench._
+import vexriscv.VexRiscv
+import vexriscv.plugin.DecoderSimplePlugin
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -11,7 +13,7 @@ import scala.collection.mutable.ArrayBuffer
 object VexRiscvSynthesisBench {
   def main(args: Array[String]) {
 
-    def wrap(that : => Component) : Component = that
+//    def wrap(that : => Component) : Component = that
 //    Wrap with input/output registers
 //        def wrap(that : => Component) : Component = {
 //          //new WrapWithReg.Wrapper(that)
@@ -30,6 +32,13 @@ object VexRiscvSynthesisBench {
 //          }
 //          c
 //        }
+
+   // Wrap to do a decoding bench
+    def wrap(that : => VexRiscv) : VexRiscv = {
+      val top = that
+      top.service(classOf[DecoderSimplePlugin]).bench(top)
+      top
+    }
 
     val smallestNoCsr = new Rtl {
       override def getName(): String = "VexRiscv smallest no CSR"
@@ -84,9 +93,12 @@ object VexRiscvSynthesisBench {
       SpinalVerilog(wrap(GenFull.cpu()).setDefinitionName(getRtlPath().split("\\.").head))
     }
 
+
 //    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full)
 //    val rtls = List(noCacheNoMmuMaxPerf, fullNoMmuMaxPerf)
-      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
+    //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
+    val rtls = List(smallAndProductive,  full)
+
 
     val targets = XilinxStdTargets(
       vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
