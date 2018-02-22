@@ -416,6 +416,8 @@ public:
 		Vga *vga = new Vga(top,640,480);
 		vgaClk->add(vga);
 		#endif
+
+		top->io_coreInterrupt = 0;
 	}
 
 
