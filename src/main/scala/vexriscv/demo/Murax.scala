@@ -278,7 +278,7 @@ case class Murax(config : MuraxConfig) extends Component{
       val logic = new MuraxSimpleBusDecoder(
         master = mainBusArbiter.io.masterBus,
         specification = List[(SimpleBus,SizeMapping)](
-          ram.io.bus             -> (0x80000000l, onChipRamSize kB),
+          ram.io.bus             -> (0x80000000l, onChipRamSize),
           apbBridge.io.simpleBus -> (0xF0000000l, 1 MB)
         ),
         pipelineMaster = pipelineMainBus
