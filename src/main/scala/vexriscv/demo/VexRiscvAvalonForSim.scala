@@ -17,6 +17,7 @@ import spinal.lib.eda.altera.{ResetEmitterTag, InterruptReceiverTag, QSysify}
 //
 //}
 
+//make clean run DBUS=CACHED_AVALON IBUS=CACHED_AVALON MMU=no CSR=no DEBUG_PLUGIN=AVALON
 
 object VexRiscvAvalonForSim{
   def main(args: Array[String]) {
@@ -26,51 +27,51 @@ object VexRiscvAvalonForSim{
       val cpuConfig = VexRiscvConfig(
         plugins = List(
           new PcManagerSimplePlugin(0x00000000l, false),
-//          new IBusSimplePlugin(
-//            interfaceKeepData = false,
-//            catchAccessFault = false
-//          ),
-//          new DBusSimplePlugin(
-//            catchAddressMisaligned = false,
-//            catchAccessFault = false
-//          ),
-          new IBusCachedPlugin(
-            config = InstructionCacheConfig(
-              cacheSize = 4096,
-              bytePerLine =32,
-              wayCount = 1,
-              addressWidth = 32,
-              cpuDataWidth = 32,
-              memDataWidth = 32,
-              catchIllegalAccess = true,
-              catchAccessFault = true,
-              catchMemoryTranslationMiss = true,
-              asyncTagMemory = false,
-              twoCycleRam = true
-            )
-            //            askMemoryTranslation = true,
-            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-            //              portTlbSize = 4
-            //            )
+          new IBusSimplePlugin(
+            interfaceKeepData = false,
+            catchAccessFault = false
           ),
-          new DBusCachedPlugin(
-            config = new DataCacheConfig(
-              cacheSize         = 4096,
-              bytePerLine       = 32,
-              wayCount          = 1,
-              addressWidth      = 32,
-              cpuDataWidth      = 32,
-              memDataWidth      = 32,
-              catchAccessError  = true,
-              catchIllegal      = true,
-              catchUnaligned    = true,
-              catchMemoryTranslationMiss = true
-            ),
-            memoryTranslatorPortConfig = null
-            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-            //              portTlbSize = 6
-            //            )
+          new DBusSimplePlugin(
+            catchAddressMisaligned = false,
+            catchAccessFault = false
           ),
+//          new IBusCachedPlugin(
+//            config = InstructionCacheConfig(
+//              cacheSize = 4096,
+//              bytePerLine =32,
+//              wayCount = 1,
+//              addressWidth = 32,
+//              cpuDataWidth = 32,
+//              memDataWidth = 32,
+//              catchIllegalAccess = true,
+//              catchAccessFault = true,
+//              catchMemoryTranslationMiss = true,
+//              asyncTagMemory = false,
+//              twoCycleRam = true
+//            )
+//            //            askMemoryTranslation = true,
+//            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//            //              portTlbSize = 4
+//            //            )
+//          ),
+//          new DBusCachedPlugin(
+//            config = new DataCacheConfig(
+//              cacheSize         = 4096,
+//              bytePerLine       = 32,
+//              wayCount          = 1,
+//              addressWidth      = 32,
+//              cpuDataWidth      = 32,
+//              memDataWidth      = 32,
+//              catchAccessError  = true,
+//              catchIllegal      = true,
+//              catchUnaligned    = true,
+//              catchMemoryTranslationMiss = true
+//            ),
+//            memoryTranslatorPortConfig = null
+//            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//            //              portTlbSize = 6
+//            //            )
+//          ),
           new StaticMemoryTranslatorPlugin(
             ioRange      = _(31 downto 28) === 0xF
           ),

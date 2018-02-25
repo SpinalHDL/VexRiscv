@@ -204,15 +204,17 @@ object SymplifyBit{
         if (term.value.testBit(i))
           t = Masked(term.value.clearBit(i), term.care)
       }
-      if (t != null && !falseTerms.exists(_.intersects(t)))
+      if (t != null && !falseTerms.exists(_.intersects(t))) {
+        t.isPrime = false
         return t
+      }
     }
     null
   }
 
   //Return primes implicants for the trueTerms, falseTerms spec. Default value is don't care
   def getPrimeImplicantsByTrueAndFalse(trueTerms: Seq[Masked], falseTerms: Seq[Masked], inputWidth : Int): Seq[Masked] = {
-    val primes = ArrayBuffer[Masked]()
+    val primes = mutable.LinkedHashSet[Masked]()
     trueTerms.foreach(_.isPrime = true)
     falseTerms.foreach(_.isPrime = true)
     val trueTermByCareCount = (inputWidth to 0 by -1).map(b => trueTerms.filter(b == _.care.bitCount))
@@ -243,29 +245,44 @@ object SymplifyBit{
           primes += p
     }
 
-    verify(primes, trueTerms, falseTerms)
-    for(prime <- primes){
-      try{
-        verify(primes.filterNot(_ == prime), trueTerms, falseTerms)
-        assert(false)
-      } catch {
-        case _ : Throwable =>
+    def optimise() {
+      val duplicateds = primes.filter(prime => verifyTrueFalse(primes.filterNot(_ == prime), trueTerms, falseTerms))
+      if(duplicateds.nonEmpty) {
+        primes -= duplicateds.maxBy(_.care.bitCount)
+        optimise()
       }
     }
-    primes
+
+    optimise()
+
+    verifyTrueFalse(primes, trueTerms, falseTerms)
+    var duplication = 0
+    for(prime <- primes){
+      if(verifyTrueFalse(primes.filterNot(_ == prime), trueTerms, falseTerms)){
+        duplication += 1
+      }
+    }
+    if(duplication != 0){
+      PendingError(s"Duplicated primes : $duplication")
+    }
+    primes.toSeq
   }
 
   //Verify that the 'terms' doesn't violate the trueTerms ++ falseTerms spec
-  def verify(terms : Seq[Masked], trueTerms : Seq[Masked], falseTerms : Seq[Masked]): Unit ={
-    require(trueTerms.forall(trueTerm => terms.exists(_ covers trueTerm)))
-    require(falseTerms.forall(falseTerm => !terms.exists(_ covers falseTerm)))
+  def verifyTrueFalse(terms : Iterable[Masked], trueTerms : Seq[Masked], falseTerms : Seq[Masked]): Boolean ={
+    return (trueTerms.forall(trueTerm => terms.exists(_ covers trueTerm))) && (falseTerms.forall(falseTerm => !terms.exists(_ covers falseTerm)))
   }
+
+  def checkTrue(terms : Iterable[Masked], trueTerms : Seq[Masked]): Boolean ={
+    return trueTerms.forall(trueTerm => terms.exists(_ covers trueTerm))
+  }
+
 
   // Return primes implicants for the trueTerms, default value is False.
   // You can insert don't care values by adding non-prime implicants in the trueTerms
   // Will simplify the trueTerms from the most constrained ones to the least constrained ones
   def getPrimeImplicantsByTrueAndDontCare(trueTerms: Seq[Masked],dontCareTerms: Seq[Masked], inputWidth : Int): Seq[Masked] = {
-    val primes = ArrayBuffer[Masked]()
+    val primes = mutable.LinkedHashSet[Masked]()
     trueTerms.foreach(_.isPrime = true)
     dontCareTerms.foreach(_.isPrime = false)
     val termsByCareCount = (inputWidth to 0 by -1).map(b => (trueTerms ++ dontCareTerms).filter(b == _.care.bitCount))
@@ -281,7 +298,29 @@ object SymplifyBit{
         for (p <- r; if p.isPrime)
           primes += p
     }
-    primes
+
+
+    def optimise() {
+      val duplicateds = primes.filter(prime => checkTrue(primes.filterNot(_ == prime), trueTerms))
+      if(duplicateds.nonEmpty) {
+        primes -= duplicateds.maxBy(_.care.bitCount)
+        optimise()
+      }
+    }
+
+    optimise()
+
+
+    var duplication = 0
+    for(prime <- primes){
+      if(checkTrue(primes.filterNot(_ == prime), trueTerms)){
+        duplication += 1
+      }
+    }
+    if(duplication != 0){
+      PendingError(s"Duplicated primes : $duplication")
+    }
+    primes.toSeq
   }
 
   def main(args: Array[String]) {
@@ -303,11 +342,11 @@ object SymplifyBit{
       println("UUT")
       println(reducedPrimeImplicants.map(_.toString(4)).mkString("\n"))
     }
-//    {
-//      val trueTerms = List(0, 15).map(v => Masked(v, 0xF))
-//      val falseTerms = List(3).map(v => Masked(v, 0xF))
-//      val primes =  getPrimeImplicants(trueTerms, falseTerms, 4)
-//      println(primes.map(_.toString(4)).mkString("\n"))
-//    }
+    {
+      val trueTerms = List(0, 15).map(v => Masked(v, 0xF))
+      val falseTerms = List(3).map(v => Masked(v, 0xF))
+      val primes =  getPrimeImplicantsByTrueAndFalse(trueTerms, falseTerms, 4)
+      println(primes.map(_.toString(4)).mkString("\n"))
+    }
   }
 }
