@@ -208,6 +208,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
   object ENV_CTRL extends Stageable(EnvCtrlEnum())
   object IS_CSR extends Stageable(Bool)
+  object CSR_WRITE_OPCODE extends Stageable(Bool)
 
   var allowInterrupts : Bool = null
   var allowException  : Bool = null
@@ -530,6 +531,14 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       contextSwitching := jumpInterface.valid
 
       //CSR read/write instructions management
+
+      decode plug new Area{
+        import decode._
+
+        val imm = IMM(input(INSTRUCTION))
+        insert(CSR_WRITE_OPCODE) := (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
+          || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
+      }
       execute plug new Area {
         import execute._
 
@@ -551,10 +560,9 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
           False -> writeSrc,
           True -> Mux(input(INSTRUCTION)(12), readDataReg & ~writeSrc, readDataReg | writeSrc)
         )
-        val writeOpcode = (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
-          || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
-        val writeInstruction = arbitration.isValid && input(IS_CSR) && writeOpcode
-        val readInstruction = arbitration.isValid && input(IS_CSR) && !writeOpcode
+
+        val writeInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE)
+        val readInstruction = arbitration.isValid && input(IS_CSR) && !input(CSR_WRITE_OPCODE)
 
         arbitration.haltItself setWhen(writeInstruction && !readDataRegValid)
         val writeEnable = writeInstruction && !arbitration.isStuckByOthers && !arbitration.removeIt && readDataRegValid
@@ -575,8 +583,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
                 if(withRead && withWrite) {
                   illegalAccess := False
                 } else {
-                  if (withWrite) illegalAccess.clearWhen(writeOpcode)
-                  if (withRead) illegalAccess.clearWhen(!writeOpcode)
+                  if (withWrite) illegalAccess.clearWhen(input(CSR_WRITE_OPCODE))
+                  if (withRead) illegalAccess.clearWhen(!input(CSR_WRITE_OPCODE))
                 }
 
                 when(writeEnable) {
