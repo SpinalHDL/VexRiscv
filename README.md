@@ -70,6 +70,8 @@ The hardware description of this CPU is done by using an very software oriented 
 There is a gitter channel for all questions about VexRiscv :<br>
 [![Gitter](https://badges.gitter.im/SpinalHDL/VexRiscv.svg)](https://gitter.im/SpinalHDL/VexRiscv?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
+For commercial support, please contact spinalhdl@gmail.com
+
 ## Area usage and maximal frequency 
 
 The following number where obtains by synthesis the CPU as toplevel without any specific synthesis option to save area or to get better maximal frequency (neutral).<br>
