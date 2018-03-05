@@ -209,6 +209,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
   object ENV_CTRL extends Stageable(EnvCtrlEnum())
   object IS_CSR extends Stageable(Bool)
   object CSR_WRITE_OPCODE extends Stageable(Bool)
+  object CSR_READ_OPCODE extends Stageable(Bool)
 
   var allowInterrupts : Bool = null
   var allowException  : Bool = null
@@ -230,8 +231,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
     val defaultCsrActions = List[(Stageable[_ <: BaseType],Any)](
       IS_CSR                   -> True,
       REGFILE_WRITE_VALID      -> True,
-      BYPASSABLE_EXECUTE_STAGE -> False,
-      BYPASSABLE_MEMORY_STAGE  -> False
+      BYPASSABLE_EXECUTE_STAGE -> True,
+      BYPASSABLE_MEMORY_STAGE  -> True
     )
 
     val nonImmediatActions = defaultCsrActions ++ List(
@@ -531,13 +532,17 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       contextSwitching := jumpInterface.valid
 
       //CSR read/write instructions management
-
       decode plug new Area{
         import decode._
 
         val imm = IMM(input(INSTRUCTION))
-        insert(CSR_WRITE_OPCODE) := (!((input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
-          || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)))
+        insert(CSR_WRITE_OPCODE) := ! (
+             (input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
+          || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)
+        )
+        insert(CSR_READ_OPCODE) := input(INSTRUCTION)(13 downto 7) =/= B"0100000"
+        //Assure that the CSR access are in the execute stage when there is nothing left in memory/writeback stages to avoid exception hazard
+        arbitration.haltItself setWhen(arbitration.isValid && input(IS_CSR) && (execute.arbitration.isValid || memory.arbitration.isValid))
       }
       execute plug new Area {
         import execute._
@@ -555,18 +560,18 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         val writeSrc = input(INSTRUCTION)(14) ? imm.z.asBits.resized | input(SRC1)
         val readData = B(0, 32 bits)
         def readDataReg = memory.input(REGFILE_WRITE_DATA)  //PIPE OPT
-        val readDataRegValid = Reg(Bool) setWhen(arbitration.isValid && !memory.arbitration.isStuck) clearWhen(!arbitration.isStuck)
+        val readDataRegValid = Reg(Bool) setWhen(arbitration.isValid) clearWhen(!arbitration.isStuck)
         val writeData = input(INSTRUCTION)(13).mux(
           False -> writeSrc,
           True -> Mux(input(INSTRUCTION)(12), readDataReg & ~writeSrc, readDataReg | writeSrc)
         )
 
         val writeInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE)
-        val readInstruction = arbitration.isValid && input(IS_CSR) && !input(CSR_WRITE_OPCODE)
+        val readInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE)
 
         arbitration.haltItself setWhen(writeInstruction && !readDataRegValid)
-        val writeEnable = writeInstruction && !arbitration.isStuckByOthers && !arbitration.removeIt && readDataRegValid
-        val readEnable = readInstruction && !arbitration.isStuckByOthers && !arbitration.removeIt
+        val writeEnable = writeInstruction &&  readDataRegValid
+        val readEnable  = readInstruction  && !readDataRegValid
 
         when(arbitration.isValid && input(IS_CSR)) {
           output(REGFILE_WRITE_DATA) := readData
@@ -584,7 +589,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
                   illegalAccess := False
                 } else {
                   if (withWrite) illegalAccess.clearWhen(input(CSR_WRITE_OPCODE))
-                  if (withRead) illegalAccess.clearWhen(!input(CSR_WRITE_OPCODE))
+                  if (withRead) illegalAccess.clearWhen(input(CSR_READ_OPCODE))
                 }
 
                 when(writeEnable) {

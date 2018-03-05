@@ -13,7 +13,7 @@ import scala.collection.mutable.ArrayBuffer
 object VexRiscvSynthesisBench {
   def main(args: Array[String]) {
 
-//    def wrap(that : => Component) : Component = that
+    def wrap(that : => Component) : Component = that
 //    Wrap with input/output registers
 //        def wrap(that : => Component) : Component = {
 //          //new WrapWithReg.Wrapper(that)
@@ -34,11 +34,11 @@ object VexRiscvSynthesisBench {
 //        }
 
    // Wrap to do a decoding bench
-    def wrap(that : => VexRiscv) : VexRiscv = {
-      val top = that
-      top.service(classOf[DecoderSimplePlugin]).bench(top)
-      top
-    }
+//    def wrap(that : => VexRiscv) : VexRiscv = {
+//      val top = that
+//      top.service(classOf[DecoderSimplePlugin]).bench(top)
+//      top
+//    }
 
     val smallestNoCsr = new Rtl {
       override def getName(): String = "VexRiscv smallest no CSR"
@@ -94,10 +94,10 @@ object VexRiscvSynthesisBench {
     }
 
 
-//    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full)
+    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full)
 //    val rtls = List(noCacheNoMmuMaxPerf, fullNoMmuMaxPerf)
     //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
-    val rtls = List(smallAndProductive,  full)
+//    val rtls = List(smallAndProductive,  full)
 
 
     val targets = XilinxStdTargets(

@@ -6,7 +6,7 @@ import spinal.lib.bus.amba3.apb._
 import spinal.lib.bus.misc.SizeMapping
 import spinal.lib.com.jtag.Jtag
 import spinal.lib.com.uart._
-import spinal.lib.io.TriStateArray
+import spinal.lib.io.{InOutWrapper, TriStateArray}
 import spinal.lib.misc.{InterruptCtrl, Prescaler, Timer}
 import spinal.lib.soc.pinsec.{PinsecTimerCtrl, PinsecTimerCtrlExternal}
 import vexriscv.plugin._
@@ -291,7 +291,7 @@ case class Murax(config : MuraxConfig) extends Component{
 
 object Murax{
   def main(args: Array[String]) {
-    SpinalVerilog(Murax(MuraxConfig.default))
+    SpinalVerilog(InOutWrapper(Murax(MuraxConfig.default)))
   }
 }
 
