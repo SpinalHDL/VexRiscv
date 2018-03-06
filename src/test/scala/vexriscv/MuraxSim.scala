@@ -1,15 +1,13 @@
 package vexriscv
 
 import java.awt
-import java.awt.event.{ActionEvent, ActionListener}
+import java.awt.event.{ActionEvent, ActionListener, MouseEvent, MouseListener}
 
 import spinal.sim._
 import spinal.core._
 import spinal.core.sim._
 import vexriscv.demo.{Murax, MuraxConfig}
-import java.awt.{Color, Dimension, Graphics, GridLayout}
-import javax.annotation.processing.SupportedSourceVersion
-import javax.swing.{BoxLayout, JButton, JFrame, JPanel}
+import javax.swing._
 
 import spinal.lib.com.jtag.sim.JtagTcp
 import spinal.lib.com.uart.sim.{UartDecoder, UartEncoder}
@@ -53,25 +51,19 @@ object MuraxSim {
         val guiToSim = mutable.Queue[Any]()
 
         var ledsValue = 0l
+        var switchValue : () => BigInt = null
         val ledsFrame = new JFrame{
           setLayout(new BoxLayout(getContentPane, BoxLayout.Y_AXIS))
-          add(new JPanel{
-            val ledDiameter = 20
-            val blackThickness = 2
-            override def paintComponent(g : Graphics) : Unit = {
-              for(i <- 0 to 7) {
-                g.setColor(Color.BLACK)
-                val x = i*ledDiameter + 1
-                g.fillOval(x,1,ledDiameter,ledDiameter);
-                if (((ledsValue >> (7-i)) & 1) != 0) {
-                  g.setColor(Color.GREEN.darker())
-                  g.fillOval(x+blackThickness,3,ledDiameter-blackThickness*2,ledDiameter-blackThickness*2);
-                }
-              }
-              g.setColor(Color.BLACK)
-            }
-            this.setPreferredSize(new Dimension(ledDiameter*8+2, ledDiameter+2))
+          
+          add(new JLedArray(8){
+            override def getValue = ledsValue
           })
+          add{
+            val switches = new JSwitchArray(8)
+            switchValue = switches.getValue
+            switches
+          }
+
           add(new JButton("Reset"){
             addActionListener(new ActionListener {
               override def actionPerformed(actionEvent: ActionEvent): Unit = {
@@ -87,6 +79,12 @@ object MuraxSim {
 
         }
 
+        //Fast refresh
+        clockDomain.onSampling{
+          dut.io.gpioA.read #= (dut.io.gpioA.write.toLong & dut.io.gpioA.writeEnable.toLong) | (switchValue() << 8)
+        }
+
+        //Slow refresh
         while(true){
           sleep(mainClkPeriod*50000)
 
