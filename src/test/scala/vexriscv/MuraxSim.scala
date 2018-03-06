@@ -54,7 +54,7 @@ object MuraxSim {
         var switchValue : () => BigInt = null
         val ledsFrame = new JFrame{
           setLayout(new BoxLayout(getContentPane, BoxLayout.Y_AXIS))
-          
+
           add(new JLedArray(8){
             override def getValue = ledsValue
           })
@@ -80,9 +80,9 @@ object MuraxSim {
         }
 
         //Fast refresh
-        clockDomain.onSampling{
-          dut.io.gpioA.read #= (dut.io.gpioA.write.toLong & dut.io.gpioA.writeEnable.toLong) | (switchValue() << 8)
-        }
+//        clockDomain.onSampling{
+//          dut.io.gpioA.read #= (dut.io.gpioA.write.toLong & dut.io.gpioA.writeEnable.toLong) | (switchValue() << 8)
+//        }
 
         //Slow refresh
         while(true){
@@ -97,6 +97,7 @@ object MuraxSim {
             }
           }
 
+          dut.io.gpioA.read #= (dut.io.gpioA.write.toLong & dut.io.gpioA.writeEnable.toLong) | (switchValue() << 8)
           ledsValue = dut.io.gpioA.write.toLong
           ledsFrame.repaint()
         }
