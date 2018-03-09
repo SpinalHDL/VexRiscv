@@ -41,7 +41,7 @@ object TestsWorkspace {
 //          ),
           new IBusCachedPlugin(
             config = InstructionCacheConfig(
-              cacheSize = 2048,
+              cacheSize = 1024*16,
               bytePerLine = 32,
               wayCount = 1,
               addressWidth = 32,
@@ -113,8 +113,14 @@ object TestsWorkspace {
           ),
   //        new HazardSimplePlugin(false, true, false, true),
   //        new HazardSimplePlugin(false, false, false, false),
-          new MulPlugin,
-          new DivPlugin,
+//          new MulPlugin,
+          new MulDivIterativePlugin(
+            genMul = true,
+            genDiv = true,
+            mulUnroolFactor = 32,
+            divUnroolFactor = 1
+          ),
+//          new DivPlugin,
           new CsrPlugin(CsrPluginConfig.all(0x80000020l).copy(deterministicInteruptionEntry = false)),
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
