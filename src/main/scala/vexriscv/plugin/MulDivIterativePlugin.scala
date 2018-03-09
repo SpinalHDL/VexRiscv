@@ -44,16 +44,22 @@ class MulDivIterativePlugin(mulUnroolFactor : Int = 1) extends Plugin[VexRiscv]{
 
     memory plug new Area {
       import memory._
-      val rs1 = Reg(UInt(64 bits))
+      val rs1 = Reg(UInt(33 bits))
       val rs2 = Reg(UInt(32 bits))
-      val accumulator = Reg(UInt(64 bits))
+      val accumulator = Reg(UInt(65 bits))
       val mul = new Area{
-        val done = rs2 === 0
+        assert(isPow2(mulUnroolFactor))
+        val counter = Counter(32 / mulUnroolFactor + 1)
+        val done = counter.willOverflowIfInc
         when(input(IS_MUL)){
-          arbitration.haltItself setWhen(!done)
-          rs1 := rs1 |<< mulUnroolFactor
-          rs2 := rs2 |>> mulUnroolFactor
-          accumulator := ((0 until mulUnroolFactor).map(i => rs2(i) ? (rs1 |<< i) | U(0)) :+ accumulator).reduceBalancedTree(_ + _)
+          when(!done){
+            arbitration.haltItself := True
+            counter.increment()
+            rs2 := rs2 |>> mulUnroolFactor
+            val sumElements = ((0 until mulUnroolFactor).map(i => rs2(i) ? (rs1 << i) | U(0)) :+ (accumulator >> 32))
+            val sumResult =  sumElements.map(_.asSInt.resize(32 + mulUnroolFactor + 1).asUInt).reduceBalancedTree(_ + _)
+            accumulator := (sumResult @@ accumulator(31 downto 0)) >> mulUnroolFactor
+          }
           output(REGFILE_WRITE_DATA) := ((input(INSTRUCTION)(13 downto 12) === B"00") ? accumulator(31 downto 0) | accumulator(63 downto 32)).asBits
         }
       }
@@ -62,10 +68,15 @@ class MulDivIterativePlugin(mulUnroolFactor : Int = 1) extends Plugin[VexRiscv]{
         accumulator := 0
         def twoComplement(that : Bits, enable: Bool): UInt = (Mux(enable, ~that, that).asUInt + enable.asUInt)
         val rs2NeedRevert =  execute.input(RS2).msb && execute.input(IS_RS2_SIGNED)
-        val rs1Extended = B((63 downto 32) -> (execute.input(IS_RS1_SIGNED) && execute.input(RS1).msb), (31 downto 0) -> execute.input(RS1))
-        rs1 := twoComplement(rs1Extended, rs2NeedRevert)
+        val rs1Extended = B((32 downto 32) -> (execute.input(IS_RS1_SIGNED) && execute.input(RS1).msb), (31 downto 0) -> execute.input(RS1))
+        rs1 := twoComplement(rs1Extended, rs2NeedRevert).resized
         rs2 := twoComplement(execute.input(RS2), rs2NeedRevert)
+        mul.counter.clear()
       }
     }
   }
 }
+
+
+
+//            val mulEnables = rs2.subdivideIn(mulUnroolFactor bits)(counter(log2Up(32/mulUnroolFactor)-1 downto 0))
