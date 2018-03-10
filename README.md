@@ -34,6 +34,7 @@
     + [DBusCachedPlugin](#dbuscachedplugin)
     + [MulPlugin](#mulplugin)
     + [DivPlugin](#divplugin)
+    + [MulDivIterativePlugin](#MulDivIterativePlugin)
     + [CsrPlugin](#csrplugin)
     + [StaticMemoryTranslatorPlugin](#staticmemorytranslatorplugin)
     + [MemoryTranslatorPlugin](#memorytranslatorplugin)
@@ -893,7 +894,27 @@ Implement the multiplication instruction from the RISC-V M extension. Its implem
 
 #### DivPlugin
 
-Implement the division/modulo instruction from the RISC-V M extension. It is done by a simple iterative manner which always take 34 cycles. The result is inserted into the Memory stage. 
+Implement the division/modulo instruction from the RISC-V M extension. It is done by a simple iterative manner which always take 34 cycles. The result is inserted into the Memory stage.
+
+This plugin is now based on the MulDivIterativePlugin one. 
+
+#### MulDivIterativePlugin
+
+This plugin implement the multiplication, division and modulo of the RISC-V M extension by an iterative manner, which is friendly for small FPGA which don't provide DSP blocks.
+
+This plugin is able to unrool the iterative calculation process to reduce the number of cycles used to execute mul/div instructions.
+
+| Parameters | type | description |
+| ------ | ----------- | ------ | 
+| genMul    | Boolean | Enable the multiplication support, can be set to false if you wan for instance to use the MulPlugin instead |
+| genDiv    | Boolean |  Enable the division support |
+| mulUnroolFactor    | Int | Number of combinatorial stages used to speed up the multiplication, should be > 0 |
+| divUnroolFactor    | Int | Number of combinatorial stages used to speed up the division, should be > 0 |
+
+The number of cycles used to execute a multiplication is '32/mulUnroolFactor'
+The number of cycles used to execute a division is '32/divUnroolFactor + 1'
+
+Both mul/div are processed into the memory stage (late result)
 
 #### CsrPlugin
 
