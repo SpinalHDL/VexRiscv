@@ -86,13 +86,11 @@ VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass, no interrupt) ->
   Artix 7    -> 346 Mhz 481 LUT 539 FF
   Cyclone V  -> 201 Mhz 347 ALMs
   Cyclone IV -> 190 Mhz 673 LUT 529 FF 
-  Cyclone II -> 154 Mhz 673 LUT 528 FF 
   
 VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass) ->
   Artix 7    -> 340 Mhz 562 LUT 589 FF 
   Cyclone V  -> 202 Mhz 387 ALMs
   Cyclone IV -> 180 Mhz 780 LUT 579 FF 
-  Cyclone II -> 149 Mhz 780 LUT 578 FF 
   
 VexRiscv small and productive (RV32I, 0.82 DMIPS/Mhz)  ->
   Artix 7    -> 327 Mhz 698 LUT 558 FF 
@@ -100,30 +98,29 @@ VexRiscv small and productive (RV32I, 0.82 DMIPS/Mhz)  ->
   Cyclone IV -> 146 Mhz 1,061 LUT 552 FF 
 
 VexRiscv small and productive with I$ (RV32I, 0.72 DMIPS/Mhz, 4KB-I$)  ->
-  Artix 7 -> 331 Mhz 727 LUT 600 FF 
-  Cyclone V -> 152 Mhz 536 ALMs
+  Artix 7    -> 331 Mhz 727 LUT 600 FF 
+  Cyclone V  -> 152 Mhz 536 ALMs
   Cyclone IV -> 156 Mhz 1,075 LUT 565 FF 
 
 VexRiscv full no cache (RV32IM, 1.22 DMIPS/Mhz, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
-  Artix 7    -> 310 Mhz 1391 LUT 934 FF 
-  Cyclone V  -> 143 Mhz 935 ALMs
-  Cyclone IV -> 123 Mhz 1,916 LUT 960 FF 
-  Cyclone II -> 108 Mhz 1,939 LUT 959 FF 
-  
+  Artix 7    -> 295 Mhz 1399 LUT 971 FF 
+  Cyclone V  -> 151 Mhz 922 ALMs
+  Cyclone IV -> 136 Mhz 1,859 LUT 992 FF 
+      
 VexRiscv full (RV32IM, 1.21 DMIPS/Mhz with cache trashing, 4KB-I$,4KB-D$, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
-  Artix 7    -> 249 Mhz 1822 LUT 1362 FF 
-  Cyclone V  -> 128 Mhz 1,187 ALMs
-  Cyclone IV -> 107 Mhz 2,560 LUT 1,671 FF 
-  
+  Artix 7    -> 253 Mhz 1840 LUT 1394 FF 
+  Cyclone V  -> 126 Mhz 1,172 ALMs
+  Cyclone IV -> 117 Mhz 2,548 LUT 1,703 FF
+      
 VexRiscv full max perf -> (RV32IM, 1.44 DMIPS/Mhz, 16KB-I$,16KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch prediction in the fetch stage, branch and shift operations done in the Execute stage) ->
-  Artix 7    -> 192 Mhz 1858 LUT 1392 FF 
-  Cyclone V  -> 89 Mhz 1,246 ALMs
-  Cyclone IV -> 85 Mhz 2,673 LUT 1,679 FF 
+  Artix 7    -> 183 Mhz 1813 LUT 1424 FF 
+  Cyclone V  -> 93 Mhz 1,253 ALMs
+  Cyclone IV -> 84 Mhz 2,642 LUT 1,711 FF 
 
 VexRiscv full with MMU (RV32IM, 1.26 DMIPS/Mhz with cache trashing, 4KB-I$, 4KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, MMU) ->
-  Artix 7    -> 208 Mhz 2092 LUT 1881 FF 
-  Cyclone V - > 112 Mhz 1,435 ALMs
-  Cyclone IV -> 94 Mhz 2,980 LUT 2,169 FF 
+  Artix 7    -> 214 Mhz 2070 LUT 1913 FF 
+  Cyclone V  -> 108 Mhz 1,430 ALMs
+  Cyclone IV -> 100 Mhz 2,976 LUT 2,201 FF 
 ```
 
 There is a summary of the configuration which produce 1.44 DMIPS : 
