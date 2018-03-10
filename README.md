@@ -34,7 +34,7 @@
     + [DBusCachedPlugin](#dbuscachedplugin)
     + [MulPlugin](#mulplugin)
     + [DivPlugin](#divplugin)
-    + [MulDivIterativePlugin](#MulDivIterativePlugin)
+    + [MulDivIterativePlugin](#muldiviterativeplugin)
     + [CsrPlugin](#csrplugin)
     + [StaticMemoryTranslatorPlugin](#staticmemorytranslatorplugin)
     + [MemoryTranslatorPlugin](#memorytranslatorplugin)
