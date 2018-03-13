@@ -291,7 +291,7 @@ case class Murax(config : MuraxConfig) extends Component{
 
 object Murax{
   def main(args: Array[String]) {
-    SpinalVerilog(InOutWrapper(Murax(MuraxConfig.default)))
+    SpinalVerilog(Murax(MuraxConfig.default))
   }
 }
 
