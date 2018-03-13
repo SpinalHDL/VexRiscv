@@ -348,16 +348,16 @@ There is some measurements of Murax SoC timings and area  :
 
 ```
 Murax interlocked stages (0.45 DMIPS/Mhz) ->
-  Artix 7    -> 304 Mhz 1016 LUT 1296 FF
-  Cyclone V  -> 165 Mhz 736 ALMs
-  Cyclone IV -> 151 Mhz 1,463 LUT 1,254 FF
-  ICE40-HX   ->  51 Mhz 2387 LC (icestorm)
+  Artix 7    -> 305 Mhz 1004 LUT 1297 FF 
+  Cyclone V  -> 160 Mhz 744 ALMs
+  Cyclone IV -> 148 Mhz 1,522 LUT 1,255 FF 
+  ICE40-HX   ->  51 Mhz 2402 LC (icestorm)
 
 MuraxFast bypassed stages (0.65 DMIPS/Mhz) ->
-  Artix 7    -> 301 Mhz 1248 LUT 1393 FF
-  Cyclone V  -> 163 Mhz 872 ALMs
-  Cyclone IV -> 145 Mhz 1,712 LUT 1,288 FF
-  ICE40-HX   ->  45 Mhz, 2718 LC  (icestorm)
+  Artix 7    -> 312 Mhz 1240 LUT 1330 FF 
+  Cyclone V  -> 159 Mhz 884 ALMs
+  Cyclone IV -> 142 Mhz 1,755 LUT 1,289 FF 
+  ICE40-HX   ->  50 Mhz, 2787 LC  (icestorm)
 ```
 
 There is some scripts to generate the SoC and call the icestorm toolchain there : scripts/Murax/

@@ -6,8 +6,19 @@ import spinal.lib._
 
 import scala.collection.mutable.ArrayBuffer
 
+
+
+object KeepAttribute{
+  object syn_keep extends AttributeFlag("synthesis syn_keep = 1", COMMENT_ATTRIBUTE){
+    override def isLanguageReady(language: Language) : Boolean = language == Language.VERILOG || language == Language.SYSTEM_VERILOG
+  }
+  object keep extends AttributeFlag("keep")
+
+  def apply[T <: Data](that : T) = that.addAttribute(keep).addAttribute(syn_keep)
+}
 class PcManagerSimplePlugin(resetVector       : BigInt,
-                            relaxedPcCalculation : Boolean = false) extends Plugin[VexRiscv] with JumpService{
+                            relaxedPcCalculation : Boolean = false,
+                            keepPcPlus4 : Boolean = true) extends Plugin[VexRiscv] with JumpService{
   //FetchService interface
   case class JumpInfo(interface :  Flow[UInt], stage: Stage, priority : Int)
   val jumpInfos = ArrayBuffer[JumpInfo]()
@@ -17,7 +28,7 @@ class PcManagerSimplePlugin(resetVector       : BigInt,
     interface
   }
   var prefetchExceptionPort : Flow[ExceptionCause] = null
-  
+
   override def setup(pipeline: VexRiscv): Unit = {
     if(!relaxedPcCalculation) pipeline.unremovableStages += pipeline.prefetch
   }
@@ -53,8 +64,10 @@ class PcManagerSimplePlugin(resetVector       : BigInt,
 
       //PC calculation without Jump
       val pcReg = Reg(UInt(32 bits)) init(resetVector) addAttribute(Verilator.public)
+      val pcPlus4 = pcReg + 4
+      if(keepPcPlus4) KeepAttribute(pcPlus4)
       when(arbitration.isFiring){
-        pcReg := pcReg + 4
+        pcReg := pcPlus4
       }
 
       //JumpService hardware implementation

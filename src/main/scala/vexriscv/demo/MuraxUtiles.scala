@@ -163,7 +163,7 @@ class MuraxSimpleBusToApbBridge(apb3Config: Apb3Config, pipelineBridge : Boolean
   }
 }
 
-class MuraxSimpleBusDecoder(master : SimpleBus, specification : List[(SimpleBus,SizeMapping)], pipelineMaster : Boolean) extends Area{
+class MuraxSimpleBusDecoder(master : SimpleBus, val specification : List[(SimpleBus,SizeMapping)], pipelineMaster : Boolean) extends Area{
   val masterPipelined = SimpleBus(master.config)
   if(!pipelineMaster) {
     masterPipelined.cmd << master.cmd
