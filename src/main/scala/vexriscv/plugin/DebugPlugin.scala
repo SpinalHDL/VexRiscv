@@ -128,6 +128,7 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
     isInjectingOnDecode = Bool()
   }
 
+
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
@@ -140,7 +141,7 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
       val haltIt = RegInit(False)
       val stepIt = RegInit(False)
 
-      val isPipActive = RegNext(List(fetch, decode, execute, memory, writeBack).map(_.arbitration.isValid).orR)
+      val isPipActive = RegNext(List(decode, execute, memory, writeBack).map(_.arbitration.isValid).orR)
       val isPipBusy = isPipActive || RegNext(isPipActive)
       val haltedByBreak = RegInit(False)
 
@@ -201,17 +202,17 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
 
 
       when(execute.arbitration.isFiring && execute.input(IS_EBREAK)) {
-        prefetch.arbitration.haltByOther := True
+        decode.arbitration.haltByOther := True
         decode.arbitration.flushAll := True
         haltIt := True
         haltedByBreak := True
       }
 
       when(haltIt) {
-        prefetch.arbitration.haltByOther := True
+        decode.arbitration.haltByOther := True
       }
 
-      when(stepIt && prefetch.arbitration.isFiring) {
+      when(stepIt && decode.arbitration.isFiring) {
         haltIt := True
       }
       when(stepIt && Cat(pipeline.stages.map(_.arbitration.redoIt)).asBits.orR) {

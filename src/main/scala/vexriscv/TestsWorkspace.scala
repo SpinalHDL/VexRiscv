@@ -31,33 +31,33 @@ object TestsWorkspace {
     SpinalConfig(mergeAsyncProcess = false).generateVerilog {
       val configFull = VexRiscvConfig(
         plugins = List(
-          new PcManagerSimplePlugin(
-            resetVector = 0x80000000l,
-            relaxedPcCalculation = false
-          ),
-//          new IBusSimplePlugin(
-//            interfaceKeepData = false,
-//            catchAccessFault = true
+//          new PcManagerSimplePlugin(
+//            resetVector = 0x80000000l,
+//            relaxedPcCalculation = false
 //          ),
-          new IBusCachedPlugin(
-            config = InstructionCacheConfig(
-              cacheSize = 1024*16,
-              bytePerLine = 32,
-              wayCount = 1,
-              addressWidth = 32,
-              cpuDataWidth = 32,
-              memDataWidth = 32,
-              catchIllegalAccess = true,
-              catchAccessFault = true,
-              catchMemoryTranslationMiss = true,
-              asyncTagMemory = false,
-              twoCycleRam = false
-            ),
-            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-              portTlbSize = 4
-            )
+          new IBusSimplePlugin(
+            interfaceKeepData = false,
+            catchAccessFault = true
           ),
-//          new DBusSimplePlugin(
+//          new IBusCachedPlugin(
+//            config = InstructionCacheConfig(
+//              cacheSize = 1024*16,
+//              bytePerLine = 32,
+//              wayCount = 1,
+//              addressWidth = 32,
+//              cpuDataWidth = 32,
+//              memDataWidth = 32,
+//              catchIllegalAccess = true,
+//              catchAccessFault = true,
+//              catchMemoryTranslationMiss = true,
+//              asyncTagMemory = false,
+//              twoCycleRam = false
+//            ),
+//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//              portTlbSize = 4
+//            )
+//          ),
+////          new DBusSimplePlugin(
 //            catchAddressMisaligned = true,
 //            catchAccessFault = true,
 //            earlyInjection = false
@@ -122,11 +122,11 @@ object TestsWorkspace {
           ),
 //          new DivPlugin,
           new CsrPlugin(CsrPluginConfig.all(0x80000020l).copy(deterministicInteruptionEntry = false)),
-          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
+//          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = true,
             catchAddressMisaligned = true,
-            prediction = DYNAMIC_TARGET,
+            prediction = NONE,
             historyRamSizeLog2 = 8
           ),
           new YamlPlugin("cpu0.yaml")

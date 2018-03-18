@@ -58,8 +58,8 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   type  T = VexRiscv
   import config._
 
-  stages ++= List.fill(6)(new Stage())
-  val prefetch :: fetch :: decode :: execute :: memory :: writeBack :: Nil = stages.toList
+  stages ++= List.fill(4)(new Stage())
+  val /*prefetch :: fetch :: */decode :: execute :: memory :: writeBack :: Nil = stages.toList
   plugins ++= config.plugins
 
   //regression usage

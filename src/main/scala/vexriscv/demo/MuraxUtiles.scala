@@ -64,7 +64,7 @@ class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
     io.masterBus.cmd.valid := False
   }
 
-  io.iBus.rsp.ready := io.masterBus.rsp.valid && !rspTarget
+  io.iBus.rsp.valid := io.masterBus.rsp.valid && !rspTarget
   io.iBus.rsp.inst  := io.masterBus.rsp.data
   io.iBus.rsp.error := False
 

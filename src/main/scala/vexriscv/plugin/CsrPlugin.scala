@@ -376,8 +376,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       //Used to make the pipeline empty softly (for interrupts)
       val pipelineLiberator = new Area{
         val enable = False.noBackendCombMerge //Verilator Perf
-        prefetch.arbitration.haltByOther setWhen(enable)
-        val done = ! List(fetch, decode, execute, memory, writeBack).map(_.arbitration.isValid).orR
+        decode.arbitration.haltByOther setWhen(enable) //TODO FETCH
+        val done = ! List(execute, memory, writeBack).map(_.arbitration.isValid).orR
       }
 
 
@@ -388,9 +388,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         val exceptionValids = Vec(Bool,stages.length)
         val exceptionValidsRegs = Vec(Reg(Bool) init(False), stages.length).allowUnsetRegToAvoidLatch
         val exceptionContext = Reg(ExceptionCause())
-        val pipelineHasException = exceptionValids.orR   //TODO FMAX maybe could be partialy pipelined
 
-        pipelineLiberator.enable setWhen(pipelineHasException)
+        pipelineLiberator.enable setWhen(exceptionValidsRegs.tail.orR)
 
         val groupedByStage = exceptionPortsInfos.map(_.stage).distinct.map(s => {
           val stagePortsInfos = exceptionPortsInfos.filter(_.stage == s).sortWith(_.priority > _.priority)
@@ -409,14 +408,16 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         })
 
         val sortedByStage = groupedByStage.sortWith((a, b) => pipeline.indexOf(a.stage) < pipeline.indexOf(b.stage))
-
+        sortedByStage.zipWithIndex.foreach(e => e._1.port.setName(e._1.stage.getName() + "_exception_agregat"))
         exceptionValids := exceptionValidsRegs
         for(portInfo <- sortedByStage; port = portInfo.port ; stage = portInfo.stage; stageId = indexOf(portInfo.stage)) {
           when(port.valid) {
-            stages(indexOf(stage) - 1).arbitration.flushAll := True
+            if(indexOf(stage) != 0) stages(indexOf(stage) - 1).arbitration.flushAll := True
             stage.arbitration.removeIt := True
             exceptionValids(stageId) := True
-            exceptionContext := port.payload
+            when(!exceptionValidsRegs.takeRight(stages.length-stageId-1).fold(False)(_ || _)) {
+              exceptionContext := port.payload
+            }
           }
         }
         for(stageId <- firstStageIndexWithExceptionPort until stages.length; stage = stages(stageId) ){
@@ -482,6 +483,12 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
       //Interrupt/Exception entry logic
       pipelineLiberator.enable setWhen(interrupt)
+
+      if(exceptionPortCtrl != null) {
+        when(exception) {
+          exceptionPortCtrl.exceptionValidsRegs.foreach(_ := False)
+        }
+      }
       when(exception || (interrupt && pipelineLiberator.done)){
         jumpInterface.valid := True
         jumpInterface.payload := mtvec
@@ -490,7 +497,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         mstatus.MPP  := privilege
         mepc := exception mux(
           True  -> writeBack.input(PC),
-          False -> (writeBackWasWfi ? writeBack.input(PC) | prefetch.input(PC_CALC_WITHOUT_JUMP))
+          False -> (writeBackWasWfi ? writeBack.input(PC) | decode.input(PC))
         )
 
         mcause.interrupt := interrupt

@@ -386,7 +386,7 @@ public:
 		#ifdef  REF
 		if(bootPc != -1) top->VexRiscv->core->prefetch_pc = bootPc;
 		#else
-		if(bootPc != -1) top->VexRiscv->prefetch_PcManagerSimplePlugin_pcReg = bootPc;
+		if(bootPc != -1) top->VexRiscv->IBusSimplePlugin_pcCalc_pcReg = bootPc;
 		#endif
 
 
@@ -511,7 +511,7 @@ public:
 
 	virtual void onReset(){
 		top->iBus_cmd_ready = 1;
-		top->iBus_rsp_ready = 1;
+		top->iBus_rsp_valid = 0;
 	}
 
 	virtual void preCycle(){
@@ -523,12 +523,12 @@ public:
 	}
 	//TODO doesn't catch when instruction removed ?
 	virtual void postCycle(){
-		top->iBus_rsp_ready = !pending;
+		top->iBus_rsp_valid = 0;
 		if(pending && (!ws->iStall || VL_RANDOM_I(7) < 100)){
-			top->iBus_rsp_inst = inst_next;
+			top->iBus_rsp_payload_inst = inst_next;
 			pending = false;
-			top->iBus_rsp_ready = 1;
-			top->iBus_rsp_error = error_next;
+			top->iBus_rsp_valid = 1;
+			top->iBus_rsp_payload_error = error_next;
 		}
 		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100 && !pending;
 	}
@@ -1426,8 +1426,9 @@ public:
 
 	uint32_t readCmd(uint32_t size, uint32_t address){
 		accessCmd(false, 2, address, VL_RANDOM_I(32));
-		if(recv(clientSocket, buffer, 4, 0) != 4){
-			printf("Should read 4 bytes");
+		int error;
+		if((error = recv(clientSocket, buffer, 4, 0)) != 4){
+			printf("Should read 4 bytes, had %d", error);
 			fail();
 		}
 

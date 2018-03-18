@@ -11,10 +11,10 @@ object GenSmallestNoCsr extends App{
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       plugins = List(
-        new PcManagerSimplePlugin(
-          resetVector = 0x00000000l,
-          relaxedPcCalculation = false
-        ),
+//        new PcManagerSimplePlugin(
+//          resetVector = 0x00000000l,
+//          relaxedPcCalculation = false
+//        ),
         new IBusSimplePlugin(
           interfaceKeepData = false,
           catchAccessFault = false
