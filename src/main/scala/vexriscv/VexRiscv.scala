@@ -22,6 +22,7 @@ case class VexRiscvConfig(plugins : Seq[Plugin[VexRiscv]]){
   object REGFILE_WRITE_VALID extends Stageable(Bool)
   object REGFILE_WRITE_DATA extends Stageable(Bits(32 bits))
 
+
   object SRC1   extends Stageable(Bits(32 bits))
   object SRC2   extends Stageable(Bits(32 bits))
   object SRC_ADD_SUB extends Stageable(Bits(32 bits))

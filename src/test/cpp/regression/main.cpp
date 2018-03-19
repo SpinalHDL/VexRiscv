@@ -182,7 +182,7 @@ public:
 	double cyclesPerSecond = 10e6;
 	double allowedCycles = 0.0;
 	uint32_t bootPc = -1;
-	uint32_t iStall = 1,dStall = 1;
+	uint32_t iStall = STALL,dStall = STALL;
 	#ifdef TRACE
 	VerilatedVcdC* tfp;
 	#endif
@@ -433,14 +433,21 @@ public:
 				dump(i + 1);
 
 
-
-				if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
-					regTraces <<
-						#ifdef TRACE_WITH_TIME
-						currentTime <<
-						 #endif
-						 " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
-				}
+                if(top->VexRiscv->writeBack_arbitration_isFiring){
+                    if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
+                        regTraces <<
+                            #ifdef TRACE_WITH_TIME
+                            currentTime <<
+                             #endif
+                             " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
+                    } else {
+                        regTraces <<
+                                #ifdef TRACE_WITH_TIME
+                                currentTime <<
+                                 #endif
+                                 " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << endl;
+                    }
+                }
 
 				for(SimElement* simElement : simElements) simElement->preCycle();
 
@@ -1429,7 +1436,7 @@ public:
 		int error;
 		if((error = recv(clientSocket, buffer, 4, 0)) != 4){
 			printf("Should read 4 bytes, had %d", error);
-			fail();
+			while(1);
 		}
 
 		return *((uint32_t*) buffer);
@@ -1502,7 +1509,7 @@ public:
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
 		if((readValue = readCmd(2,debugAddress + 4)) != 0x80000014){
-			printf("wrong break PC 2 %x\n",readValue);
+			printf("wrong break PC 3 %x\n",readValue);
 			clientFail = true; return;
 		}
 
@@ -1523,7 +1530,7 @@ public:
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
 		if((readValue = readCmd(2,debugAddress + 4)) != 0x80000024){
-			printf("wrong break PC 2 %x\n",readValue);
+			printf("wrong break PC 3 %x\n",readValue);
 			clientFail = true; return;
 		}
 

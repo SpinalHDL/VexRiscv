@@ -134,6 +134,7 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
     import pipeline.config._
 
     val logic = debugClockDomain {pipeline plug new Area{
+      val iBusFetcher = service(classOf[IBusFetcher])
       val insertDecodeInstruction = False
       val firstCycle = RegNext(False) setWhen (io.bus.cmd.ready)
       val secondCycle = RegNext(firstCycle)
@@ -141,7 +142,7 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
       val haltIt = RegInit(False)
       val stepIt = RegInit(False)
 
-      val isPipActive = RegNext(List(decode, execute, memory, writeBack).map(_.arbitration.isValid).orR)
+      val isPipActive = RegNext(List(decode,execute, memory, writeBack).map(_.arbitration.isValid).orR)
       val isPipBusy = isPipActive || RegNext(isPipActive)
       val haltedByBreak = RegInit(False)
 
@@ -173,9 +174,9 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
           is(1) {
             when(io.bus.cmd.wr) {
               insertDecodeInstruction := True
-              decode.arbitration.isValid setWhen (firstCycle)
+              decode.arbitration.isValid.getDrivingReg setWhen (firstCycle)
               decode.arbitration.haltItself setWhen (secondCycle)
-              io.bus.cmd.ready := !(firstCycle || secondCycle || decode.arbitration.isValid)
+              io.bus.cmd.ready := !firstCycle && !secondCycle && execute.arbitration.isValid
             }
           }
         }
@@ -209,7 +210,8 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
       }
 
       when(haltIt) {
-        decode.arbitration.haltByOther := True
+        iBusFetcher.haltIt()
+//        decode.arbitration.haltByOther := True
       }
 
       when(stepIt && decode.arbitration.isFiring) {

@@ -96,7 +96,9 @@ object IBusSimpleBus{
     maximumPendingReadTransactions = 8
   )
 }
-case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMasterSlave{
+
+
+case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMasterSlave {
   var cmd = Stream(IBusSimpleCmd())
   var rsp = Flow(IBusSimpleRsp())
 
@@ -148,11 +150,23 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
   }
 }
 
-class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, pendingMax : Int = 7) extends Plugin[VexRiscv] with JumpService{
+trait IBusFetcher{
+  def haltIt() : Unit
+  def nextPc() : (Bool, UInt)
+}
+
+class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, pendingMax : Int = 7) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
   var iBus : IBusSimpleBus = null
   var prefetchExceptionPort : Flow[ExceptionCause] = null
   def resetVector = BigInt(0x80000000l)
   def keepPcPlus4 = false
+
+  lazy val fetcherHalt = False
+  lazy val decodeNextPcValid = Bool
+  lazy val decodeNextPc = UInt(32 bits)
+  def nextPc() = (decodeNextPcValid, decodeNextPc)
+
+  override def haltIt(): Unit = fetcherHalt := True
 
   case class JumpInfo(interface :  Flow[UInt], stage: Stage, priority : Int)
   val jumpInfos = ArrayBuffer[JumpInfo]()
@@ -258,10 +272,14 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
 
 
       val injector = new Area {
-        val input =  iBusRsp.output.s2mPipe(flush)
-        val stage = input.m2sPipe(flush, false)
+        val inputBeforeHalt =  iBusRsp.output.s2mPipe(flush)
+        val input =  inputBeforeHalt.haltWhen(fetcherHalt)
+        val stage = input.m2sPipe(flush || decode.arbitration.isRemoved)
+
+        decodeNextPcValid := RegNext(inputBeforeHalt.isStall)
+        decodeNextPc := decode.input(PC)
+
         stage.ready := !decode.arbitration.isStuck
-        decode.arbitration.isValid.setAsComb().removeAssignments()
         decode.arbitration.isValid := stage.valid
         decode.insert(PC) := stage.pc
         decode.insert(INSTRUCTION) := stage.rsp.inst

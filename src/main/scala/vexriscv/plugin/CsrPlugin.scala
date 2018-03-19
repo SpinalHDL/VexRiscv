@@ -291,7 +291,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
-
+    val fetcher = service(classOf[IBusFetcher])
 
     pipeline plug new Area{
       //Define CSR mapping utilities
@@ -376,8 +376,11 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       //Used to make the pipeline empty softly (for interrupts)
       val pipelineLiberator = new Area{
         val enable = False.noBackendCombMerge //Verilator Perf
-        decode.arbitration.haltByOther setWhen(enable) //TODO FETCH
-        val done = ! List(execute, memory, writeBack).map(_.arbitration.isValid).orR
+        when(enable){
+          fetcher.haltIt()
+        }
+        val done = ! List(decode, execute, memory, writeBack).map(_.arbitration.isValid).orR && fetcher.nextPc()._1
+//        val done = History(doneAsync, 0 to 0).andR
       }
 
 
@@ -389,7 +392,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         val exceptionValidsRegs = Vec(Reg(Bool) init(False), stages.length).allowUnsetRegToAvoidLatch
         val exceptionContext = Reg(ExceptionCause())
 
-        pipelineLiberator.enable setWhen(exceptionValidsRegs.tail.orR)
+        pipelineLiberator.enable setWhen(exceptionValidsRegs.orR)
 
         val groupedByStage = exceptionPortsInfos.map(_.stage).distinct.map(s => {
           val stagePortsInfos = exceptionPortsInfos.filter(_.stage == s).sortWith(_.priority > _.priority)
@@ -497,7 +500,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         mstatus.MPP  := privilege
         mepc := exception mux(
           True  -> writeBack.input(PC),
-          False -> (writeBackWasWfi ? writeBack.input(PC) | decode.input(PC))
+          False -> fetcher.nextPc()._2
         )
 
         mcause.interrupt := interrupt
@@ -529,10 +532,10 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       }
 
       //Manage WFI instructions
-      if(wfiGen) when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.WFI){
+      if(wfiGen) when(decode.arbitration.isValid && decode.input(ENV_CTRL) === EnvCtrlEnum.WFI){
         when(!interrupt){
-          execute.arbitration.haltItself := True
-          decode.arbitration.flushAll := True
+          fetcher.haltIt()
+          decode.arbitration.haltItself := True
         }
       }
 

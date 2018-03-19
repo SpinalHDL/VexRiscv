@@ -25,7 +25,7 @@ object KeepAttribute{
 class PcManagerSimplePlugin(resetVector       : BigInt,
                             relaxedPcCalculation : Boolean = false,
                             keepPcPlus4 : Boolean = true) extends Plugin[VexRiscv]{
-  override def build(pipeline: VexRiscv): Unit = ???
+  override def build(pipeline: VexRiscv): Unit = {println("PcManagerSimplePlugin is now useless")}
 }
 
 
