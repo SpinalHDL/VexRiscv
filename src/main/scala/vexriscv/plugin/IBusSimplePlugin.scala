@@ -160,7 +160,8 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
   var prefetchExceptionPort : Flow[ExceptionCause] = null
   def resetVector = BigInt(0x80000000l)
   def keepPcPlus4 = false
-
+  def decodePcGen = true
+  def compressedGen = true
   lazy val fetcherHalt = False
   lazy val decodeNextPcValid = Bool
   lazy val decodeNextPc = UInt(32 bits)
@@ -191,7 +192,25 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
     import pipeline.config._
 
     pipeline plug new Area {
-      val pcCalc = new Area {
+
+      //JumpService hardware implementation
+      val jump = new Area {
+        val sortedByStage = jumpInfos.sortWith((a, b) => {
+          (pipeline.indexOf(a.stage) > pipeline.indexOf(b.stage)) ||
+            (pipeline.indexOf(a.stage) == pipeline.indexOf(b.stage) && a.priority > b.priority)
+        })
+        val valids = sortedByStage.map(_.interface.valid)
+        val pcs = sortedByStage.map(_.interface.payload)
+
+        val pcLoad = Flow(UInt(32 bits))
+        pcLoad.valid := jumpInfos.map(_.interface.valid).orR
+        pcLoad.payload := MuxOH(OHMasking.first(valids.asBits), pcs)
+      }
+
+
+      def flush = jump.pcLoad.valid
+
+      val fetchPc = new Area {
         val output = Stream(UInt(32 bits))
 
         //PC calculation without Jump
@@ -202,35 +221,34 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
           pcReg := pcPlus4
         }
 
-        //JumpService hardware implementation
-        val jump = new Area {
-          val sortedByStage = jumpInfos.sortWith((a, b) => {
-            (pipeline.indexOf(a.stage) > pipeline.indexOf(b.stage)) ||
-              (pipeline.indexOf(a.stage) == pipeline.indexOf(b.stage) && a.priority > b.priority)
-          })
-          val valids = sortedByStage.map(_.interface.valid)
-          val pcs = sortedByStage.map(_.interface.payload)
 
-          val pcLoad = Flow(UInt(32 bits))
-          pcLoad.valid := jumpInfos.map(_.interface.valid).orR
-          pcLoad.payload := MuxOH(OHMasking.first(valids.asBits), pcs)
-
-          //application of the selected jump request
-          when(pcLoad.valid) {
-            pcReg := pcLoad.payload
-          }
+        //application of the selected jump request
+        when(jump.pcLoad.valid) {
+          pcReg := jump.pcLoad.payload
         }
-
 
         output.valid := (RegNext(True) init (False)) // && !jump.pcLoad.valid
         output.payload := pcReg
       }
 
-      def flush = pcCalc.jump.pcLoad.valid
+      val decodePc = ifGen(decodePcGen)(new Area {
+        //PC calculation without Jump
+        val pcReg = Reg(UInt(32 bits)) init (resetVector) addAttribute (Verilator.public)
+        val pcPlus4 = pcReg + 4
+        if (keepPcPlus4) KeepAttribute(pcPlus4)
+        when(decode.arbitration.isFiring) {
+          pcReg := pcPlus4
+        }
+
+        //application of the selected jump request
+        when(jump.pcLoad.valid) {
+          pcReg := jump.pcLoad.payload
+        }
+      })
 
 
       val iBusCmd = new Area {
-        def input = pcCalc.output
+        def input = fetchPc.output
 
         val output = input.continueWhen(iBus.cmd.fire)
 
@@ -272,16 +290,21 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
 
 
       val injector = new Area {
-        val inputBeforeHalt =  iBusRsp.output.s2mPipe(flush)
+        val inputBeforeHalt =  iBusRsp.output//.s2mPipe(flush)
         val input =  inputBeforeHalt.haltWhen(fetcherHalt)
         val stage = input.m2sPipe(flush || decode.arbitration.isRemoved)
 
-        decodeNextPcValid := RegNext(inputBeforeHalt.isStall)
-        decodeNextPc := decode.input(PC)
+        if(decodePcGen){
+          decodeNextPcValid := True
+          decodeNextPc := decodePc.pcReg
+        }else {
+          decodeNextPcValid := RegNext(inputBeforeHalt.isStall)
+          decodeNextPc := decode.input(PC)
+        }
 
         stage.ready := !decode.arbitration.isStuck
         decode.arbitration.isValid := stage.valid
-        decode.insert(PC) := stage.pc
+        decode.insert(PC) := (if(decodePcGen) decodePc.pcReg else stage.pc)
         decode.insert(INSTRUCTION) := stage.rsp.inst
         decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), input.rsp.inst)
         decode.insert(INSTRUCTION_READY) := True
@@ -295,67 +318,3 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
     }
   }
 }
-
-//class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) extends Plugin[VexRiscv]{
-//  var iBus : IBusSimpleBus = null
-//
-//  object IBUS_ACCESS_ERROR extends Stageable(Bool)
-//  var decodeExceptionPort : Flow[ExceptionCause] = null
-//  override def setup(pipeline: VexRiscv): Unit = {
-//    if(catchAccessFault) {
-//      val exceptionService = pipeline.service(classOf[ExceptionService])
-//      decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1)
-//    }
-//  }
-//
-//  override def build(pipeline: VexRiscv): Unit = {
-//    import pipeline._
-//    import pipeline.config._
-//    iBus = master(IBusSimpleBus(interfaceKeepData)).setName("iBus")
-//    prefetch plug new Area {
-//      val pendingCmd = RegInit(False) clearWhen (iBus.rsp.ready) setWhen (iBus.cmd.fire)
-//
-//      //Emit iBus.cmd request
-//      iBus.cmd.valid := prefetch.arbitration.isValid && !prefetch.arbitration.removeIt && !prefetch.arbitration.isStuckByOthers && !(pendingCmd && !iBus.rsp.ready) //prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
-//      iBus.cmd.pc := prefetch.output(PC)
-//      prefetch.arbitration.haltItself setWhen (!iBus.cmd.ready || (pendingCmd && !iBus.rsp.ready))
-//    }
-//
-//    //Bus rsp buffer
-//    val rspBuffer = if(!interfaceKeepData) new Area{
-//      val valid = RegInit(False) setWhen(iBus.rsp.ready) clearWhen(!fetch.arbitration.isStuck)
-//      val error = Reg(Bool)
-//      val data = Reg(Bits(32 bits))
-//      when(!valid) {
-//        data := iBus.rsp.inst
-//        error := iBus.rsp.error
-//      }
-//    } else null
-//
-//    //Insert iBus.rsp into INSTRUCTION
-//    fetch.insert(INSTRUCTION) := iBus.rsp.inst
-//    fetch.insert(IBUS_ACCESS_ERROR) := iBus.rsp.error
-//    if(!interfaceKeepData) {
-//      when(rspBuffer.valid) {
-//        fetch.insert(INSTRUCTION) := rspBuffer.data
-//        fetch.insert(IBUS_ACCESS_ERROR) := rspBuffer.error
-//      }
-//    }
-//
-//    fetch.insert(IBUS_ACCESS_ERROR) clearWhen(!fetch.arbitration.isValid) //Avoid interference with instruction injection from the debug plugin
-//
-//    if(interfaceKeepData)
-//      fetch.arbitration.haltItself setWhen(fetch.arbitration.isValid && !iBus.rsp.ready)
-//    else
-//      fetch.arbitration.haltItself setWhen(fetch.arbitration.isValid && !iBus.rsp.ready && !rspBuffer.valid)
-//
-//    decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck,decode.input(INSTRUCTION),fetch.output(INSTRUCTION))
-//    decode.insert(INSTRUCTION_READY) := True
-//
-//    if(catchAccessFault){
-//      decodeExceptionPort.valid := decode.arbitration.isValid && decode.input(IBUS_ACCESS_ERROR)
-//      decodeExceptionPort.code  := 1
-//      decodeExceptionPort.badAddr := decode.input(PC)
-//    }
-//  }
-//}
