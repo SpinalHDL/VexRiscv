@@ -236,7 +236,7 @@ object RvcDecompressor{
         val addJ = (i(6 downto 2) === 0) ? j | add
         ret := (i(12 downto 2) === B"100_0000_0000") ? ebreak | addJ
       }
-      is(22){ ret := swspImm(11 downto 5) ## i(6 downto 2)  ## x2 ## B"010" ## swImm(4 downto 0) ## B"0100011" }
+      is(22){ ret := swspImm(11 downto 5) ## i(6 downto 2)  ## x2 ## B"010" ## swspImm(4 downto 0) ## B"0100011" }
     }
 
     ret
@@ -418,7 +418,7 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
         bufferValid clearWhen(output.fire)
         when(input.ready){
           when(input.valid) {
-            bufferValid := !(!isRvc && !input.pc(1) && !bufferValid)
+            bufferValid := !(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1))
           }
           bufferData := input.rsp.inst(31 downto 16)
         }

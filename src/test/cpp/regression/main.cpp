@@ -1333,11 +1333,12 @@ public:
 			iBusAccess(top->VexRiscv->writeBack_PC, &instruction, &error);
 			if(instruction == 0x00000073){
 				uint32_t code = top->VexRiscv->RegFilePlugin_regFile[28];
-				if((code & 1) == 0){
+				uint32_t code2 = top->VexRiscv->RegFilePlugin_regFile[3];
+				if((code & 1) == 0 && (code2 & 1) == 0){
 					cout << "Wrong error code"<< endl;
 					fail();
 				}
-				if(code == 1){
+				if(code == 1 || code2 == 1){
 					pass();
 				}else{
 					cout << "Error code " << code/2 << endl;
