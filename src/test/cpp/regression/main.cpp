@@ -1782,12 +1782,24 @@ int main(int argc, char **argv, char **env) {
 
 		#ifdef DHRYSTONE
 			Dhrystone("dhrystoneO3_Stall","dhrystoneO3",true,true).run(1.5e6);
+			#if defined(COMPRESSED)
+			    Dhrystone("dhrystoneO3C_Stall","dhrystoneO3C",true,true).run(1.5e6);
+            #endif
 			#if defined(MUL) && defined(DIV)
 				Dhrystone("dhrystoneO3M_Stall","dhrystoneO3M",true,true).run(1.9e6);
+				#if defined(COMPRESSED)
+				    Dhrystone("dhrystoneO3MC_Stall","dhrystoneO3MC",true,true).run(1.9e6);
+				#endif
 			#endif
 			Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.9e6);
+			#if defined(COMPRESSED)
+			Dhrystone("dhrystoneO3C","dhrystoneO3C",false,false).run(1.9e6);
+            #endif
 			#if defined(MUL) && defined(DIV)
 				Dhrystone("dhrystoneO3M","dhrystoneO3M",false,false).run(1.9e6);
+				#if defined(COMPRESSED)
+				    Dhrystone("dhrystoneO3MC","dhrystoneO3MC",false,false).run(1.9e6);
+				#endif
 			#endif
 		#endif
 
