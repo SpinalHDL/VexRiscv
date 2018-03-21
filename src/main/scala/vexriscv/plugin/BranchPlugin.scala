@@ -45,7 +45,7 @@ class BranchPlugin(earlyBranch : Boolean,
     )
 
     val jActions = List[(Stageable[_ <: BaseType],Any)](
-      SRC1_CTRL           -> Src1CtrlEnum.FOUR,
+      SRC1_CTRL           -> Src1CtrlEnum.PC_INCREMENT,
       SRC2_CTRL           -> Src2CtrlEnum.PC,
       SRC_USE_SUB_LESS    -> False,
       REGFILE_WRITE_VALID -> True
@@ -139,7 +139,7 @@ class BranchPlugin(earlyBranch : Boolean,
       }
 
       if(catchAddressMisaligned) { //TODO conflict with instruction cache two stage
-        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
+        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && (if(pipeline(RVC_GEN)) jumpInterface.payload(0 downto 0) =/= 0 else jumpInterface.payload(1 downto 0) =/= 0)
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := jumpInterface.payload
       }

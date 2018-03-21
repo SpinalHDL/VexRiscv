@@ -7,12 +7,14 @@ import spinal.lib._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+trait PipelineConfig[T]
 
 trait Pipeline {
   type T <: Pipeline
   val plugins = ArrayBuffer[Plugin[T]]()
   var stages = ArrayBuffer[Stage]()
   var unremovableStages = mutable.Set[Stage]()
+  val configs = mutable.HashMap[PipelineConfig[_], Any]()
 //  val services = ArrayBuffer[Any]()
 
   def indexOf(stage : Stage) = stages.indexOf(stage)
@@ -27,6 +29,9 @@ trait Pipeline {
     val filtered = plugins.filter(o => clazz.isAssignableFrom(o.getClass))
      filtered.length != 0
   }
+
+  def update[T](that : PipelineConfig[T], value : T) : Unit = configs(that) = value
+  def apply[T](that : PipelineConfig[T]) : T = configs(that).asInstanceOf[T]
 
   def build(): Unit ={
     plugins.foreach(_.pipeline = this.asInstanceOf[T])

@@ -1,6 +1,6 @@
 package vexriscv.plugin
 
-import vexriscv.{Riscv, VexRiscv}
+import vexriscv.{RVC_GEN, Riscv, VexRiscv}
 import spinal.core._
 
 
@@ -15,7 +15,7 @@ class SrcPlugin(separatedAddSub : Boolean, executeInsertion : Boolean = false) e
       val imm = Riscv.IMM(input(INSTRUCTION))
       insert(SRC1) := input(SRC1_CTRL).mux(
         Src1CtrlEnum.RS   -> output(RS1),
-        Src1CtrlEnum.FOUR -> B(4),
+        Src1CtrlEnum.PC_INCREMENT -> (if(pipeline(RVC_GEN)) Mux(input(IS_RVC), B(2), B(4)) else B(4)).resized,
         Src1CtrlEnum.IMU  -> imm.u.resized
       )
       insert(SRC2) := input(SRC2_CTRL).mux(

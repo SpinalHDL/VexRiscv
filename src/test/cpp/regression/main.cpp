@@ -386,7 +386,10 @@ public:
 		#ifdef  REF
 		if(bootPc != -1) top->VexRiscv->core->prefetch_pc = bootPc;
 		#else
-		if(bootPc != -1) top->VexRiscv->IBusSimplePlugin_pcCalc_pcReg = bootPc;
+		if(bootPc != -1) {
+		    top->VexRiscv->IBusSimplePlugin_fetchPc_pcReg = bootPc;
+		    top->VexRiscv->IBusSimplePlugin_decodePc_pcReg = bootPc;
+		}
 		#endif
 
 
@@ -451,6 +454,7 @@ public:
 
 				for(SimElement* simElement : simElements) simElement->preCycle();
 
+                #ifndef COMPRESSED
 				if(withInstructionReadCheck){
 					if(top->VexRiscv->decode_arbitration_isValid && !top->VexRiscv->decode_arbitration_haltItself && !top->VexRiscv->decode_arbitration_flushAll){
 						uint32_t expectedData;
@@ -459,6 +463,7 @@ public:
 						assertEq(top->VexRiscv->decode_INSTRUCTION,expectedData);
 					}
 				}
+				#endif
 
 				checks();
 				//top->eval();
@@ -1719,6 +1724,7 @@ int main(int argc, char **argv, char **env) {
 			for(const string &name : riscvTestMemory){
 				redo(REDO,RiscvTest(name).run();)
 			}
+
 			#ifdef MUL
 			for(const string &name : riscvTestMul){
 				redo(REDO,RiscvTest(name).run();)
@@ -1729,6 +1735,10 @@ int main(int argc, char **argv, char **env) {
 				redo(REDO,RiscvTest(name).run();)
 			}
 			#endif
+
+            #ifdef COMPRESSED
+            redo(REDO,RiscvTest("rv32uc-p-rvc").bootAt(0x800000FCu)->run());
+            #endif
 
 			#ifdef CSR
 				uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,

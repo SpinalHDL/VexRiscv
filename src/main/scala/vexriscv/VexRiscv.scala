@@ -5,7 +5,9 @@ import spinal.core._
 
 case class VexRiscvConfig(plugins : Seq[Plugin[VexRiscv]]){
 
+
   //Default Stageables
+  object IS_RVC extends Stageable(Bool)
   object BYPASSABLE_EXECUTE_STAGE   extends Stageable(Bool)
   object BYPASSABLE_MEMORY_STAGE   extends Stageable(Bool)
   object RS1   extends Stageable(Bits(32 bits))
@@ -43,7 +45,7 @@ case class VexRiscvConfig(plugins : Seq[Plugin[VexRiscv]]){
 
 
   object Src1CtrlEnum extends SpinalEnum(binarySequential){
-    val RS, IMU, FOUR = newElement()   //IMU, IMZ IMJB
+    val RS, IMU, PC_INCREMENT = newElement()   //IMU, IMZ IMJB
   }
 
   object Src2CtrlEnum extends SpinalEnum(binarySequential){
@@ -55,6 +57,7 @@ case class VexRiscvConfig(plugins : Seq[Plugin[VexRiscv]]){
 
 
 
+object RVC_GEN extends PipelineConfig[Boolean]
 class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   type  T = VexRiscv
   import config._
@@ -76,6 +79,8 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   decode.arbitration.removeIt.noBackendCombMerge //Verilator perf
   memory.arbitration.removeIt.noBackendCombMerge
   execute.arbitration.flushAll.noBackendCombMerge
+
+  this(RVC_GEN) = false
 }
 
 
