@@ -159,7 +159,7 @@ object RvcDecompressor{
 
   def main(args: Array[String]): Unit = {
     SpinalVerilog(new Component{
-      Delay(out(apply(Delay(in Bits(16 bits),2))),2)
+      out(Delay((apply(Delay(in Bits(16 bits),2))),2))
     }.setDefinitionName("Decompressor"))
   }
 
@@ -398,6 +398,7 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
         val output = Stream(FetchRsp())
 
         val bufferValid = RegInit(False)
+        val bufferError = Reg(Bool)
         val bufferData = Reg(Bits(16 bits))
 
         val raw = Mux(
@@ -411,7 +412,7 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
         output.pc := input.pc
         output.isRvc := isRvc
         output.rsp.inst := isRvc ? decompressed | raw
-        output.rsp.error := False
+        output.rsp.error := (bufferValid && bufferError) || (input.valid && input.rsp.error && (!isRvc || (isRvc && !bufferValid)))
         input.ready := (bufferValid ? (!isRvc && output.ready) | (input.pc(1) || output.ready))
 
 
@@ -420,6 +421,7 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
           when(input.valid) {
             bufferValid := !(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1))
           }
+          bufferError := input.rsp.error
           bufferData := input.rsp.inst(31 downto 16)
         }
         bufferValid.clearWhen(flush)

@@ -388,7 +388,9 @@ public:
 		#else
 		if(bootPc != -1) {
 		    top->VexRiscv->IBusSimplePlugin_fetchPc_pcReg = bootPc;
+		    #ifdef COMPRESSED
 		    top->VexRiscv->IBusSimplePlugin_decodePc_pcReg = bootPc;
+		    #endif
 		}
 		#endif
 
@@ -1742,9 +1744,15 @@ int main(int argc, char **argv, char **env) {
             #endif
 
 			#ifdef CSR
-				uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
-				8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
-				redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
+			    #ifndef COMPRESSED
+				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
+				    8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
+				    redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
+                #else
+				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
+				    8,6,9,6,10,4,11,4,    12,13,   14,2,     15,5,16,17,1 };
+				    redo(REDO,TestX28("machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
+                #endif
 			#endif
 			#ifdef MMU
 				uint32_t mmuRef[] = {1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
