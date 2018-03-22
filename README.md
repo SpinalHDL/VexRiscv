@@ -47,7 +47,7 @@
 
 This repository host an RISC-V implementation written in SpinalHDL. There is some specs :
 
-- RV32IM instruction set
+- RV32I[M] instruction set
 - Pipelined on 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
 - 1.44 DMIPS/Mhz when all features are enabled
 - Optimized for FPGA, fully portable
@@ -60,6 +60,8 @@ This repository host an RISC-V implementation written in SpinalHDL. There is som
 - Two implementation of shift instructions, Single cycle / shiftNumber cycles
 - Each stage could have bypass or interlock hazard logic
 - FreeRTOS port https://github.com/Dolu1990/FreeRTOS-RISCV
+- The data cache support atomic LR/SC
+- RV32 compressed instruction are supported in the reworkFetch branch for configurations without instruction cache (will be merge in master, WIP)
 
 The hardware description of this CPU is done by using an very software oriented approach
 (without any overhead in the generated hardware). There is a list of software concepts used :
