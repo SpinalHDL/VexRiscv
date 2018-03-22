@@ -19,27 +19,6 @@
 - [CPU clock and resets](#cpu-clock-and-resets)
 - [VexRiscv Architecture](#vexriscv-architecture)
   * [Plugins](#plugins)
-    + [PcManagerSimplePlugin](#pcmanagersimpleplugin)
-    + [IBusSimplePlugin](#ibussimpleplugin)
-    + [IBusCachedPlugin](#ibuscachedplugin)
-    + [DecoderSimplePlugin](#decodersimpleplugin)
-    + [RegFilePlugin](#regfileplugin)
-    + [HazardSimplePlugin](#hazardsimpleplugin)
-    + [SrcPlugin](#srcplugin)
-    + [IntAluPlugin](#intaluplugin)
-    + [LightShifterPlugin](#lightshifterplugin)
-    + [FullBarrielShifterPlugin](#fullbarrielshifterplugin)
-    + [BranchPlugin](#branchplugin)
-    + [DBusSimplePlugin](#dbussimpleplugin)
-    + [DBusCachedPlugin](#dbuscachedplugin)
-    + [MulPlugin](#mulplugin)
-    + [DivPlugin](#divplugin)
-    + [MulDivIterativePlugin](#muldiviterativeplugin)
-    + [CsrPlugin](#csrplugin)
-    + [StaticMemoryTranslatorPlugin](#staticmemorytranslatorplugin)
-    + [MemoryTranslatorPlugin](#memorytranslatorplugin)
-    + [DebugPlugin](#debugplugin)
-    + [YamlPlugin](#yamlplugin)
 
 
 
@@ -631,7 +610,29 @@ So again, if you generate the CPU without any plugin, it will only contain the 5
 
 ### Plugins
 
-This chapter (WIP) will describe plugins currently implemented
+This chapter (WIP) will describe plugins currently implemented.
+
+- [PcManagerSimplePlugin](#pcmanagersimpleplugin)
+- [IBusSimplePlugin](#ibussimpleplugin)
+- [IBusCachedPlugin](#ibuscachedplugin)
+- [DecoderSimplePlugin](#decodersimpleplugin)
+- [RegFilePlugin](#regfileplugin)
+- [HazardSimplePlugin](#hazardsimpleplugin)
+- [SrcPlugin](#srcplugin)
+- [IntAluPlugin](#intaluplugin)
+- [LightShifterPlugin](#lightshifterplugin)
+- [FullBarrielShifterPlugin](#fullbarrielshifterplugin)
+- [BranchPlugin](#branchplugin)
+- [DBusSimplePlugin](#dbussimpleplugin)
+- [DBusCachedPlugin](#dbuscachedplugin)
+- [MulPlugin](#mulplugin)
+- [DivPlugin](#divplugin)
+- [MulDivIterativePlugin](#muldiviterativeplugin)
+- [CsrPlugin](#csrplugin)
+- [StaticMemoryTranslatorPlugin](#staticmemorytranslatorplugin)
+- [MemoryTranslatorPlugin](#memorytranslatorplugin)
+- [DebugPlugin](#debugplugin)
+- [YamlPlugin](#yamlplugin)
 
 #### PcManagerSimplePlugin
 
