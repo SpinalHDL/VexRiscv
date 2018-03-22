@@ -610,7 +610,7 @@ So again, if you generate the CPU without any plugin, it will only contain the 5
 
 ### Plugins
 
-This chapter (WIP) will describe plugins currently implemented.
+This chapter is describing plugins currently implemented.
 
 - [PcManagerSimplePlugin](#pcmanagersimpleplugin)
 - [IBusSimplePlugin](#ibussimpleplugin)
