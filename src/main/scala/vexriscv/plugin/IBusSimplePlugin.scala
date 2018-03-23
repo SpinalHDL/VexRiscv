@@ -111,9 +111,11 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
   def keepPcPlus4 = false
   def decodePcGen = true
   def compressedGen = true
-  def cmdToRspStageCount = 3
-  def rspStageGen = true
+  def cmdToRspStageCount = 1
+  def rspStageGen = false
   def injectorReadyCutGen = true
+  def relaxedPcCalculation = true
+  assert(cmdToRspStageCount >= 1)
   assert(!(compressedGen && !decodePcGen))
   lazy val fetcherHalt = False
   lazy val decodeNextPcValid = Bool
@@ -165,9 +167,11 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
 
       def flush = jump.pcLoad.valid
 
-      val fetchPc = new Area {
+      class PcFetch extends Area{
         val output = Stream(UInt(32 bits))
+      }
 
+      val fetchPc = if(relaxedPcCalculation) new PcFetch {
         //PC calculation without Jump
         val pcReg = Reg(UInt(32 bits)) init (resetVector) addAttribute (Verilator.public)
         val pcPlus4 = pcReg + 4
@@ -188,10 +192,44 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
           pcReg := jump.pcLoad.payload
         }
 
-
-
-        output.valid := (RegNext(True) init (False)) // && !jump.pcLoad.valid
+        output.valid := RegNext(True) init (False) // && !jump.pcLoad.valid
         output.payload := pcReg
+      } else new PcFetch{
+        //PC calculation without Jump
+        val pcReg = Reg(UInt(32 bits)) init(resetVector) addAttribute(Verilator.public)
+        val inc = RegInit(False)
+
+        val pc = pcReg + (inc ## B"00").asUInt
+        val samplePcNext = False
+
+        when(jump.pcLoad.valid) {
+          inc := False
+          samplePcNext := True
+          pc := jump.pcLoad.payload
+        }
+
+
+        when(output.fire){
+          inc := True
+          samplePcNext := True
+        }
+
+
+        when(samplePcNext) {
+          pcReg := pc
+        }
+
+        if(compressedGen) {
+          when(output.fire) {
+            pcReg(1 downto 0) := 0
+            when(pc(1)){
+              inc := True
+            }
+          }
+        }
+
+        output.valid := RegNext(True) init (False)
+        output.payload := pc
       }
 
       val decodePc = ifGen(decodePcGen)(new Area {
@@ -240,13 +278,14 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
       }
 
       val iBusRsp = new Area {
-        val input = recursive[Stream[UInt]](iBusCmd.output, cmdToRspStageCount, x => x.m2sPipe(flush))//iBusCmd.output.m2sPipe(flush)// ASYNC .throwWhen(flush)
+        val inputFirstStage = if(relaxedPcCalculation) iBusCmd.output.m2sPipe(flush) else iBusCmd.output.m2sPipe().throwWhen(flush)
+        val input = recursive[Stream[UInt]](inputFirstStage, cmdToRspStageCount - 1, x => x.m2sPipe(flush))//iBusCmd.output.m2sPipe(flush)// ASYNC .throwWhen(flush)
 
         //Manage flush for iBus transactions in flight
         val discardCounter = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
         discardCounter := discardCounter - (iBus.rsp.fire && discardCounter =/= 0).asUInt
         when(flush) {
-          discardCounter := iBusCmd.pendingCmdNext
+          discardCounter := (if(relaxedPcCalculation) iBusCmd.pendingCmdNext else iBusCmd.pendingCmd - iBus.rsp.fire.asUInt)
         }
 
 
