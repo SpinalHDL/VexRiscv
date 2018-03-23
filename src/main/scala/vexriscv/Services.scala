@@ -11,6 +11,12 @@ trait JumpService{
   def createJumpInterface(stage : Stage, priority : Int = 0) : Flow[UInt]
 }
 
+trait IBusFetcher{
+  def haltIt() : Unit
+  def nextPc() : (Bool, UInt)
+}
+
+
 trait DecoderService{
   def add(key : MaskedLiteral,values : Seq[(Stageable[_ <: BaseType],Any)])
   def add(encoding :Seq[(MaskedLiteral,Seq[(Stageable[_ <: BaseType],Any)])])

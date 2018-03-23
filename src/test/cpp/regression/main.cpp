@@ -241,7 +241,7 @@ public:
 
 	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
 		if(addr % 4 != 0) {
-			cout << "Warning, unaligned IBusAccess : " << addr << endl;
+			//cout << "Warning, unaligned IBusAccess : " << addr << endl;
 		//	fail();
 		}
 		*data =     (  (mem[addr + 0] << 0)
@@ -512,9 +512,8 @@ public:
 #ifdef IBUS_SIMPLE
 class IBusSimple : public SimElement{
 public:
-	uint32_t inst_next = VL_RANDOM_I(32);
-	bool error_next = false;
-	bool pending = false;
+	uint32_t pendings[256];
+	uint32_t rPtr = 0, wPtr = 0;
 
 	Workspace *ws;
 	VVexRiscv* top;
@@ -529,22 +528,29 @@ public:
 	}
 
 	virtual void preCycle(){
-		if (top->iBus_cmd_valid && top->iBus_cmd_ready && !pending) {
+		if (top->iBus_cmd_valid && top->iBus_cmd_ready) {
 			//assertEq(top->iBus_cmd_payload_pc & 3,0);
-			pending = true;
-			ws->iBusAccess(top->iBus_cmd_payload_pc,&inst_next,&error_next);
+			pendings[wPtr] = (top->iBus_cmd_payload_pc);
+			wPtr = (wPtr + 1) & 0xFF;
+			//ws->iBusAccess(top->iBus_cmd_payload_pc,&inst_next,&error_next);
 		}
 	}
 	//TODO doesn't catch when instruction removed ?
 	virtual void postCycle(){
 		top->iBus_rsp_valid = 0;
-		if(pending && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+		if(rPtr != wPtr && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+	        uint32_t inst_next;
+	        bool error_next;
+		    ws->iBusAccess(pendings[rPtr], &inst_next,&error_next);
+        	rPtr = (rPtr + 1) & 0xFF;
 			top->iBus_rsp_payload_inst = inst_next;
-			pending = false;
 			top->iBus_rsp_valid = 1;
 			top->iBus_rsp_payload_error = error_next;
+		} else {
+		    top->iBus_rsp_payload_inst = VL_RANDOM_I(32);
+		    top->iBus_rsp_payload_error = VL_RANDOM_I(1);
 		}
-		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100 && !pending;
+		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100;
 	}
 };
 #endif
@@ -1329,10 +1335,11 @@ public:
 	}
 
 	virtual void checks(){
-		if(top->VexRiscv->writeBack_INSTRUCTION == 0x00000073){
+		if(top->VexRiscv->writeBack_arbitration_isFiring && top->VexRiscv->writeBack_INSTRUCTION == 0x00000013){
 			uint32_t instruction;
 			bool error;
-			iBusAccess(top->VexRiscv->writeBack_PC, &instruction, &error);
+			Workspace::iBusAccess(top->VexRiscv->writeBack_PC, &instruction, &error);
+			//printf("%x => %x\n", top->VexRiscv->writeBack_PC, instruction );
 			if(instruction == 0x00000073){
 				uint32_t code = top->VexRiscv->RegFilePlugin_regFile[28];
 				uint32_t code2 = top->VexRiscv->RegFilePlugin_regFile[3];
@@ -1353,6 +1360,7 @@ public:
 	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error){
 		Workspace::iBusAccess(addr,data,error);
 		if(*data == 0x0ff0000f) *data = 0x00000013;
+		if(*data == 0x00000073) *data = 0x00000013;
 	}
 };
 #endif
