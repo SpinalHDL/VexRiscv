@@ -278,7 +278,7 @@ class BranchPlugin(earlyBranch : Boolean,
         }
         default{
           branch_src1 := input(PC)
-          branch_src2 := (input(PREDICTION_HAD_BRANCHED) ? B(4) | imm.b_sext).asUInt
+          branch_src2 := (input(PREDICTION_HAD_BRANCHED) ? (if(pipeline(RVC_GEN)) Mux(input(IS_RVC), B(2), B(4)) else B(4)).resized | imm.b_sext).asUInt
         }
       }
       val branchAdder = branch_src1 + branch_src2
@@ -298,7 +298,7 @@ class BranchPlugin(earlyBranch : Boolean,
       }
 
       if(catchAddressMisaligned) {
-        branchExceptionPort.valid := input(INSTRUCTION_READY) && arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
+        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && (if(pipeline(RVC_GEN)) jumpInterface.payload(0 downto 0) =/= 0 else jumpInterface.payload(1 downto 0) =/= 0)
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := jumpInterface.payload
       }

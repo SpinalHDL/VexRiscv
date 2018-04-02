@@ -110,13 +110,14 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
   var prefetchExceptionPort : Flow[ExceptionCause] = null
   def resetVector = BigInt(0x80000000l)
   def keepPcPlus4 = false
-  def decodePcGen = false
-  def compressedGen = false
+  def decodePcGen = true
+  def compressedGen = true
   def cmdToRspStageCount = 1
   def rspStageGen = false
   def injectorReadyCutGen = false
   def relaxedPcCalculation = false
   def prediction : BranchPrediction = STATIC
+  def catchAddressMisaligned = true
   var decodePrediction : DecodePredictionBus = null
   assert(cmdToRspStageCount >= 1)
   assert(!(compressedGen && !decodePcGen))
