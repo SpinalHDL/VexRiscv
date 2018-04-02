@@ -5,6 +5,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
+import vexriscv.Riscv.IMM
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -109,18 +110,22 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
   var prefetchExceptionPort : Flow[ExceptionCause] = null
   def resetVector = BigInt(0x80000000l)
   def keepPcPlus4 = false
-  def decodePcGen = true
-  def compressedGen = true
+  def decodePcGen = false
+  def compressedGen = false
   def cmdToRspStageCount = 1
   def rspStageGen = false
-  def injectorReadyCutGen = true
-  def relaxedPcCalculation = true
+  def injectorReadyCutGen = false
+  def relaxedPcCalculation = false
+  def prediction : BranchPrediction = STATIC
+  var decodePrediction : DecodePredictionBus = null
   assert(cmdToRspStageCount >= 1)
   assert(!(compressedGen && !decodePcGen))
   lazy val fetcherHalt = False
   lazy val decodeNextPcValid = Bool
   lazy val decodeNextPc = UInt(32 bits)
   def nextPc() = (decodeNextPcValid, decodeNextPc)
+
+  var predictionJumpInterface : Flow[UInt] = null
 
   override def haltIt(): Unit = fetcherHalt := True
 
@@ -142,6 +147,14 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
     }
 
     pipeline(RVC_GEN) = compressedGen
+
+    prediction match {
+      case NONE =>
+      case STATIC | DYNAMIC => {
+        predictionJumpInterface = createJumpInterface(pipeline.decode)
+        decodePrediction = pipeline.service(classOf[PredictionInterface]).askDecodePrediction()
+      }
+    }
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -364,6 +377,29 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
           decodeExceptionPort.valid := decode.arbitration.isValid && stage.rsp.error
           decodeExceptionPort.code  := 1
           decodeExceptionPort.badAddr := decode.input(PC)
+        }
+
+        prediction match {
+          case `NONE` =>
+          case `STATIC` => {
+            val imm = IMM(decode.input(INSTRUCTION))
+
+            val conditionalBranchPrediction = (prediction match {
+              case `STATIC` =>  imm.b_sext.msb
+              //case `DYNAMIC` => input(HISTORY_LINE).history.msb
+            })
+            decodePrediction.cmd.hadBranch := decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL || (decode.input(BRANCH_CTRL) === BranchCtrlEnum.B && conditionalBranchPrediction)
+
+            predictionJumpInterface.valid := decodePrediction.cmd.hadBranch && decode.arbitration.isFiring //TODO OH Doublon de priorité
+            predictionJumpInterface.payload := decode.input(PC) + ((decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
+
+
+//            if(catchAddressMisaligned) {
+//              predictionExceptionPort.valid := input(INSTRUCTION_READY) && input(PREDICTION_HAD_BRANCHED) && arbitration.isValid && predictionJumpInterface.payload(1 downto 0) =/= 0
+//              predictionExceptionPort.code := 0
+//              predictionExceptionPort.badAddr := predictionJumpInterface.payload
+//            }
+          }
         }
       }
     }
