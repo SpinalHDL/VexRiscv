@@ -122,7 +122,7 @@ object TestsWorkspace {
           ),
 //          new DivPlugin,
           new CsrPlugin(CsrPluginConfig.all(0x80000020l).copy(deterministicInteruptionEntry = false)),
-          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
+//          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = true,
             catchAddressMisaligned = true,

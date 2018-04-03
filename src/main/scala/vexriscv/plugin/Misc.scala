@@ -95,11 +95,12 @@ object RvcDecompressor{
 
 object StreamVexPimper{
   implicit class StreamFlushPimper[T <: Data](pimped : Stream[T]){
-    def m2sPipe(flush : Bool, collapsBubble : Boolean = true): Stream[T] = {
+    def m2sPipeWithFlush(flush : Bool, discardInput : Boolean = true, collapsBubble : Boolean = true): Stream[T] = {
       val ret = cloneOf(pimped)
 
       val rValid = RegInit(False)
       val rData = Reg(pimped.dataType)
+      if(!discardInput) rValid.clearWhen(flush)
 
       pimped.ready := (Bool(collapsBubble) && !ret.valid) || ret.ready
 
@@ -111,7 +112,7 @@ object StreamVexPimper{
       ret.valid := rValid
       ret.payload := rData
 
-      rValid.clearWhen(flush)
+      if(discardInput) rValid.clearWhen(flush)
 
       ret
     }

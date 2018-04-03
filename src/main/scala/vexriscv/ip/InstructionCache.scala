@@ -81,7 +81,7 @@ case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle 
   val data  =  ifGen(p.dataOnDecode) (Bits(p.cpuDataWidth bits))
   val error   =  Bool
   val mmuMiss   =  Bool
-  val illegalAccess =Bool
+  val illegalAccess = Bool
 
   override def asMaster(): Unit = {
     out(isValid, isUser, isStuck, pc)
