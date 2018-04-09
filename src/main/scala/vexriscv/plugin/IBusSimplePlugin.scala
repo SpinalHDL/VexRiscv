@@ -107,31 +107,18 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
 class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, pendingMax : Int = 7) extends IBusFetcherImpl(
     catchAccessFault = catchAccessFault,
-    pendingMax = 7,
     resetVector = BigInt(0x80000000l),
     keepPcPlus4 = false,
-    decodePcGen = false,
-    compressedGen = false,
+    decodePcGen = true,
+    compressedGen = true,
     cmdToRspStageCount = 1,
     rspStageGen = false,
     injectorReadyCutGen = false,
     relaxedPcCalculation = false,
     prediction = NONE,
-    catchAddressMisaligned = false,
+    catchAddressMisaligned = true,
     injectorStage = true){
   var iBus : IBusSimpleBus = null
-  def resetVector = BigInt(0x80000000l)
-  def keepPcPlus4 = false
-  def decodePcGen = false
-  def compressedGen = false
-  def cmdToRspStageCount = 1
-  def rspStageGen = false
-  def injectorReadyCutGen = false
-  def relaxedPcCalculation = false
-  def prediction : BranchPrediction = NONE
-  def catchAddressMisaligned = false
-  def injectorStage = true
-
 
   override def setup(pipeline: VexRiscv): Unit = {
     super.setup(pipeline)

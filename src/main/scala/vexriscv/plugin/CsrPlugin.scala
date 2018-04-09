@@ -379,7 +379,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         when(enable){
           fetcher.haltIt()
         }
-        val done = ! List(decode, execute, memory, writeBack).map(_.arbitration.isValid).orR && fetcher.nextPc()._1
+        val done = ! List(execute, memory, writeBack).map(_.arbitration.isValid).orR && fetcher.nextPc()._1
 //        val done = History(doneAsync, 0 to 0).andR
       }
 
@@ -532,10 +532,9 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       }
 
       //Manage WFI instructions
-      if(wfiGen) when(decode.arbitration.isValid && decode.input(ENV_CTRL) === EnvCtrlEnum.WFI){
+      if(wfiGen) when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.WFI){
         when(!interrupt){
-          fetcher.haltIt()
-          decode.arbitration.haltItself := True
+          execute.arbitration.haltItself := True
         }
       }
 

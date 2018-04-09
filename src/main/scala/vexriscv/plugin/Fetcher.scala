@@ -9,18 +9,17 @@ import scala.collection.mutable.ArrayBuffer
 
 
 
-abstract class IBusFetcherImpl(catchAccessFault : Boolean,
-                      pendingMax : Int = 7,
-                      resetVector : BigInt,
-                      keepPcPlus4 : Boolean,
-                      decodePcGen : Boolean,
-                      compressedGen : Boolean,
-                      cmdToRspStageCount : Int,
-                      rspStageGen : Boolean,
-                      injectorReadyCutGen : Boolean,
-                      relaxedPcCalculation : Boolean,
-                      prediction : BranchPrediction,
-                      catchAddressMisaligned : Boolean,
+abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
+                               val resetVector : BigInt,
+                               val keepPcPlus4 : Boolean,
+                               val decodePcGen : Boolean,
+                               val compressedGen : Boolean,
+                               val cmdToRspStageCount : Int,
+                               val rspStageGen : Boolean,
+                               val injectorReadyCutGen : Boolean,
+                               val relaxedPcCalculation : Boolean,
+                               val prediction : BranchPrediction,
+                               val catchAddressMisaligned : Boolean,
                       injectorStage : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
   var prefetchExceptionPort : Flow[ExceptionCause] = null
 
@@ -244,13 +243,12 @@ abstract class IBusFetcherImpl(catchAccessFault : Boolean,
     val injector = new Area {
       val inputBeforeHalt = condApply(if(decodePcGen) decompressor.output else iBusRsp.output, injectorReadyCutGen)(_.s2mPipe(flush))
       val decodeInput = if(injectorStage){
-        val inputBeforeStage =  inputBeforeHalt.haltWhen(fetcherHalt)
-        val decodeInput = inputBeforeStage.m2sPipeWithFlush(killLastStage)
-        decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), inputBeforeStage.rsp.inst)
+        val decodeInput = inputBeforeHalt.m2sPipeWithFlush(killLastStage)
+        decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), inputBeforeHalt.rsp.inst)
         decodeInput
       } else {
         inputBeforeHalt
-      }
+      }.haltWhen(fetcherHalt)
 
       if(decodePcGen){
         decodeNextPcValid := True

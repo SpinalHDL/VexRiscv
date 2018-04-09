@@ -174,6 +174,7 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
           is(1) {
             when(io.bus.cmd.wr) {
               insertDecodeInstruction := True
+              //TODO !!!!
               decode.arbitration.isValid.getDrivingReg setWhen (firstCycle)
               decode.arbitration.haltItself setWhen (secondCycle)
               io.bus.cmd.ready := !firstCycle && !secondCycle && execute.arbitration.isValid
