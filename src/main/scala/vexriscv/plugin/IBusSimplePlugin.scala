@@ -132,7 +132,9 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
     pipeline plug new FetchArea(pipeline) {
 
       val cmd = new Area {
-        import iBusCmd._
+        def input = fetchPc.output
+        def output = iBusRsp.input
+
         output << input.continueWhen(iBus.cmd.fire)
 
         //Avoid sending to many iBus cmd
@@ -161,12 +163,12 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
         rspBuffer.io.flush := flush
 
         val fetchRsp = FetchRsp()
-        fetchRsp.pc := input.payload
+        fetchRsp.pc := pipeline.last.payload
         fetchRsp.rsp := rspBuffer.io.pop.payload
         fetchRsp.rsp.error.clearWhen(!rspBuffer.io.pop.valid) //Avoid interference with instruction injection from the debug plugin
 
 
-        val join = StreamJoin(Seq(input, rspBuffer.io.pop), fetchRsp)
+        val join = StreamJoin(Seq(pipeline.last, rspBuffer.io.pop), fetchRsp)
         output << (if(rspStageGen) join.m2sPipeWithFlush(flush) else join)
       }
     }

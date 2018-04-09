@@ -172,13 +172,13 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
     })
 
 
-    val iBusCmd = new Area {
-      def input = fetchPc.output
-
-      // ...
-
-      val output = Stream(UInt(32 bits))
-    }
+//    val iBusCmd = new Area {
+//      def input = fetchPc.output
+//
+//      // ...
+//
+//      val output = Stream(UInt(32 bits))
+//    }
 
     case class FetchRsp() extends Bundle {
       val pc = UInt(32 bits)
@@ -188,21 +188,20 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
 
     val iBusRsp = new Area {
-      val inputStages = Vec(Stream(UInt(32 bits)), cmdToRspStageCount)
+      val input = Stream(UInt(32 bits))
+      val pipeline = Vec(Stream(UInt(32 bits)), cmdToRspStageCount)
       for(i <- 0 until cmdToRspStageCount) {
         //          val doFlush = if(i == cmdToRspStageCount- 1 && ???) killLastStage else flush
-        inputStages(i) << {i match {
-          case 0 => iBusCmd.output.m2sPipeWithFlush(flush, relaxedPcCalculation)
-          case _ => inputStages(i-1)/*.haltWhen(fetcherHalt)*/.m2sPipeWithFlush(flush)
+        pipeline(i) << {i match {
+          case 0 => input.m2sPipeWithFlush(flush, relaxedPcCalculation)
+          case _ => pipeline(i-1)/*.haltWhen(fetcherHalt)*/.m2sPipeWithFlush(flush)
         }}
       }
 
-      def input = inputStages.last
-
       // ...
 
-      val join = Stream(FetchRsp())
-      val output = if(rspStageGen) join.m2sPipeWithFlush(flush) else join
+      val outputBeforeStage = Stream(FetchRsp())
+      val output = if(rspStageGen) outputBeforeStage.m2sPipeWithFlush(flush) else outputBeforeStage
     }
 
     val decompressor = ifGen(decodePcGen)(new Area{
@@ -255,8 +254,8 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         decodeNextPc := decodePc.pcReg
       }else {
         val lastStageStream = if(injectorStage) inputBeforeHalt
-        else if(rspStageGen) iBusRsp.join
-        else if(cmdToRspStageCount > 1)iBusRsp.inputStages(cmdToRspStageCount-2)
+        else if(rspStageGen) iBusRsp.outputBeforeStage
+        else if(cmdToRspStageCount > 1)iBusRsp.pipeline(cmdToRspStageCount-2)
         else throw new Exception("Fetch should at least have two stages")
 
         //          when(fetcherHalt){
