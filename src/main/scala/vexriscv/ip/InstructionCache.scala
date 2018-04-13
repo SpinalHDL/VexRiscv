@@ -340,6 +340,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       lineLoader.valid := True
       lineLoader.address := mmuRsp.physicalAddress //Could be optimise if mmu not used
     }
+//    when(io.cpu)
 
     io.cpu.decode.error := hit.error
     io.cpu.decode.mmuMiss := mmuRsp.miss

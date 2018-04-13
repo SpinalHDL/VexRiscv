@@ -387,10 +387,17 @@ public:
 		if(bootPc != -1) top->VexRiscv->core->prefetch_pc = bootPc;
 		#else
 		if(bootPc != -1) {
-		    top->VexRiscv->IBusSimplePlugin_fetchPc_pcReg = bootPc;
-		    #ifdef COMPRESSED
-		    top->VexRiscv->IBusSimplePlugin_decodePc_pcReg = bootPc;
-		    #endif
+		    #ifdef IBUS_SIMPLE
+                top->VexRiscv->IBusSimplePlugin_fetchPc_pcReg = bootPc;
+                #ifdef COMPRESSED
+                top->VexRiscv->IBusSimplePlugin_decodePc_pcReg = bootPc;
+                #endif
+            #else
+                top->VexRiscv->IBusCachedPlugin_fetchPc_pcReg = bootPc;
+                #ifdef COMPRESSED
+                top->VexRiscv->IBusCachedPlugin_decodePc_pcReg = bootPc;
+                #endif
+            #endif
 		}
 		#endif
 

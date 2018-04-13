@@ -35,28 +35,28 @@ object TestsWorkspace {
 //            resetVector = 0x80000000l,
 //            relaxedPcCalculation = false
 //          ),
-          new IBusSimplePlugin(
-            interfaceKeepData = false,
-            catchAccessFault = true
-          ),
-//          new IBusCachedPlugin(
-//            config = InstructionCacheConfig(
-//              cacheSize = 1024*16,
-//              bytePerLine = 32,
-//              wayCount = 1,
-//              addressWidth = 32,
-//              cpuDataWidth = 32,
-//              memDataWidth = 32,
-//              catchIllegalAccess = true,
-//              catchAccessFault = true,
-//              catchMemoryTranslationMiss = true,
-//              asyncTagMemory = false,
-//              twoCycleRam = false
-//            ),
+//          new IBusSimplePlugin(
+//            interfaceKeepData = false,
+//            catchAccessFault = true
+//          ),
+          new IBusCachedPlugin(
+            config = InstructionCacheConfig(
+              cacheSize = 1024*16,
+              bytePerLine = 32,
+              wayCount = 1,
+              addressWidth = 32,
+              cpuDataWidth = 32,
+              memDataWidth = 32,
+              catchIllegalAccess = false,
+              catchAccessFault = false,
+              catchMemoryTranslationMiss = false,
+              asyncTagMemory = false,
+              twoCycleRam = false
+            )//,
 //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
 //              portTlbSize = 4
 //            )
-//          ),
+          ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = true,
 //            catchAccessFault = true,

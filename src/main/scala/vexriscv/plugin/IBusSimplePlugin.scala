@@ -163,12 +163,12 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
         rspBuffer.io.flush := flush
 
         val fetchRsp = FetchRsp()
-        fetchRsp.pc := pipeline.last.payload
+        fetchRsp.pc := inputPipeline.last.payload
         fetchRsp.rsp := rspBuffer.io.pop.payload
         fetchRsp.rsp.error.clearWhen(!rspBuffer.io.pop.valid) //Avoid interference with instruction injection from the debug plugin
 
 
-        val join = StreamJoin(Seq(pipeline.last, rspBuffer.io.pop), fetchRsp)
+        val join = StreamJoin(Seq(inputPipeline.last, rspBuffer.io.pop), fetchRsp)
         output << (if(rspStageGen) join.m2sPipeWithFlush(flush) else join)
       }
     }

@@ -189,12 +189,12 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
     val iBusRsp = new Area {
       val input = Stream(UInt(32 bits))
-      val pipeline = Vec(Stream(UInt(32 bits)), cmdToRspStageCount)
+      val inputPipeline = Vec(Stream(UInt(32 bits)), cmdToRspStageCount)
       for(i <- 0 until cmdToRspStageCount) {
         //          val doFlush = if(i == cmdToRspStageCount- 1 && ???) killLastStage else flush
-        pipeline(i) << {i match {
+        inputPipeline(i) << {i match {
           case 0 => input.m2sPipeWithFlush(flush, relaxedPcCalculation)
-          case _ => pipeline(i-1)/*.haltWhen(fetcherHalt)*/.m2sPipeWithFlush(flush)
+          case _ => inputPipeline(i-1)/*.haltWhen(fetcherHalt)*/.m2sPipeWithFlush(flush)
         }}
       }
 
@@ -255,7 +255,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       }else {
         val lastStageStream = if(injectorStage) inputBeforeHalt
         else if(rspStageGen) iBusRsp.outputBeforeStage
-        else if(cmdToRspStageCount > 1)iBusRsp.pipeline(cmdToRspStageCount-2)
+        else if(cmdToRspStageCount > 1)iBusRsp.inputPipeline(cmdToRspStageCount-2)
         else throw new Exception("Fetch should at least have two stages")
 
         //          when(fetcherHalt){
