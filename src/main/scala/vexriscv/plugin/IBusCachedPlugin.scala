@@ -50,10 +50,10 @@ class IBusCachedPlugin(config : InstructionCacheConfig, memoryTranslatorPortConf
 
     redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.decode, priority = 1) //Priority 1 will win against branch predictor
 
-    if(catchSomething) {
-      val exceptionService = pipeline.service(classOf[ExceptionService])
-      decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1)
-    }
+//    if(catchSomething) {
+//      val exceptionService = pipeline.service(classOf[ExceptionService])
+//      decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1)
+//    }
 
 //    if(pipeline.serviceExist(classOf[MemoryTranslator]))
 //      ??? //TODO
@@ -114,43 +114,52 @@ class IBusCachedPlugin(config : InstructionCacheConfig, memoryTranslatorPortConf
         cache.io.cpu.fetch.mmuBus.rsp.miss := False
       }
 
-      if (dataOnDecode) {
-        decode.insert(INSTRUCTION) := cache.io.cpu.decode.data
-      } else {
-        iBusRsp.outputBeforeStage.arbitrationFrom(iBusRsp.inputPipeline(0))
-        iBusRsp.outputBeforeStage.rsp.inst := cache.io.cpu.fetch.data
-        iBusRsp.outputBeforeStage.pc := iBusRsp.inputPipeline(0).payload
-      }
+      val missHalt = cache.io.cpu.fetch.isValid && cache.io.cpu.fetch.cacheMiss
+      iBusRsp.outputBeforeStage.arbitrationFrom(iBusRsp.inputPipeline(0).haltWhen(missHalt))
+      iBusRsp.outputBeforeStage.rsp.inst := cache.io.cpu.fetch.data
+      iBusRsp.outputBeforeStage.pc := iBusRsp.inputPipeline(0).payload
 
-      cache.io.cpu.decode.pc := injector.inputBeforeHalt.pc
-
-      val ownDecode = pipeline.plugins.filter(_.isInstanceOf[InstructionInjector]).foldLeft(True)(_ && !_.asInstanceOf[InstructionInjector].isInjecting(decode))
-      cache.io.cpu.decode.isValid := decode.arbitration.isValid && ownDecode
-      cache.io.cpu.decode.isStuck := !injector.inputBeforeHalt.ready
-      cache.io.cpu.decode.isUser := (if (privilegeService != null) privilegeService.isUser(decode) else False)
-      //    cache.io.cpu.decode.pc  := decode.input(PC)
-
-      redoBranch.valid := decode.arbitration.isValid && ownDecode && cache.io.cpu.decode.cacheMiss && !cache.io.cpu.decode.mmuMiss && !cache.io.cpu.decode.illegalAccess
+      cache.io.cpu.fill.valid   := missHalt && iBusRsp.readyForError
+      cache.io.cpu.fill.payload := cache.io.cpu.fetch.pc
+      redoBranch.valid   := (RegNext(cache.io.cpu.fill.valid  && !flush) init(False))
       redoBranch.payload := decode.input(PC)
-      when(redoBranch.valid) {
-        decode.arbitration.redoIt := True
-        decode.arbitration.flushAll := True
-      }
+//      if (dataOnDecode) {
+//        decode.insert(INSTRUCTION) := cache.io.cpu.decode.data
+//      } else {
+//        iBusRsp.outputBeforeStage.arbitrationFrom(iBusRsp.inputPipeline(0))
+//        iBusRsp.outputBeforeStage.rsp.inst := cache.io.cpu.fetch.data
+//        iBusRsp.outputBeforeStage.pc := iBusRsp.inputPipeline(0).payload
+//      }
+//
+//      cache.io.cpu.decode.pc := injector.inputBeforeHalt.pc
+//
+//      val ownDecode = pipeline.plugins.filter(_.isInstanceOf[InstructionInjector]).foldLeft(True)(_ && !_.asInstanceOf[InstructionInjector].isInjecting(decode))
+//      cache.io.cpu.decode.isValid := decode.arbitration.isValid && ownDecode
+//      cache.io.cpu.decode.isStuck := !injector.inputBeforeHalt.ready
+//      cache.io.cpu.decode.isUser := (if (privilegeService != null) privilegeService.isUser(decode) else False)
+//      //    cache.io.cpu.decode.pc  := decode.input(PC)
+//
+//      redoBranch.valid := decode.arbitration.isValid && ownDecode && cache.io.cpu.decode.cacheMiss && !cache.io.cpu.decode.mmuMiss && !cache.io.cpu.decode.illegalAccess
+//      redoBranch.payload := decode.input(PC)
+//      when(redoBranch.valid) {
+//        decode.arbitration.redoIt := True
+//        decode.arbitration.flushAll := True
+//      }
 
       //    val redo = RegInit(False) clearWhen(decode.arbitration.isValid) setWhen(redoBranch.valid)
       //    when(redoBranch.valid || redo){
       //      service(classOf[InterruptionInhibitor]).inhibateInterrupts()
       //    }
 
-      if (catchSomething) {
-        val accessFault = if (catchAccessFault) cache.io.cpu.decode.error else False
-        val mmuMiss = if (catchMemoryTranslationMiss) cache.io.cpu.decode.mmuMiss else False
-        val illegalAccess = if (catchIllegalAccess) cache.io.cpu.decode.illegalAccess else False
+//      if (catchSomething) {
+//        val accessFault = if (catchAccessFault) cache.io.cpu.decode.error else False
+//        val mmuMiss = if (catchMemoryTranslationMiss) cache.io.cpu.decode.mmuMiss else False
+//        val illegalAccess = if (catchIllegalAccess) cache.io.cpu.decode.illegalAccess else False
 
-        decodeExceptionPort.valid := decode.arbitration.isValid && ownDecode && (accessFault || mmuMiss || illegalAccess)
-        decodeExceptionPort.code := mmuMiss ? U(14) | 1
-        decodeExceptionPort.badAddr := decode.input(PC)
-      }
+//        decodeExceptionPort.valid := decode.arbitration.isValid && ownDecode && (accessFault || mmuMiss || illegalAccess)
+//        decodeExceptionPort.code := mmuMiss ? U(14) | 1
+//        decodeExceptionPort.badAddr := decode.input(PC)
+//      }
 
       memory plug new Area {
 

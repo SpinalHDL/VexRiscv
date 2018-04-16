@@ -17,8 +17,11 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    catchAccessFault : Boolean,
                                    catchMemoryTranslationMiss : Boolean,
                                    asyncTagMemory : Boolean,
+                                   twoCycleCache : Boolean = false,
                                    twoCycleRam : Boolean = false,
                                    preResetFlush : Boolean = false){
+
+  assert(!(twoCycleRam && !twoCycleCache))
 
   def dataOnDecode = twoCycleRam && wayCount > 1
   def burstSize = bytePerLine*8/memDataWidth
@@ -63,10 +66,12 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
   val pc = UInt(p.addressWidth bits)
   val data    =  Bits(p.cpuDataWidth bits)
   val mmuBus  = MemoryTranslatorBus()
+  val cacheMiss, error, mmuMiss, illegalAccess,isUser  = ifGen(!p.twoCycleCache)(Bool)
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, pc)
-    inWithNull(data)
+    inWithNull(error,mmuMiss,illegalAccess,data, cacheMiss)
+    outWithNull(isUser)
     slaveWithNull(mmuBus)
   }
 }
@@ -74,19 +79,15 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
 
 case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle with IMasterSlave {
   val isValid = Bool
-  val isUser  = Bool
   val isStuck  = Bool
   val pc = UInt(p.addressWidth bits)
-  val cacheMiss  = Bool
   val data  =  ifGen(p.dataOnDecode) (Bits(p.cpuDataWidth bits))
-  val error   =  Bool
-  val mmuMiss   =  Bool
-  val illegalAccess = Bool
+  val cacheMiss, error, mmuMiss, illegalAccess, isUser  = ifGen(p.twoCycleCache)(Bool)
 
   override def asMaster(): Unit = {
-    out(isValid, isUser, isStuck, pc)
-    in(cacheMiss)
-    inWithNull(error,mmuMiss,illegalAccess,data)
+    out(isValid, isStuck, pc)
+    outWithNull(isUser)
+    inWithNull(error,mmuMiss,illegalAccess,data, cacheMiss)
   }
 }
 
@@ -94,9 +95,10 @@ case class InstructionCacheCpuBus(p : InstructionCacheConfig) extends Bundle wit
   val prefetch = InstructionCacheCpuPrefetch(p)
   val fetch = InstructionCacheCpuFetch(p)
   val decode = InstructionCacheCpuDecode(p)
+  val fill = Flow(UInt(p.addressWidth bits))
 
   override def asMaster(): Unit = {
-    master(prefetch, fetch, decode)
+    master(prefetch, fetch, decode, fill)
   }
 }
 
@@ -218,6 +220,11 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     val address = Reg(UInt(addressWidth bits))
     val hadError = RegInit(False) clearWhen(fire)
 
+    when(io.cpu.fill.valid){
+      valid := True
+      address := io.cpu.fill.payload
+    }
+
     io.cpu.prefetch.haltIt setWhen(valid)
 
     val flushCounter = Reg(UInt(log2Up(wayLineCount) + 1 bit)) init(if(preResetFlush) wayLineCount else 0)
@@ -311,10 +318,21 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     io.cpu.fetch.mmuBus.cmd.isValid := io.cpu.fetch.isValid
     io.cpu.fetch.mmuBus.cmd.virtualAddress := io.cpu.fetch.pc
     io.cpu.fetch.mmuBus.cmd.bypassTranslation := False
+
+    val resolution = ifGen(!twoCycleCache)( new Area{
+      def stage[T <: Data](that : T) = RegNextWhen(that,!io.cpu.decode.isStuck)
+      val mmuRsp = stage(io.cpu.fetch.mmuBus.rsp)
+
+      io.cpu.fetch.cacheMiss := !hit.valid
+      io.cpu.fetch.error := hit.error
+      io.cpu.fetch.mmuMiss := mmuRsp.miss
+      io.cpu.fetch.illegalAccess := !mmuRsp.allowExecute || (io.cpu.fetch.isUser && !mmuRsp.allowUser)
+    })
   }
 
 
-  val decodeStage = new Area{
+
+  val decodeStage = ifGen(twoCycleCache) (new Area{
     def stage[T <: Data](that : T) = RegNextWhen(that,!io.cpu.decode.isStuck)
     val mmuRsp = stage(io.cpu.fetch.mmuBus.rsp)
 
@@ -335,16 +353,16 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }
 
     io.cpu.decode.cacheMiss := !hit.valid
-    when( io.cpu.decode.isValid && io.cpu.decode.cacheMiss){
-      io.cpu.prefetch.haltIt := True
-      lineLoader.valid := True
-      lineLoader.address := mmuRsp.physicalAddress //Could be optimise if mmu not used
-    }
+//    when( io.cpu.decode.isValid && io.cpu.decode.cacheMiss){
+//      io.cpu.prefetch.haltIt := True
+//      lineLoader.valid := True
+//      lineLoader.address := mmuRsp.physicalAddress //Could be optimise if mmu not used
+//    }
 //    when(io.cpu)
 
     io.cpu.decode.error := hit.error
     io.cpu.decode.mmuMiss := mmuRsp.miss
     io.cpu.decode.illegalAccess := !mmuRsp.allowExecute || (io.cpu.decode.isUser && !mmuRsp.allowUser)
-  }
+  })
 }
 

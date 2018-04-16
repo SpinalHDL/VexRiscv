@@ -44,12 +44,12 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
   }
 
 
-  var decodeExceptionPort : Flow[ExceptionCause] = null
+//  var decodeExceptionPort : Flow[ExceptionCause] = null
   override def setup(pipeline: VexRiscv): Unit = {
     fetcherHalt = False
     if(catchAccessFault || catchAddressMisaligned) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
-      decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1).setName("iBusErrorExceptionnPort")
+//      decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1).setName("iBusErrorExceptionnPort")
     }
 
     pipeline(RVC_GEN) = compressedGen
@@ -200,8 +200,10 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
       // ...
 
+      val readyForError = True
       val outputBeforeStage = Stream(FetchRsp())
       val output = if(rspStageGen) outputBeforeStage.m2sPipeWithFlush(flush) else outputBeforeStage
+      if(rspStageGen) readyForError.clearWhen(output.valid)
     }
 
     val decompressor = ifGen(decodePcGen)(new Area{
@@ -209,7 +211,6 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       val output = Stream(FetchRsp())
 
       val bufferValid = RegInit(False)
-      val bufferError = Reg(Bool)
       val bufferData = Reg(Bits(16 bits))
 
       val raw = Mux(
@@ -219,11 +220,10 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       )
       val isRvc = raw(1 downto 0) =/= 3
       val decompressed = RvcDecompressor(raw(15 downto 0))
-      output.valid := isRvc ? (bufferValid || input.valid) | (input.valid && (bufferValid || !input.pc(1)))
+      output.valid := (isRvc ? (bufferValid || input.valid) | (input.valid && (bufferValid || !input.pc(1))))
       output.pc := input.pc
       output.isRvc := isRvc
       output.rsp.inst := isRvc ? decompressed | raw
-      output.rsp.error := (bufferValid && bufferError) || (input.valid && input.rsp.error && (!isRvc || (isRvc && !bufferValid)))
       input.ready := (bufferValid ? (!isRvc && output.ready) | (input.pc(1) || output.ready))
 
 
@@ -231,19 +231,21 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       when(input.ready){
         when(input.valid) {
           bufferValid := !(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1))
-          bufferError := input.rsp.error
           bufferData := input.rsp.inst(31 downto 16)
         }
       }
       bufferValid.clearWhen(flush)
+      iBusRsp.readyForError.clearWhen(bufferValid && isRvc)
     })
 
     def condApply[T](that : T, cond : Boolean)(func : (T) => T) = if(cond)func(that) else that
     val injector = new Area {
       val inputBeforeHalt = condApply(if(decodePcGen) decompressor.output else iBusRsp.output, injectorReadyCutGen)(_.s2mPipe(flush))
+      if(injectorReadyCutGen) iBusRsp.readyForError.clearWhen(inputBeforeHalt.valid)
       val decodeInput = if(injectorStage){
         val decodeInput = inputBeforeHalt.m2sPipeWithFlush(killLastStage)
         decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), inputBeforeHalt.rsp.inst)
+        iBusRsp.readyForError.clearWhen(decodeInput.valid)
         decodeInput
       } else {
         inputBeforeHalt
@@ -273,11 +275,11 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       decode.insert(INSTRUCTION_READY) := True
       if(compressedGen) decode.insert(IS_RVC) := decodeInput.isRvc
 
-      if(catchAccessFault){
-        decodeExceptionPort.valid := decode.arbitration.isValid && decodeInput.rsp.error
-        decodeExceptionPort.code  := 1
-        decodeExceptionPort.badAddr := decode.input(PC)
-      }
+//      if(catchAccessFault){
+//        decodeExceptionPort.valid := decode.arbitration.isValid && decodeInput.rsp.error
+//        decodeExceptionPort.code  := 1
+//        decodeExceptionPort.badAddr := decode.input(PC)
+//      }
     }
 
     prediction match {
