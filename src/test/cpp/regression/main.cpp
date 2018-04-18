@@ -430,8 +430,6 @@ public:
 				top->eval();
 
 
-				dump(i + 1);
-
 
 
 				if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
@@ -443,6 +441,8 @@ public:
 				}
 
 				for(SimElement* simElement : simElements) simElement->preCycle();
+
+				dump(i + 1);
 
 				if(withInstructionReadCheck){
 					if(top->VexRiscv->decode_arbitration_isValid && !top->VexRiscv->decode_arbitration_haltItself && !top->VexRiscv->decode_arbitration_flushAll){
