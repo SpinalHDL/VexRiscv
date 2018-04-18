@@ -334,10 +334,8 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     bus.DAT_MOSI := cmdBridge.data
 
     cmdBridge.ready := bus.ACK
-    when(cmdBridge.valid) {
-      bus.CYC := True
-      bus.STB := True
-    }
+    bus.CYC := cmdBridge.valid
+    bus.STB := cmdBridge.valid
 
     rsp.valid := RegNext(bus.WE && bus.ACK) init(False)
     rsp.data  := RegNext(bus.DAT_MISO)

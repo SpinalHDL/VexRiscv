@@ -178,6 +178,8 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
     bus.SEL := "1111"
     bus.WE  := False
     bus.DAT_MOSI.assignDontCare()
+    bus.CYC := False
+    bus.STB := False
     when(cmd.valid || pending){
       bus.CYC := True
       bus.STB := True
