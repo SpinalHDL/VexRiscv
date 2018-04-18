@@ -304,7 +304,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
   def toWishbone(): Wishbone = {
     val wishboneConfig = p.getWishboneConfig()
     val bus = Wishbone(wishboneConfig)
-    val counter = Reg(UInt(log2Up(p.burstSize) bits))
+    val counter = Reg(UInt(log2Up(p.burstSize) bits)) init(0)
 
     val cmdBridge = Stream (DataCacheMemCmd(p))
     cmdBridge.valid := cmd.valid
@@ -333,11 +333,11 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     bus.WE  := cmdBridge.wr
     bus.DAT_MOSI := cmdBridge.data
 
-    cmdBridge.ready := bus.ACK
+    cmdBridge.ready := cmdBridge.valid && bus.ACK
     bus.CYC := cmdBridge.valid
     bus.STB := cmdBridge.valid
 
-    rsp.valid := RegNext(bus.WE && bus.ACK) init(False)
+    rsp.valid := RegNext(cmdBridge.valid && !bus.WE && bus.ACK) init(False)
     rsp.data  := RegNext(bus.DAT_MISO)
     rsp.error := False //TODO
     bus

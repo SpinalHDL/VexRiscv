@@ -168,7 +168,7 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
   def toWishbone(): Wishbone = {
     val wishboneConfig = p.getWishboneConfig()
     val bus = Wishbone(wishboneConfig)
-    val counter = Reg(UInt(log2Up(p.burstSize) bits))
+    val counter = Reg(UInt(log2Up(p.burstSize) bits)) init(0)
     val pending = counter =/= 0
     val lastCycle = counter === counter.maxValue
 
@@ -188,8 +188,8 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
       }
     }
 
-    cmd.ready := !pending
-    rsp.valid := RegNext(bus.ACK) init(False)
+    cmd.ready := cmd.valid && bus.ACK
+    rsp.valid := RegNext(bus.CYC && bus.ACK) init(False)
     rsp.data := RegNext(bus.DAT_MISO)
     rsp.error := False //TODO
     bus
