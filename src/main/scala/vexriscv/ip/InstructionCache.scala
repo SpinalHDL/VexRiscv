@@ -44,7 +44,7 @@ case class InstructionCacheConfig( cacheSize : Int,
   )
 
   def getWishboneConfig() = WishboneConfig(
-    addressWidth = 32,
+    addressWidth = 30,
     dataWidth = 32,
     selWidth = 4,
     useSTALL = false,
@@ -172,7 +172,7 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
     val pending = counter =/= 0
     val lastCycle = counter === counter.maxValue
 
-    bus.ADR := (cmd.address >> widthOf(counter) + 2) @@ counter @@ "00"
+    bus.ADR := (cmd.address >> widthOf(counter) + 2) @@ counter
     bus.CTI := lastCycle ? B"111" | B"010"
     bus.BTE := "00"
     bus.SEL := "1111"

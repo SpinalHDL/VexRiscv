@@ -48,7 +48,7 @@ case class DataCacheConfig( cacheSize : Int,
   )
 
   def getWishboneConfig() = WishboneConfig(
-    addressWidth = 32,
+    addressWidth = 30,
     dataWidth = 32,
     selWidth = 4,
     useSTALL = false,
@@ -326,7 +326,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     }
 
 
-    bus.ADR := cmdBridge.address
+    bus.ADR := cmdBridge.address >> 2
     bus.CTI := Mux(isBurst, cmdBridge.last ? B"111" | B"010", B"000")
     bus.BTE := "00"
     bus.SEL := cmdBridge.wr ? cmdBridge.mask | "1111"

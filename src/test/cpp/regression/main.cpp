@@ -710,12 +710,11 @@ public:
 	virtual void preCycle(){
 	    top->iBusWishbone_DAT_MISO = VL_RANDOM_I(32);
 		if (top->iBusWishbone_CYC && top->iBusWishbone_STB && top->iBusWishbone_ACK) {
-			assertEq(top->iBusWishbone_ADR & 3,0);
 			if(top->iBusWishbone_WE){
 
 			} else {
 		        bool error;
-			    ws->iBusAccess(top->iBusWishbone_ADR,&top->iBusWishbone_DAT_MISO,&error);
+			    ws->iBusAccess(top->iBusWishbone_ADR << 2,&top->iBusWishbone_DAT_MISO,&error);
 			    top->iBusWishbone_ERR = error;
 			}
 		}
@@ -848,13 +847,12 @@ public:
 	virtual void preCycle(){
 	    top->dBusWishbone_DAT_MISO = VL_RANDOM_I(32);
 		if (top->dBusWishbone_CYC && top->dBusWishbone_STB && top->dBusWishbone_ACK) {
-			assertEq(top->dBusWishbone_ADR & 3,0);
 			if(top->dBusWishbone_WE){
 			    bool dummy;
-                ws->dBusAccess(top->dBusWishbone_ADR,1,2,top->dBusWishbone_SEL,&top->dBusWishbone_DAT_MOSI,&dummy);
+                ws->dBusAccess(top->dBusWishbone_ADR << 2 ,1,2,top->dBusWishbone_SEL,&top->dBusWishbone_DAT_MOSI,&dummy);
 			} else {
 			    bool error;
-			    ws->dBusAccess(top->dBusWishbone_ADR,0,2,0xF,&top->dBusWishbone_DAT_MISO,&error);
+			    ws->dBusAccess(top->dBusWishbone_ADR << 2,0,2,0xF,&top->dBusWishbone_DAT_MISO,&error);
                 top->dBusWishbone_ERR = error;
 			}
 		}
