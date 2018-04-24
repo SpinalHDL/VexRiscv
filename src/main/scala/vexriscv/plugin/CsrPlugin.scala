@@ -312,7 +312,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         val base = Reg(UInt(2 bits)) init(U"01") allowUnsetRegToAvoidLatch
         val extensions = Reg(Bits(26 bits)) init(misaExtensionsInit) allowUnsetRegToAvoidLatch
       }
-      val mtvec = RegInit(U(mtvecInit,xlen bits)) allowUnsetRegToAvoidLatch
+      val mtvec = Reg(UInt(xlen bits)).allowUnsetRegToAvoidLatch
+      if(mtvecInit != null) mtvec init(mtvecInit)
       val mepc = Reg(UInt(xlen bits))
       val mstatus = new Area{
         val MIE, MPIE = RegInit(False)
