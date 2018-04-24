@@ -23,6 +23,9 @@ object KeepAttribute{
 class PcManagerSimplePlugin(resetVector       : BigInt,
                             relaxedPcCalculation : Boolean = false,
                             keepPcPlus4 : Boolean = true) extends Plugin[VexRiscv] with JumpService{
+
+  var externalResetVector : UInt = null
+
   //FetchService interface
   case class JumpInfo(interface :  Flow[UInt], stage: Stage, priority : Int)
   val jumpInfos = ArrayBuffer[JumpInfo]()
@@ -35,6 +38,7 @@ class PcManagerSimplePlugin(resetVector       : BigInt,
 
   override def setup(pipeline: VexRiscv): Unit = {
     if(!relaxedPcCalculation) pipeline.unremovableStages += pipeline.prefetch
+    if(resetVector == null) externalResetVector = in(UInt(32 bits).setName("externalResetVector"))
   }
 
 
@@ -67,7 +71,7 @@ class PcManagerSimplePlugin(resetVector       : BigInt,
       arbitration.isValid := True
 
       //PC calculation without Jump
-      val pcReg = Reg(UInt(32 bits)) init(resetVector) addAttribute(Verilator.public)
+      val pcReg = Reg(UInt(32 bits)) init(if(resetVector != null) resetVector else externalResetVector) addAttribute(Verilator.public)
       val pcPlus4 = pcReg + 4
       if(keepPcPlus4) KeepAttribute(pcPlus4)
       when(arbitration.isFiring){
@@ -78,7 +82,7 @@ class PcManagerSimplePlugin(resetVector       : BigInt,
       val jump = if(jumpInfos.length != 0) new Area {
         val sortedByStage = jumpInfos.sortWith((a, b) => {
           (pipeline.indexOf(a.stage) > pipeline.indexOf(b.stage)) ||
-          (pipeline.indexOf(a.stage) == pipeline.indexOf(b.stage) && a.priority > b.priority)
+            (pipeline.indexOf(a.stage) == pipeline.indexOf(b.stage) && a.priority > b.priority)
         })
         val valids = sortedByStage.map(_.interface.valid)
         val pcs = sortedByStage.map(_.interface.payload)
@@ -109,7 +113,7 @@ class PcManagerSimplePlugin(resetVector       : BigInt,
       arbitration.isValid := True
 
       //PC calculation without Jump
-      val pcReg = Reg(UInt(32 bits)) init(resetVector) addAttribute(Verilator.public)
+      val pcReg = Reg(UInt(32 bits)) init(if(resetVector != null) resetVector else externalResetVector) addAttribute(Verilator.public)
       val inc = RegInit(False)
       val pcBeforeJumps = pcReg + (inc ## B"00").asUInt
       insert(PC_CALC_WITHOUT_JUMP) := pcBeforeJumps
