@@ -2,8 +2,9 @@ package vexriscv.demo
 
 import spinal.core._
 import spinal.lib.eda.bench._
+import spinal.lib.eda.icestorm.IcestormStdTargets
 import vexriscv.VexRiscv
-import vexriscv.plugin.DecoderSimplePlugin
+import vexriscv.plugin.{DecoderSimplePlugin, KeepAttribute}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -14,6 +15,11 @@ object VexRiscvSynthesisBench {
   def main(args: Array[String]) {
 
     def wrap(that : => Component) : Component = that
+//    def wrap(that : => Component) : Component = {
+//      val c = that
+//      c.getAllIo.foreach(io => KeepAttribute(io.asDirectionLess()))
+//      c
+//    }
 //    Wrap with input/output registers
 //        def wrap(that : => Component) : Component = {
 //          //new WrapWithReg.Wrapper(that)
@@ -105,8 +111,9 @@ object VexRiscvSynthesisBench {
     ) ++ AlteraStdTargets(
       quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin",
       quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin"
-    )
+    ) ++  IcestormStdTargets()
 
+//    val targets = IcestormStdTargets()
     Bench(rtls, targets, "/eda/tmp/")
   }
 }

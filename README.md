@@ -67,21 +67,25 @@ VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass, no interrupt) ->
   Artix 7    -> 346 Mhz 481 LUT 539 FF
   Cyclone V  -> 201 Mhz 347 ALMs
   Cyclone IV -> 190 Mhz 673 LUT 529 FF 
+  iCE40      -> 81 Mhz 1130 LC
   
 VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass) ->
   Artix 7    -> 340 Mhz 562 LUT 589 FF 
   Cyclone V  -> 202 Mhz 387 ALMs
   Cyclone IV -> 180 Mhz 780 LUT 579 FF 
+  iCE40      -> 71 Mhz 1278 LC
   
 VexRiscv small and productive (RV32I, 0.82 DMIPS/Mhz)  ->
   Artix 7    -> 327 Mhz 698 LUT 558 FF 
   Cyclone V  -> 158 Mhz 524 ALMs
   Cyclone IV -> 146 Mhz 1,061 LUT 552 FF 
-
+  iCE40      -> 55 Mhz 1541 LC
+  
 VexRiscv small and productive with I$ (RV32I, 0.72 DMIPS/Mhz, 4KB-I$)  ->
   Artix 7    -> 331 Mhz 727 LUT 600 FF 
   Cyclone V  -> 152 Mhz 536 ALMs
   Cyclone IV -> 156 Mhz 1,075 LUT 565 FF 
+  iCE40      -> 54 Mhz 1686 LC
 
 VexRiscv full no cache (RV32IM, 1.22 DMIPS/Mhz, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
   Artix 7    -> 295 Mhz 1399 LUT 971 FF 
