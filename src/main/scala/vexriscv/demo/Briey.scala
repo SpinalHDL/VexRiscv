@@ -389,6 +389,21 @@ object Briey{
   }
 }
 
+//DE1-SoC with memory init
+object BrieyWithMemoryInit{
+  def main(args: Array[String]) {
+    val config = SpinalConfig()
+    config.generateVerilog({
+      val toplevel = new Briey(BrieyConfig.default)
+      toplevel.axi.vgaCtrl.vga.ctrl.io.error.addAttribute(Verilator.public)
+      toplevel.axi.vgaCtrl.vga.ctrl.io.frameStart.addAttribute(Verilator.public)
+      HexTools.initRam(toplevel.axi.ram.ram, "src/main/ressource/hex/muraxDemo.hex", 0x80000000l)
+      toplevel
+    })
+  }
+}
+
+
 //DE0-Nano
 object BrieyDe0Nano{
   def main(args: Array[String]) {
