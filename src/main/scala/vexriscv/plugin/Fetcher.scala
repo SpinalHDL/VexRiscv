@@ -27,9 +27,9 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
   assert(cmdToRspStageCount >= 1)
   assert(!(compressedGen && !decodePcGen))
   var fetcherHalt : Bool = null
-  lazy val decodeNextPcValid = Bool
+  lazy val decodeNextPcValid = Bool //TODO remove me ?
   lazy val decodeNextPc = UInt(32 bits)
-  def nextPc() = (decodeNextPcValid, decodeNextPc)
+  def nextPc() = (False, decodeNextPc)
 
   var predictionJumpInterface : Flow[UInt] = null
 
@@ -230,7 +230,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       bufferValid clearWhen(output.fire)
       when(input.ready){
         when(input.valid) {
-          bufferValid := !(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1))
+          bufferValid := !(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1) && output.ready)
           bufferData := input.rsp.inst(31 downto 16)
         }
       }
@@ -238,18 +238,19 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       iBusRsp.readyForError.clearWhen(bufferValid && isRvc)
     })
 
+    //TODO never colalpse buble of the last stage
     def condApply[T](that : T, cond : Boolean)(func : (T) => T) = if(cond)func(that) else that
     val injector = new Area {
       val inputBeforeHalt = condApply(if(decodePcGen) decompressor.output else iBusRsp.output, injectorReadyCutGen)(_.s2mPipe(flush))
       if(injectorReadyCutGen) iBusRsp.readyForError.clearWhen(inputBeforeHalt.valid)
-      val decodeInput = if(injectorStage){
-        val decodeInput = inputBeforeHalt.m2sPipeWithFlush(killLastStage)
+      val decodeInput = (if(injectorStage){
+        val decodeInput = inputBeforeHalt.m2sPipeWithFlush(killLastStage, collapsBubble = false)
         decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), inputBeforeHalt.rsp.inst)
         iBusRsp.readyForError.clearWhen(decodeInput.valid)
         decodeInput
       } else {
         inputBeforeHalt
-      }.haltWhen(fetcherHalt)
+      }).haltWhen(fetcherHalt)
 
       if(decodePcGen){
         decodeNextPcValid := True

@@ -28,6 +28,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, memoryTranslatorPortConf
   var mmuBus : MemoryTranslatorBus = null
   var privilegeService : PrivilegeService = null
   var redoBranch : Flow[UInt] = null
+  var decodeExceptionPort : Flow[ExceptionCause] = null
 
   object FLUSH_ALL extends Stageable(Bool)
   object IBUS_ACCESS_ERROR extends Stageable(Bool)
@@ -50,10 +51,10 @@ class IBusCachedPlugin(config : InstructionCacheConfig, memoryTranslatorPortConf
 
     redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.decode, priority = 1) //Priority 1 will win against branch predictor
 
-//    if(catchSomething) {
-//      val exceptionService = pipeline.service(classOf[ExceptionService])
-//      decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1)
-//    }
+    if(catchSomething) {
+      val exceptionService = pipeline.service(classOf[ExceptionService])
+      decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1)
+    }
 
 //    if(pipeline.serviceExist(classOf[MemoryTranslator]))
 //      ??? //TODO
@@ -82,6 +83,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, memoryTranslatorPortConf
     }
   }
 
+
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
@@ -99,7 +101,7 @@ class IBusCachedPlugin(config : InstructionCacheConfig, memoryTranslatorPortConf
 
       //Connect fetch cache side
       cache.io.cpu.fetch.isValid := iBusRsp.inputPipeline(0).valid
-      cache.io.cpu.fetch.isStuck := !iBusRsp.inputPipeline(0).ready
+      cache.io.cpu.fetch.isStuck := !iBusRsp.input.ready
       cache.io.cpu.fetch.pc := iBusRsp.inputPipeline(0).payload
 
       if (mmuBus != null) {
@@ -114,15 +116,43 @@ class IBusCachedPlugin(config : InstructionCacheConfig, memoryTranslatorPortConf
         cache.io.cpu.fetch.mmuBus.rsp.miss := False
       }
 
-      val missHalt = cache.io.cpu.fetch.isValid && cache.io.cpu.fetch.cacheMiss
-      iBusRsp.outputBeforeStage.arbitrationFrom(iBusRsp.inputPipeline(0).haltWhen(missHalt))
+//      val missHalt = cache.io.cpu.fetch.isValid && cache.io.cpu.fetch.cacheMiss
+      var issueDetected = False
+
+      val redoFetch = False //RegNext(False) init(False)
+      when(cache.io.cpu.fetch.isValid && cache.io.cpu.fetch.cacheMiss && !issueDetected){
+        issueDetected \= True
+        redoFetch := iBusRsp.readyForError
+//        if(decodePcGen) {
+//          redoFetch := !flush && iBusRsp.readyForError
+//        } else {
+//          redoFetch := !flush && iBusRsp.readyForError
+//        }
+      }
+      cache.io.cpu.fill.valid  := redoFetch
+      redoBranch.valid   := redoFetch
+      assert(decodePcGen == compressedGen)
+      redoBranch.payload := (if(decodePcGen) decode.input(PC) else cache.io.cpu.fetch.pc)
+      cache.io.cpu.fill.payload := cache.io.cpu.fetch.pc
+
+      if(catchSomething){
+//        val missHalt = cache.io.cpu.fetch.isValid && cache.io.cpu.fetch.cacheMiss
+
+        decodeExceptionPort.valid := False
+        decodeExceptionPort.code  := 1
+        decodeExceptionPort.badAddr := cache.io.cpu.fetch.pc
+        when(cache.io.cpu.fetch.isValid && cache.io.cpu.fetch.error && !issueDetected){
+          issueDetected \= True
+          decodeExceptionPort.valid  := iBusRsp.readyForError
+        }
+      }
+
+
+      iBusRsp.outputBeforeStage.arbitrationFrom(iBusRsp.inputPipeline(0).haltWhen(issueDetected))
       iBusRsp.outputBeforeStage.rsp.inst := cache.io.cpu.fetch.data
       iBusRsp.outputBeforeStage.pc := iBusRsp.inputPipeline(0).payload
 
-      cache.io.cpu.fill.valid   := missHalt && iBusRsp.readyForError
-      cache.io.cpu.fill.payload := cache.io.cpu.fetch.pc
-      redoBranch.valid   := (RegNext(cache.io.cpu.fill.valid  && !flush) init(False))
-      redoBranch.payload := decode.input(PC)
+
 //      if (dataOnDecode) {
 //        decode.insert(INSTRUCTION) := cache.io.cpu.decode.data
 //      } else {

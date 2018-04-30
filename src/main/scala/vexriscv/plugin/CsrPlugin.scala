@@ -379,7 +379,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         when(enable){
           fetcher.haltIt()
         }
-        val done = ! List(execute, memory, writeBack).map(_.arbitration.isValid).orR && fetcher.nextPc()._1
+        val done = ! List(execute, memory, writeBack).map(_.arbitration.isValid).orR && !fetcher.nextPc()._1
 //        val done = History(doneAsync, 0 to 0).andR
       }
 
