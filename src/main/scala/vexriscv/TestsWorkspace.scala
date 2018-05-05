@@ -35,28 +35,28 @@ object TestsWorkspace {
 //            resetVector = 0x80000000l,
 //            relaxedPcCalculation = false
 //          ),
-//          new IBusSimplePlugin(
-//            interfaceKeepData = false,
-//            catchAccessFault = true
-//          ),
-          new IBusCachedPlugin(
-            config = InstructionCacheConfig(
-              cacheSize = 1024*16,
-              bytePerLine = 32,
-              wayCount = 1,
-              addressWidth = 32,
-              cpuDataWidth = 32,
-              memDataWidth = 32,
-              catchIllegalAccess = false,
-              catchAccessFault = true,
-              catchMemoryTranslationMiss = false,
-              asyncTagMemory = false,
-              twoCycleRam = false
-            )//,
+          new IBusSimplePlugin(
+            interfaceKeepData = false,
+            catchAccessFault = true
+          ),
+//          new IBusCachedPlugin(
+//            config = InstructionCacheConfig(
+//              cacheSize = 1024*16,
+//              bytePerLine = 32,
+//              wayCount = 1,
+//              addressWidth = 32,
+//              cpuDataWidth = 32,
+//              memDataWidth = 32,
+//              catchIllegalAccess = false,
+//              catchAccessFault = true,
+//              catchMemoryTranslationMiss = false,
+//              asyncTagMemory = false,
+//              twoCycleRam = false
+//            )//,
 //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
 //              portTlbSize = 4
 //            )
-          ),
+//          ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = true,
 //            catchAccessFault = true,
@@ -122,7 +122,7 @@ object TestsWorkspace {
           ),
 //          new DivPlugin,
           new CsrPlugin(CsrPluginConfig.all(0x80000020l).copy(deterministicInteruptionEntry = false)),
-//          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
+          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = true,
             catchAddressMisaligned = true,

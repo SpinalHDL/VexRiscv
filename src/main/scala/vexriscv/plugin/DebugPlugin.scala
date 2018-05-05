@@ -105,6 +105,8 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
   var io : DebugExtensionIo = null
   val injectionAsks = ArrayBuffer[(Stage, Bool)]()
   var isInjectingOnDecode : Bool = null
+  var injectionPort : Stream[Bits] = null
+
   override def isInjecting(stage: Stage) : Bool = if(stage == pipeline.decode) isInjectingOnDecode else False
 
   object IS_EBREAK extends Stageable(Bool)
@@ -126,6 +128,7 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
     ))
 
     isInjectingOnDecode = Bool()
+    injectionPort = pipeline.service(classOf[IBusFetcher]).getInjectionPort()
   }
 
 
@@ -174,34 +177,38 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
           is(1) {
             when(io.bus.cmd.wr) {
               insertDecodeInstruction := True
-              //TODO !!!!
-              decode.arbitration.isValid.getDrivingReg setWhen (firstCycle)
-              decode.arbitration.haltItself setWhen (secondCycle)
-              io.bus.cmd.ready := !firstCycle && !secondCycle && execute.arbitration.isValid
+//              decode.arbitration.isValid.getDrivingReg setWhen (firstCycle)
+//              decode.arbitration.haltItself setWhen (secondCycle)
+//              io.bus.cmd.ready := !firstCycle && !secondCycle && execute.arbitration.isValid
+              io.bus.cmd.ready := injectionPort.fire
             }
           }
         }
       }
 
-      Component.current.addPrePopTask(() => {
-        //Check if the decode instruction is driven by a register
-        val instructionDriver = try {decode.input(INSTRUCTION).getDrivingReg} catch { case _ : Throwable => null}
-        if(instructionDriver != null){ //If yes =>
-          //Insert the instruction by writing the "fetch to decode instruction register",
-          // Work even if it need to cross some hierarchy (caches)
-          instructionDriver.component.rework {
-            when(insertDecodeInstruction.pull()) {
-              instructionDriver := io.bus.cmd.data.pull()
-            }
-          }
-        } else{
-          //Insert the instruction via a mux in the decode stage
-          when(RegNext(insertDecodeInstruction)){
-            decode.input(INSTRUCTION) := RegNext(io.bus.cmd.data)
-          }
-        }
-      })
+      injectionPort.valid := RegNext(insertDecodeInstruction) init(False) clearWhen(injectionPort.fire)
+      injectionPort.payload := RegNext(io.bus.cmd.data)
 
+
+//      Component.current.addPrePopTask(() => {
+//        //Check if the decode instruction is driven by a register
+//        val instructionDriver = try {decode.input(INSTRUCTION).getDrivingReg} catch { case _ : Throwable => null}
+//        if(instructionDriver != null){ //If yes =>
+//          //Insert the instruction by writing the "fetch to decode instruction register",
+//          // Work even if it need to cross some hierarchy (caches)
+//          instructionDriver.component.rework {
+//            when(insertDecodeInstruction.pull()) {
+//              instructionDriver := io.bus.cmd.data.pull()
+//            }
+//          }
+//        } else{
+//          //Insert the instruction via a mux in the decode stage
+//          when(RegNext(insertDecodeInstruction)){
+//            decode.input(INSTRUCTION) := RegNext(io.bus.cmd.data)
+//          }
+//        }
+//      })
+//
 
       when(execute.arbitration.isFiring && execute.input(IS_EBREAK)) {
         decode.arbitration.haltByOther := True

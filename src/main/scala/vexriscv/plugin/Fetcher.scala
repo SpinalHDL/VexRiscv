@@ -31,6 +31,12 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
   lazy val decodeNextPc = UInt(32 bits)
   def nextPc() = (False, decodeNextPc)
 
+  var injectionPort : Stream[Bits] = null
+  override def getInjectionPort() = {
+    injectionPort = Stream(Bits(32 bits))
+    injectionPort
+  }
+
   var predictionJumpInterface : Flow[UInt] = null
 
   override def haltIt(): Unit = fetcherHalt := True
@@ -281,6 +287,14 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 //        decodeExceptionPort.code  := 1
 //        decodeExceptionPort.badAddr := decode.input(PC)
 //      }
+
+      if(injectionPort != null){
+        injectionPort.ready := !decode.arbitration.isStuck
+        when(injectionPort.valid) {
+          decode.arbitration.isValid := True
+          decode.insert(INSTRUCTION) := injectionPort.payload
+        }
+      }
     }
 
     prediction match {
