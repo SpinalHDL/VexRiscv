@@ -289,9 +289,11 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 //      }
 
       if(injectionPort != null){
-        injectionPort.ready := !decode.arbitration.isStuck
+        val state = RegNext(injectionPort.valid) init(False) clearWhen(injectionPort.ready)
+        injectionPort.ready := !decode.arbitration.isStuck && state
         when(injectionPort.valid) {
           decode.arbitration.isValid := True
+          decode.arbitration.haltItself setWhen(!state)
           decode.insert(INSTRUCTION) := injectionPort.payload
         }
       }
