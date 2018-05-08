@@ -53,9 +53,9 @@ object TestsWorkspace {
 //              asyncTagMemory = false,
 //              twoCycleRam = false
 //            )//,
-//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-//              portTlbSize = 4
-//            )
+////            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+////              portTlbSize = 4
+////            )
 //          ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = true,

@@ -210,11 +210,15 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
 //      })
 //
 
-      when(execute.arbitration.isFiring && execute.input(IS_EBREAK)) {
-        decode.arbitration.haltByOther := True
-        decode.arbitration.flushAll := True
-        haltIt := True
-        haltedByBreak := True
+      when(execute.input(IS_EBREAK)){
+        when(execute.arbitration.isValid ) {
+          iBusFetcher.haltIt()
+          decode.arbitration.flushAll := True
+        }
+        when(execute.arbitration.isFiring) {
+          haltIt := True
+          haltedByBreak := True
+        }
       }
 
       when(haltIt) {
@@ -222,8 +226,11 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
 //        decode.arbitration.haltByOther := True
       }
 
-      when(stepIt && decode.arbitration.isFiring) {
-        haltIt := True
+      when(stepIt && iBusFetcher.incoming()) {
+        iBusFetcher.haltIt()
+        when(decode.arbitration.isValid) {
+          haltIt := True
+        }
       }
       when(stepIt && Cat(pipeline.stages.map(_.arbitration.redoIt)).asBits.orR) {
         haltIt := False

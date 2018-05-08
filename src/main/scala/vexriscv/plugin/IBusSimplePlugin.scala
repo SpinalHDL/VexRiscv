@@ -169,6 +169,7 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
 
 
         val join = StreamJoin(Seq(inputPipeline.last, rspBuffer.io.pop), fetchRsp)
+        inputPipeline.last.ready setWhen(!inputPipeline.last.valid)
         output << (if(rspStageGen) join.m2sPipeWithFlush(flush) else join)
       }
     }

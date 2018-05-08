@@ -377,10 +377,9 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       val pipelineLiberator = new Area{
         val enable = False.noBackendCombMerge //Verilator Perf
         when(enable){
-          fetcher.haltIt()
+          decode.arbitration.haltByOther := True
         }
         val done = ! List(execute, memory, writeBack).map(_.arbitration.isValid).orR && !fetcher.nextPc()._1
-//        val done = History(doneAsync, 0 to 0).andR
       }
 
 
@@ -392,7 +391,10 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         val exceptionValidsRegs = Vec(Reg(Bool) init(False), stages.length).allowUnsetRegToAvoidLatch
         val exceptionContext = Reg(ExceptionCause())
 
-        pipelineLiberator.enable setWhen(exceptionValidsRegs.orR)
+        //Assume 2 stages before decode
+        when(exceptionValidsRegs.drop(1).orR) {
+          decode.arbitration.haltByOther := True
+        }
 
         val groupedByStage = exceptionPortsInfos.map(_.stage).distinct.map(s => {
           val stagePortsInfos = exceptionPortsInfos.filter(_.stage == s).sortWith(_.priority > _.priority)
@@ -418,9 +420,9 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
             if(indexOf(stage) != 0) stages(indexOf(stage) - 1).arbitration.flushAll := True
             stage.arbitration.removeIt := True
             exceptionValids(stageId) := True
-            when(!exceptionValidsRegs.takeRight(stages.length-stageId-1).fold(False)(_ || _)) {
-              exceptionContext := port.payload
-            }
+//            when(!exceptionValidsRegs.takeRight(stages.length-stageId-1).fold(False)(_ || _)) {
+            exceptionContext := port.payload
+//            }
           }
         }
         for(stageId <- firstStageIndexWithExceptionPort until stages.length; stage = stages(stageId) ){
@@ -487,11 +489,11 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       //Interrupt/Exception entry logic
       pipelineLiberator.enable setWhen(interrupt)
 
-      if(exceptionPortCtrl != null) {
-        when(exception) {
-          exceptionPortCtrl.exceptionValidsRegs.foreach(_ := False)
-        }
-      }
+//      if(exceptionPortCtrl != null) {
+//        when(exception) {
+//          exceptionPortCtrl.exceptionValidsRegs.foreach(_ := False)
+//        }
+//      }
       when(exception || (interrupt && pipelineLiberator.done)){
         jumpInterface.valid := True
         jumpInterface.payload := mtvec

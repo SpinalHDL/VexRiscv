@@ -1502,25 +1502,25 @@ public:
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
 		if((readValue = readCmd(2,debugAddress + 4)) != 0x8000000C){
-			printf("wrong break PC %x\n",readValue);
+			printf("wrong breakA PC %x\n",readValue);
 			clientFail = true; return;
 		}
 
 		writeCmd(2, debugAddress + 4, 0x13 + (1 << 15)); //Read regfile
 		if((readValue = readCmd(2,debugAddress + 4)) != 10){
-			printf("wrong break PC %x\n",readValue);
+			printf("wrong breakB PC %x\n",readValue);
 			clientFail = true; return;
 		}
 
 		writeCmd(2, debugAddress + 4, 0x13 + (2 << 15)); //Read regfile
 		if((readValue = readCmd(2,debugAddress + 4)) != 20){
-			printf("wrong break PC %x\n",readValue);
+			printf("wrong breakC PC %x\n",readValue);
 			clientFail = true; return;
 		}
 
 		writeCmd(2, debugAddress + 4, 0x13 + (3 << 15)); //Read regfile
 		if((readValue = readCmd(2,debugAddress + 4)) != 30){
-			printf("wrong break PC %x\n",readValue);
+			printf("wrong breakD PC %x\n",readValue);
 			clientFail = true; return;
 		}
 
@@ -1532,7 +1532,7 @@ public:
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
 		if((readValue = readCmd(2,debugAddress + 4)) != 0x80000014){
-			printf("wrong break PC 3 %x\n",readValue);
+			printf("wrong breakE PC 3 %x\n",readValue);
 			clientFail = true; return;
 		}
 
@@ -1553,7 +1553,7 @@ public:
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
 		if((readValue = readCmd(2,debugAddress + 4)) != 0x80000024){
-			printf("wrong break PC 3 %x\n",readValue);
+			printf("wrong breakF PC 3 %x\n",readValue);
 			clientFail = true; return;
 		}
 
