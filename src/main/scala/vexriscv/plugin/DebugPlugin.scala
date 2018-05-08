@@ -95,19 +95,13 @@ case class DebugExtensionIo() extends Bundle with IMasterSlave{
 }
 
 
-//Allow to avoid instruction cache plugin to be confused by new instruction poping in the pipeline
-trait InstructionInjector{
-  def isInjecting(stage : Stage) : Bool
-}
 
-class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] with InstructionInjector {
+class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
 
   var io : DebugExtensionIo = null
   val injectionAsks = ArrayBuffer[(Stage, Bool)]()
-  var isInjectingOnDecode : Bool = null
   var injectionPort : Stream[Bits] = null
 
-  override def isInjecting(stage: Stage) : Bool = if(stage == pipeline.decode) isInjectingOnDecode else False
 
   object IS_EBREAK extends Stageable(Bool)
   override def setup(pipeline: VexRiscv): Unit = {
@@ -127,7 +121,6 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
       ALU_CTRL  -> AluCtrlEnum.ADD_SUB //Used to get the PC value in busReadDataReg
     ))
 
-    isInjectingOnDecode = Bool()
     injectionPort = pipeline.service(classOf[IBusFetcher]).getInjectionPort()
   }
 
@@ -138,7 +131,6 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
 
     val logic = debugClockDomain {pipeline plug new Area{
       val iBusFetcher = service(classOf[IBusFetcher])
-      val insertDecodeInstruction = False
       val firstCycle = RegNext(False) setWhen (io.bus.cmd.ready)
       val secondCycle = RegNext(firstCycle)
       val resetIt = RegInit(False)
@@ -164,6 +156,9 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
         io.bus.rsp.data(4) := stepIt
       }
 
+      injectionPort.valid := False
+      injectionPort.payload := io.bus.cmd.data
+
       when(io.bus.cmd.valid) {
         switch(io.bus.cmd.address(2 downto 2)) {
           is(0) {
@@ -176,18 +171,14 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
           }
           is(1) {
             when(io.bus.cmd.wr) {
-              insertDecodeInstruction := True
-//              decode.arbitration.isValid.getDrivingReg setWhen (firstCycle)
-//              decode.arbitration.haltItself setWhen (secondCycle)
-//              io.bus.cmd.ready := !firstCycle && !secondCycle && execute.arbitration.isValid
-              io.bus.cmd.ready := injectionPort.fire
+              injectionPort.valid := True
+              io.bus.cmd.ready := injectionPort.ready
             }
           }
         }
       }
 
-      injectionPort.valid := RegNext(insertDecodeInstruction) init(False) clearWhen(injectionPort.fire)
-      injectionPort.payload := RegNext(io.bus.cmd.data)
+
 
 
 //      Component.current.addPrePopTask(() => {
@@ -232,9 +223,17 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
           haltIt := True
         }
       }
+
       when(stepIt && Cat(pipeline.stages.map(_.arbitration.redoIt)).asBits.orR) {
         haltIt := False
       }
+
+      //Avoid having two C instruction executed in a single step
+      if(pipeline(RVC_GEN)){
+        val cleanStep = RegNext(stepIt && decode.arbitration.isFiring) init(False)
+        decode.arbitration.removeIt setWhen(cleanStep)
+      }
+
       io.resetOut := RegNext(resetIt)
 
       if(serviceExist(classOf[InterruptionInhibitor])) {
@@ -248,8 +247,5 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
         }
       }
     }}
-
-
-    isInjectingOnDecode := RegNext(logic.insertDecodeInstruction) init(False)
   }
 }

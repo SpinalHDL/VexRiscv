@@ -171,7 +171,8 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         pcReg + 4
 
       if (keepPcPlus4) KeepAttribute(pcPlus)
-      when(decode.arbitration.isFiring) {
+      val injectedDecode = False
+      when(decode.arbitration.isFiring && !injectedDecode) {
         pcReg := pcPlus
       }
 
@@ -250,31 +251,31 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       incomingInstruction setWhen(bufferValid && bufferData(1 downto 0) =/= 3)
     })
 
-    //TODO never colalpse buble of the last stage
+
     def condApply[T](that : T, cond : Boolean)(func : (T) => T) = if(cond)func(that) else that
     val injector = new Area {
-      val inputBeforeHalt = condApply(if(decodePcGen) decompressor.output else iBusRsp.output, injectorReadyCutGen)(_.s2mPipe(flush))
-      if(injectorReadyCutGen) {
+      val inputBeforeHalt = condApply(if (decodePcGen) decompressor.output else iBusRsp.output, injectorReadyCutGen)(_.s2mPipe(flush))
+      if (injectorReadyCutGen) {
         iBusRsp.readyForError.clearWhen(inputBeforeHalt.valid)
-        incomingInstruction setWhen(inputBeforeHalt.valid)
+        incomingInstruction setWhen (inputBeforeHalt.valid)
       }
-      val decodeInput = (if(injectorStage){
+      val decodeInput = (if (injectorStage) {
         val decodeInput = inputBeforeHalt.m2sPipeWithFlush(killLastStage, collapsBubble = false)
         decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), inputBeforeHalt.rsp.inst)
         iBusRsp.readyForError.clearWhen(decodeInput.valid)
-        incomingInstruction setWhen(decodeInput.valid)
+        incomingInstruction setWhen (decodeInput.valid)
         decodeInput
       } else {
         inputBeforeHalt
       })
 
-      if(decodePcGen){
+      if (decodePcGen) {
         decodeNextPcValid := True
         decodeNextPc := decodePc.pcReg
-      }else {
-        val lastStageStream = if(injectorStage) inputBeforeHalt
-        else if(rspStageGen) iBusRsp.outputBeforeStage
-        else if(cmdToRspStageCount > 1)iBusRsp.inputPipeline(cmdToRspStageCount-2)
+      } else {
+        val lastStageStream = if (injectorStage) inputBeforeHalt
+        else if (rspStageGen) iBusRsp.outputBeforeStage
+        else if (cmdToRspStageCount > 1) iBusRsp.inputPipeline(cmdToRspStageCount - 2)
         else throw new Exception("Fetch should at least have two stages")
 
         //          when(fetcherHalt){
@@ -287,25 +288,72 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
       decodeInput.ready := !decode.arbitration.isStuck
       decode.arbitration.isValid := decodeInput.valid
-      decode.insert(PC) := (if(decodePcGen) decodePc.pcReg else decodeInput.pc)
+      decode.insert(PC) := (if (decodePcGen) decodePc.pcReg else decodeInput.pc)
       decode.insert(INSTRUCTION) := decodeInput.rsp.inst
       decode.insert(INSTRUCTION_READY) := True
-      if(compressedGen) decode.insert(IS_RVC) := decodeInput.isRvc
+      if (compressedGen) decode.insert(IS_RVC) := decodeInput.isRvc
 
-//      if(catchAccessFault){
-//        decodeExceptionPort.valid := decode.arbitration.isValid && decodeInput.rsp.error
-//        decodeExceptionPort.code  := 1
-//        decodeExceptionPort.badAddr := decode.input(PC)
-//      }
+      //      if(catchAccessFault){
+      //        decodeExceptionPort.valid := decode.arbitration.isValid && decodeInput.rsp.error
+      //        decodeExceptionPort.code  := 1
+      //        decodeExceptionPort.badAddr := decode.input(PC)
+      //      }
 
-      if(injectionPort != null){
-        val state = RegNext(injectionPort.valid) init(False) clearWhen(injectionPort.ready)
-        injectionPort.ready := !decode.arbitration.isStuck && state
-        when(injectionPort.valid) {
-          decode.arbitration.isValid := True
-          decode.arbitration.haltItself setWhen(!state)
-          decode.insert(INSTRUCTION) := injectionPort.payload
-        }
+      if (injectionPort != null) {
+        Component.current.addPrePopTask(() => {
+          val state = RegInit(U"000")
+
+          injectionPort.ready := False
+          if(decodePcGen){
+            decodePc.injectedDecode setWhen(state =/= 0)
+          }
+          switch(state) {
+            is(0) { //request pipelining
+              when(injectionPort.valid) {
+                state := 1
+              }
+            }
+            is(1) { //Give time to propagate the payload
+              state := 2
+            }
+            is(2){ //read regfile delay
+              decode.arbitration.isValid := True
+              decode.arbitration.haltItself := True
+              state := 3
+            }
+            is(3){ //Do instruction
+              decode.arbitration.isValid := True
+              when(!decode.arbitration.isStuck) {
+                state := 4
+              }
+            }
+            is(4){ //request pipelining
+              injectionPort.ready := True
+              state := 0
+            }
+          }
+
+          //Check if the decode instruction is driven by a register
+          val instructionDriver = try {
+            decode.input(INSTRUCTION).getDrivingReg
+          } catch {
+            case _: Throwable => null
+          }
+          if (instructionDriver != null) { //If yes =>
+            //Insert the instruction by writing the "fetch to decode instruction register",
+            // Work even if it need to cross some hierarchy (caches)
+            instructionDriver.component.rework {
+              when(state.pull() =/= 0) {
+                instructionDriver := injectionPort.payload.pull()
+              }
+            }
+          } else {
+            //Insert the instruction via a mux in the decode stage
+            when(state =/= 0) {
+              decode.input(INSTRUCTION) := RegNext(injectionPort.payload)
+            }
+          }
+        })
       }
     }
 
