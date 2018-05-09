@@ -119,10 +119,16 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
     catchAddressMisaligned = true,
     injectorStage = true){
   var iBus : IBusSimpleBus = null
+  var decodeExceptionPort : Flow[ExceptionCause] = null
 
   override def setup(pipeline: VexRiscv): Unit = {
     super.setup(pipeline)
     iBus = master(IBusSimpleBus(interfaceKeepData)).setName("iBus")
+
+    if(catchAccessFault) {
+      val exceptionService = pipeline.service(classOf[ExceptionService])
+      decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1)
+    }
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -168,9 +174,20 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
         fetchRsp.rsp.error.clearWhen(!rspBuffer.io.pop.valid) //Avoid interference with instruction injection from the debug plugin
 
 
+        var issueDetected = False
         val join = StreamJoin(Seq(inputPipeline.last, rspBuffer.io.pop), fetchRsp)
         inputPipeline.last.ready setWhen(!inputPipeline.last.valid)
-        output << (if(rspStageGen) join.m2sPipeWithFlush(flush) else join)
+        outputBeforeStage << join.haltWhen(issueDetected)
+
+        if(catchAccessFault){
+          decodeExceptionPort.valid := False
+          decodeExceptionPort.code  := 1
+          decodeExceptionPort.badAddr := join.pc
+          when(join.valid && join.rsp.error && !issueDetected){
+            issueDetected \= True
+            decodeExceptionPort.valid  := iBusRsp.readyForError
+          }
+        }
       }
     }
   }

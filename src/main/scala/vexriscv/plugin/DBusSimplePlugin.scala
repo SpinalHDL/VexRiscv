@@ -287,7 +287,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
       }
 
       if(!earlyInjection)
-        assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
+        assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow writeback stage stall when read happend")
 
       //formal
       insert(FORMAL_MEM_RDATA) := input(MEMORY_READ_DATA)
