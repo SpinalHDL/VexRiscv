@@ -92,6 +92,33 @@ object RvcDecompressor{
 }
 
 
+object StreamForkVex{
+  def apply[T <: Data](input : Stream[T], portCount: Int, flush : Bool/*, flushDiscardInput : Boolean*/) : Vec[Stream[T]] = {
+    val outputs = Vec(cloneOf(input), portCount)
+    val linkEnable = Vec(RegInit(True), portCount)
+
+    input.ready := True
+    for (i <- 0 until portCount) {
+      when(!outputs(i).ready && linkEnable(i)) {
+        input.ready := False
+      }
+    }
+
+    for (i <- 0 until portCount) {
+      outputs(i).valid := input.valid && linkEnable(i)
+      outputs(i).payload := input.payload
+      when(outputs(i).fire) {
+        linkEnable(i) := False
+      }
+    }
+
+    when(input.ready || flush) {
+      linkEnable.foreach(_ := True)
+    }
+    outputs
+  }
+}
+
 
 object StreamVexPimper{
   implicit class StreamFlushPimper[T <: Data](pimped : Stream[T]){

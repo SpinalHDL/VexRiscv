@@ -22,9 +22,6 @@ case class IBusSimpleRsp() extends Bundle with IMasterSlave{
 }
 
 
-
-import StreamVexPimper._
-
 object IBusSimpleBus{
   def getAxi4Config() = Axi4Config(
     addressWidth = 32,
@@ -110,7 +107,8 @@ class IBusSimplePlugin(interfaceKeepData : Boolean,
 //                       resetVector : BigInt,
 //                       keepPcPlus4 : Boolean,
 //                       decodePcGen : Boolean,
-                       pendingMax : Int = 7) extends IBusFetcherImpl(
+                       pendingMax : Int = 7,
+                       relaxedBusCmdValid : Boolean = false) extends IBusFetcherImpl(
     catchAccessFault = catchAccessFault,
     resetVector = BigInt(0x80000000l),
     keepPcPlus4 = false,
@@ -141,16 +139,29 @@ class IBusSimplePlugin(interfaceKeepData : Boolean,
 
     pipeline plug new FetchArea(pipeline) {
 
-      val cmd = new Area {
+      //Avoid sending to many iBus cmd
+      val pendingCmd = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
+      val pendingCmdNext = pendingCmd + iBus.cmd.fire.asUInt - iBus.rsp.fire.asUInt
+      pendingCmd := pendingCmdNext
+
+      val cmd = if(relaxedBusCmdValid) new Area {
+        assert(relaxedPcCalculation, "relaxedBusCmdValid can only be used with relaxedPcCalculation")
+        def input = fetchPc.output
+        def output = iBusRsp.input
+
+        val fork = StreamForkVex(input, 2, flush)
+        val busFork = fork(0)
+        val pipFork = fork(1)
+        output << pipFork
+
+        iBus.cmd.valid := busFork.valid && pendingCmd =/= pendingMax
+        iBus.cmd.pc := busFork.payload(31 downto 2) @@ "00"
+        busFork.ready := iBus.cmd.ready
+      } else new Area {
         def input = fetchPc.output
         def output = iBusRsp.input
 
         output << input.continueWhen(iBus.cmd.fire)
-
-        //Avoid sending to many iBus cmd
-        val pendingCmd = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
-        val pendingCmdNext = pendingCmd + iBus.cmd.fire.asUInt - iBus.rsp.fire.asUInt
-        pendingCmd := pendingCmdNext
 
         iBus.cmd.valid := input.valid && output.ready && pendingCmd =/= pendingMax
         iBus.cmd.pc := input.payload(31 downto 2) @@ "00"
@@ -163,12 +174,12 @@ class IBusSimplePlugin(interfaceKeepData : Boolean,
         val discardCounter = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
         discardCounter := discardCounter - (iBus.rsp.fire && discardCounter =/= 0).asUInt
         when(flush) {
-          discardCounter := (if(relaxedPcCalculation) cmd.pendingCmdNext else cmd.pendingCmd - iBus.rsp.fire.asUInt)
+          discardCounter := (if(relaxedPcCalculation) pendingCmdNext else pendingCmd - iBus.rsp.fire.asUInt)
         }
 
 
 //        val rsp = recursive[Stream[IBusSimpleRsp]](rspUnbuffered, cmdToRspStageCount, x => x.s2mPipe(flush))
-        val rspBuffer = StreamFifoLowLatency(IBusSimpleRsp(), cmdToRspStageCount)
+        val rspBuffer = StreamFifoLowLatency(IBusSimpleRsp(), cmdToRspStageCount + (if(relaxedBusCmdValid) 1 else 0))
         rspBuffer.io.push << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
         rspBuffer.io.flush := flush
 
