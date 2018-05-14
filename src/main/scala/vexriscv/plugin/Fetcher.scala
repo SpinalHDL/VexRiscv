@@ -8,7 +8,6 @@ import StreamVexPimper._
 import scala.collection.mutable.ArrayBuffer
 
 
-
 abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
                                val resetVector : BigInt,
                                val keepPcPlus4 : Boolean,
@@ -19,11 +18,12 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
                                val relaxedPcCalculation : Boolean,
                                val prediction : BranchPrediction,
                                val catchAddressMisaligned : Boolean,
-                      injectorStage : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
+                               val injectorStage : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
   var prefetchExceptionPort : Flow[ExceptionCause] = null
 
   var decodePrediction : DecodePredictionBus = null
   assert(cmdToRspStageCount >= 1)
+  assert(!(cmdToRspStageCount == 1 && !injectorStage))
   assert(!(compressedGen && !decodePcGen))
   var fetcherHalt : Bool = null
   lazy val decodeNextPcValid = Bool //TODO remove me ?
