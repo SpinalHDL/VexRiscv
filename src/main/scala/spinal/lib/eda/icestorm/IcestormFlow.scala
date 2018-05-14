@@ -50,7 +50,7 @@ object IcestormFlow {
     workspacePathFile.mkdir()
     FileUtils.copyFileToDirectory(new File(toplevelPath), workspacePathFile)
     doCmd(List("yosys", "-v3", "-p", s"synth_ice40 -top $projectName -blif ${projectName}.blif", s"$projectName.v" ), workspacePath)
-    val arachne = doCmd(List("arachne-pnr", "-d", device.replace("hx",""), "--max-passes", "600", "-P", pack, s"$projectName.blif" ,"-o", s"$projectName.asc"), workspacePath)
+    val arachne = doCmd(List("arachne-pnr", "-d", device.replace("hx","").replace("up",""), "--max-passes", "600", "-P", pack, s"$projectName.blif" ,"-o", s"$projectName.asc"), workspacePath)
     doCmd(List("icepack", s"$projectName.asc", s"$projectName.bin"), workspacePath)
     val icetime = doCmd(List("icetime", "-tmd", device, s"${projectName}.asc"), workspacePath)
     new Report{
@@ -138,13 +138,24 @@ object IcestormFlow {
   }
 
   def main(args: Array[String]) {
+//    SpinalVerilog(StreamFifo(Bits(8 bits), 64))
+//    val report = IcestormFlow(
+//      workspacePath="/home/spinalvm/tmp",
+//      toplevelPath="StreamFifo.v",
+//      family="iCE40",
+//      device="hx8k",
+//      pack = "ct256"
+//    )
+//    println(report.getArea())
+//    println(report.getFMax())
+//  }
     SpinalVerilog(StreamFifo(Bits(8 bits), 64))
     val report = IcestormFlow(
       workspacePath="/home/spinalvm/tmp",
-      toplevelPath="VexRiscv.v",
+      toplevelPath="StreamFifo.v",
       family="iCE40",
-      device="hx8k",
-      pack = "ct256"
+      device="up5k",
+      pack = "sg48"
     )
     println(report.getArea())
     println(report.getFMax())
@@ -163,6 +174,19 @@ object IcestormStdTargets {
           family=getFamilyName(),
            device="hx8k",
            pack = "ct256"
+        )
+      }
+    }
+
+    targets += new Target {
+      override def getFamilyName(): String = "iCE40Ultra"
+      override def synthesise(rtl: Rtl, workspace: String): Report = {
+        IcestormFlow(
+          workspacePath=workspace,
+          toplevelPath=rtl.getRtlPath(),
+          family=getFamilyName(),
+          device="up5k",
+          pack = "sg48"
         )
       }
     }
