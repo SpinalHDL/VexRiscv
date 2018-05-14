@@ -15,7 +15,6 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
                                val decodePcGen : Boolean,
                                val compressedGen : Boolean,
                                val cmdToRspStageCount : Int,
-                               val rspStageGen : Boolean,
                                val injectorReadyCutGen : Boolean,
                                val relaxedPcCalculation : Boolean,
                                val prediction : BranchPrediction,
@@ -212,9 +211,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       // ...
 
       val readyForError = True
-      val outputBeforeStage = Stream(FetchRsp())
-      val output = if(rspStageGen) outputBeforeStage.m2sPipeWithFlush(flush, collapsBubble = false) else outputBeforeStage
-      if(rspStageGen) readyForError.clearWhen(output.valid)
+      val output = Stream(FetchRsp())
       incomingInstruction setWhen(inputPipeline.map(_.valid).orR)
     }
 
@@ -274,7 +271,6 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         decodeNextPc := decodePc.pcReg
       } else {
         val lastStageStream = if (injectorStage) inputBeforeHalt
-        else if (rspStageGen) iBusRsp.outputBeforeStage
         else if (cmdToRspStageCount > 1) iBusRsp.inputPipeline(cmdToRspStageCount - 2)
         else throw new Exception("Fetch should at least have two stages")
 

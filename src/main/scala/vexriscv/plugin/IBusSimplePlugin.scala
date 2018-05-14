@@ -105,18 +105,22 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
 
 
-class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, pendingMax : Int = 7) extends IBusFetcherImpl(
+class IBusSimplePlugin(interfaceKeepData : Boolean,
+                       catchAccessFault : Boolean,
+//                       resetVector : BigInt,
+//                       keepPcPlus4 : Boolean,
+//                       decodePcGen : Boolean,
+                       pendingMax : Int = 7) extends IBusFetcherImpl(
     catchAccessFault = catchAccessFault,
     resetVector = BigInt(0x80000000l),
     keepPcPlus4 = false,
-    decodePcGen = true,
-    compressedGen = true,
+    decodePcGen = false,
+    compressedGen = false,
     cmdToRspStageCount = 1,
-    rspStageGen = false,
     injectorReadyCutGen = false,
-    relaxedPcCalculation = false,
+    relaxedPcCalculation = true,
     prediction = NONE,
-    catchAddressMisaligned = true,
+    catchAddressMisaligned = false,
     injectorStage = true){
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
@@ -177,7 +181,7 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean, 
         var issueDetected = False
         val join = StreamJoin(Seq(inputPipeline.last, rspBuffer.io.pop), fetchRsp)
         inputPipeline.last.ready setWhen(!inputPipeline.last.valid)
-        outputBeforeStage << join.haltWhen(issueDetected)
+        output << join.haltWhen(issueDetected)
 
         if(catchAccessFault){
           decodeExceptionPort.valid := False

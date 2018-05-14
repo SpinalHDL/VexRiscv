@@ -16,7 +16,6 @@ class IBusCachedPlugin(config : InstructionCacheConfig, memoryTranslatorPortConf
   decodePcGen = false,
   compressedGen = false,
   cmdToRspStageCount = 1,
-  rspStageGen = false,
   injectorReadyCutGen = false,
   relaxedPcCalculation = false,
   prediction = NONE,
@@ -148,9 +147,9 @@ class IBusCachedPlugin(config : InstructionCacheConfig, memoryTranslatorPortConf
       }
 
 
-      iBusRsp.outputBeforeStage.arbitrationFrom(iBusRsp.inputPipeline(0).haltWhen(issueDetected))
-      iBusRsp.outputBeforeStage.rsp.inst := cache.io.cpu.fetch.data
-      iBusRsp.outputBeforeStage.pc := iBusRsp.inputPipeline(0).payload
+      iBusRsp.output.arbitrationFrom(iBusRsp.inputPipeline(0).haltWhen(issueDetected))
+      iBusRsp.output.rsp.inst := cache.io.cpu.fetch.data
+      iBusRsp.output.pc := iBusRsp.inputPipeline(0).payload
 
 
 //      if (dataOnDecode) {
