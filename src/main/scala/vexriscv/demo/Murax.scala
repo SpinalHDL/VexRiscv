@@ -52,13 +52,13 @@ object MuraxConfig{
     pipelineApbBridge     = true,
     gpioWidth = 32,
     cpuPlugins = ArrayBuffer( //DebugPlugin added by the toplevel
-      new PcManagerSimplePlugin(
-        resetVector = 0x80000000l,
-        relaxedPcCalculation = true
-      ),
       new IBusSimplePlugin(
-        interfaceKeepData = false,
-        catchAccessFault = false
+        resetVector = 0x80000000l,
+        relaxedPcCalculation = true,
+        prediction = NONE,
+        catchAccessFault = false,
+        catchAddressMisaligned = false,
+        compressedGen = false
       ),
       new DBusSimplePlugin(
         catchAddressMisaligned = false,

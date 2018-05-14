@@ -26,10 +26,13 @@ object VexRiscvAvalonForSim{
       //CPU configuration
       val cpuConfig = VexRiscvConfig(
         plugins = List(
-          new PcManagerSimplePlugin(0x00000000l, false),
           new IBusSimplePlugin(
-            interfaceKeepData = false,
-            catchAccessFault = false
+            resetVector = 0x00000000l,
+            relaxedPcCalculation = false,
+            prediction = NONE,
+            catchAccessFault = false,
+            catchAddressMisaligned = false,
+            compressedGen = false
           ),
           new DBusSimplePlugin(
             catchAddressMisaligned = false,

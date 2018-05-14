@@ -102,30 +102,36 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
 
 
-class IBusSimplePlugin(interfaceKeepData : Boolean,
+
+class IBusSimplePlugin(resetVector : BigInt,
+                       relaxedPcCalculation : Boolean,
+                       prediction : BranchPrediction,
                        catchAccessFault : Boolean,
-//                       resetVector : BigInt,
-//                       keepPcPlus4 : Boolean,
-//                       decodePcGen : Boolean,
+                       catchAddressMisaligned : Boolean,
+                       keepPcPlus4 : Boolean = false,
+                       compressedGen : Boolean = false,
+                       busLatencyMin : Int = 1,
                        pendingMax : Int = 7,
-                       relaxedBusCmdValid : Boolean = false) extends IBusFetcherImpl(
+                       injectorStage : Boolean = true,
+                       relaxedBusCmdValid : Boolean = false
+                      ) extends IBusFetcherImpl(
     catchAccessFault = catchAccessFault,
-    resetVector = BigInt(0x80000000l),
-    keepPcPlus4 = false,
-    decodePcGen = false,
-    compressedGen = false,
-    cmdToRspStageCount = 1,
+    resetVector = resetVector,
+    keepPcPlus4 = keepPcPlus4,
+    decodePcGen = compressedGen,
+    compressedGen = compressedGen,
+    cmdToRspStageCount = busLatencyMin,
     injectorReadyCutGen = false,
-    relaxedPcCalculation = true,
-    prediction = NONE,
-    catchAddressMisaligned = false,
-    injectorStage = true){
+    relaxedPcCalculation = relaxedPcCalculation,
+    prediction = prediction,
+    catchAddressMisaligned = catchAddressMisaligned,
+    injectorStage = injectorStage){
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
 
   override def setup(pipeline: VexRiscv): Unit = {
     super.setup(pipeline)
-    iBus = master(IBusSimpleBus(interfaceKeepData)).setName("iBus")
+    iBus = master(IBusSimpleBus(false)).setName("iBus")
 
     if(catchAccessFault) {
       val exceptionService = pipeline.service(classOf[ExceptionService])

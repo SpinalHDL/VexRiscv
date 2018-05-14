@@ -12,13 +12,13 @@ object GenCustomSimdAdd extends App{
     config = VexRiscvConfig(
       plugins = List(
         new SimdAddPlugin,
-        new PcManagerSimplePlugin(
-          resetVector = 0x00000000l,
-          relaxedPcCalculation = false
-        ),
         new IBusSimplePlugin(
-          interfaceKeepData = false,
-          catchAccessFault = false
+          resetVector = 0x00000000l,
+          relaxedPcCalculation = false,
+          prediction = NONE,
+          catchAccessFault = false,
+          catchAddressMisaligned = false,
+          compressedGen = false
         ),
         new DBusSimplePlugin(
           catchAddressMisaligned = false,

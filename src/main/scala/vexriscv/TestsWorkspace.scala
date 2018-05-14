@@ -31,13 +31,13 @@ object TestsWorkspace {
     SpinalConfig(mergeAsyncProcess = false).generateVerilog {
       val configFull = VexRiscvConfig(
         plugins = List(
-//          new PcManagerSimplePlugin(
-//            resetVector = 0x80000000l,
-//            relaxedPcCalculation = false
-//          ),
           new IBusSimplePlugin(
-            interfaceKeepData = false,
-            catchAccessFault = true
+            resetVector = 0x80000000l,
+            relaxedPcCalculation = false,
+            prediction = NONE,
+            catchAccessFault = true,
+            catchAddressMisaligned = true,
+            compressedGen = true
           ),
 //          new IBusCachedPlugin(
 //            config = InstructionCacheConfig(
@@ -134,103 +134,6 @@ object TestsWorkspace {
       )
 
 
-      val configLight = VexRiscvConfig(
-        plugins = List(
-          new PcManagerSimplePlugin(0x00000000l, false),
-          new IBusSimplePlugin(
-            interfaceKeepData = true,
-            catchAccessFault = false
-          ),
-
-          new DBusSimplePlugin(
-            catchAddressMisaligned = false,
-            catchAccessFault = false
-          ),
-          new DecoderSimplePlugin(
-            catchIllegalInstruction = false
-          ),
-          new RegFilePlugin(
-            regFileReadyKind = plugin.ASYNC,
-            zeroBoot = false
-          ),
-          new IntAluPlugin,
-          new SrcPlugin(
-            separatedAddSub = false
-          ),
-  //        new FullBarrielShifterPlugin,
-          new LightShifterPlugin,
-  //        new HazardSimplePlugin(true, true, true, true),
-          //        new HazardSimplePlugin(false, true, false, true),
-          new HazardSimplePlugin(
-            bypassExecute           = false,
-            bypassMemory            = false,
-            bypassWriteBack         = false,
-            bypassWriteBackBuffer   = false,
-            pessimisticUseSrc       = false,
-            pessimisticWriteRegFile = false,
-            pessimisticAddressMatch = false
-          ),
-//          new HazardPessimisticPlugin,
-          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
-  //        new MulPlugin,
-  //        new DivPlugin,
-  //        new MachineCsr(csrConfig),
-          new BranchPlugin(
-            earlyBranch = false,
-            catchAddressMisaligned = false,
-            prediction = NONE
-          )
-        )
-      )
-
-
-
-      val configTest = VexRiscvConfig(
-        plugins = List(
-          new PcManagerSimplePlugin(0x00000000l, true),
-          new IBusSimplePlugin(
-            interfaceKeepData = true,
-            catchAccessFault = true
-          ),
-          new DBusSimplePlugin(
-            catchAddressMisaligned = true,
-            catchAccessFault = true
-          ),
-          new CsrPlugin(CsrPluginConfig.small(0x80000020l)),
-          new DecoderSimplePlugin(
-            catchIllegalInstruction = true
-          ),
-          new RegFilePlugin(
-            regFileReadyKind = plugin.SYNC,
-            zeroBoot = false
-          ),
-          new IntAluPlugin,
-          new SrcPlugin(
-            separatedAddSub = false
-          ),
-          new FullBarrielShifterPlugin,
-  //        new LightShifterPlugin,
-          //        new HazardSimplePlugin(true, true, true, true),
-          //        new HazardSimplePlugin(false, true, false, true),
-          new HazardSimplePlugin(
-            bypassExecute           = false,
-            bypassMemory            = false,
-            bypassWriteBack         = false,
-            bypassWriteBackBuffer   = false,
-            pessimisticUseSrc       = false,
-            pessimisticWriteRegFile = false,
-            pessimisticAddressMatch = false
-          ),
-//          new MulPlugin,
-//          new DivPlugin,
-          //        new MachineCsr(csrConfig),
-          new BranchPlugin(
-            earlyBranch = false,
-            catchAddressMisaligned = true,
-            prediction = NONE
-          )
-        )
-      )
 
       val toplevel = new VexRiscv(configFull)
 //      val toplevel = new VexRiscv(configLight)
