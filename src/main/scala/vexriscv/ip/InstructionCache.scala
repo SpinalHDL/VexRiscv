@@ -23,7 +23,6 @@ case class InstructionCacheConfig( cacheSize : Int,
 
   assert(!(twoCycleRam && !twoCycleCache))
 
-  def dataOnDecode = twoCycleRam && wayCount > 1
   def burstSize = bytePerLine*8/memDataWidth
   def catchSomething = catchAccessFault || catchMemoryTranslationMiss || catchIllegalAccess
 
@@ -60,7 +59,15 @@ case class InstructionCacheCpuPrefetch(p : InstructionCacheConfig) extends Bundl
   }
 }
 
-case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle with IMasterSlave {
+trait InstructionCacheCommons{
+  val isValid : Bool
+  val isStuck : Bool
+  val pc : UInt
+  val data   : Bits
+  val cacheMiss, error, mmuMiss, illegalAccess,isUser : Bool
+}
+
+case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle with IMasterSlave with InstructionCacheCommons {
   val isValid = Bool
   val isStuck = Bool
   val pc = UInt(p.addressWidth bits)
@@ -77,11 +84,11 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
 }
 
 
-case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle with IMasterSlave {
+case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle with IMasterSlave with InstructionCacheCommons {
   val isValid = Bool
   val isStuck  = Bool
   val pc = UInt(p.addressWidth bits)
-  val data  =  ifGen(p.dataOnDecode) (Bits(p.cpuDataWidth bits))
+  val data  =  Bits(p.cpuDataWidth bits)
   val cacheMiss, error, mmuMiss, illegalAccess, isUser  = ifGen(p.twoCycleCache)(Bool)
 
   override def asMaster(): Unit = {
@@ -309,6 +316,9 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       val data = read.waysValues.map(_.data).read(id)
       val word = data.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(memWordToCpuWordRange))
       io.cpu.fetch.data := word
+      if(twoCycleCache){
+        io.cpu.decode.data := RegNextWhen(io.cpu.fetch.data,!io.cpu.decode.isStuck)
+      }
     } else null
 
     if(twoCycleRam && wayCount == 1){
@@ -345,11 +355,9 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       val valid = Cat(hits).orR
       val id = OHToUInt(hits)
       val error = tags(id).error
-      if(dataOnDecode) {
-        val data = fetchStage.read.waysValues.map(way => stage(way.data)).read(id)
-        val word = data.subdivideIn(cpuDataWidth bits).read(io.cpu.decode.pc(memWordToCpuWordRange))
-        io.cpu.decode.data := word
-      }
+      val data = fetchStage.read.waysValues.map(way => stage(way.data)).read(id)
+      val word = data.subdivideIn(cpuDataWidth bits).read(io.cpu.decode.pc(memWordToCpuWordRange))
+      io.cpu.decode.data := word
     }
 
     io.cpu.decode.cacheMiss := !hit.valid

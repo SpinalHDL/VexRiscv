@@ -31,32 +31,33 @@ object TestsWorkspace {
     SpinalConfig(mergeAsyncProcess = false).generateVerilog {
       val configFull = VexRiscvConfig(
         plugins = List(
-          new IBusSimplePlugin(
-            resetVector = 0x80000000l,
-            relaxedPcCalculation = false,
-            prediction = NONE,
-            catchAccessFault = true,
-            catchAddressMisaligned = true,
-            compressedGen = true
-          ),
-//          new IBusCachedPlugin(
-//            config = InstructionCacheConfig(
-//              cacheSize = 1024*16,
-//              bytePerLine = 32,
-//              wayCount = 1,
-//              addressWidth = 32,
-//              cpuDataWidth = 32,
-//              memDataWidth = 32,
-//              catchIllegalAccess = false,
-//              catchAccessFault = true,
-//              catchMemoryTranslationMiss = false,
-//              asyncTagMemory = false,
-//              twoCycleRam = false
-//            )//,
-////            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-////              portTlbSize = 4
-////            )
+//          new IBusSimplePlugin(
+//            resetVector = 0x80000000l,
+//            relaxedPcCalculation = false,
+//            prediction = NONE,
+//            catchAccessFault = true,
+//            catchAddressMisaligned = false,
+//            compressedGen = true
 //          ),
+          new IBusCachedPlugin(
+            config = InstructionCacheConfig(
+              cacheSize = 1024*16,
+              bytePerLine = 32,
+              wayCount = 1,
+              addressWidth = 32,
+              cpuDataWidth = 32,
+              memDataWidth = 32,
+              catchIllegalAccess = false,
+              catchAccessFault = true,
+              catchMemoryTranslationMiss = false,
+              asyncTagMemory = false,
+              twoCycleRam = false,
+              twoCycleCache = true
+            )//,
+//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//              portTlbSize = 4
+//            )
+          ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = true,
 //            catchAccessFault = true,
