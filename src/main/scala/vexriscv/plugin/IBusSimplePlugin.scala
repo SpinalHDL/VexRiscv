@@ -104,10 +104,10 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
 
 class IBusSimplePlugin(resetVector : BigInt,
-                       relaxedPcCalculation : Boolean,
-                       prediction : BranchPrediction,
-                       catchAccessFault : Boolean,
-                       catchAddressMisaligned : Boolean,
+                       catchAccessFault : Boolean = false,
+                       catchAddressMisaligned : Boolean = false,
+                       relaxedPcCalculation : Boolean = false,
+                       prediction : BranchPrediction = NONE,
                        keepPcPlus4 : Boolean = false,
                        compressedGen : Boolean = false,
                        busLatencyMin : Int = 1,

@@ -9,17 +9,24 @@ import spinal.lib._
 //  var iBus  : InstructionCacheMemBus = null
 //  override def build(pipeline: VexRiscv): Unit = ???
 //}
-class IBusCachedPlugin(config : InstructionCacheConfig, memoryTranslatorPortConfig : Any = null)  extends IBusFetcherImpl(
+class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
+                       relaxedPcCalculation : Boolean = false,
+                       prediction : BranchPrediction = NONE,
+                       compressedGen : Boolean = false,
+                       keepPcPlus4 : Boolean = false,
+                       catchAddressMisaligned : Boolean = false,
+                       config : InstructionCacheConfig,
+                       memoryTranslatorPortConfig : Any = null)  extends IBusFetcherImpl(
   catchAccessFault = config.catchAccessFault,
-  resetVector = BigInt(0x80000000l),
-  keepPcPlus4 = false,
-  decodePcGen = true,
-  compressedGen = true,
+  resetVector = resetVector,
+  keepPcPlus4 = keepPcPlus4,
+  decodePcGen = compressedGen,
+  compressedGen = compressedGen,
   cmdToRspStageCount = (if(config.twoCycleCache) 2 else 1),
   injectorReadyCutGen = false,
-  relaxedPcCalculation = false,
-  prediction = NONE,
-  catchAddressMisaligned = false,
+  relaxedPcCalculation = relaxedPcCalculation,
+  prediction = prediction,
+  catchAddressMisaligned = catchAddressMisaligned,
   injectorStage = !config.twoCycleCache){
   import config._
 

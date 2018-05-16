@@ -17,7 +17,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
                                val injectorReadyCutGen : Boolean,
                                val relaxedPcCalculation : Boolean,
                                val prediction : BranchPrediction,
-                               val catchAddressMisaligned : Boolean,
+                               val catchAddressMisaligned : Boolean, //Catch broken prediction ?
                                val injectorStage : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
   var prefetchExceptionPort : Flow[ExceptionCause] = null
 

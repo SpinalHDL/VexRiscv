@@ -40,6 +40,7 @@ object TestsWorkspace {
 //            compressedGen = true
 //          ),
           new IBusCachedPlugin(
+            resetVector = 0x80000000l,
             config = InstructionCacheConfig(
               cacheSize = 1024*16,
               bytePerLine = 32,
