@@ -200,11 +200,12 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
     val iBusRsp = new Area {
       val input = Stream(UInt(32 bits))
       val inputPipeline = Vec(Stream(UInt(32 bits)), cmdToRspStageCount)
+      val inputPipelineHalt = Vec(False, cmdToRspStageCount-1)
       for(i <- 0 until cmdToRspStageCount) {
         //          val doFlush = if(i == cmdToRspStageCount- 1 && ???) killLastStage else flush
         inputPipeline(i) << {i match {
           case 0 => input.m2sPipeWithFlush(flush, relaxedPcCalculation, collapsBubble = false)
-          case _ => inputPipeline(i-1)/*.haltWhen(fetcherHalt)*/.m2sPipeWithFlush(flush,collapsBubble = false)
+          case _ => inputPipeline(i-1).haltWhen(inputPipelineHalt(i-1)).m2sPipeWithFlush(flush,collapsBubble = false)
         }}
       }
 

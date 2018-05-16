@@ -511,6 +511,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     io.cpu.memory.mmuBus.cmd.isValid := io.cpu.memory.isValid  && request.kind === MEMORY //TODO filter request kind
     io.cpu.memory.mmuBus.cmd.virtualAddress := request.address
     io.cpu.memory.mmuBus.cmd.bypassTranslation := request.way
+    io.cpu.memory.mmuBus.end := !io.cpu.memory.isStuck || io.cpu.memory.isRemoved
     cpuMemoryStageNeedReadData := io.cpu.memory.isValid && request.kind === MEMORY && !request.wr
   }
 

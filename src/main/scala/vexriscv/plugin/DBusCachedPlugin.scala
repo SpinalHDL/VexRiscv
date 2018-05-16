@@ -95,7 +95,7 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       MEMORY_MANAGMENT -> True
     ))
 
-    mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(pipeline.memory,memoryTranslatorPortConfig)
+    mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA ,memoryTranslatorPortConfig)
 
     if(catchSomething)
       exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(pipeline.writeBack)
@@ -171,6 +171,7 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       arbitration.haltItself setWhen(cache.io.cpu.memory.haltIt)
 
       cache.io.cpu.memory.mmuBus <> mmuBus
+      arbitration.haltItself setWhen (mmuBus.cmd.isValid && !mmuBus.rsp.hit && !mmuBus.rsp.miss)
     }
 
     writeBack plug new Area{

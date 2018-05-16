@@ -56,20 +56,22 @@ case class MemoryTranslatorRsp() extends Bundle{
   val isIoAccess = Bool
   val allowRead, allowWrite, allowExecute, allowUser = Bool
   val miss = Bool
+  val hit = Bool
 }
 
 case class MemoryTranslatorBus() extends Bundle with IMasterSlave{
   val cmd = MemoryTranslatorCmd()
   val rsp = MemoryTranslatorRsp()
+  val end = Bool
 
   override def asMaster() : Unit = {
-    out(cmd)
+    out(cmd, end)
     in(rsp)
   }
 }
 
 trait MemoryTranslator{
-  def newTranslationPort(stage : Stage, args : Any) : MemoryTranslatorBus
+  def newTranslationPort(priority : Int, args : Any) : MemoryTranslatorBus
 }
 
 

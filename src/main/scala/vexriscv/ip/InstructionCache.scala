@@ -63,6 +63,7 @@ trait InstructionCacheCommons{
   val isValid : Bool
   val isStuck : Bool
   val pc : UInt
+  val physicalAddress : UInt
   val data   : Bits
   val cacheMiss, error, mmuMiss, illegalAccess,isUser : Bool
 }
@@ -70,14 +71,16 @@ trait InstructionCacheCommons{
 case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle with IMasterSlave with InstructionCacheCommons {
   val isValid = Bool
   val isStuck = Bool
+  val isRemoved = Bool
   val pc = UInt(p.addressWidth bits)
   val data    =  Bits(p.cpuDataWidth bits)
   val mmuBus  = MemoryTranslatorBus()
+  val physicalAddress = UInt(p.addressWidth bits)
   val cacheMiss, error, mmuMiss, illegalAccess,isUser  = ifGen(!p.twoCycleCache)(Bool)
 
   override def asMaster(): Unit = {
-    out(isValid, isStuck, pc)
-    inWithNull(error,mmuMiss,illegalAccess,data, cacheMiss)
+    out(isValid, isStuck, isRemoved, pc)
+    inWithNull(error,mmuMiss,illegalAccess,data, cacheMiss,physicalAddress)
     outWithNull(isUser)
     slaveWithNull(mmuBus)
   }
@@ -88,13 +91,14 @@ case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle 
   val isValid = Bool
   val isStuck  = Bool
   val pc = UInt(p.addressWidth bits)
+  val physicalAddress = UInt(p.addressWidth bits)
   val data  =  Bits(p.cpuDataWidth bits)
   val cacheMiss, error, mmuMiss, illegalAccess, isUser  = ifGen(p.twoCycleCache)(Bool)
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, pc)
     outWithNull(isUser)
-    inWithNull(error,mmuMiss,illegalAccess,data, cacheMiss)
+    inWithNull(error,mmuMiss,illegalAccess,data, cacheMiss, physicalAddress)
   }
 }
 
@@ -328,6 +332,8 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     io.cpu.fetch.mmuBus.cmd.isValid := io.cpu.fetch.isValid
     io.cpu.fetch.mmuBus.cmd.virtualAddress := io.cpu.fetch.pc
     io.cpu.fetch.mmuBus.cmd.bypassTranslation := False
+    io.cpu.fetch.mmuBus.end := !io.cpu.fetch.isStuck || io.cpu.fetch.isRemoved
+    io.cpu.fetch.physicalAddress := io.cpu.fetch.mmuBus.rsp.physicalAddress
 
     val resolution = ifGen(!twoCycleCache)( new Area{
       def stage[T <: Data](that : T) = RegNextWhen(that,!io.cpu.decode.isStuck)
@@ -371,6 +377,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     io.cpu.decode.error := hit.error
     io.cpu.decode.mmuMiss := mmuRsp.miss
     io.cpu.decode.illegalAccess := !mmuRsp.allowExecute || (io.cpu.decode.isUser && !mmuRsp.allowUser)
+    io.cpu.decode.physicalAddress := mmuRsp.physicalAddress
   })
 }
 

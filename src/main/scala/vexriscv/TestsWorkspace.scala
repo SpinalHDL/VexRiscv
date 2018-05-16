@@ -41,6 +41,7 @@ object TestsWorkspace {
 //          ),
           new IBusCachedPlugin(
             resetVector = 0x80000000l,
+            compressedGen = true,
             config = InstructionCacheConfig(
               cacheSize = 1024*16,
               bytePerLine = 32,
@@ -54,10 +55,10 @@ object TestsWorkspace {
               asyncTagMemory = false,
               twoCycleRam = false,
               twoCycleCache = true
-            )//,
-//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-//              portTlbSize = 4
-//            )
+            ),
+            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+              portTlbSize = 4
+            )
           ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = true,
