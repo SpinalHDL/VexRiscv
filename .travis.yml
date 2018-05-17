@@ -1,0 +1,55 @@
+language: scala
+
+notifications:
+  email:
+    on_success: never
+
+# See 'project/Version.scala'
+scala:
+   - 2.11.6
+
+sbt_args: -no-colors -J-Xss2m
+
+script:
+  - sbt -jvm-opts travis/jvmopts.compile compile
+  - sbt -jvm-opts travis/jvmopts.test test
+
+jdk:
+  - oraclejdk8
+  - oraclejdk7
+#  - openjdk7
+
+before_install:
+  # JDK fix
+  - cat /etc/hosts # optionally check the content *before*
+  - sudo hostname "$(hostname | cut -c1-63)"
+  - sed -e "s/^\\(127\\.0\\.0\\.1.*\\)/\\1 $(hostname | cut -c1-63)/" /etc/hosts | sudo tee /etc/hosts
+  - cat /etc/hosts # optionally check the content *after*
+  - cd ..
+
+  # Verilator
+  #- sudo apt-get install git make autoconf g++ flex bison -y  # First time prerequisites
+  #- git clone http://git.veripool.org/git/verilator   # Only first time
+  #- unset VERILATOR_ROOT  # For bash
+  #- cd verilator
+  #- git pull        # Make sure we're up-to-date
+  #- git checkout verilator_3_916
+  #- autoconf        # Create ./configure script
+  #- ./configure
+  #- make -j$(nproc)
+  #- sudo make install
+  - cd ..
+
+  - cd VexRiscv
+  - sbt compile
+
+
+before_cache:
+  # Tricks to avoid unnecessary cache updates
+  - find $HOME/.ivy2 -name "ivydata-*.properties" -delete
+  - find $HOME/.sbt -name "*.lock" -delete
+
+cache:
+  directories:
+    - $HOME/.ivy2/cache
+    - $HOME/.sbt/boot/
