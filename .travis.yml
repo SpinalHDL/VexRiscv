@@ -42,8 +42,10 @@ before_install:
   #- make -j$(nproc)
   #- sudo make install
   #- cd ..
-  - echo $BINTRAY_KEY
+
   - cd VexRiscv
+  - curl -T README.md -udolu1990:$BINTRAY_KEY https://api.bintray.com/content/spinalhdl/VexRiscv/test/0.0.4/README.md
+  - curl -X POST -udolu1990:$BINTRAY_KEY https://api.bintray.com/content/spinalhdl/VexRiscv/test/0.0.4/publish
   - sbt compile
 
 
