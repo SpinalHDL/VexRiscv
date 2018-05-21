@@ -32,13 +32,13 @@ case class FetchPredictionCmd() extends Bundle{
   val hadBranch = Bool
   val targetPc = UInt(32 bits)
 }
-case class FetchPredictionRsp(stage : Stage) extends Bundle{
+case class FetchPredictionRsp() extends Bundle{
   val wasRight = Bool
-  val targetPc = UInt(32 bits)
+  val finalPc = UInt(32 bits)
 }
 case class FetchPredictionBus(stage : Stage) extends Bundle {
   val cmd = FetchPredictionCmd()
-  val rsp = FetchPredictionRsp(stage)
+  val rsp = FetchPredictionRsp()
 }
 
 
@@ -68,9 +68,14 @@ class BranchPlugin(earlyBranch : Boolean,
 
 
   var decodePrediction : DecodePredictionBus = null
+  var fetchPrediction : FetchPredictionBus = null
 
 
-  override def askFetchPrediction() = ???
+  override def askFetchPrediction() = {
+    fetchPrediction = FetchPredictionBus(branchStage)
+    fetchPrediction
+  }
+
   override def askDecodePrediction() = {
     decodePrediction = DecodePredictionBus(branchStage)
     decodePrediction
@@ -131,9 +136,10 @@ class BranchPlugin(earlyBranch : Boolean,
     }
   }
 
-  override def build(pipeline: VexRiscv): Unit = (decodePrediction) match {
-    case null => buildWithoutPrediction(pipeline)
-    case _ => buildWithPrediction(pipeline)
+  override def build(pipeline: VexRiscv): Unit = (fetchPrediction,decodePrediction) match {
+    case (null, null) => buildWithoutPrediction(pipeline)
+    case (_   , null) => buildFetchPrediction(pipeline)
+    case (null, _) => buildDecodePrediction(pipeline)
 //    case `DYNAMIC` => buildWithPrediction(pipeline)
 //    case `DYNAMIC_TARGET` => buildDynamicTargetPrediction(pipeline)
   }
@@ -192,7 +198,7 @@ class BranchPlugin(earlyBranch : Boolean,
   }
 
 
-  def buildWithPrediction(pipeline: VexRiscv): Unit = {
+  def buildDecodePrediction(pipeline: VexRiscv): Unit = {
 //    case class BranchPredictorLine()  extends Bundle{
 //      val history = SInt(historyWidth bits)
 //    }
@@ -298,9 +304,9 @@ class BranchPlugin(earlyBranch : Boolean,
       }
 
       if(catchAddressMisaligned) {
-        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && (if(pipeline(RVC_GEN)) jumpInterface.payload(0 downto 0) =/= 0 else jumpInterface.payload(1 downto 0) =/= 0)
+        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && (if(pipeline(RVC_GEN)) input(BRANCH_CALC)(0 downto 0) =/= 0 else input(BRANCH_CALC)(1 downto 0) =/= 0)
         branchExceptionPort.code := 0
-        branchExceptionPort.badAddr := jumpInterface.payload
+        branchExceptionPort.badAddr := input(BRANCH_CALC)
       }
     }
 
@@ -321,139 +327,64 @@ class BranchPlugin(earlyBranch : Boolean,
 
 
 
-//  def buildDynamicTargetPrediction(pipeline: VexRiscv): Unit = {
-//    import pipeline._
-//    import pipeline.config._
-//
-//    case class BranchPredictorLine()  extends Bundle{
-//      val source = Bits(31 - historyRamSizeLog2 bits)
-//      val confidence = UInt(2 bits)
-//      val target = UInt(32 bits)
-//    }
-//
-//    object PREDICTION_WRITE_HAZARD extends Stageable(Bool)
-//    object PREDICTION extends Stageable(BranchPredictorLine())
-//    object PREDICTION_HIT extends Stageable(Bool)
-//
-//    val history = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
-//    val historyWrite = history.writePort
-//
-//
-//    fetch plug new Area{
-//      import fetch._
-//      val line = history.readSync((prefetch.output(PC) >> 2).resized, prefetch.arbitration.isFiring)
-////      val line = history.readAsync((fetch.output(PC) >> 2).resized)
-//      val hit = line.source === (input(PC).asBits >>  1 + historyRamSizeLog2)
-//
-//      //Avoid write to read hazard
-//      val historyWriteLast = RegNext(historyWrite)
-//      val hazard = historyWriteLast.valid && historyWriteLast.address === (output(PC) >> 2).resized
-//      insert(PREDICTION_WRITE_HAZARD) := hazard
-//
-//      predictionJumpInterface.valid := line.confidence.msb && hit && arbitration.isFiring && !hazard
-//      predictionJumpInterface.payload := line.target
-//
-//      insert(PREDICTION) := line
-//      insert(PREDICTION_HIT) := hit
-//    }
-//
-//
-//
-//    //Do branch calculations (conditions + target PC)
-//    execute plug new Area {
-//      import execute._
-//
-//      val less = input(SRC_LESS)
-//      val eq = input(SRC1) === input(SRC2)
-//
-//      insert(BRANCH_DO) := input(BRANCH_CTRL).mux(
-//        BranchCtrlEnum.INC  -> False,
-//        BranchCtrlEnum.JAL  -> True,
-//        BranchCtrlEnum.JALR -> True,
-//        BranchCtrlEnum.B    -> input(INSTRUCTION)(14 downto 12).mux(
-//          B"000"  -> eq  ,
-//          B"001"  -> !eq  ,
-//          M"1-1"  -> !less,
-//          default -> less
-//        )
-//      )
-//
-//      val imm = IMM(input(INSTRUCTION))
-//      val branch_src1 = (input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? input(RS1).asUInt | input(PC)
-//      val branch_src2 = input(BRANCH_CTRL).mux(
-//        BranchCtrlEnum.JAL  -> imm.j_sext,
-//        BranchCtrlEnum.JALR -> imm.i_sext,
-//        default             -> imm.b_sext
-//      ).asUInt
-//
-//      val branchAdder = branch_src1 + branch_src2
-//      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ ((input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? False | branchAdder(0))
-//    }
-//
-//    //Apply branchs (JAL,JALR, Bxx)
-//    val branchStage = if(earlyBranch) execute else memory
-//    branchStage plug new Area {
-//      import branchStage._
-//
-//      val predictionMissmatch = input(PREDICTION).confidence.msb =/= input(BRANCH_DO) || (input(BRANCH_DO) && input(PREDICTION).target =/= input(BRANCH_CALC))
-//
-//      historyWrite.valid := False
-//      historyWrite.address := (branchStage.output(PC) >> 2).resized
-//      historyWrite.data.source := input(PC).asBits >> 1 + historyRamSizeLog2
-//      historyWrite.data.target := input(BRANCH_CALC)
-//
-//      jumpInterface.valid := False
-//      jumpInterface.payload := input(BRANCH_CALC)
-//
-//
-//      when(!input(BRANCH_DO)){
-//        historyWrite.valid := arbitration.isFiring && input(PREDICTION_HIT)
-//        historyWrite.data.confidence := input(PREDICTION).confidence - (input(PREDICTION).confidence =/= 0).asUInt
-//        historyWrite.data.target := input(BRANCH_CALC)
-//
-//
-//        jumpInterface.valid := input(PREDICTION_HIT) && input(PREDICTION).confidence.msb && !input(PREDICTION_WRITE_HAZARD) && arbitration.isFiring
-//        jumpInterface.payload := input(PC) + 4
-//      } otherwise{
-//        when(!input(PREDICTION_HIT) || input(PREDICTION_WRITE_HAZARD)){
-//          jumpInterface.valid := arbitration.isFiring
-//          historyWrite.valid := arbitration.isFiring
-//          historyWrite.data.confidence := "10"
-//        } otherwise {
-//          historyWrite.valid := arbitration.isFiring
-//          historyWrite.data.confidence := input(PREDICTION).confidence + (input(PREDICTION).confidence =/= 3).asUInt
-//          when(!input(PREDICTION).confidence.msb || input(PREDICTION).target =/= input(BRANCH_CALC)){
-//            jumpInterface.valid := arbitration.isFiring
-//          }
-//        }
-//      }
-//
-//      //Prevent rewriting an history which already had hazard
-//      historyWrite.valid clearWhen(input(PREDICTION_WRITE_HAZARD))
-//
-//
-//
-//      when(jumpInterface.valid) {
-//        stages(indexOf(branchStage) - 1).arbitration.flushAll := True
-//      }
-//
-//      if(catchAddressMisaligned) {
-//        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1 downto 0) =/= 0
-//        branchExceptionPort.code := 0
-//        branchExceptionPort.badAddr := jumpInterface.payload
-//      }
-//    }
-//
-//    //Init History
-//    val historyInit = pipeline plug new Area{
-//      val counter = Reg(UInt(historyRamSizeLog2 + 1 bits)) init(0)
-//      when(!counter.msb){
-//        prefetch.arbitration.haltByOther := True
-//        historyWrite.valid := True
-//        historyWrite.address := counter.resized
-//        historyWrite.data.confidence := 0
-//        counter := counter + 1
-//      }
-//    }
-//  }
+  def buildFetchPrediction(pipeline: VexRiscv): Unit = {
+    import pipeline._
+    import pipeline.config._
+
+
+    //Do branch calculations (conditions + target PC)
+    execute plug new Area {
+      import execute._
+
+      val less = input(SRC_LESS)
+      val eq = input(SRC1) === input(SRC2)
+
+      insert(BRANCH_DO) := input(BRANCH_CTRL).mux(
+        BranchCtrlEnum.INC  -> False,
+        BranchCtrlEnum.JAL  -> True,
+        BranchCtrlEnum.JALR -> True,
+        BranchCtrlEnum.B    -> input(INSTRUCTION)(14 downto 12).mux(
+          B"000"  -> eq  ,
+          B"001"  -> !eq  ,
+          M"1-1"  -> !less,
+          default -> less
+        )
+      )
+
+      val imm = IMM(input(INSTRUCTION))
+      val branch_src1 = (input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? input(RS1).asUInt | input(PC)
+      val branch_src2 = input(BRANCH_CTRL).mux(
+        BranchCtrlEnum.JAL  -> imm.j_sext,
+        BranchCtrlEnum.JALR -> imm.i_sext,
+        default             -> imm.b_sext
+      ).asUInt
+
+      val branchAdder = branch_src1 + branch_src2
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ ((input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? False | branchAdder(0))
+    }
+
+    //Apply branchs (JAL,JALR, Bxx)
+    val branchStage = if(earlyBranch) execute else memory
+    branchStage plug new Area {
+      import branchStage._
+
+      val predictionMissmatch = fetchPrediction.cmd.hadBranch =/= input(BRANCH_DO) || (input(BRANCH_DO) && fetchPrediction.cmd.targetPc =/= input(BRANCH_CALC))
+      fetchPrediction.rsp.wasRight := ! predictionMissmatch
+      fetchPrediction.rsp.finalPc := input(BRANCH_CALC)
+
+      jumpInterface.valid := arbitration.isFiring && predictionMissmatch //Probably just isValid instead of isFiring is better
+      jumpInterface.payload := (input(BRANCH_DO) ? input(BRANCH_CALC) | input(PC) + (if(pipeline(RVC_GEN)) ((input(IS_RVC)) ? U(2) | U(4)) else 4))
+
+
+      when(jumpInterface.valid) {
+        stages(indexOf(branchStage) - 1).arbitration.flushAll := True
+      }
+
+      if(catchAddressMisaligned) {
+        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && (if(pipeline(RVC_GEN)) input(BRANCH_CALC)(0 downto 0) =/= 0 else input(BRANCH_CALC)(1 downto 0) =/= 0)
+        branchExceptionPort.code := 0
+        branchExceptionPort.badAddr := input(BRANCH_CALC)
+      }
+    }
+  }
 }

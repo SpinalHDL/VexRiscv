@@ -53,6 +53,8 @@ object BrieyConfig{
         //            catchAccessFault = true
         //          ),
         new IBusCachedPlugin(
+          resetVector = 0x80000000l,
+          prediction = STATIC,
           config = InstructionCacheConfig(
             cacheSize = 4096,
             bytePerLine =32,
@@ -64,7 +66,8 @@ object BrieyConfig{
             catchAccessFault = true,
             catchMemoryTranslationMiss = true,
             asyncTagMemory = false,
-            twoCycleRam = true
+            twoCycleRam = true,
+            twoCycleCache = true
           )
           //            askMemoryTranslation = true,
           //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
@@ -123,7 +126,7 @@ object BrieyConfig{
         new BranchPlugin(
           earlyBranch = false,
           catchAddressMisaligned = true,
-          prediction = STATIC
+          prediction = NONE
         ),
         new CsrPlugin(
           config = CsrPluginConfig(

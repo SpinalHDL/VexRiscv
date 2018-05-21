@@ -41,7 +41,8 @@ object TestsWorkspace {
 //          ),
           new IBusCachedPlugin(
             resetVector = 0x80000000l,
-            compressedGen = true,
+            compressedGen = false,
+            prediction = DYNAMIC_TARGET,
             config = InstructionCacheConfig(
               cacheSize = 1024*16,
               bytePerLine = 32,

@@ -22,6 +22,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
   var prefetchExceptionPort : Flow[ExceptionCause] = null
 
   var decodePrediction : DecodePredictionBus = null
+  var fetchPrediction : FetchPredictionBus = null
   assert(cmdToRspStageCount >= 1)
   assert(!(cmdToRspStageCount == 1 && !injectorStage))
   assert(!(compressedGen && !decodePcGen))
@@ -68,6 +69,9 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         predictionJumpInterface = createJumpInterface(pipeline.decode)
         decodePrediction = pipeline.service(classOf[PredictionInterface]).askDecodePrediction()
       }
+      case DYNAMIC_TARGET => {
+        fetchPrediction = pipeline.service(classOf[PredictionInterface]).askFetchPrediction()
+      }
     }
   }
 
@@ -98,6 +102,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
     class PcFetch extends Area{
       val preOutput = Stream(UInt(32 bits))
       val output = preOutput.haltWhen(fetcherHalt)
+      val predictionPcLoad = ifGen(prediction == DYNAMIC_TARGET) (Flow(UInt(32 bits)))
     }
 
     val fetchPc = if(relaxedPcCalculation) new PcFetch {
@@ -117,6 +122,11 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       }
 
       //application of the selected jump request
+      if(predictionPcLoad != null) {
+        when(predictionPcLoad.valid) {
+          pcReg := predictionPcLoad.payload
+        }
+      }
       when(jump.pcLoad.valid) {
         pcReg := jump.pcLoad.payload
       }
@@ -131,6 +141,13 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       val pc = pcReg + (inc ## B"00").asUInt
       val samplePcNext = False
 
+      if(predictionPcLoad != null) {
+        when(predictionPcLoad.valid) {
+          inc := False
+          samplePcNext := True
+          pc := predictionPcLoad.payload
+        }
+      }
       when(jump.pcLoad.valid) {
         inc := False
         samplePcNext := True
@@ -252,26 +269,26 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
     def condApply[T](that : T, cond : Boolean)(func : (T) => T) = if(cond)func(that) else that
     val injector = new Area {
-      val inputBeforeHalt = condApply(if (decodePcGen) decompressor.output else iBusRsp.output, injectorReadyCutGen)(_.s2mPipe(flush))
+      val inputBeforeStage = condApply(if (decodePcGen) decompressor.output else iBusRsp.output, injectorReadyCutGen)(_.s2mPipe(flush))
       if (injectorReadyCutGen) {
-        iBusRsp.readyForError.clearWhen(inputBeforeHalt.valid)
-        incomingInstruction setWhen (inputBeforeHalt.valid)
+        iBusRsp.readyForError.clearWhen(inputBeforeStage.valid)
+        incomingInstruction setWhen (inputBeforeStage.valid)
       }
       val decodeInput = (if (injectorStage) {
-        val decodeInput = inputBeforeHalt.m2sPipeWithFlush(killLastStage, collapsBubble = false)
-        decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), inputBeforeHalt.rsp.inst)
+        val decodeInput = inputBeforeStage.m2sPipeWithFlush(killLastStage, collapsBubble = false)
+        decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), inputBeforeStage.rsp.inst)
         iBusRsp.readyForError.clearWhen(decodeInput.valid)
         incomingInstruction setWhen (decodeInput.valid)
         decodeInput
       } else {
-        inputBeforeHalt
+        inputBeforeStage
       })
 
       if (decodePcGen) {
         decodeNextPcValid := True
         decodeNextPc := decodePc.pcReg
       } else {
-        val lastStageStream = if (injectorStage) inputBeforeHalt
+        val lastStageStream = if (injectorStage) inputBeforeStage
         else if (cmdToRspStageCount > 1) iBusRsp.inputPipeline(cmdToRspStageCount - 2)
         else throw new Exception("Fetch should at least have two stages")
 
@@ -354,7 +371,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       }
     }
 
-    prediction match {
+    val predictor = prediction match {
       case NONE =>
       case STATIC | DYNAMIC => {
         def historyWidth = 2
@@ -392,6 +409,67 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
           //                          predictionExceptionPort.code := 0
           //                          predictionExceptionPort.badAddr := predictionJumpInterface.payload
         }
+      }
+      case DYNAMIC_TARGET => new Area{
+        val historyRamSizeLog2 : Int = 10
+        case class BranchPredictorLine()  extends Bundle{
+          val source = Bits(31 - historyRamSizeLog2 bits)
+          val branchWish = UInt(2 bits)
+          val target = UInt(32 bits)
+        }
+
+        val history = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
+        val historyWrite = history.writePort
+
+        val line = history.readSync((fetchPc.output.payload >> 2).resized, iBusRsp.inputPipeline(0).ready)
+        val hit = line.source === (iBusRsp.inputPipeline(0).payload.asBits >>  1 + historyRamSizeLog2)
+
+        //Avoid write to read hazard
+        val historyWriteLast = RegNextWhen(historyWrite, iBusRsp.inputPipeline(0).ready)
+        val hazard = historyWriteLast.valid && historyWriteLast.address === (iBusRsp.inputPipeline(0).payload >> 2).resized
+        fetchPc.predictionPcLoad.valid := line.branchWish.msb && hit && iBusRsp.inputPipeline(0).fire && !flush && !hazard
+        fetchPc.predictionPcLoad.payload := line.target
+
+        case class PredictionResult()  extends Bundle{
+          val hazard = Bool
+          val hit = Bool
+          val line = BranchPredictorLine()
+        }
+
+        val fetchContext = PredictionResult()
+        fetchContext.hazard := hazard
+        fetchContext.hit := hit
+        fetchContext.line := line  //RegNextWhen(e._1, e._2.)
+        val iBusRspContext = iBusRsp.inputPipeline.tail.foldLeft(fetchContext)((data,stream) => RegNextWhen(data, stream.ready))
+        val injectorContext = Delay(iBusRspContext,cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
+
+        object PREDICTION_CONTEXT extends Stageable(PredictionResult())
+        pipeline.decode.insert(PREDICTION_CONTEXT) := injectorContext
+        val branchStage = fetchPrediction.stage
+        val branchContext = branchStage.input(PREDICTION_CONTEXT)
+        fetchPrediction.cmd.hadBranch := branchContext.hit && !branchContext.hazard && branchContext.line.branchWish.msb
+        fetchPrediction.cmd.targetPc := branchContext.line.target
+
+
+        historyWrite.valid := False
+        historyWrite.address := (branchStage.input(PC) >> 2).resized
+        historyWrite.data.source := branchStage.input(PC).asBits >> 1 + historyRamSizeLog2
+        historyWrite.data.target := fetchPrediction.rsp.finalPc
+
+        when(fetchPrediction.rsp.wasRight) {
+          historyWrite.valid := branchContext.hit
+          historyWrite.data.branchWish := branchContext.line.branchWish + (branchContext.line.branchWish === 2).asUInt - (branchContext.line.branchWish === 1).asUInt
+        } otherwise {
+          when(branchContext.hit) {
+            historyWrite.valid := True
+            historyWrite.data.branchWish := branchContext.line.branchWish - (branchContext.line.branchWish.msb).asUInt + (!branchContext.line.branchWish.msb).asUInt
+          } otherwise {
+            historyWrite.valid := True
+            historyWrite.data.branchWish := "10"
+          }
+        }
+
+        historyWrite.valid clearWhen(branchContext.hazard || !branchStage.arbitration.isFiring)
       }
     }
   }
