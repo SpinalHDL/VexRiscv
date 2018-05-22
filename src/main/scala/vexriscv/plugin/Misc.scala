@@ -68,7 +68,7 @@ object RvcDecompressor{
           whenTrue = B((6 downto 0) -> i(12)), //andi
           whenFalse = B"0" ## (i(11 downto 10) === B"01" || (i(11 downto 10) === B"11" && i(6 downto 5) === B"00")) ## B"00000"
         )
-        val rs2Shift = isShift ? shiftImm | rcl
+        val rs2Shift = (isShift || isImmediate) ? shiftImm | rcl
         val opc = (isImmediate ? B"0010011" | B"0110011")
         ret := msbs ## rs2Shift ## rch ## func3 ## rch ## opc
       }
