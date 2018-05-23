@@ -105,9 +105,9 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
 class IBusSimplePlugin(resetVector : BigInt,
                        catchAccessFault : Boolean = false,
-                       catchAddressMisaligned : Boolean = false,
                        relaxedPcCalculation : Boolean = false,
                        prediction : BranchPrediction = NONE,
+                       historyRamSizeLog2 : Int = 10,
                        keepPcPlus4 : Boolean = false,
                        compressedGen : Boolean = false,
                        busLatencyMin : Int = 1,
@@ -123,8 +123,8 @@ class IBusSimplePlugin(resetVector : BigInt,
     cmdToRspStageCount = busLatencyMin,
     injectorReadyCutGen = false,
     relaxedPcCalculation = relaxedPcCalculation,
-    prediction = prediction,
-    catchAddressMisaligned = catchAddressMisaligned,
+    prediction_ = prediction,
+    historyRamSizeLog2 = historyRamSizeLog2,
     injectorStage = injectorStage){
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null

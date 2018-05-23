@@ -87,7 +87,7 @@ class FormalPlugin extends Plugin[VexRiscv]{
 
       rvfi.valid :=  arbitration.isFiring
       rvfi.order := order
-      rvfi.insn := output(INSTRUCTION)
+      rvfi.insn := output(FORMAL_INSTRUCTION)
       rvfi.trap := False
       rvfi.halt := False
       rvfi.intr := False

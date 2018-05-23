@@ -29,9 +29,8 @@ object VexRiscvAvalonForSim{
           new IBusSimplePlugin(
             resetVector = 0x00000000l,
             relaxedPcCalculation = false,
-            prediction = NONE,
+            prediction = STATIC,
             catchAccessFault = false,
-            catchAddressMisaligned = false,
             compressedGen = false
           ),
           new DBusSimplePlugin(
@@ -105,8 +104,7 @@ object VexRiscvAvalonForSim{
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = false,
-            catchAddressMisaligned = true,
-            prediction = STATIC
+            catchAddressMisaligned = true
           ),
           new CsrPlugin(
             config = CsrPluginConfig(

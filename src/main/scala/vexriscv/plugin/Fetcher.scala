@@ -16,13 +16,16 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
                                val cmdToRspStageCount : Int,
                                val injectorReadyCutGen : Boolean,
                                val relaxedPcCalculation : Boolean,
-                               val prediction : BranchPrediction,
-                               val catchAddressMisaligned : Boolean, //Catch broken prediction ?
+                               val prediction_ : BranchPrediction,
+                               val historyRamSizeLog2 : Int,
                                val injectorStage : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
   var prefetchExceptionPort : Flow[ExceptionCause] = null
-
   var decodePrediction : DecodePredictionBus = null
   var fetchPrediction : FetchPredictionBus = null
+  val prediction = prediction_ match{
+    case DYNAMIC => STATIC
+    case x => x
+  }
   assert(cmdToRspStageCount >= 1)
   assert(!(cmdToRspStageCount == 1 && !injectorStage))
   assert(!(compressedGen && !decodePcGen))
@@ -56,9 +59,8 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
   override def setup(pipeline: VexRiscv): Unit = {
     fetcherHalt = False
     incomingInstruction = False
-    if(catchAccessFault || catchAddressMisaligned) {
+    if(catchAccessFault) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
-//      decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1).setName("iBusErrorExceptionnPort")
     }
 
     pipeline(RVC_GEN) = compressedGen
@@ -369,13 +371,32 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
           }
         })
       }
+
+
+      //Formal verification signals generation, miss prediction stuff ?
+      val formal = new Area {
+        val raw = if(compressedGen) decompressor.raw else inputBeforeStage.rsp.inst
+        val rawInDecode = Delay(raw, if(injectorStage) 1 else 0, when = decodeInput.ready)
+        decode.insert(FORMAL_INSTRUCTION) := rawInDecode
+
+        decode.insert(FORMAL_PC_NEXT) := (if (compressedGen)
+          decode.input(PC) + ((decode.input(IS_RVC)) ? U(2) | U(4))
+        else
+          decode.input(PC) + 4)
+
+          jumpInfos
+        .foreach(info => {
+          when(info.interface.valid) {
+            info.stage.output(FORMAL_PC_NEXT) := info.interface.payload
+          }
+        })
+      }
     }
 
     val predictor = prediction match {
       case NONE =>
       case STATIC | DYNAMIC => {
         def historyWidth = 2
-        def historyRamSizeLog2 = 10
         //          if(prediction == DYNAMIC) {
         //            case class BranchPredictorLine()  extends Bundle{
         //              val history = SInt(historyWidth bits)
@@ -401,14 +422,6 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
         predictionJumpInterface.valid := decodePrediction.cmd.hadBranch && decode.arbitration.isFiring //TODO OH Doublon de priorité
         predictionJumpInterface.payload := decode.input(PC) + ((decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
-
-
-        if(catchAddressMisaligned) {
-          ???
-          //                          predictionExceptionPort.valid := input(INSTRUCTION_READY) && input(PREDICTION_HAD_BRANCHED) && arbitration.isValid && predictionJumpInterface.payload(1 downto 0) =/= 0
-          //                          predictionExceptionPort.code := 0
-          //                          predictionExceptionPort.badAddr := predictionJumpInterface.payload
-        }
       }
       case DYNAMIC_TARGET => new Area{
         val historyRamSizeLog2 : Int = 10
@@ -416,6 +429,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
           val source = Bits(31 - historyRamSizeLog2 bits)
           val branchWish = UInt(2 bits)
           val target = UInt(32 bits)
+          val unaligned = ifGen(compressedGen)(Bool)
         }
 
         val history = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)

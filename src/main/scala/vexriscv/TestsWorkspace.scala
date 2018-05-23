@@ -31,36 +31,36 @@ object TestsWorkspace {
     SpinalConfig(mergeAsyncProcess = false).generateVerilog {
       val configFull = VexRiscvConfig(
         plugins = List(
-//          new IBusSimplePlugin(
-//            resetVector = 0x80000000l,
-//            relaxedPcCalculation = false,
-//            prediction = NONE,
-//            catchAccessFault = true,
-//            catchAddressMisaligned = false,
-//            compressedGen = true
-//          ),
-          new IBusCachedPlugin(
+          new IBusSimplePlugin(
             resetVector = 0x80000000l,
-            compressedGen = false,
-            prediction = DYNAMIC_TARGET,
-            config = InstructionCacheConfig(
-              cacheSize = 1024*16,
-              bytePerLine = 32,
-              wayCount = 1,
-              addressWidth = 32,
-              cpuDataWidth = 32,
-              memDataWidth = 32,
-              catchIllegalAccess = false,
-              catchAccessFault = true,
-              catchMemoryTranslationMiss = false,
-              asyncTagMemory = false,
-              twoCycleRam = false,
-              twoCycleCache = true
-            ),
-            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-              portTlbSize = 4
-            )
+            relaxedPcCalculation = false,
+            prediction = NONE,
+            historyRamSizeLog2 = 8,
+            catchAccessFault = true,
+            compressedGen = true
           ),
+//          new IBusCachedPlugin(
+//            resetVector = 0x80000000l,
+//            compressedGen = true,
+//            prediction = DYNAMIC_TARGET,
+//            config = InstructionCacheConfig(
+//              cacheSize = 1024*16,
+//              bytePerLine = 32,
+//              wayCount = 1,
+//              addressWidth = 32,
+//              cpuDataWidth = 32,
+//              memDataWidth = 32,
+//              catchIllegalAccess = false,
+//              catchAccessFault = true,
+//              catchMemoryTranslationMiss = false,
+//              asyncTagMemory = false,
+//              twoCycleRam = false,
+//              twoCycleCache = true
+//            ),
+//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//              portTlbSize = 4
+//            )
+//          ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = true,
 //            catchAccessFault = true,
@@ -129,9 +129,7 @@ object TestsWorkspace {
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = true,
-            catchAddressMisaligned = true,
-            prediction = NONE,
-            historyRamSizeLog2 = 8
+            catchAddressMisaligned = true
           ),
           new YamlPlugin("cpu0.yaml")
         )

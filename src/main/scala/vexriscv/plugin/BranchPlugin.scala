@@ -49,8 +49,6 @@ trait PredictionInterface{
 
 class BranchPlugin(earlyBranch : Boolean,
                    catchAddressMisaligned : Boolean,
-                   prediction : BranchPrediction,
-                   historyRamSizeLog2 : Int = 10,
                    historyWidth : Int = 2) extends Plugin[VexRiscv] with PredictionInterface{
 
 
@@ -119,20 +117,10 @@ class BranchPlugin(earlyBranch : Boolean,
     val pcManagerService = pipeline.service(classOf[JumpService])
     jumpInterface = pcManagerService.createJumpInterface(branchStage)
 
-    prediction match {
-      case NONE =>
-//      case STATIC | DYNAMIC => predictionJumpInterface = pcManagerService.createJumpInterface(pipeline.decode)
-//      case DYNAMIC_TARGET => predictionJumpInterface = pcManagerService.createJumpInterface(pipeline.fetch)
-    }
 
     if (catchAddressMisaligned) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       branchExceptionPort = exceptionService.newExceptionPort(branchStage)
-      prediction match {
-        case NONE =>
-//        case STATIC | DYNAMIC => predictionExceptionPort = exceptionService.newExceptionPort(pipeline.decode)
-//        case DYNAMIC_TARGET =>
-      }
     }
   }
 

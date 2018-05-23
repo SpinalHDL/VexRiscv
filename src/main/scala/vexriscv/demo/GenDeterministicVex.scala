@@ -14,9 +14,8 @@ object GenDeterministicVex extends App{
         new IBusSimplePlugin(
           resetVector = 0x80000000l,
           relaxedPcCalculation = false,
-          prediction = NONE,
+          prediction = STATIC,
           catchAccessFault = true,
-          catchAddressMisaligned = true,
           compressedGen = false
         ),
         new DBusSimplePlugin(
@@ -55,8 +54,7 @@ object GenDeterministicVex extends App{
         new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
           earlyBranch = true,
-          catchAddressMisaligned = true,
-          prediction = STATIC
+          catchAddressMisaligned = true
         ),
         new YamlPlugin("cpu0.yaml")
       )

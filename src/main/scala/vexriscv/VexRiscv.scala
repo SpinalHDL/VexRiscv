@@ -42,6 +42,7 @@ case class VexRiscvConfig(plugins : Seq[Plugin[VexRiscv]]){
   object FORMAL_MEM_WMASK  extends Stageable(Bits(4 bits))
   object FORMAL_MEM_RDATA  extends Stageable(Bits(32 bits))
   object FORMAL_MEM_WDATA  extends Stageable(Bits(32 bits))
+  object FORMAL_INSTRUCTION extends Stageable(Bits(32 bits))
 
 
   object Src1CtrlEnum extends SpinalEnum(binarySequential){

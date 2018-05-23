@@ -125,8 +125,7 @@ object BrieyConfig{
         ),
         new BranchPlugin(
           earlyBranch = false,
-          catchAddressMisaligned = true,
-          prediction = NONE
+          catchAddressMisaligned = true
         ),
         new CsrPlugin(
           config = CsrPluginConfig(

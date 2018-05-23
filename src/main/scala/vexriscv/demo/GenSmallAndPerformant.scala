@@ -16,7 +16,6 @@ object GenSmallAndProductive extends App{
           relaxedPcCalculation = false,
           prediction = NONE,
           catchAccessFault = false,
-          catchAddressMisaligned = false,
           compressedGen = false
         ),
         new DBusSimplePlugin(
@@ -48,8 +47,7 @@ object GenSmallAndProductive extends App{
         ),
         new BranchPlugin(
           earlyBranch = false,
-          catchAddressMisaligned = false,
-          prediction = NONE
+          catchAddressMisaligned = false
         ),
         new YamlPlugin("cpu0.yaml")
       )

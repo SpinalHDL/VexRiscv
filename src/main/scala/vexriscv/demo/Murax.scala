@@ -57,7 +57,6 @@ object MuraxConfig{
         relaxedPcCalculation = true,
         prediction = NONE,
         catchAccessFault = false,
-        catchAddressMisaligned = false,
         compressedGen = false
       ),
       new DBusSimplePlugin(
@@ -90,8 +89,7 @@ object MuraxConfig{
       ),
       new BranchPlugin(
         earlyBranch = false,
-        catchAddressMisaligned = false,
-        prediction = NONE
+        catchAddressMisaligned = false
       ),
       new YamlPlugin("cpu0.yaml")
     ),
@@ -310,8 +308,14 @@ object MuraxDhrystoneReadyMulDivStatic{
       config.cpuPlugins.remove(config.cpuPlugins.indexWhere(_.isInstanceOf[BranchPlugin]))
       config.cpuPlugins +=new BranchPlugin(
         earlyBranch = false,
-        catchAddressMisaligned = false,
-        prediction = STATIC
+        catchAddressMisaligned = false
+      )
+      config.cpuPlugins += new IBusSimplePlugin(
+        resetVector = 0x80000000l,
+        relaxedPcCalculation = true,
+        prediction = STATIC,
+        catchAccessFault = false,
+        compressedGen = false
       )
       config.cpuPlugins.remove(config.cpuPlugins.indexWhere(_.isInstanceOf[LightShifterPlugin]))
       config.cpuPlugins += new FullBarrielShifterPlugin

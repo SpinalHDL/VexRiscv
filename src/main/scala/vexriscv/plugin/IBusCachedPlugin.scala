@@ -12,9 +12,9 @@ import spinal.lib._
 class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
                        relaxedPcCalculation : Boolean = false,
                        prediction : BranchPrediction = NONE,
+                       historyRamSizeLog2 : Int = 10,
                        compressedGen : Boolean = false,
                        keepPcPlus4 : Boolean = false,
-                       catchAddressMisaligned : Boolean = false,
                        config : InstructionCacheConfig,
                        memoryTranslatorPortConfig : Any = null)  extends IBusFetcherImpl(
   catchAccessFault = config.catchAccessFault,
@@ -25,8 +25,8 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
   cmdToRspStageCount = (if(config.twoCycleCache) 2 else 1),
   injectorReadyCutGen = false,
   relaxedPcCalculation = relaxedPcCalculation,
-  prediction = prediction,
-  catchAddressMisaligned = catchAddressMisaligned,
+  prediction_ = prediction,
+  historyRamSizeLog2 = historyRamSizeLog2,
   injectorStage = !config.twoCycleCache){
   import config._
 

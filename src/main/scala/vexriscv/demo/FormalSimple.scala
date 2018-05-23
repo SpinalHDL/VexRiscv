@@ -18,8 +18,7 @@ object FormalSimple extends App{
           relaxedPcCalculation = false,
           prediction = NONE,
           catchAccessFault = false,
-          catchAddressMisaligned = false,
-          compressedGen = false
+          compressedGen = true
         ),
 
         new DBusSimplePlugin(
@@ -51,8 +50,7 @@ object FormalSimple extends App{
         ),
         new BranchPlugin(
           earlyBranch = false,
-          catchAddressMisaligned = true,
-          prediction = NONE
+          catchAddressMisaligned = true
         ),
         new YamlPlugin("cpu0.yaml")
       )
