@@ -17,7 +17,7 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    catchAccessFault : Boolean,
                                    catchMemoryTranslationMiss : Boolean,
                                    asyncTagMemory : Boolean,
-                                   twoCycleCache : Boolean = false,
+                                   twoCycleCache : Boolean = true,
                                    twoCycleRam : Boolean = false,
                                    preResetFlush : Boolean = false){
 
