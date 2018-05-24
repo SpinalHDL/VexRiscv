@@ -73,7 +73,45 @@ class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
   io.dBus.rsp.error := False
 }
 
+object HexTools{
+  def readHexFile(path : String, callback : (Int, Int) => Unit): Unit ={
+    import scala.io.Source
+    def hToI(that : String, start : Int, size : Int) = Integer.parseInt(that.substring(start,start + size), 16)
 
+    var offset = 0
+    for (line <- Source.fromFile(path).getLines) {
+      if (line.charAt(0) == ':'){
+        val byteCount = hToI(line, 1, 2)
+        val nextAddr = hToI(line, 3, 4) + offset
+        val key = hToI(line, 7, 2)
+        key match {
+          case 0 =>
+            for(i <- 0 until byteCount){
+              callback(nextAddr + i, hToI(line, 9 + i * 2, 2))
+            }
+          case 2 =>
+            offset = hToI(line, 9, 4) << 4
+          case 4 =>
+            offset = hToI(line, 9, 4) << 16
+          case 3 =>
+          case 5 =>
+          case 1 =>
+        }
+      }
+    }
+  }
+
+
+
+  def initRam[T <: Data](ram : Mem[T], onChipRamHexFile : String, ramOffset : BigInt): Unit ={
+    val initContent = Array.fill[BigInt](ram.wordCount)(0)
+    HexTools.readHexFile(onChipRamHexFile,(address,data) => {
+      val addressWithoutOffset = (address - ramOffset).toInt
+      initContent(addressWithoutOffset >> 2) |= BigInt(data) << ((addressWithoutOffset & 3)*8)
+    })
+    ram.initBigInt(initContent)
+  }
+}
 
 class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpleBusConfig : SimpleBusConfig) extends Component{
   val io = new Bundle{
@@ -92,39 +130,7 @@ class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpl
   io.bus.cmd.ready := True
 
   if(onChipRamHexFile != null){
-    def readHexFile(path : String, callback : (Int, Int) => Unit): Unit ={
-      import scala.io.Source
-      def hToI(that : String, start : Int, size : Int) = Integer.parseInt(that.substring(start,start + size), 16)
-
-      var offset = 0
-      for (line <- Source.fromFile(path).getLines) {
-        if (line.charAt(0) == ':'){
-          val byteCount = hToI(line, 1, 2)
-          val nextAddr = hToI(line, 3, 4) + offset
-          val key = hToI(line, 7, 2)
-          key match {
-            case 0 =>
-              for(i <- 0 until byteCount){
-                callback(nextAddr + i, hToI(line, 9 + i * 2, 2))
-              }
-            case 2 =>
-              offset = hToI(line, 9, 4) << 4
-            case 4 =>
-              offset = hToI(line, 9, 4) << 16
-            case 3 =>
-            case 5 =>
-            case 1 =>
-          }
-        }
-      }
-    }
-
-    val initContent = Array.fill[BigInt](ram.wordCount)(0)
-    readHexFile(onChipRamHexFile,(address,data) => {
-      val addressWithoutOffset = address + Int.MinValue
-      initContent(addressWithoutOffset >> 2) |= BigInt(data) << ((addressWithoutOffset & 3)*8)
-    })
-    ram.initBigInt(initContent)
+    HexTools.initRam(ram, onChipRamHexFile, 0x80000000l)
   }
 }
 

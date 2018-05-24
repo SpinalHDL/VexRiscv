@@ -19,27 +19,6 @@
 - [CPU clock and resets](#cpu-clock-and-resets)
 - [VexRiscv Architecture](#vexriscv-architecture)
   * [Plugins](#plugins)
-    + [PcManagerSimplePlugin](#pcmanagersimpleplugin)
-    + [IBusSimplePlugin](#ibussimpleplugin)
-    + [IBusCachedPlugin](#ibuscachedplugin)
-    + [DecoderSimplePlugin](#decodersimpleplugin)
-    + [RegFilePlugin](#regfileplugin)
-    + [HazardSimplePlugin](#hazardsimpleplugin)
-    + [SrcPlugin](#srcplugin)
-    + [IntAluPlugin](#intaluplugin)
-    + [LightShifterPlugin](#lightshifterplugin)
-    + [FullBarrielShifterPlugin](#fullbarrielshifterplugin)
-    + [BranchPlugin](#branchplugin)
-    + [DBusSimplePlugin](#dbussimpleplugin)
-    + [DBusCachedPlugin](#dbuscachedplugin)
-    + [MulPlugin](#mulplugin)
-    + [DivPlugin](#divplugin)
-    + [MulDivIterativePlugin](#muldiviterativeplugin)
-    + [CsrPlugin](#csrplugin)
-    + [StaticMemoryTranslatorPlugin](#staticmemorytranslatorplugin)
-    + [MemoryTranslatorPlugin](#memorytranslatorplugin)
-    + [DebugPlugin](#debugplugin)
-    + [YamlPlugin](#yamlplugin)
 
 
 
@@ -47,7 +26,7 @@
 
 This repository host an RISC-V implementation written in SpinalHDL. There is some specs :
 
-- RV32IM instruction set
+- RV32I[M] instruction set
 - Pipelined on 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
 - 1.44 DMIPS/Mhz when all features are enabled
 - Optimized for FPGA, fully portable
@@ -60,6 +39,8 @@ This repository host an RISC-V implementation written in SpinalHDL. There is som
 - Two implementation of shift instructions, Single cycle / shiftNumber cycles
 - Each stage could have bypass or interlock hazard logic
 - FreeRTOS port https://github.com/Dolu1990/FreeRTOS-RISCV
+- The data cache support atomic LR/SC
+- RV32 compressed instruction are supported in the reworkFetch branch for configurations without instruction cache (will be merge in master, WIP)
 
 The hardware description of this CPU is done by using an very software oriented approach
 (without any overhead in the generated hardware). There is a list of software concepts used :
@@ -86,21 +67,25 @@ VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass, no interrupt) ->
   Artix 7    -> 346 Mhz 481 LUT 539 FF
   Cyclone V  -> 201 Mhz 347 ALMs
   Cyclone IV -> 190 Mhz 673 LUT 529 FF 
+  iCE40      -> 81 Mhz 1130 LC
   
 VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass) ->
   Artix 7    -> 340 Mhz 562 LUT 589 FF 
   Cyclone V  -> 202 Mhz 387 ALMs
   Cyclone IV -> 180 Mhz 780 LUT 579 FF 
+  iCE40      -> 71 Mhz 1278 LC
   
 VexRiscv small and productive (RV32I, 0.82 DMIPS/Mhz)  ->
   Artix 7    -> 327 Mhz 698 LUT 558 FF 
   Cyclone V  -> 158 Mhz 524 ALMs
   Cyclone IV -> 146 Mhz 1,061 LUT 552 FF 
-
+  iCE40      -> 55 Mhz 1541 LC
+  
 VexRiscv small and productive with I$ (RV32I, 0.72 DMIPS/Mhz, 4KB-I$)  ->
   Artix 7    -> 331 Mhz 727 LUT 600 FF 
   Cyclone V  -> 152 Mhz 536 ALMs
   Cyclone IV -> 156 Mhz 1,075 LUT 565 FF 
+  iCE40      -> 54 Mhz 1686 LC
 
 VexRiscv full no cache (RV32IM, 1.22 DMIPS/Mhz, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
   Artix 7    -> 295 Mhz 1399 LUT 971 FF 
@@ -629,7 +614,29 @@ So again, if you generate the CPU without any plugin, it will only contain the 5
 
 ### Plugins
 
-This chapter (WIP) will describe plugins currently implemented
+This chapter is describing plugins currently implemented.
+
+- [PcManagerSimplePlugin](#pcmanagersimpleplugin)
+- [IBusSimplePlugin](#ibussimpleplugin)
+- [IBusCachedPlugin](#ibuscachedplugin)
+- [DecoderSimplePlugin](#decodersimpleplugin)
+- [RegFilePlugin](#regfileplugin)
+- [HazardSimplePlugin](#hazardsimpleplugin)
+- [SrcPlugin](#srcplugin)
+- [IntAluPlugin](#intaluplugin)
+- [LightShifterPlugin](#lightshifterplugin)
+- [FullBarrielShifterPlugin](#fullbarrielshifterplugin)
+- [BranchPlugin](#branchplugin)
+- [DBusSimplePlugin](#dbussimpleplugin)
+- [DBusCachedPlugin](#dbuscachedplugin)
+- [MulPlugin](#mulplugin)
+- [DivPlugin](#divplugin)
+- [MulDivIterativePlugin](#muldiviterativeplugin)
+- [CsrPlugin](#csrplugin)
+- [StaticMemoryTranslatorPlugin](#staticmemorytranslatorplugin)
+- [MemoryTranslatorPlugin](#memorytranslatorplugin)
+- [DebugPlugin](#debugplugin)
+- [YamlPlugin](#yamlplugin)
 
 #### PcManagerSimplePlugin
 

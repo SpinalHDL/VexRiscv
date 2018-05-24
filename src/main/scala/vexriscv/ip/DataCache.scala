@@ -3,9 +3,9 @@ package vexriscv.ip
 import vexriscv._
 import spinal.core._
 import spinal.lib._
-import spinal.lib.bus.amba4.axi.{Axi4Shared, Axi4Config}
+import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4Shared}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
-
+import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 
 case class DataCacheConfig( cacheSize : Int,
                             bytePerLine : Int,
@@ -45,6 +45,21 @@ case class DataCacheConfig( cacheSize : Int,
     burstOnBurstBoundariesOnly = true,
     useResponse = true,
     maximumPendingReadTransactions = 2
+  )
+
+  def getWishboneConfig() = WishboneConfig(
+    addressWidth = 30,
+    dataWidth = 32,
+    selWidth = 4,
+    useSTALL = false,
+    useLOCK = false,
+    useERR = true,
+    useRTY = false,
+    tgaWidth = 0,
+    tgcWidth = 0,
+    tgdWidth = 0,
+    useBTE = true,
+    useCTI = true
   )
 }
 
@@ -284,6 +299,48 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     rsp.error := mm.response =/= AvalonMM.Response.OKAY
 
     mm
+  }
+
+  def toWishbone(): Wishbone = {
+    val wishboneConfig = p.getWishboneConfig()
+    val bus = Wishbone(wishboneConfig)
+    val counter = Reg(UInt(log2Up(p.burstSize) bits)) init(0)
+
+    val cmdBridge = Stream (DataCacheMemCmd(p))
+    val isBurst = cmdBridge.length =/= 0
+    cmdBridge.valid := cmd.valid
+    cmdBridge.address := (isBurst ? (cmd.address(31 downto widthOf(counter) + 2) @@ counter @@ "00") | (cmd.address(31 downto 2) @@ "00"))
+    cmdBridge.wr := cmd.wr
+    cmdBridge.mask := cmd.mask
+    cmdBridge.data := cmd.data
+    cmdBridge.length := cmd.length
+    cmdBridge.last := counter === cmd.length
+    cmd.ready := cmdBridge.ready && (cmdBridge.wr || cmdBridge.last)
+
+
+    when(cmdBridge.fire){
+      counter := counter + 1
+      when(cmdBridge.last){
+        counter := 0
+      }
+    }
+
+
+    bus.ADR := cmdBridge.address >> 2
+    bus.CTI := Mux(isBurst, cmdBridge.last ? B"111" | B"010", B"000")
+    bus.BTE := "00"
+    bus.SEL := cmdBridge.wr ? cmdBridge.mask | "1111"
+    bus.WE  := cmdBridge.wr
+    bus.DAT_MOSI := cmdBridge.data
+
+    cmdBridge.ready := cmdBridge.valid && bus.ACK
+    bus.CYC := cmdBridge.valid
+    bus.STB := cmdBridge.valid
+
+    rsp.valid := RegNext(cmdBridge.valid && !bus.WE && bus.ACK) init(False)
+    rsp.data  := RegNext(bus.DAT_MISO)
+    rsp.error := False //TODO
+    bus
   }
 }
 

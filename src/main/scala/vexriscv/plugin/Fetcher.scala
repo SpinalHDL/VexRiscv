@@ -22,6 +22,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
   var prefetchExceptionPort : Flow[ExceptionCause] = null
   var decodePrediction : DecodePredictionBus = null
   var fetchPrediction : FetchPredictionBus = null
+  var externalResetVector : UInt = null
   assert(cmdToRspStageCount >= 1)
   assert(!(cmdToRspStageCount == 1 && !injectorStage))
   assert(!(compressedGen && !decodePcGen))
@@ -58,6 +59,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
     if(catchAccessFault) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
     }
+    if(resetVector == null) externalResetVector = in(UInt(32 bits).setName("externalResetVector"))
 
     pipeline(RVC_GEN) = compressedGen
 
@@ -105,7 +107,8 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
     val fetchPc = if(relaxedPcCalculation) new PcFetch {
       //PC calculation without Jump
-      val pcReg = Reg(UInt(32 bits)) init (resetVector) addAttribute (Verilator.public)
+      val pcReg = Reg(UInt(32 bits)) init(if(resetVector != null) resetVector else externalResetVector) addAttribute(Verilator.public)
+
       val pcPlus4 = pcReg + 4
       if (keepPcPlus4) KeepAttribute(pcPlus4)
       when(preOutput.fire) {
@@ -133,7 +136,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       preOutput.payload := pcReg
     } else new PcFetch{
       //PC calculation without Jump
-      val pcReg = Reg(UInt(32 bits)) init(resetVector) addAttribute(Verilator.public)
+      val pcReg = Reg(UInt(32 bits)) init(if(resetVector != null) resetVector else externalResetVector) addAttribute(Verilator.public)
       val inc = RegInit(False)
 
       val pc = pcReg + (inc ## B"00").asUInt
@@ -178,7 +181,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
     val decodePc = ifGen(decodePcGen)(new Area {
       //PC calculation without Jump
-      val pcReg = Reg(UInt(32 bits)) init (resetVector) addAttribute (Verilator.public)
+      val pcReg = Reg(UInt(32 bits)) init(if(resetVector != null) resetVector else externalResetVector) addAttribute(Verilator.public)
       val pcPlus = if(compressedGen)
         pcReg + ((decode.input(IS_RVC)) ? U(2) | U(4))
       else

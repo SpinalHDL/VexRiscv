@@ -442,8 +442,6 @@ public:
 				top->eval();
 
 
-				dump(i + 1);
-
 
                 if(top->VexRiscv->writeBack_arbitration_isFiring){
                     if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
@@ -462,6 +460,8 @@ public:
                 }
 
 				for(SimElement* simElement : simElements) simElement->preCycle();
+
+				dump(i + 1);
 
                 #ifndef COMPRESSED
 				if(withInstructionReadCheck){
@@ -713,6 +713,48 @@ public:
 };
 #endif
 
+
+#ifdef IBUS_CACHED_WISHBONE
+#include <queue>
+
+
+class IBusCachedWishbone : public SimElement{
+public:
+
+	Workspace *ws;
+	VVexRiscv* top;
+
+	IBusCachedWishbone(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+		top->iBusWishbone_ACK = !ws->iStall;
+		top->iBusWishbone_ERR = 0;
+	}
+
+	virtual void preCycle(){
+	    top->iBusWishbone_DAT_MISO = VL_RANDOM_I(32);
+		if (top->iBusWishbone_CYC && top->iBusWishbone_STB && top->iBusWishbone_ACK) {
+			if(top->iBusWishbone_WE){
+
+			} else {
+		        bool error;
+			    ws->iBusAccess(top->iBusWishbone_ADR << 2,&top->iBusWishbone_DAT_MISO,&error);
+			    top->iBusWishbone_ERR = error;
+			}
+		}
+	}
+
+	virtual void postCycle(){
+		if(ws->iStall)
+			top->iBusWishbone_ACK = VL_RANDOM_I(7) < 100;
+	}
+};
+#endif
+
+
 #ifdef DBUS_SIMPLE
 class DBusSimple : public SimElement{
 public:
@@ -809,7 +851,46 @@ public:
 };
 #endif
 
+#ifdef DBUS_CACHED_WISHBONE
+#include <queue>
 
+
+class DBusCachedWishbone : public SimElement{
+public:
+
+	Workspace *ws;
+	VVexRiscv* top;
+
+	DBusCachedWishbone(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+		top->dBusWishbone_ACK = !ws->iStall;
+		top->dBusWishbone_ERR = 0;
+	}
+
+	virtual void preCycle(){
+	    top->dBusWishbone_DAT_MISO = VL_RANDOM_I(32);
+		if (top->dBusWishbone_CYC && top->dBusWishbone_STB && top->dBusWishbone_ACK) {
+			if(top->dBusWishbone_WE){
+			    bool dummy;
+                ws->dBusAccess(top->dBusWishbone_ADR << 2 ,1,2,top->dBusWishbone_SEL,&top->dBusWishbone_DAT_MOSI,&dummy);
+			} else {
+			    bool error;
+			    ws->dBusAccess(top->dBusWishbone_ADR << 2,0,2,0xF,&top->dBusWishbone_DAT_MISO,&error);
+                top->dBusWishbone_ERR = error;
+			}
+		}
+	}
+
+	virtual void postCycle(){
+		if(ws->iStall)
+			top->dBusWishbone_ACK = VL_RANDOM_I(7) < 100;
+	}
+};
+#endif
 
 #ifdef DBUS_CACHED
 
@@ -1243,6 +1324,9 @@ void Workspace::fillSimELements(){
 	#ifdef IBUS_CACHED_AVALON
 		simElements.push_back(new IBusCachedAvalon(this));
 	#endif
+	#ifdef IBUS_CACHED_WISHBONE
+		simElements.push_back(new IBusCachedWishbone(this));
+	#endif
 	#ifdef DBUS_SIMPLE
 		simElements.push_back(new DBusSimple(this));
 	#endif
@@ -1254,6 +1338,9 @@ void Workspace::fillSimELements(){
 	#endif
 	#ifdef DBUS_CACHED_AVALON
 		simElements.push_back(new DBusCachedAvalon(this));
+	#endif
+	#ifdef DBUS_CACHED_WISHBONE
+		simElements.push_back(new DBusCachedWishbone(this));
 	#endif
 	#ifdef DEBUG_PLUGIN_STD
 		simElements.push_back(new DebugPluginStd(this));

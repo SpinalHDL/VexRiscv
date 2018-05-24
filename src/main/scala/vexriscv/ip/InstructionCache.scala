@@ -3,8 +3,9 @@ package vexriscv.ip
 import vexriscv._
 import spinal.core._
 import spinal.lib._
-import spinal.lib.bus.amba4.axi.{Axi4ReadOnly, Axi4Config}
-import spinal.lib.bus.avalon.{AvalonMMConfig, AvalonMM}
+import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4ReadOnly}
+import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
+import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 
 
 case class InstructionCacheConfig( cacheSize : Int,
@@ -44,6 +45,20 @@ case class InstructionCacheConfig( cacheSize : Int,
     constantBurstBehavior = true
   )
 
+  def getWishboneConfig() = WishboneConfig(
+    addressWidth = 30,
+    dataWidth = 32,
+    selWidth = 4,
+    useSTALL = false,
+    useLOCK = false,
+    useERR = true,
+    useRTY = false,
+    tgaWidth = 0,
+    tgcWidth = 0,
+    tgdWidth = 0,
+    useBTE = true,
+    useCTI = true
+  )
 }
 
 
@@ -161,6 +176,36 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
     rsp.data := mm.readData
     rsp.error := mm.response =/= AvalonMM.Response.OKAY
     mm
+  }
+
+  def toWishbone(): Wishbone = {
+    val wishboneConfig = p.getWishboneConfig()
+    val bus = Wishbone(wishboneConfig)
+    val counter = Reg(UInt(log2Up(p.burstSize) bits)) init(0)
+    val pending = counter =/= 0
+    val lastCycle = counter === counter.maxValue
+
+    bus.ADR := (cmd.address >> widthOf(counter) + 2) @@ counter
+    bus.CTI := lastCycle ? B"111" | B"010"
+    bus.BTE := "00"
+    bus.SEL := "1111"
+    bus.WE  := False
+    bus.DAT_MOSI.assignDontCare()
+    bus.CYC := False
+    bus.STB := False
+    when(cmd.valid || pending){
+      bus.CYC := True
+      bus.STB := True
+      when(bus.ACK){
+        counter := counter + 1
+      }
+    }
+
+    cmd.ready := cmd.valid && bus.ACK
+    rsp.valid := RegNext(bus.CYC && bus.ACK) init(False)
+    rsp.data := RegNext(bus.DAT_MISO)
+    rsp.error := False //TODO
+    bus
   }
 }
 

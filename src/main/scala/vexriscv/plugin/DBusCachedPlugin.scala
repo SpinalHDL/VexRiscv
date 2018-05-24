@@ -18,7 +18,9 @@ class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
   }
 }
 
-class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : Any = null)  extends Plugin[VexRiscv]{
+class DBusCachedPlugin(config : DataCacheConfig,
+                       memoryTranslatorPortConfig : Any = null,
+                       csrInfo : Boolean = false)  extends Plugin[VexRiscv]{
   import config._
   var dBus  : DataCacheMemBus = null
   var mmuBus : MemoryTranslatorBus = null
@@ -214,7 +216,12 @@ class DBusCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
       when(arbitration.isValid && input(MEMORY_ENABLE)) {
         output(REGFILE_WRITE_DATA) := rspFormated
       }
-   }
+    }
+
+    if(csrInfo){
+      val csr = service(classOf[CsrPlugin])
+      csr.r(0xCC0, 0 ->  U(cacheSize/wayCount),  20 ->  U(bytePerLine))
+    }
   }
 }
 
