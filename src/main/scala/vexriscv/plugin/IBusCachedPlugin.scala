@@ -25,7 +25,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
   cmdToRspStageCount = (if(config.twoCycleCache) 2 else 1),
   injectorReadyCutGen = false,
   relaxedPcCalculation = relaxedPcCalculation,
-  prediction_ = prediction,
+  prediction = prediction,
   historyRamSizeLog2 = historyRamSizeLog2,
   injectorStage = !config.twoCycleCache){
   import config._

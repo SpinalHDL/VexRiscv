@@ -1761,7 +1761,7 @@ int main(int argc, char **argv, char **env) {
 			#ifdef CSR
 			    #ifndef COMPRESSED
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
-				    8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
+				    8,6,9,6,10,4,11,4,    12,13,2,   14,2,     15,5,16,17,1 };
 				    redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
                 #else
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,

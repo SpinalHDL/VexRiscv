@@ -123,7 +123,7 @@ class IBusSimplePlugin(resetVector : BigInt,
     cmdToRspStageCount = busLatencyMin,
     injectorReadyCutGen = false,
     relaxedPcCalculation = relaxedPcCalculation,
-    prediction_ = prediction,
+    prediction = prediction,
     historyRamSizeLog2 = historyRamSizeLog2,
     injectorStage = injectorStage){
   var iBus : IBusSimpleBus = null
@@ -184,7 +184,6 @@ class IBusSimplePlugin(resetVector : BigInt,
         }
 
 
-//        val rsp = recursive[Stream[IBusSimpleRsp]](rspUnbuffered, cmdToRspStageCount, x => x.s2mPipe(flush))
         val rspBuffer = StreamFifoLowLatency(IBusSimpleRsp(), cmdToRspStageCount + (if(relaxedBusCmdValid) 1 else 0))
         rspBuffer.io.push << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
         rspBuffer.io.flush := flush

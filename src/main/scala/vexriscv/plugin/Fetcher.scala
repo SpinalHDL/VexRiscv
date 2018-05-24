@@ -16,16 +16,12 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
                                val cmdToRspStageCount : Int,
                                val injectorReadyCutGen : Boolean,
                                val relaxedPcCalculation : Boolean,
-                               val prediction_ : BranchPrediction,
+                               val prediction : BranchPrediction,
                                val historyRamSizeLog2 : Int,
                                val injectorStage : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
   var prefetchExceptionPort : Flow[ExceptionCause] = null
   var decodePrediction : DecodePredictionBus = null
   var fetchPrediction : FetchPredictionBus = null
-  val prediction = prediction_ match{
-    case DYNAMIC => STATIC
-    case x => x
-  }
   assert(cmdToRspStageCount >= 1)
   assert(!(cmdToRspStageCount == 1 && !injectorStage))
   assert(!(compressedGen && !decodePcGen))
@@ -397,31 +393,54 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       case NONE =>
       case STATIC | DYNAMIC => {
         def historyWidth = 2
-        //          if(prediction == DYNAMIC) {
-        //            case class BranchPredictorLine()  extends Bundle{
-        //              val history = SInt(historyWidth bits)
-        //            }
-        //
-        //            val historyCache = if(prediction == DYNAMIC) Mem(BranchPredictorLine(), 1 << historyRamSizeLog2) setName("branchCache") else null
-        //            val historyCacheWrite = if(prediction == DYNAMIC) historyCache.writePort else null
-        //
-        //
-        //            val readAddress = (2, historyRamSizeLog2 bits)
-        //            fetch.insert(HISTORY_LINE) := historyCache.readSync(readAddress,!prefetch.arbitration.isStuckByOthers)
-        //
-        //          }
+        val dynamic = ifGen(prediction == DYNAMIC) (new Area {
+          case class BranchPredictorLine()  extends Bundle{
+            val history = SInt(historyWidth bits)
+          }
+
+          val historyCache = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
+          val historyWrite = historyCache.writePort
+          val historyWriteLast = RegNextWhen(historyWrite, iBusRsp.inputPipeline(0).ready)
+          val hazard = historyWriteLast.valid && historyWriteLast.address === (iBusRsp.inputPipeline(0).payload >> 2).resized
+
+          case class DynamicContext() extends Bundle{
+            val hazard = Bool
+            val line = BranchPredictorLine()
+          }
+          val fetchContext = DynamicContext()
+          fetchContext.hazard := hazard
+          fetchContext.line := historyCache.readSync((fetchPc.output.payload >> 2).resized, iBusRsp.inputPipeline(0).ready)
+          val iBusRspContext = iBusRsp.inputPipeline.tail.foldLeft(fetchContext)((data,stream) => RegNextWhen(data, stream.ready))
+          val injectorContext = Delay(iBusRspContext,cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
+          object PREDICTION_CONTEXT extends Stageable(DynamicContext())
+          decode.insert(PREDICTION_CONTEXT) := injectorContext
+
+          val branchStage = decodePrediction.stage
+          val branchContext = branchStage.input(PREDICTION_CONTEXT)
+          val moreJump = decodePrediction.rsp.wasWrong ^ branchContext.line.history.msb
+
+          historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits)
+          historyWrite.data.history := branchContext.line.history + (moreJump ? S(-1) | S(1))
+          val sat = (branchContext.line.history === (moreJump ? S(branchContext.line.history.minValue) | S(branchContext.line.history.maxValue)))
+          historyWrite.valid := !branchContext.hazard && branchStage.arbitration.isFiring && branchStage.input(BRANCH_CTRL) === BranchCtrlEnum.B && !sat
+        })
 
 
         val imm = IMM(decode.input(INSTRUCTION))
 
-        val conditionalBranchPrediction = (prediction match {
+        val conditionalBranchPrediction = prediction match {
           case STATIC =>  imm.b_sext.msb
-          //            case DYNAMIC => decodeHistory.history.msb
-        })
+          case DYNAMIC => dynamic.injectorContext.line.history.msb
+        }
+
         decodePrediction.cmd.hadBranch := decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL || (decode.input(BRANCH_CTRL) === BranchCtrlEnum.B && conditionalBranchPrediction)
 
         predictionJumpInterface.valid := decodePrediction.cmd.hadBranch && decode.arbitration.isFiring //TODO OH Doublon de priorité
         predictionJumpInterface.payload := decode.input(PC) + ((decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
+
+//        when(predictionJumpInterface.payload((if(pipeline(RVC_GEN)) 0 else 1) downto 0) =/= 0){
+//          decodePrediction.cmd.hadBranch := False
+//        }
       }
       case DYNAMIC_TARGET => new Area{
         val historyRamSizeLog2 : Int = 10

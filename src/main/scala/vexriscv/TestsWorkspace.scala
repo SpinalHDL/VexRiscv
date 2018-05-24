@@ -34,10 +34,10 @@ object TestsWorkspace {
           new IBusSimplePlugin(
             resetVector = 0x80000000l,
             relaxedPcCalculation = false,
-            prediction = NONE,
+            prediction = DYNAMIC,
             historyRamSizeLog2 = 8,
             catchAccessFault = true,
-            compressedGen = true
+            compressedGen = false
           ),
 //          new IBusCachedPlugin(
 //            resetVector = 0x80000000l,
@@ -104,7 +104,7 @@ object TestsWorkspace {
           new SrcPlugin(
             separatedAddSub = false
           ),
-          new FullBarrielShifterPlugin(earlyInjection = true),
+          new FullBarrielShifterPlugin(earlyInjection = false),
   //        new LightShifterPlugin,
           new HazardSimplePlugin(
             bypassExecute           = true,
@@ -117,9 +117,9 @@ object TestsWorkspace {
           ),
   //        new HazardSimplePlugin(false, true, false, true),
   //        new HazardSimplePlugin(false, false, false, false),
-//          new MulPlugin,
+          new MulPlugin,
           new MulDivIterativePlugin(
-            genMul = true,
+            genMul = false,
             genDiv = true,
             mulUnroolFactor = 32,
             divUnroolFactor = 1
@@ -128,7 +128,7 @@ object TestsWorkspace {
           new CsrPlugin(CsrPluginConfig.all(0x80000020l).copy(deterministicInteruptionEntry = false)),
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
-            earlyBranch = true,
+            earlyBranch = false,
             catchAddressMisaligned = true
           ),
           new YamlPlugin("cpu0.yaml")
