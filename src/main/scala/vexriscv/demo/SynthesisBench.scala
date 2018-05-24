@@ -7,6 +7,7 @@ import vexriscv.VexRiscv
 import vexriscv.plugin.{DecoderSimplePlugin, KeepAttribute}
 
 import scala.collection.mutable.ArrayBuffer
+import scala.util.Random
 
 /**
  * Created by PIC32F_USER on 16/07/2017.
@@ -105,7 +106,6 @@ object VexRiscvSynthesisBench {
     //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
 //    val rtls = List(smallAndProductive,  full)
 
-
     val targets = XilinxStdTargets(
       vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
     ) ++ AlteraStdTargets(
@@ -154,7 +154,7 @@ object MuraxSynthesisBench {
       override def getName(): String = "Murax"
       override def getRtlPath(): String = "Murax.v"
       SpinalVerilog({
-        val murax = new Murax(MuraxConfig.default).setDefinitionName(getRtlPath().split("\\.").head)
+        val murax = new Murax(MuraxConfig.default.copy(gpioWidth = 8)).setDefinitionName(getRtlPath().split("\\.").head)
         murax.io.mainClk.setName("clk")
         murax
       })
@@ -165,7 +165,7 @@ object MuraxSynthesisBench {
       override def getName(): String = "MuraxFast"
       override def getRtlPath(): String = "MuraxFast.v"
       SpinalVerilog({
-        val murax = new Murax(MuraxConfig.fast).setDefinitionName(getRtlPath().split("\\.").head)
+        val murax = new Murax(MuraxConfig.fast.copy(gpioWidth = 8)).setDefinitionName(getRtlPath().split("\\.").head)
         murax.io.mainClk.setName("clk")
         murax
       })
@@ -173,12 +173,13 @@ object MuraxSynthesisBench {
 
     val rtls = List(murax, muraxFast)
 
-    val targets = XilinxStdTargets(
+    val targets = IcestormStdTargets() ++ XilinxStdTargets(
       vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
     ) ++ AlteraStdTargets(
       quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin/",
       quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin/"
     )
+
 
     Bench(rtls, targets, "/eda/tmp/")
   }
