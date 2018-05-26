@@ -3,7 +3,7 @@ package vexriscv.demo
 import spinal.core._
 import spinal.lib.bus.amba3.apb.{Apb3, Apb3Config, Apb3SlaveFactory}
 import spinal.lib.bus.misc.SizeMapping
-import spinal.lib.misc.{InterruptCtrl, Prescaler, Timer}
+import spinal.lib.misc.{HexTools, InterruptCtrl, Prescaler, Timer}
 import spinal.lib._
 import vexriscv.plugin.{DBusSimpleBus, IBusSimpleBus}
 
@@ -73,43 +73,6 @@ class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
   io.dBus.rsp.error := False
 }
 
-object HexTools{
-  def readHexFile(path : String, callback : (Int, Int) => Unit, offset : Int = 0): Unit ={
-    import scala.io.Source
-    def hToI(that : String, start : Int, size : Int) = Integer.parseInt(that.substring(start,start + size), 16)
-
-    var offset = 0
-    for (line <- Source.fromFile(path).getLines) {
-      if (line.charAt(0) == ':'){
-        val byteCount = hToI(line, 1, 2)
-        val nextAddr = hToI(line, 3, 4) + offset
-        val key = hToI(line, 7, 2)
-        key match {
-          case 0 =>
-            for(i <- 0 until byteCount){
-              callback(nextAddr + i + offset, hToI(line, 9 + i * 2, 2))
-            }
-          case 2 =>
-            offset = hToI(line, 9, 4) << 4
-          case 4 =>
-            offset = hToI(line, 9, 4) << 16
-          case 3 =>
-          case 5 =>
-          case 1 =>
-        }
-      }
-    }
-  }
-
-  def initRam[T <: Data](ram : Mem[T], onChipRamHexFile : String, ramOffset : BigInt): Unit ={
-    val initContent = Array.fill[BigInt](ram.wordCount)(0)
-    HexTools.readHexFile(onChipRamHexFile,(address,data) => {
-      val addressWithoutOffset = (address - ramOffset).toInt
-      initContent(addressWithoutOffset >> 2) |= BigInt(data) << ((addressWithoutOffset & 3)*8)
-    })
-    ram.initBigInt(initContent)
-  }
-}
 
 class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpleBusConfig : SimpleBusConfig) extends Component{
   val io = new Bundle{
