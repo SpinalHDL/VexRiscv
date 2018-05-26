@@ -2,8 +2,10 @@ package spinal.lib.misc
 
 import spinal.core._
 
+import scala.collection.mutable.ArrayBuffer
+
 object HexTools{
-  def readHexFile(path : String, callback : (Int, Int) => Unit, hexOffset : Int = 0): Unit ={
+  def readHexFile(path : String, hexOffset : Int, callback : (Int, Int) => Unit) : Unit ={
     import scala.io.Source
     def hToI(that : String, start : Int, size : Int) = Integer.parseInt(that.substring(start,start + size), 16)
 
@@ -30,9 +32,24 @@ object HexTools{
     }
   }
 
+  def readHexFile(path : String, hexOffset : Int): Array[BigInt] ={
+    var onChipRomSize = 0
+    readHexFile(path, hexOffset ,(address, _) => {
+      onChipRomSize = Math.max((address).toInt, onChipRomSize) + 1
+    })
+
+    val initContent = Array.fill[BigInt]((onChipRomSize+3)/4)(0)
+    readHexFile(path, hexOffset,(address,data) => {
+      val addressWithoutOffset = (address).toInt
+      if(addressWithoutOffset < onChipRomSize)
+        initContent(addressWithoutOffset >> 2) |= BigInt(data) << ((addressWithoutOffset & 3)*8)
+    })
+    initContent
+  }
+
   def initRam[T <: Data](ram : Mem[T], onChipRamHexFile : String, hexOffset : BigInt): Unit ={
     val initContent = Array.fill[BigInt](ram.wordCount)(0)
-    HexTools.readHexFile(onChipRamHexFile,(address,data) => {
+    HexTools.readHexFile(onChipRamHexFile, 0,(address,data) => {
       val addressWithoutOffset = (address - hexOffset).toInt
       initContent(addressWithoutOffset >> 2) |= BigInt(data) << ((addressWithoutOffset & 3)*8)
     })
