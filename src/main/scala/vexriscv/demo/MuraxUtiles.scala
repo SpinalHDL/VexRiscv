@@ -74,7 +74,7 @@ class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
 }
 
 object HexTools{
-  def readHexFile(path : String, callback : (Int, Int) => Unit): Unit ={
+  def readHexFile(path : String, callback : (Int, Int) => Unit, offset : Int = 0): Unit ={
     import scala.io.Source
     def hToI(that : String, start : Int, size : Int) = Integer.parseInt(that.substring(start,start + size), 16)
 
@@ -87,7 +87,7 @@ object HexTools{
         key match {
           case 0 =>
             for(i <- 0 until byteCount){
-              callback(nextAddr + i, hToI(line, 9 + i * 2, 2))
+              callback(nextAddr + i + offset, hToI(line, 9 + i * 2, 2))
             }
           case 2 =>
             offset = hToI(line, 9, 4) << 4
@@ -100,8 +100,6 @@ object HexTools{
       }
     }
   }
-
-
 
   def initRam[T <: Data](ram : Mem[T], onChipRamHexFile : String, ramOffset : BigInt): Unit ={
     val initContent = Array.fill[BigInt](ram.wordCount)(0)
