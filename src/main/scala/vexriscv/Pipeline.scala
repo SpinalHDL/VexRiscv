@@ -100,7 +100,7 @@ trait Pipeline {
             inputDefault := stage.inserts(key)
           } else {
             val stageBefore = stages(stageIndex - 1)
-            inputDefault := RegNextWhen(stageBefore.output(key), !stage.arbitration.isStuck)
+            inputDefault := RegNextWhen(stageBefore.output(key), !stage.arbitration.isStuck).setName(s"${stageBefore.getName()}_to_${stage.getName()}_${key.getName()}")
           }
         }
       }
