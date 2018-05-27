@@ -37,7 +37,7 @@ object TestsWorkspace {
             prediction = DYNAMIC,
             historyRamSizeLog2 = 8,
             catchAccessFault = true,
-            compressedGen = false
+            compressedGen = true
           ),
 //          new IBusCachedPlugin(
 //            resetVector = 0x80000000l,

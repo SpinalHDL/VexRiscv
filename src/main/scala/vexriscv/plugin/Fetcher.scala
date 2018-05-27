@@ -488,7 +488,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
 
         historyWrite.valid := False
-        historyWrite.address := (branchStage.input(PC) >> 2).resized
+        historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits)
         historyWrite.data.source := branchStage.input(PC).asBits >> 1 + historyRamSizeLog2
         historyWrite.data.target := fetchPrediction.rsp.finalPc
 
