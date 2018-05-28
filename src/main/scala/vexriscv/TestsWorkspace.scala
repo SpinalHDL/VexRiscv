@@ -117,8 +117,8 @@ object TestsWorkspace {
           new MulDivIterativePlugin(
             genMul = true,
             genDiv = true,
-            mulUnroolFactor = 32,
-            divUnroolFactor = 1
+            mulUnrollFactor = 32,
+            divUnrollFactor = 1
           ),
 //          new DivPlugin,
           new CsrPlugin(CsrPluginConfig.all(0x80000020l).copy(deterministicInteruptionEntry = false)),
