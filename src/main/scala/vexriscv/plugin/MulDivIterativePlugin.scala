@@ -4,7 +4,7 @@ import spinal.core._
 import spinal.lib._
 import vexriscv.{VexRiscv, _}
 
-class MulDivIterativePlugin(genMul : Boolean, genDiv : Boolean, mulUnroolFactor : Int, divUnroolFactor : Int) extends Plugin[VexRiscv]{
+class MulDivIterativePlugin(genMul : Boolean, genDiv : Boolean, mulUnrollFactor : Int, divUnrollFactor : Int) extends Plugin[VexRiscv]{
   object IS_MUL extends Stageable(Bool)
   object IS_DIV extends Stageable(Bool)
   object IS_REM extends Stageable(Bool)
@@ -68,17 +68,17 @@ class MulDivIterativePlugin(genMul : Boolean, genDiv : Boolean, mulUnroolFactor 
 
 
       val mul = ifGen(genMul) (new Area{
-        assert(isPow2(mulUnroolFactor))
-        val counter = Counter(32 / mulUnroolFactor + 1)
+        assert(isPow2(mulUnrollFactor))
+        val counter = Counter(32 / mulUnrollFactor + 1)
         val done = counter.willOverflowIfInc
         when(arbitration.isValid && input(IS_MUL)){
           when(!done){
             arbitration.haltItself := True
             counter.increment()
-            rs2 := rs2 |>> mulUnroolFactor
-            val sumElements = ((0 until mulUnroolFactor).map(i => rs2(i) ? (rs1 << i) | U(0)) :+ (accumulator >> 32))
-            val sumResult =  sumElements.map(_.asSInt.resize(32 + mulUnroolFactor + 1).asUInt).reduceBalancedTree(_ + _)
-            accumulator := (sumResult @@ accumulator(31 downto 0)) >> mulUnroolFactor
+            rs2 := rs2 |>> mulUnrollFactor
+            val sumElements = ((0 until mulUnrollFactor).map(i => rs2(i) ? (rs1 << i) | U(0)) :+ (accumulator >> 32))
+            val sumResult =  sumElements.map(_.asSInt.resize(32 + mulUnrollFactor + 1).asUInt).reduceBalancedTree(_ + _)
+            accumulator := (sumResult @@ accumulator(31 downto 0)) >> mulUnrollFactor
           }
           output(REGFILE_WRITE_DATA) := ((input(INSTRUCTION)(13 downto 12) === B"00") ? accumulator(31 downto 0) | accumulator(63 downto 32)).asBits
         }
@@ -86,7 +86,7 @@ class MulDivIterativePlugin(genMul : Boolean, genDiv : Boolean, mulUnroolFactor 
 
 
       val div = ifGen(genDiv) (new Area{
-        assert(isPow2(divUnroolFactor))
+        assert(isPow2(divUnrollFactor))
 
         //register allocation
         def numerator = rs1(31 downto 0)
@@ -94,7 +94,7 @@ class MulDivIterativePlugin(genMul : Boolean, genDiv : Boolean, mulUnroolFactor 
         def remainder = accumulator(31 downto 0)
 
         val needRevert = Reg(Bool)
-        val counter = Counter(32 / divUnroolFactor + 2)
+        val counter = Counter(32 / divUnrollFactor + 2)
         val done = counter.willOverflowIfInc
         val result = Reg(Bits(32 bits))
         when(arbitration.isValid && input(IS_DIV)){
@@ -116,9 +116,9 @@ class MulDivIterativePlugin(genMul : Boolean, genDiv : Boolean, mulUnroolFactor 
               }
             }
 
-            stages(numerator, remainder, divUnroolFactor)
+            stages(numerator, remainder, divUnrollFactor)
 
-            when(counter === 32 / divUnroolFactor){
+            when(counter === 32 / divUnrollFactor){
               val selectedResult = (input(INSTRUCTION)(13) ? remainder | numerator)
               result := selectedResult.twoComplement(needRevert).asBits.resized
             }
