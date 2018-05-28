@@ -4,7 +4,7 @@ import vexriscv.{VexRiscv, _}
 import spinal.core._
 
 // DivPlugin was by the past a standalone plugin, but now it use the MulDivIterativePlugin implementation
-class DivPlugin extends MulDivIterativePlugin(genMul = false, genDiv = true, mulUnroolFactor = 1, divUnroolFactor = 1)
+class DivPlugin extends MulDivIterativePlugin(genMul = false, genDiv = true, mulUnrollFactor = 1, divUnrollFactor = 1)
 
 //import spinal.lib.math.MixedDivider
 //
