@@ -254,13 +254,10 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       output.rsp.inst := isRvc ? decompressed | raw
       input.ready := (bufferValid ? (!isRvc && output.ready) | (input.pc(1) || output.ready))
 
-
       bufferValid clearWhen(output.fire)
-      when(input.ready){
-        when(input.valid) {
-          bufferValid := !(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1) && output.ready)
-          bufferData := input.rsp.inst(31 downto 16)
-        }
+      when(input.fire){
+        bufferValid := !(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1) && output.ready)
+        bufferData := input.rsp.inst(31 downto 16)
       }
       bufferValid.clearWhen(flush)
       iBusRsp.readyForError.clearWhen(bufferValid && isRvc)
@@ -392,6 +389,16 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       }
     }
 
+    def stage1ToInjectorPipe[T <: Data](input : T): T ={
+      val iBusRspContext = iBusRsp.inputPipeline.tail.foldLeft(input)((data,stream) => RegNextWhen(data, stream.ready))
+      val compressorContext = ifGen(compressedGen)(new Area{
+        val lastContext = RegNextWhen(iBusRspContext, decompressor.input.fire)
+        val output = (decompressor.bufferValid && decompressor.isRvc) ? lastContext | iBusRspContext
+      })
+      val injectorContext = Delay(if(compressedGen) compressorContext.output else iBusRspContext, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
+      injectorContext
+    }
+
     val predictor = prediction match {
       case NONE =>
       case STATIC | DYNAMIC => {
@@ -413,16 +420,22 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
           val fetchContext = DynamicContext()
           fetchContext.hazard := hazard
           fetchContext.line := historyCache.readSync((fetchPc.output.payload >> 2).resized, iBusRsp.inputPipeline(0).ready)
-          val iBusRspContext = iBusRsp.inputPipeline.tail.foldLeft(fetchContext)((data,stream) => RegNextWhen(data, stream.ready))
-          val injectorContext = Delay(iBusRspContext,cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
+//          val iBusRspContext = iBusRsp.inputPipeline.tail.foldLeft(fetchContext)((data,stream) => RegNextWhen(data, stream.ready))
+//          val compressorContext = ifGen(compressedGen)(new Area{
+//            val lastContext = RegNextWhen(iBusRspContext, decompressor.input.fire)
+//            val output = (decompressor.bufferValid && decompressor.isRvc) ? lastContext | iBusRspContext
+//          })
+//          val injectorContext = Delay(if(compressedGen) compressorContext.output else iBusRspContext, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
           object PREDICTION_CONTEXT extends Stageable(DynamicContext())
-          decode.insert(PREDICTION_CONTEXT) := injectorContext
+          decode.insert(PREDICTION_CONTEXT) := stage1ToInjectorPipe(fetchContext)
+          val decodeContextPrediction = decode.input(PREDICTION_CONTEXT).line.history.msb
 
           val branchStage = decodePrediction.stage
           val branchContext = branchStage.input(PREDICTION_CONTEXT)
           val moreJump = decodePrediction.rsp.wasWrong ^ branchContext.line.history.msb
 
-          historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits)
+          historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits) + (if(compressedGen) (!branchStage.input(IS_RVC) && branchStage.input(PC)(1)).asUInt else 0)
+
           historyWrite.data.history := branchContext.line.history + (moreJump ? S(-1) | S(1))
           val sat = (branchContext.line.history === (moreJump ? S(branchContext.line.history.minValue) | S(branchContext.line.history.maxValue)))
           historyWrite.valid := !branchContext.hazard && branchStage.arbitration.isFiring && branchStage.input(BRANCH_CTRL) === BranchCtrlEnum.B && !sat
@@ -433,7 +446,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
         val conditionalBranchPrediction = prediction match {
           case STATIC =>  imm.b_sext.msb
-          case DYNAMIC => dynamic.injectorContext.line.history.msb
+          case DYNAMIC => dynamic.decodeContextPrediction
         }
 
         decodePrediction.cmd.hadBranch := decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL || (decode.input(BRANCH_CTRL) === BranchCtrlEnum.B && conditionalBranchPrediction)
@@ -448,17 +461,17 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       case DYNAMIC_TARGET => new Area{
         val historyRamSizeLog2 : Int = 10
         case class BranchPredictorLine()  extends Bundle{
-          val source = Bits(31 - historyRamSizeLog2 bits)
+          val source = Bits(30 - historyRamSizeLog2 bits)
           val branchWish = UInt(2 bits)
           val target = UInt(32 bits)
-          val unaligned = ifGen(compressedGen)(Bool)
+//          val unaligned = ifGen(compressedGen)(Bool)
         }
 
         val history = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
         val historyWrite = history.writePort
 
         val line = history.readSync((fetchPc.output.payload >> 2).resized, iBusRsp.inputPipeline(0).ready)
-        val hit = line.source === (iBusRsp.inputPipeline(0).payload.asBits >>  1 + historyRamSizeLog2)
+        val hit = line.source === (iBusRsp.inputPipeline(0).payload.asBits >> 2 + historyRamSizeLog2)
 
         //Avoid write to read hazard
         val historyWriteLast = RegNextWhen(historyWrite, iBusRsp.inputPipeline(0).ready)
@@ -488,8 +501,8 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
 
         historyWrite.valid := False
-        historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits)
-        historyWrite.data.source := branchStage.input(PC).asBits >> 1 + historyRamSizeLog2
+        historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits) + (if(compressedGen) (!branchStage.input(IS_RVC) && branchStage.input(PC)(1)).asUInt else 0)
+        historyWrite.data.source := branchStage.input(PC).asBits >> 2 + historyRamSizeLog2
         historyWrite.data.target := fetchPrediction.rsp.finalPc
 
         when(fetchPrediction.rsp.wasRight) {
