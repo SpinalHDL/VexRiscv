@@ -393,7 +393,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       val iBusRspContext = iBusRsp.inputPipeline.tail.foldLeft(input)((data,stream) => RegNextWhen(data, stream.ready))
       val compressorContext = ifGen(compressedGen)(new Area{
         val lastContext = RegNextWhen(iBusRspContext, decompressor.input.fire)
-        val output = (decompressor.bufferValid && decompressor.isRvc) ? lastContext | iBusRspContext
+        val output = decompressor.bufferValid ? lastContext | iBusRspContext
       })
       val injectorContext = Delay(if(compressedGen) compressorContext.output else iBusRspContext, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
       injectorContext
@@ -420,12 +420,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
           val fetchContext = DynamicContext()
           fetchContext.hazard := hazard
           fetchContext.line := historyCache.readSync((fetchPc.output.payload >> 2).resized, iBusRsp.inputPipeline(0).ready)
-//          val iBusRspContext = iBusRsp.inputPipeline.tail.foldLeft(fetchContext)((data,stream) => RegNextWhen(data, stream.ready))
-//          val compressorContext = ifGen(compressedGen)(new Area{
-//            val lastContext = RegNextWhen(iBusRspContext, decompressor.input.fire)
-//            val output = (decompressor.bufferValid && decompressor.isRvc) ? lastContext | iBusRspContext
-//          })
-//          val injectorContext = Delay(if(compressedGen) compressorContext.output else iBusRspContext, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
+
           object PREDICTION_CONTEXT extends Stageable(DynamicContext())
           decode.insert(PREDICTION_CONTEXT) := stage1ToInjectorPipe(fetchContext)
           val decodeContextPrediction = decode.input(PREDICTION_CONTEXT).line.history.msb
@@ -434,7 +429,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
           val branchContext = branchStage.input(PREDICTION_CONTEXT)
           val moreJump = decodePrediction.rsp.wasWrong ^ branchContext.line.history.msb
 
-          historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits) + (if(compressedGen) (!branchStage.input(IS_RVC) && branchStage.input(PC)(1)).asUInt else 0)
+          historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits)
 
           historyWrite.data.history := branchContext.line.history + (moreJump ? S(-1) | S(1))
           val sat = (branchContext.line.history === (moreJump ? S(branchContext.line.history.minValue) | S(branchContext.line.history.maxValue)))
@@ -501,7 +496,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
 
         historyWrite.valid := False
-        historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits) + (if(compressedGen) (!branchStage.input(IS_RVC) && branchStage.input(PC)(1)).asUInt else 0)
+        historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits)
         historyWrite.data.source := branchStage.input(PC).asBits >> 2 + historyRamSizeLog2
         historyWrite.data.target := fetchPrediction.rsp.finalPc
 

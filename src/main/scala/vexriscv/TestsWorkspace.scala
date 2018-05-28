@@ -34,10 +34,10 @@ object TestsWorkspace {
           new IBusSimplePlugin(
             resetVector = 0x80000000l,
             relaxedPcCalculation = false,
-            prediction = DYNAMIC_TARGET,
+            prediction = DYNAMIC,
             historyRamSizeLog2 = 8,
             catchAccessFault = true,
-            compressedGen = false
+            compressedGen = true
           ),
 //          new IBusCachedPlugin(
 //            resetVector = 0x80000000l,
