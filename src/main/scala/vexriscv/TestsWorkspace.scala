@@ -34,7 +34,7 @@ object TestsWorkspace {
           new IBusSimplePlugin(
             resetVector = 0x80000000l,
             relaxedPcCalculation = false,
-            prediction = DYNAMIC,
+            prediction = NONE,
             historyRamSizeLog2 = 8,
             catchAccessFault = true,
             compressedGen = true
@@ -98,7 +98,7 @@ object TestsWorkspace {
           ),
           new RegFilePlugin(
             regFileReadyKind = plugin.ASYNC,
-            zeroBoot = false
+            zeroBoot = true
           ),
           new IntAluPlugin,
           new SrcPlugin(

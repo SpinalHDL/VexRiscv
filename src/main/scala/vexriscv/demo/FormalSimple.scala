@@ -16,7 +16,7 @@ object FormalSimple extends App{
         new IBusSimplePlugin(
           resetVector = 0x00000000l,
           relaxedPcCalculation = false,
-          prediction = NONE,
+          prediction = DYNAMIC_TARGET,
           catchAccessFault = false,
           compressedGen = true
         ),

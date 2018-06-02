@@ -259,10 +259,17 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       output.pc := input.pc
       output.isRvc := isRvc
       output.rsp.inst := isRvc ? decompressed | raw
-      input.ready := (bufferValid ? (!isRvc && output.ready) | (input.pc(1) || output.ready))
+//      input.ready := (bufferValid ? (!isRvc && output.ready) | (input.pc(1) || output.ready))
+      input.ready := !output.valid || !(!output.ready || (isRvc && !input.pc(1) && input.rsp.inst(16, 2 bits) =/= 3) || (!isRvc && bufferValid && input.rsp.inst(16, 2 bits) =/= 3))
+      addPrePopTask(() => {
+        when(!input.ready && output.fire && !flush /* && ((isRvc && !bufferValid && !input.pc(1)) || (!isRvc && bufferValid && input.rsp.inst(16, 2 bits) =/= 3))*/) {
+          input.pc.getDrivingReg(1) := True
+        }
+      })
 
       bufferValid clearWhen(output.fire)
       when(input.fire){
+//        bufferValid := !(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1) && output.ready)
         bufferValid := !(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1) && output.ready)
         bufferData := input.rsp.inst(31 downto 16)
       }
@@ -387,8 +394,13 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         else
           decode.input(PC) + 4)
 
-          jumpInfos
-        .foreach(info => {
+        if(decodePc != null && decodePc.predictionPcLoad != null){
+          when(decodePc.predictionPcLoad.valid){
+            decode.insert(FORMAL_PC_NEXT) := decodePc.predictionPcLoad.payload
+          }
+        }
+
+        jumpInfos.foreach(info => {
           when(info.interface.valid) {
             info.stage.output(FORMAL_PC_NEXT) := info.interface.payload
           }
@@ -398,12 +410,16 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
     def stage1ToInjectorPipe[T <: Data](input : T): (T,T) ={
       val iBusRspContext = iBusRsp.inputPipeline.tail.foldLeft(input)((data,stream) => RegNextWhen(data, stream.ready))
-      val decompressorContext = ifGen(compressedGen)(new Area{
-        val lastContext = RegNextWhen(iBusRspContext, decompressor.input.fire)
-        val output = decompressor.bufferValid ? lastContext | iBusRspContext
-      })
-      val injectorContext = Delay(if(compressedGen) decompressorContext.output else iBusRspContext, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
-      (ifGen(compressedGen)(decompressorContext.output), injectorContext)
+//      val decompressorContext = ifGen(compressedGen)(new Area{
+//        val lastContext = RegNextWhen(iBusRspContext, decompressor.input.fire)
+//        val output = decompressor.bufferValid ? lastContext | iBusRspContext
+//      })
+      val decompressorContext = cloneOf(input)
+      decompressorContext := iBusRspContext
+      val injectorContext = Delay(if(compressedGen) decompressorContext else iBusRspContext, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
+      val injectorContextWire = cloneOf(input) //Allow combinatorial override
+      injectorContextWire := injectorContext
+      (ifGen(compressedGen)(decompressorContext), injectorContextWire)
     }
 
     val predictor = prediction match {
@@ -461,14 +477,14 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 //        }
       }
       case DYNAMIC_TARGET => new Area{
-        assert(!compressedGen, "Can't combine DYNAMIC_TARGET and RVC as it could stop the instruction fetch mid-air")
+        assert(!compressedGen || cmdToRspStageCount == 1, "Can't combine DYNAMIC_TARGET and RVC as it could stop the instruction fetch mid-air")
 
         val historyRamSizeLog2 : Int = 10
         case class BranchPredictorLine()  extends Bundle{
           val source = Bits(30 - historyRamSizeLog2 bits)
           val branchWish = UInt(2 bits)
           val target = UInt(32 bits)
-//          val unaligned = ifGen(compressedGen)(Bool)
+          val unaligned = ifGen(compressedGen)(Bool)
         }
 
         val history = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
@@ -477,10 +493,15 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         val line = history.readSync((fetchPc.output.payload >> 2).resized, iBusRsp.inputPipeline(0).ready || flush)
         val hit = line.source === (iBusRsp.inputPipeline(0).payload.asBits >> 2 + historyRamSizeLog2)
 
+        //Avoid stoping instruction fetch in the middle patch
+        if(compressedGen && cmdToRspStageCount == 1){
+          hit clearWhen(!decompressor.output.valid)
+        }
+
         //Avoid write to read hazard
         val historyWriteLast = RegNextWhen(historyWrite, iBusRsp.inputPipeline(0).ready)
         val hazard = historyWriteLast.valid && historyWriteLast.address === (iBusRsp.inputPipeline(0).payload >> 2).resized
-        fetchPc.predictionPcLoad.valid := line.branchWish.msb && hit && !hazard && iBusRsp.inputPipeline(0).fire
+        fetchPc.predictionPcLoad.valid := line.branchWish.msb && hit && !hazard && iBusRsp.inputPipeline(0).fire //XXX && !(!line.unaligned && iBusRsp.inputPipeline(0).payload(1))
         fetchPc.predictionPcLoad.payload := line.target
 
         case class PredictionResult()  extends Bundle{
@@ -496,11 +517,18 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
         val (decompressorContext, injectorContext) = stage1ToInjectorPipe(fetchContext)
         if(compressedGen) {
+          //prediction hit on the right instruction into words
+          decompressorContext.hit clearWhen(decompressorContext.line.unaligned && (decompressor.bufferValid || (decompressor.isRvc && !decompressor.input.pc(1))))
+
+         // if(compressedGen) injectorContext.hit clearWhen(decodePc.pcReg(1) =/= injectorContext.line.unaligned)
+
           decodePc.predictionPcLoad.valid := injectorContext.line.branchWish.msb && injectorContext.hit && !injectorContext.hazard && injector.decodeInput.fire
           decodePc.predictionPcLoad.payload := injectorContext.line.target
 
+
           when(decompressorContext.line.branchWish.msb && decompressorContext.hit && !decompressorContext.hazard && decompressor.output.fire){
             decompressor.bufferValid := False
+            decompressor.input.ready := True
           }
         }
 
@@ -514,9 +542,10 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
 
         historyWrite.valid := False
-        historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits)
-        historyWrite.data.source := branchStage.input(PC).asBits >> 2 + historyRamSizeLog2
+        historyWrite.address := fetchPrediction.rsp.sourceLastWord(2, historyRamSizeLog2 bits)
+        historyWrite.data.source := fetchPrediction.rsp.sourceLastWord.asBits >> 2 + historyRamSizeLog2
         historyWrite.data.target := fetchPrediction.rsp.finalPc
+        if(compressedGen) historyWrite.data.unaligned := !fetchPrediction.stage.input(PC)(1) ^ fetchPrediction.stage.input(IS_RVC)
 
         when(fetchPrediction.rsp.wasRight) {
           historyWrite.valid := branchContext.hit

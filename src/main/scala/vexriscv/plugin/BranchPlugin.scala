@@ -35,6 +35,7 @@ case class FetchPredictionCmd() extends Bundle{
 case class FetchPredictionRsp() extends Bundle{
   val wasRight = Bool
   val finalPc = UInt(32 bits)
+  val sourceLastWord = UInt(32 bits)
 }
 case class FetchPredictionBus(stage : Stage) extends Bundle {
   val cmd = FetchPredictionCmd()
@@ -310,6 +311,12 @@ class BranchPlugin(earlyBranch : Boolean,
       val predictionMissmatch = fetchPrediction.cmd.hadBranch =/= input(BRANCH_DO) || (input(BRANCH_DO) && fetchPrediction.cmd.targetPc =/= input(BRANCH_CALC))
       fetchPrediction.rsp.wasRight := ! predictionMissmatch
       fetchPrediction.rsp.finalPc := input(BRANCH_CALC)
+      fetchPrediction.rsp.sourceLastWord := {
+        if(pipeline(RVC_GEN))
+          ((!input(IS_RVC) && input(PC)(1)) ? input(NEXT_PC) | input(PC))
+        else
+          input(PC)
+      }
 
       jumpInterface.valid := arbitration.isFiring && predictionMissmatch //Probably just isValid instead of isFiring is better
       jumpInterface.payload := (input(BRANCH_DO) ? input(BRANCH_CALC) | input(NEXT_PC))
