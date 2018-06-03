@@ -34,8 +34,8 @@ object TestsWorkspace {
           new IBusSimplePlugin(
             resetVector = 0x80000000l,
             relaxedPcCalculation = false,
-            prediction = NONE,
-            historyRamSizeLog2 = 8,
+            prediction = DYNAMIC_TARGET,
+            historyRamSizeLog2 = 12,
             catchAccessFault = true,
             compressedGen = true
           ),
