@@ -127,7 +127,7 @@ object MuraxConfig{
       bypassWriteBack = true,
       bypassWriteBackBuffer = true
     )
-//    config.cpuPlugins(config.cpuPlugins.indexWhere(_.isInstanceOf[LightShifterPlugin])) = new FullBarrielShifterPlugin()
+//    config.cpuPlugins(config.cpuPlugins.indexWhere(_.isInstanceOf[LightShifterPlugin])) = new FullBarrelShifterPlugin()
 
     config
   }
@@ -314,7 +314,7 @@ object MuraxDhrystoneReadyMulDivStatic{
         prediction = STATIC
       )
       config.cpuPlugins.remove(config.cpuPlugins.indexWhere(_.isInstanceOf[LightShifterPlugin]))
-      config.cpuPlugins += new FullBarrielShifterPlugin
+      config.cpuPlugins += new FullBarrelShifterPlugin
       Murax(config)
     })
   }
