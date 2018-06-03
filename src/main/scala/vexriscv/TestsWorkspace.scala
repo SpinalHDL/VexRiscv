@@ -100,7 +100,7 @@ object TestsWorkspace {
           new SrcPlugin(
             separatedAddSub = false
           ),
-          new FullBarrielShifterPlugin(earlyInjection = true),
+          new FullBarrelShifterPlugin(earlyInjection = true),
   //        new LightShifterPlugin,
           new HazardSimplePlugin(
             bypassExecute           = true,
@@ -157,7 +157,7 @@ object TestsWorkspace {
           new SrcPlugin(
             separatedAddSub = false
           ),
-  //        new FullBarrielShifterPlugin,
+  //        new FullBarrelShifterPlugin,
           new LightShifterPlugin,
   //        new HazardSimplePlugin(true, true, true, true),
           //        new HazardSimplePlugin(false, true, false, true),
@@ -208,7 +208,7 @@ object TestsWorkspace {
           new SrcPlugin(
             separatedAddSub = false
           ),
-          new FullBarrielShifterPlugin,
+          new FullBarrelShifterPlugin,
   //        new LightShifterPlugin,
           //        new HazardSimplePlugin(true, true, true, true),
           //        new HazardSimplePlugin(false, true, false, true),

@@ -60,7 +60,7 @@ object GenFullNoMmuMaxPerf extends App{
           separatedAddSub = false,
           executeInsertion = true
         ),
-        new FullBarrielShifterPlugin(earlyInjection = true),
+        new FullBarrelShifterPlugin(earlyInjection = true),
         new HazardSimplePlugin(
           bypassExecute           = true,
           bypassMemory            = true,

@@ -40,7 +40,7 @@ object GenCustomCsr extends App{
           separatedAddSub = false,
           executeInsertion = false
         ),
-        new FullBarrielShifterPlugin,
+        new FullBarrelShifterPlugin,
         new HazardSimplePlugin(
           bypassExecute           = true,
           bypassMemory            = true,

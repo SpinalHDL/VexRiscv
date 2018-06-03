@@ -60,7 +60,7 @@ object GenFullNoMmu extends App{
           separatedAddSub = false,
           executeInsertion = true
         ),
-        new FullBarrielShifterPlugin,
+        new FullBarrelShifterPlugin,
         new HazardSimplePlugin(
           bypassExecute           = true,
           bypassMemory            = true,
