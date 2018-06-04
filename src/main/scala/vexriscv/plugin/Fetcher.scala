@@ -452,7 +452,10 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
           val branchContext = branchStage.input(PREDICTION_CONTEXT)
           val moreJump = decodePrediction.rsp.wasWrong ^ branchContext.line.history.msb
 
-          historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits)
+          historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits) + (if(pipeline(RVC_GEN))
+            ((!branchStage.input(IS_RVC) && branchStage.input(PC)(1)) ? U(1) | U(0))
+          else
+            U(0))
 
           historyWrite.data.history := branchContext.line.history + (moreJump ? S(-1) | S(1))
           val sat = (branchContext.line.history === (moreJump ? S(branchContext.line.history.minValue) | S(branchContext.line.history.maxValue)))
@@ -562,6 +565,11 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
         historyWrite.valid clearWhen(branchContext.hazard || !branchStage.arbitration.isFiring)
 
+
+
+        ifGen(compressedGen)({
+          // val decompressionFalure = decompressor.output.
+        })
       }
     }
   }
