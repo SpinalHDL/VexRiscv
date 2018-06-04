@@ -625,7 +625,7 @@ This chapter is describing plugins currently implemented.
 - [SrcPlugin](#srcplugin)
 - [IntAluPlugin](#intaluplugin)
 - [LightShifterPlugin](#lightshifterplugin)
-- [FullBarrielShifterPlugin](#fullbarrielshifterplugin)
+- [FullBarrelShifterPlugin](#fullbarrelshifterplugin)
 - [BranchPlugin](#branchplugin)
 - [DBusSimplePlugin](#dbussimpleplugin)
 - [DBusCachedPlugin](#dbuscachedplugin)
@@ -803,9 +803,9 @@ Implement SLL/SRL/SRA instructions by using an iterative shifter register, whill
 
 The result is injected into the pipeline directly at the end of the execute stage.
 
-#### FullBarrielShifterPlugin
+#### FullBarrelShifterPlugin
 
-Implement SLL/SRL/SRA instructions by using an full barriel shifter, so it execute all shifts in a single cycle.
+Implement SLL/SRL/SRA instructions by using an full barrel shifter, so it execute all shifts in a single cycle.
 
 | Parameters | type | description |
 | ------ | ----------- | ------ | 

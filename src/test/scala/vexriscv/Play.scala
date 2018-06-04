@@ -52,7 +52,7 @@ object PlayGen extends App{
           separatedAddSub = false,
           executeInsertion = false
         ),
-        new FullBarrielShifterPlugin,
+        new FullBarrelShifterPlugin,
         new HazardSimplePlugin(
           bypassExecute           = false,
           bypassMemory            = false,
