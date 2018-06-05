@@ -487,7 +487,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         val historyWrite = history.writePort
 
         val line = history.readSync((fetchPc.output.payload >> 2).resized, iBusRsp.inputPipeline(0).ready || flush)
-        val hit = line.source === (iBusRsp.inputPipeline(0).payload.asBits >> 2 + historyRamSizeLog2) && !(!line.unaligned && iBusRsp.inputPipeline(0).payload(1))
+        val hit = line.source === (iBusRsp.inputPipeline(0).payload.asBits >> 2 + historyRamSizeLog2) && (if(compressedGen)(!(!line.unaligned && iBusRsp.inputPipeline(0).payload(1))) else True)
 
         //Avoid stoping instruction fetch in the middle patch
         if(compressedGen && cmdToRspStageCount == 1){
