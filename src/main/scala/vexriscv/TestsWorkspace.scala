@@ -35,9 +35,10 @@ object TestsWorkspace {
             resetVector = 0x80000000l,
             relaxedPcCalculation = false,
             prediction = DYNAMIC_TARGET,
-            historyRamSizeLog2 = 12,
+            historyRamSizeLog2 = 10,
             catchAccessFault = true,
-            compressedGen = true
+            compressedGen = true,
+            busLatencyMin = 3
           ),
 //          new IBusCachedPlugin(
 //            resetVector = 0x80000000l,

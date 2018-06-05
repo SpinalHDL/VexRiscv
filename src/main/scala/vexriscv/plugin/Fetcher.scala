@@ -22,6 +22,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
   var prefetchExceptionPort : Flow[ExceptionCause] = null
   var decodePrediction : DecodePredictionBus = null
   var fetchPrediction : FetchPredictionBus = null
+  var dynamicTargetFailureCorrection : Flow[UInt] = null
   var externalResetVector : UInt = null
   assert(cmdToRspStageCount >= 1)
   assert(!(cmdToRspStageCount == 1 && !injectorStage))
@@ -71,6 +72,9 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       }
       case DYNAMIC_TARGET => {
         fetchPrediction = pipeline.service(classOf[PredictionInterface]).askFetchPrediction()
+        if(compressedGen && cmdToRspStageCount > 1){
+          dynamicTargetFailureCorrection = createJumpInterface(pipeline.decode)
+        }
       }
     }
   }
@@ -304,10 +308,6 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         else if (cmdToRspStageCount > 1) iBusRsp.inputPipeline(cmdToRspStageCount - 2)
         else throw new Exception("Fetch should at least have two stages")
 
-        //          when(fetcherHalt){
-        //            lastStageStream.valid := False
-        //            lastStageStream.ready := False
-        //          }
         decodeNextPcValid := RegNext(lastStageStream.isStall)
         decodeNextPc := decode.input(PC)
       }
@@ -318,12 +318,6 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       decode.insert(INSTRUCTION) := decodeInput.rsp.inst
       decode.insert(INSTRUCTION_READY) := True
       if (compressedGen) decode.insert(IS_RVC) := decodeInput.isRvc
-
-      //      if(catchAccessFault){
-      //        decodeExceptionPort.valid := decode.arbitration.isValid && decodeInput.rsp.error
-      //        decodeExceptionPort.code  := 1
-      //        decodeExceptionPort.badAddr := decode.input(PC)
-      //      }
 
       if (injectionPort != null) {
         Component.current.addPrePopTask(() => {
@@ -480,9 +474,8 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 //        }
       }
       case DYNAMIC_TARGET => new Area{
-        assert(!compressedGen || cmdToRspStageCount == 1, "Can't combine DYNAMIC_TARGET and RVC as it could stop the instruction fetch mid-air")
+//        assert(!compressedGen || cmdToRspStageCount == 1, "Can't combine DYNAMIC_TARGET and RVC as it could stop the instruction fetch mid-air")
 
-        val historyRamSizeLog2 : Int = 10
         case class BranchPredictorLine()  extends Bundle{
           val source = Bits(30 - historyRamSizeLog2 bits)
           val branchWish = UInt(2 bits)
@@ -567,8 +560,25 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 
 
 
-        ifGen(compressedGen)({
-          // val decompressionFalure = decompressor.output.
+        val predictionFailure = ifGen(compressedGen && cmdToRspStageCount > 1)(new Area{
+          val decompressorFailure = RegInit(False)
+          when(decompressor.input.fire){
+            decompressorFailure := decompressorContext.hit && !decompressorContext.hazard && !decompressor.output.valid && decompressorContext.line.branchWish(1)
+          }
+          decompressorFailure clearWhen(flush || decompressor.output.fire)
+
+          val injectorFailure = Delay(decompressorFailure, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
+
+          dynamicTargetFailureCorrection.valid := False
+          dynamicTargetFailureCorrection.payload := decode.input(PC)
+          when(injector.decodeInput.valid && injectorFailure){
+            historyWrite.valid := True
+            historyWrite.address := (decode.input(PC) >> 2).resized
+            historyWrite.data.branchWish := 0
+
+            decode.arbitration.isValid := False
+            dynamicTargetFailureCorrection.valid := True
+          }
         })
       }
     }
