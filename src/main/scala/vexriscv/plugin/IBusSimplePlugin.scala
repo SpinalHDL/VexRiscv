@@ -160,9 +160,10 @@ class IBusSimplePlugin(resetVector : BigInt,
         val pipFork = fork(1)
         output << pipFork
 
-        iBus.cmd.valid := busFork.valid && pendingCmd =/= pendingMax
+        val okBus = pendingCmd =/= pendingMax
+        iBus.cmd.valid := busFork.valid && okBus
         iBus.cmd.pc := busFork.payload(31 downto 2) @@ "00"
-        busFork.ready := iBus.cmd.ready
+        busFork.ready := iBus.cmd.ready && okBus
       } else new Area {
         def input = fetchPc.output
         def output = iBusRsp.input
