@@ -126,18 +126,21 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         }
       }
 
+      preOutput.valid := RegNext(True) init (False) // && !jump.pcLoad.valid
+      preOutput.payload := pcReg
+
       //application of the selected jump request
       if(predictionPcLoad != null) {
         when(predictionPcLoad.valid) {
           pcReg := predictionPcLoad.payload
+          preOutput.valid := False
         }
       }
       when(jump.pcLoad.valid) {
         pcReg := jump.pcLoad.payload
       }
 
-      preOutput.valid := RegNext(True) init (False) // && !jump.pcLoad.valid
-      preOutput.payload := pcReg
+
     } else new PcFetch{
       //PC calculation without Jump
       val pcReg = Reg(UInt(32 bits)) init(if(resetVector != null) resetVector else externalResetVector) addAttribute(Verilator.public)

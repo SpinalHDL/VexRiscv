@@ -202,8 +202,8 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       busLatencyMin = latency,
       injectorStage = injectorStage
     )
-  }) :+ new VexRiscvPosition("FullRelaxed"){
-    override def testParam = "IBUS=SIMPLE"
+  }) :+ new VexRiscvPosition("FullRelaxedDeep"){
+    override def testParam = "IBUS=SIMPLE COMPRESSED=yes"
     override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
       resetVector = 0x80000000l,
       relaxedPcCalculation = true,
@@ -212,10 +212,21 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       catchAccessFault = false,
       compressedGen = true,
       busLatencyMin = 3,
+      injectorStage = false
+    )
+  } :+ new VexRiscvPosition("FullRelaxedStd") {
+    override def testParam = "IBUS=SIMPLE"
+    override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
+      resetVector = 0x80000000l,
+      relaxedPcCalculation = true,
+      relaxedBusCmdValid = true,
+      prediction = STATIC,
+      catchAccessFault = false,
+      compressedGen = false,
+      busLatencyMin = 1,
       injectorStage = true
     )
   }
-
 }
 
 
