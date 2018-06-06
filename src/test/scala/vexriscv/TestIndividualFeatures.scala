@@ -5,6 +5,7 @@ import java.io.File
 import org.scalatest.FunSuite
 import spinal.core.SpinalVerilog
 import vexriscv.demo._
+import vexriscv.ip.InstructionCacheConfig
 import vexriscv.plugin._
 
 import scala.collection.mutable.ArrayBuffer
@@ -186,7 +187,7 @@ class SrcDimension extends VexRiscvDimension("Src") {
 
 
 class IBusDimension extends VexRiscvDimension("IBus") {
-  override val positions = (for(prediction <- List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET);
+  override val positions = ((for(prediction <- List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET);
                                 latency <- List(1,3);
                                 compressed <- List(false, true);
                                 injectorStage <- List(false, true);
@@ -202,7 +203,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       busLatencyMin = latency,
       injectorStage = injectorStage
     )
-  }) :+ new VexRiscvPosition("FullRelaxedDeep"){
+  }) :+ new VexRiscvPosition("SimpleFullRelaxedDeep"){
     override def testParam = "IBUS=SIMPLE COMPRESSED=yes"
     override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
       resetVector = 0x80000000l,
@@ -214,7 +215,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       busLatencyMin = 3,
       injectorStage = false
     )
-  } :+ new VexRiscvPosition("FullRelaxedStd") {
+  } :+ new VexRiscvPosition("SimpleFullRelaxedStd") {
     override def testParam = "IBUS=SIMPLE"
     override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
       resetVector = 0x80000000l,
@@ -226,8 +227,40 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       busLatencyMin = 1,
       injectorStage = true
     )
-  }
+  }) ++ (for(prediction <- List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET);
+             twoCycleCache <- List(false, true);
+             twoCycleRam <- List(false, true);
+             wayCount <- List(1, 4);
+             cacheSize <- List(512, 4096);
+             compressed <- List(false, true);
+             relaxedPcCalculation <- List(false, true);
+            if !(!twoCycleCache && twoCycleRam ) && !(prediction != NONE && (wayCount == 1 || cacheSize == 4096 ))) yield new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) {
+    override def testParam = "IBUS=CACHED" + (if(compressed) " COMPRESSED=yes" else "")
+    override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusCachedPlugin(
+      resetVector = 0x80000000l,
+      compressedGen = compressed,
+      prediction = prediction,
+      relaxedPcCalculation = relaxedPcCalculation,
+      config = InstructionCacheConfig(
+        cacheSize = cacheSize,
+        bytePerLine = 32,
+        wayCount = wayCount,
+        addressWidth = 32,
+        cpuDataWidth = 32,
+        memDataWidth = 32,
+        catchIllegalAccess = false,
+        catchAccessFault = false,
+        catchMemoryTranslationMiss = false,
+        asyncTagMemory = false,
+        twoCycleRam = twoCycleRam,
+        twoCycleCache = twoCycleCache
+      )
+    )
+  })
+
+//  override def default = List(positions.last)
 }
+
 
 
 abstract class ConfigPosition[T](val name: String) {
@@ -278,7 +311,7 @@ class TestIndividualFeatures extends FunSuite {
   dimensions.foreach(d => d.positions.foreach(_.dimension = d))
 
   for (dimension <- dimensions) {
-    for (position <- dimension.positions) {
+    for (position <- dimension.positions/* if position.name.contains("Cached")*/) {
       for(defaults <- genDefaultsPositions(dimensions.filter(_ != dimension))){
         def gen = {
           val config = VexRiscvConfig(
