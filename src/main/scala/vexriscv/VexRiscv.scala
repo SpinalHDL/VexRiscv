@@ -3,8 +3,18 @@ package vexriscv
 import vexriscv.plugin._
 import spinal.core._
 
-case class VexRiscvConfig(plugins : Seq[Plugin[VexRiscv]]){
+import scala.collection.mutable.ArrayBuffer
 
+object VexRiscvConfig{
+  def apply(plugins : Seq[Plugin[VexRiscv]]) : VexRiscvConfig = {
+    val config = VexRiscvConfig()
+    config.plugins ++= plugins
+    config
+  }
+}
+
+case class VexRiscvConfig(){
+  val plugins = ArrayBuffer[Plugin[VexRiscv]]()
 
   //Default Stageables
   object IS_RVC extends Stageable(Bool)
