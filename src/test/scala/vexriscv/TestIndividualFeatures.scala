@@ -3,9 +3,9 @@ package vexriscv
 import java.io.File
 
 import org.scalatest.FunSuite
-import spinal.core.SpinalVerilog
+import spinal.core._
 import vexriscv.demo._
-import vexriscv.ip.InstructionCacheConfig
+import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import vexriscv.plugin._
 
 import scala.collection.mutable.ArrayBuffer
@@ -58,12 +58,23 @@ class MulDivDimension extends VexRiscvDimension("MulDiv") {
       override def applyOn(config: VexRiscvConfig): Unit = {}
       override def testParam = "MUL=no DIV=no"
     },
-    new VexRiscvPosition("MulDiv") {
+    new VexRiscvPosition("MulDivFpga") {
       override def testParam = "MUL=yes DIV=yes"
       override def applyOn(config: VexRiscvConfig): Unit = {
         config.plugins += new MulPlugin
         config.plugins += new MulDivIterativePlugin(
           genMul = false,
+          genDiv = true,
+          mulUnroolFactor = 32,
+          divUnroolFactor = 1
+        )
+      }
+    },
+    new VexRiscvPosition("MulDivAsic") {
+      override def testParam = "MUL=yes DIV=yes"
+      override def applyOn(config: VexRiscvConfig): Unit = {
+        config.plugins += new MulDivIterativePlugin(
+          genMul = true,
           genDiv = true,
           mulUnroolFactor = 32,
           divUnroolFactor = 1
@@ -263,6 +274,54 @@ class IBusDimension extends VexRiscvDimension("IBus") {
 
 
 
+
+class DBusDimension extends VexRiscvDimension("DBus") {
+  override val positions = List(
+    new VexRiscvPosition("SimpleLate") {
+      override def testParam = "DBUS=SIMPLE"
+      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DBusSimplePlugin(
+        catchAddressMisaligned = false,
+        catchAccessFault = false,
+        earlyInjection = false
+      )
+    },
+    new VexRiscvPosition("SimpleEarly") {
+      override def testParam = "DBUS=SIMPLE"
+      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DBusSimplePlugin(
+        catchAddressMisaligned = false,
+        catchAccessFault = false,
+        earlyInjection = true
+      )
+    }
+  ) ++ (for(wayCount <- List(1);
+            cacheSize <- List(512, 4096)) yield new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount) {
+    override def testParam = "DBUS=CACHED"
+    override def applyOn(config: VexRiscvConfig): Unit = {
+      config.plugins += new DBusCachedPlugin(
+        config = new DataCacheConfig(
+          cacheSize         = cacheSize,
+          bytePerLine       = 32,
+          wayCount          = wayCount,
+          addressWidth      = 32,
+          cpuDataWidth      = 32,
+          memDataWidth      = 32,
+          catchAccessError  = false,
+          catchIllegal      = false,
+          catchUnaligned    = false,
+          catchMemoryTranslationMiss = false,
+          atomicEntriesCount = 0
+        ),
+        memoryTranslatorPortConfig = null
+      )
+      config.plugins += new StaticMemoryTranslatorPlugin(
+        ioRange      = _(31 downto 28) === 0xF
+      )
+    }
+  })
+}
+
+
+
 abstract class ConfigPosition[T](val name: String) {
   def applyOn(config: T): Unit
   var dimension : ConfigDimension[_] = null
@@ -299,7 +358,8 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new IBusDimension
+    new IBusDimension,
+    new DBusDimension
   )
 
 
@@ -316,10 +376,6 @@ class TestIndividualFeatures extends FunSuite {
         def gen = {
           val config = VexRiscvConfig(
             plugins = List(
-              new DBusSimplePlugin(
-                catchAddressMisaligned = false,
-                catchAccessFault = false
-              ),
               new DecoderSimplePlugin(
                 catchIllegalInstruction = false
               ),
@@ -337,7 +393,7 @@ class TestIndividualFeatures extends FunSuite {
           gen
         }
         test(name + "_test") {
-          val testCmd = "make clean run REDO=10 DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no " + (position :: defaults).map(_.testParam).mkString(" ")
+          val testCmd = "make clean run REDO=10 CSR=no MMU=no DEBUG_PLUGIN=no " + (position :: defaults).map(_.testParam).mkString(" ")
           val str = doCmd(testCmd)
           assert(!str.contains("FAIL"))
           val intFind = "(\\d+\\.?)+".r
