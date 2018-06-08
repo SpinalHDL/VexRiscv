@@ -142,7 +142,7 @@ unsetenv VERILATOR_ROOT  # For csh; ignore error if on bash
 unset VERILATOR_ROOT  # For bash
 cd verilator
 git pull        # Make sure we're up-to-date
-git tag         # See what versions exist
+git checkout verilator_3_918
 autoconf        # Create ./configure script
 ./configure
 make
