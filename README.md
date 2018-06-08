@@ -123,7 +123,7 @@ There is a summary of the configuration which produce 1.44 DMIPS :
 On Ubuntu 14 :
 
 ```sh
-# JAVA JDK 7 or 8
+# JAVA JDK 8. Do not try with JDK >= 9
 sudo apt-get install openjdk-8-jdk
 
 # SBT
