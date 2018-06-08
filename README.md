@@ -146,17 +146,6 @@ make
 sudo make install
 ```
 
-The VexRiscv need the unreleased master-head of SpinalHDL :
-
-```sh
-# Compile and localy publish the latest SpinalHDL
-rm -rf SpinalHDL
-git clone https://github.com/SpinalHDL/SpinalHDL.git
-cd SpinalHDL
-sbt clean compile publish-local
-cd ..
-```
-
 ## CPU generation
 You can find two example of CPU instantiation in :
 - src/main/scala/vexriscv/GenFull.scala
