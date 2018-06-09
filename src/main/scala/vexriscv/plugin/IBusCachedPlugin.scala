@@ -106,9 +106,10 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
 
 
       cache.io.cpu.fetch.isRemoved := flush
+      val iBusRspOutputHalt = False
       if (mmuBus != null) {
         cache.io.cpu.fetch.mmuBus <> mmuBus
-        iBusRsp.inputPipelineHalt(0) setWhen(mmuBus.cmd.isValid && !mmuBus.rsp.hit && !mmuBus.rsp.miss)
+        (if(twoCycleCache) iBusRsp.inputPipelineHalt(0) else iBusRspOutputHalt) setWhen(mmuBus.cmd.isValid && !mmuBus.rsp.hit && !mmuBus.rsp.miss)
       } else {
         cache.io.cpu.fetch.mmuBus.rsp.physicalAddress := cache.io.cpu.fetch.mmuBus.cmd.virtualAddress
         cache.io.cpu.fetch.mmuBus.rsp.allowExecute := True
@@ -169,7 +170,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
       }
 
 
-      iBusRsp.output.arbitrationFrom(cacheRspArbitration.haltWhen(issueDetected))
+      iBusRsp.output.arbitrationFrom(cacheRspArbitration.haltWhen(issueDetected || iBusRspOutputHalt))
       iBusRsp.output.rsp.inst := cacheRsp.data
       iBusRsp.output.pc := cacheRspArbitration.payload
 

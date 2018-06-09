@@ -10,6 +10,7 @@ import vexriscv.plugin._
 
 import scala.collection.mutable.ArrayBuffer
 import scala.sys.process._
+import scala.util.Random
 
 
 abstract class  ConfigDimension[T](val name: String) {
@@ -84,6 +85,10 @@ class MulDivDimension extends VexRiscvDimension("MulDiv") {
   )
 }
 
+trait InstructionAnticipatedPosition{
+  def instructionAnticipatedOk() : Boolean
+}
+
 class RegFileDimension extends VexRiscvDimension("RegFile") {
   override val positions = List(
     new VexRiscvPosition("Async") {
@@ -95,6 +100,11 @@ class RegFileDimension extends VexRiscvDimension("RegFile") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new RegFilePlugin(
         regFileReadyKind = plugin.SYNC
       )
+
+      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = positions.exists{
+        case p : InstructionAnticipatedPosition => p.instructionAnticipatedOk()
+        case _ => false
+      }
     }
   )
 }
@@ -203,7 +213,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
                                 compressed <- List(false, true);
                                 injectorStage <- List(false, true);
                                 relaxedPcCalculation <- List(false, true);
-                                if latency > 1 || injectorStage) yield new VexRiscvPosition("Simple" + latency + (if(relaxedPcCalculation) "Relax" else "") + (if(injectorStage) "InjStage" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) {
+                                if latency > 1 || injectorStage) yield new VexRiscvPosition("Simple" + latency + (if(relaxedPcCalculation) "Relax" else "") + (if(injectorStage) "InjStage" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
     override def testParam = "IBUS=SIMPLE" + (if(compressed) " COMPRESSED=yes" else "")
     override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
       resetVector = 0x80000000l,
@@ -214,6 +224,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       busLatencyMin = latency,
       injectorStage = injectorStage
     )
+    override def instructionAnticipatedOk() = injectorStage
   }) :+ new VexRiscvPosition("SimpleFullRelaxedDeep"){
     override def testParam = "IBUS=SIMPLE COMPRESSED=yes"
     override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
@@ -226,7 +237,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       busLatencyMin = 3,
       injectorStage = false
     )
-  } :+ new VexRiscvPosition("SimpleFullRelaxedStd") {
+  } :+ new VexRiscvPosition("SimpleFullRelaxedStd") with InstructionAnticipatedPosition{
     override def testParam = "IBUS=SIMPLE"
     override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
       resetVector = 0x80000000l,
@@ -238,6 +249,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       busLatencyMin = 1,
       injectorStage = true
     )
+    override def instructionAnticipatedOk() = true
   }) ++ (for(prediction <- List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET);
              twoCycleCache <- List(false, true);
              twoCycleRam <- List(false, true);
@@ -245,7 +257,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
              cacheSize <- List(512, 4096);
              compressed <- List(false, true);
              relaxedPcCalculation <- List(false, true);
-            if !(!twoCycleCache && twoCycleRam ) && !(prediction != NONE && (wayCount == 1 || cacheSize == 4096 ))) yield new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) {
+            if !(!twoCycleCache && twoCycleRam ) && !(prediction != NONE && (wayCount == 1 || cacheSize == 4096 ))) yield new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
     override def testParam = "IBUS=CACHED" + (if(compressed) " COMPRESSED=yes" else "")
     override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusCachedPlugin(
       resetVector = 0x80000000l,
@@ -267,6 +279,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
         twoCycleCache = twoCycleCache
       )
     )
+    override def instructionAnticipatedOk() = !twoCycleCache || ((!twoCycleRam || wayCount == 1) && !compressed)
   })
 
 //  override def default = List(positions.last)
@@ -325,6 +338,7 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 abstract class ConfigPosition[T](val name: String) {
   def applyOn(config: T): Unit
   var dimension : ConfigDimension[_] = null
+  def isCompatibleWith(positions : Seq[ConfigPosition[T]]) : Boolean = true
 }
 
 abstract class  VexRiscvPosition(name: String) extends ConfigPosition[VexRiscvConfig](name){
@@ -368,39 +382,54 @@ class TestIndividualFeatures extends FunSuite {
     case Nil => List(stack)
   }
 
+
+  def doTest(positionsToApply : List[VexRiscvPosition], prefix : String = ""): Unit ={
+    def gen = {
+      SpinalVerilog{
+        val config = VexRiscvConfig(
+          plugins = List(
+            new DecoderSimplePlugin(
+              catchIllegalInstruction = false
+            ),
+            new IntAluPlugin,
+            new YamlPlugin("cpu0.yaml")
+          )
+        )
+        for (positionToApply <- positionsToApply) positionToApply.applyOn(config)
+        new VexRiscv(config)
+      }
+    }
+    val name = positionsToApply.map(d => d.dimension.name + "_" + d.name).mkString("_")
+    test(prefix + name + "_gen") {
+      gen
+    }
+    test(prefix + name + "_test") {
+      val testCmd = "make clean run REDO=10 CSR=no MMU=no DEBUG_PLUGIN=no " + (positionsToApply).map(_.testParam).mkString(" ")
+      val str = doCmd(testCmd)
+      assert(!str.contains("FAIL"))
+      val intFind = "(\\d+\\.?)+".r
+      val dmips = intFind.findFirstIn("DMIPS per Mhz\\:                              (\\d+.?)+".r.findAllIn(str).toList.last).get.toDouble
+    }
+  }
+
   dimensions.foreach(d => d.positions.foreach(_.dimension = d))
+
+  for(i <- 0 until 40){
+    var positions : List[VexRiscvPosition] = null
+    do{
+      positions = dimensions.map(d => d.positions(Random.nextInt(d.positions.size)))
+    }while(!positions.forall(_.isCompatibleWith(positions)))
+    doTest(positions," random_" + i + "_")
+  }
 
   for (dimension <- dimensions) {
     for (position <- dimension.positions/* if position.name.contains("Cached")*/) {
       for(defaults <- genDefaultsPositions(dimensions.filter(_ != dimension))){
-        def gen = {
-          val config = VexRiscvConfig(
-            plugins = List(
-              new DecoderSimplePlugin(
-                catchIllegalInstruction = false
-              ),
-              new IntAluPlugin,
-              new YamlPlugin("cpu0.yaml")
-            )
-          )
-          position.applyOn(config)
-          for (dimensionOthers <- defaults) dimensionOthers.applyOn(config)
-
-          SpinalVerilog(new VexRiscv(config))
-        }
-        val name = dimension.name + "_ " + position.name + "_" + defaults.map(d => d.dimension.name + "_" + d.name).mkString("_")
-        test(name + "_gen") {
-          gen
-        }
-        test(name + "_test") {
-          val testCmd = "make clean run REDO=10 CSR=no MMU=no DEBUG_PLUGIN=no " + (position :: defaults).map(_.testParam).mkString(" ")
-          val str = doCmd(testCmd)
-          assert(!str.contains("FAIL"))
-          val intFind = "(\\d+\\.?)+".r
-          val dmips = intFind.findFirstIn("DMIPS per Mhz\\:                              (\\d+.?)+".r.findAllIn(str).toList.last).get.toDouble
-        }
+        doTest(position :: defaults)
       }
     }
   }
+
+
 
 }
