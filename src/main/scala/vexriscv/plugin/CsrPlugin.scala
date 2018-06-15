@@ -388,8 +388,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       //Aggregate all exception port and remove required instructions
       val exceptionPortCtrl = if(exceptionPortsInfos.nonEmpty) new Area{
         val firstStageIndexWithExceptionPort = exceptionPortsInfos.map(i => indexOf(i.stage)).min
-        val exceptionValids = Vec(Bool,stages.length)
-        val exceptionValidsRegs = Vec(Reg(Bool) init(False), stages.length).allowUnsetRegToAvoidLatch
+        val exceptionValids = Vec(stages.map(s => Bool().setPartialName(s.getName())))
+        val exceptionValidsRegs = Vec(stages.map(s => Reg(Bool).init(False).setPartialName(s.getName()))).allowUnsetRegToAvoidLatch
         val exceptionContext = Reg(ExceptionCause())
 
         //Assume 2 stages before decode
@@ -430,14 +430,13 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
           when(stage.arbitration.isFlushed){
             exceptionValids(stageId) := False
           }
+          val previousStage = if(stageId == firstStageIndexWithExceptionPort) stage else stages(stageId-1)
           when(!stage.arbitration.isStuck){
-            exceptionValidsRegs(stageId) := (if(stageId != firstStageIndexWithExceptionPort) exceptionValids(stageId-1) else False)
+            exceptionValidsRegs(stageId) := (if(stageId != firstStageIndexWithExceptionPort) exceptionValids(stageId-1) && !previousStage.arbitration.isStuck else False)
           }otherwise{
             exceptionValidsRegs(stageId) := exceptionValids(stageId)
           }
         }
-
-
       } else null
 
 
