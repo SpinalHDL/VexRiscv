@@ -1,6 +1,6 @@
 package vexriscv.plugin
 
-import vexriscv._
+import vexriscv.{plugin, _}
 import vexriscv.ip._
 import spinal.core._
 import spinal.lib._
@@ -16,7 +16,8 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
                        compressedGen : Boolean = false,
                        keepPcPlus4 : Boolean = false,
                        config : InstructionCacheConfig,
-                       memoryTranslatorPortConfig : Any = null)  extends IBusFetcherImpl(
+                       memoryTranslatorPortConfig : Any = null,
+                       injectorStage : Boolean = false)  extends IBusFetcherImpl(
   catchAccessFault = config.catchAccessFault,
   resetVector = resetVector,
   keepPcPlus4 = keepPcPlus4,
@@ -27,7 +28,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
   relaxedPcCalculation = relaxedPcCalculation,
   prediction = prediction,
   historyRamSizeLog2 = historyRamSizeLog2,
-  injectorStage = !config.twoCycleCache){
+  injectorStage = !config.twoCycleCache || injectorStage){
   import config._
 
   var iBus  : InstructionCacheMemBus = null
@@ -133,7 +134,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         cache.io.cpu.decode.pc := iBusRsp.inputPipeline(1).payload
         cache.io.cpu.decode.isUser := (if (privilegeService != null) privilegeService.isUser(decode) else False)
 
-        if((!twoCycleRam || wayCount == 1) && !compressedGen){
+        if((!twoCycleRam || wayCount == 1) && !compressedGen && !injectorStage){
           decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), cache.io.cpu.fetch.data)
         }
       }

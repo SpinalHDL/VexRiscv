@@ -332,17 +332,19 @@ You can find multiples software examples and demo there : https://github.com/Spi
 There is some measurements of Murax SoC timings and area  :
 
 ```
-Murax interlocked stages (0.45 DMIPS/Mhz) ->
-  Artix 7    -> 305 Mhz 1004 LUT 1297 FF 
-  Cyclone V  -> 160 Mhz 744 ALMs
-  Cyclone IV -> 148 Mhz 1,522 LUT 1,255 FF 
-  ICE40-HX   ->  51 Mhz 2402 LC (icestorm)
+Murax interlocked stages (0.45 DMIPS/Mhz, 8 bits GPIO) ->
+  Artix 7    -> 299 Mhz 984 LUT 1186 FF 
+  Cyclone V  -> 175 Mhz 710 ALMs
+  Cyclone IV -> 137 Mhz 1,436 LUT 1,193 FF 
+  iCE40      -> 48 Mhz 2337 LC (icestorm)
+  iCE40Ultra -> 20 Mhz 2337 LC (icestorm)
 
-MuraxFast bypassed stages (0.65 DMIPS/Mhz) ->
-  Artix 7    -> 312 Mhz 1240 LUT 1330 FF 
-  Cyclone V  -> 159 Mhz 884 ALMs
-  Cyclone IV -> 142 Mhz 1,755 LUT 1,289 FF 
-  ICE40-HX   ->  50 Mhz, 2787 LC  (icestorm)
+MuraxFast bypassed stages (0.65 DMIPS/Mhz, 8 bits GPIO) ->
+  Artix 7    -> 294 Mhz 1128 LUT 1219 FF 
+  Cyclone V  -> 165 Mhz 840 ALMs
+  Cyclone IV -> 141 Mhz 1,680 LUT 1,227 FF 
+  iCE40      -> 48 Mhz 2702 LC (icestorm)
+  iCE40Ultra -> 22 Mhz 2702 LC (icestorm)
 ```
 
 There is some scripts to generate the SoC and call the icestorm toolchain there : scripts/Murax/
@@ -414,13 +416,9 @@ val cpu = new VexRiscv(
   config = VexRiscvConfig(
     //Provide a list of plugins which will futher add their logic into the CPU
     plugins = List(
-      new PcManagerSimplePlugin(
+      new IBusSimplePlugin(
         resetVector = 0x00000000l,
         relaxedPcCalculation = true
-      ),
-      new IBusSimplePlugin(
-        interfaceKeepData = false,
-        catchAccessFault = false
       ),
       new DBusSimplePlugin(
         catchAddressMisaligned = false,
@@ -447,8 +445,7 @@ val cpu = new VexRiscv(
       ),
       new BranchPlugin(
         earlyBranch = false,
-        catchAddressMisaligned = false,
-        prediction = NONE
+        catchAddressMisaligned = false
       ),
       new YamlPlugin("cpu0.yaml")
     )
@@ -616,7 +613,6 @@ So again, if you generate the CPU without any plugin, it will only contain the 5
 
 This chapter is describing plugins currently implemented.
 
-- [PcManagerSimplePlugin](#pcmanagersimpleplugin)
 - [IBusSimplePlugin](#ibussimpleplugin)
 - [IBusCachedPlugin](#ibuscachedplugin)
 - [DecoderSimplePlugin](#decodersimpleplugin)
@@ -649,24 +645,24 @@ This plugin implement the programme counter and over an jump service to all plug
 | relaxedPcCalculation | Boolean | By default jump have an asynchronous immediate effect on the program counter, which allow to reduce the branch penalties by one cycle but could reduce the FMax as it will combinatorialy drive the instruction bus address signal. To avoid this you can set this parameter to true, which will make the jump affecting the programm counter in a sequancial way, which will cut the combinatorial path but add one additional cycle of penalty when a jump occur. |
 
 
-The jump interface implemented by this plugin allow all other plugin to request jumps. The stage argument specify from which stage the jump is asked, which will allow the PcManagerSimplePlugin plugin to manage priorities between jump requests.
-
-```scala
-trait JumpService{
-  def createJumpInterface(stage : Stage) : Flow[UInt]
-}
-```
 
 This plugin operate into the prefetch stage.
 
 #### IBusSimplePlugin
 
-This plugin fetch instruction via a very simple and neutral memory interface going outside the CPU.
+This plugin implement the CPU frontend (instruction fetch) via a very simple and neutral memory interface going outside the CPU.
 
 | Parameters | type | description |
 | ------ | ----------- | ------ | 
-| interfaceKeepData | Boolean | Specify if the read response interface keep the data until the next one, or if it's only present a single cycle.|
 | catchAccessFault | Boolean | If an the read response specify an read error and this parameter is true, it will generate an CPU exception trap |
+| resetVector | BigInt | Address of the program counter after the reset |
+| relaxedPcCalculation | Boolean | By default jump have an asynchronous immediate effect on the program counter, which allow to reduce the branch penalties by one cycle but could reduce the FMax as it will combinatorialy drive the instruction bus address signal. To avoid this you can set this parameter to true, which will make the jump affecting the programm counter in a sequancial way, which will cut the combinatorial path but add one additional cycle of penalty when a jump occur. |
+| relaxedBusCmdValid | Boolean | Same than relaxedPcCalculation, but for the iBus.cmd.valid pin. |
+| compressedGen | Boolean | Enable RVC support |
+| busLatencyMin | Int | Specify the minimal latency between the iBus.cmd and iBus.rsp, which will add the corresponding number of stages into the frontend to keep the IPC to 1.|
+| injectorStage | Boolean | Add a stage between the frontend and the decode stage of the CPU to improve FMax. (busLatencyMin + injectorStage) should be at least two. | 
+| prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation, see bellow for more descriptions |
+| historyRamSizeLog2 | Int | Specify the number of entries in the direct mapped prediction cache of DYNAMIC/DYNAMIC_TARGET implementation. 2 pow historyRamSizeLog2 entries |
 
 There is the SimpleBus interface definition 
 
@@ -700,7 +696,14 @@ There is at least one cycle latency between que cmd and the rsp. the rsp.ready f
 
 Note that bridges are implemented to convert this interface into AXI4 and Avalon
 
-This plugin fit in the fetch stage
+The jump interface implemented by this plugin allow all other plugin to request jumps. The stage argument specify from which stage the jump is asked, which will allow the PcManagerSimplePlugin plugin to manage priorities between jump requests.
+
+```scala
+trait JumpService{
+  def createJumpInterface(stage : Stage) : Flow[UInt]
+}
+```
+
 
 #### IBusCachedPlugin
 
@@ -719,6 +722,11 @@ Simple and light multi way instruction cache.
 | catchIllegalAccess  | Boolean  | Catch when an memory access is done on non valid memory address (MMU) |
 | catchAccessFault  | Boolean | Catch when the memeory bus is responding with an error  |
 | catchMemoryTranslationMiss  | Boolean  |  Catch when the MMU miss a TLB |
+| resetVector | BigInt | Address of the program counter after the reset |
+| relaxedPcCalculation | Boolean | By default jump have an asynchronous immediate effect on the program counter, which allow to reduce the branch penalties by one cycle but could reduce the FMax as it will combinatorialy drive the instruction bus address signal. To avoid this you can set this parameter to true, which will make the jump affecting the programm counter in a sequancial way, which will cut the combinatorial path but add one additional cycle of penalty when a jump occur. |
+| compressedGen | Boolean | Enable RVC support |
+| prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation, see bellow for more descriptions |
+| historyRamSizeLog2 | Int | Specify the number of entries in the direct mapped prediction cache of DYNAMIC/DYNAMIC_TARGET implementation. 2 pow historyRamSizeLog2 entries |
 
 Note : If you enable the twoCycleRam and and the wayCount is bigger than one, then the register file plugin should be configured to read the regFile in a asyncronus manner.
 
@@ -813,17 +821,14 @@ Implement SLL/SRL/SRA instructions by using an full barriel shifter, so it execu
 
 #### BranchPlugin
 
-This plugin implement all branch/jump instructions (JAL/JALR/BEQ/BNE/BLT/BGE/BLTU/BGEU) with some optional branch prediction. Each of those branch prediction could have been implemented into separated plugins.
+This plugin implement all branch/jump instructions (JAL/JALR/BEQ/BNE/BLT/BGE/BLTU/BGEU) with primitives used by the cpu frontend plugins to implement branch prediction. The prediction implementation is set in the frontend plugins (IBusX)
 
 | Parameters | type | description |
 | ------ | ----------- | ------ | 
 | earlyBranch | Boolean | By default the branch is done in the Memory stage to relax timings, but if this option is set it's done in the Execute stage|
 | catchAddressMisaligned | Boolean | If a jump/branch is done in an unaligned PC address, it will fire an trap exception |
-| prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation, see bellow for more descriptions |
-| historyRamSizeLog2 | Int | Specify the number of entries in the direct mapped prediction cache of DYNAMIC/DYNAMIC_TARGET implementation. 2 pow historyRamSizeLog2 entries |
 
 Each miss predicted jumps will produce between 2 and 4 cycles penalty depending the `earlyBranch` and the `PcManagerSimplePlugin.relaxedPcCalculation` configurations
-
 
 ##### Prediction NONE
 

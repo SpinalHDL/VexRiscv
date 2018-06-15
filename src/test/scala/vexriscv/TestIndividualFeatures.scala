@@ -8,6 +8,7 @@ import vexriscv.demo._
 import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import vexriscv.plugin._
 
+import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.sys.process._
 import scala.util.Random
@@ -19,6 +20,16 @@ abstract class  ConfigDimension[T](val name: String) {
 }
 
 abstract class  VexRiscvDimension(name: String) extends ConfigDimension[VexRiscvPosition](name)
+
+abstract class ConfigPosition[T](val name: String) {
+  def applyOn(config: T): Unit
+  var dimension : ConfigDimension[_] = null
+  def isCompatibleWith(positions : Seq[ConfigPosition[T]]) : Boolean = true
+}
+
+abstract class  VexRiscvPosition(name: String) extends ConfigPosition[VexRiscvConfig](name){
+  def testParam : String = ""
+}
 
 class ShiftDimension extends VexRiscvDimension("Shift") {
   override val positions = List(
@@ -256,14 +267,16 @@ class IBusDimension extends VexRiscvDimension("IBus") {
              wayCount <- List(1, 4);
              cacheSize <- List(512, 4096);
              compressed <- List(false, true);
+             injectorStage <- List(false, true);
              relaxedPcCalculation <- List(false, true);
-            if !(!twoCycleCache && twoCycleRam ) && !(prediction != NONE && (wayCount == 1 || cacheSize == 4096 ))) yield new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
+            if !(!twoCycleCache && twoCycleRam ) && !(prediction != NONE && (wayCount == 1 || cacheSize == 4096 ))) yield new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
     override def testParam = "IBUS=CACHED" + (if(compressed) " COMPRESSED=yes" else "")
     override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusCachedPlugin(
       resetVector = 0x80000000l,
       compressedGen = compressed,
       prediction = prediction,
       relaxedPcCalculation = relaxedPcCalculation,
+      injectorStage = injectorStage,
       config = InstructionCacheConfig(
         cacheSize = cacheSize,
         bytePerLine = 32,
@@ -335,15 +348,24 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 
 
 
-abstract class ConfigPosition[T](val name: String) {
-  def applyOn(config: T): Unit
-  var dimension : ConfigDimension[_] = null
-  def isCompatibleWith(positions : Seq[ConfigPosition[T]]) : Boolean = true
+trait CatchAllPosition
+
+class CsrDimension extends VexRiscvDimension("Src") {
+  override val positions = List(
+    new VexRiscvPosition("None") {
+      override def applyOn(config: VexRiscvConfig): Unit = {}
+      override def testParam = "CSR=no"
+    },
+    new VexRiscvPosition("All") with CatchAllPosition{
+      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all)
+      override def testParam = "CSR=no"
+    }
+  )
 }
 
-abstract class  VexRiscvPosition(name: String) extends ConfigPosition[VexRiscvConfig](name){
-  def testParam : String = ""
-}
+
+
+
 
 class TestIndividualFeatures extends FunSuite {
   def doCmd(cmd: String): String = {
@@ -366,14 +388,15 @@ class TestIndividualFeatures extends FunSuite {
 
 
   val dimensions = List(
+    new IBusDimension,
+    new DBusDimension,
     new MulDivDimension,
     new ShiftDimension,
     new BranchDimension,
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new IBusDimension,
-    new DBusDimension
+    new CsrDimension
   )
 
 
@@ -382,8 +405,11 @@ class TestIndividualFeatures extends FunSuite {
     case Nil => List(stack)
   }
 
+  val usedPositions = mutable.HashSet[VexRiscvPosition]();
+  val positionsCount = dimensions.map(d => d.positions.length).sum
 
   def doTest(positionsToApply : List[VexRiscvPosition], prefix : String = ""): Unit ={
+    usedPositions ++= positionsToApply
     def gen = {
       SpinalVerilog{
         val config = VexRiscvConfig(
@@ -404,7 +430,7 @@ class TestIndividualFeatures extends FunSuite {
       gen
     }
     test(prefix + name + "_test") {
-      val testCmd = "make clean run REDO=10 CSR=no MMU=no DEBUG_PLUGIN=no " + (positionsToApply).map(_.testParam).mkString(" ")
+      val testCmd = "make clean run REDO=5 MMU=no DEBUG_PLUGIN=no " + (positionsToApply).map(_.testParam).mkString(" ")
       val str = doCmd(testCmd)
       assert(!str.contains("FAIL"))
       val intFind = "(\\d+\\.?)+".r
@@ -414,7 +440,8 @@ class TestIndividualFeatures extends FunSuite {
 
   dimensions.foreach(d => d.positions.foreach(_.dimension = d))
 
-  for(i <- 0 until 40){
+
+  for(i <- 0 until 200){
     var positions : List[VexRiscvPosition] = null
     do{
       positions = dimensions.map(d => d.positions(Random.nextInt(d.positions.size)))
@@ -422,14 +449,13 @@ class TestIndividualFeatures extends FunSuite {
     doTest(positions," random_" + i + "_")
   }
 
-  for (dimension <- dimensions) {
-    for (position <- dimension.positions/* if position.name.contains("Cached")*/) {
-      for(defaults <- genDefaultsPositions(dimensions.filter(_ != dimension))){
-        doTest(position :: defaults)
-      }
-    }
-  }
+  println(s"${usedPositions.size}/$positionsCount positions")
 
-
-
+//  for (dimension <- dimensions) {
+//    for (position <- dimension.positions/* if position.name.contains("Cached")*/) {
+//      for(defaults <- genDefaultsPositions(dimensions.filter(_ != dimension))){
+//        doTest(position :: defaults)
+//      }
+//    }
+//  }
 }
