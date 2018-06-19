@@ -24,43 +24,44 @@
 
 ## Description
 
-This repository host an RISC-V implementation written in SpinalHDL. There is some specs :
+This repository hosts a RISC-V implementation written in SpinalHDL. Here are some specs :
 
 - RV32I[M] instruction set
-- Pipelined on 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
+- Pipelined with 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
 - 1.44 DMIPS/Mhz when all features are enabled
 - Optimized for FPGA, fully portable
 - AXI4 and Avalon ready
-- Optional MUL/DIV extension
+- Optional MUL/DIV extensions
 - Optional instruction and data caches
 - Optional MMU
-- Optional debug extension allowing eclipse debugging via an GDB >> openOCD >> JTAG connection
-- Optional interrupts and exception handling with the Machine and the User mode from the riscv-privileged-v1.9.1 spec.
-- Two implementation of shift instructions, Single cycle / shiftNumber cycles
-- Each stage could have bypass or interlock hazard logic
-- FreeRTOS port https://github.com/Dolu1990/FreeRTOS-RISCV
-- The data cache support atomic LR/SC
-- RV32 compressed instruction are supported in the reworkFetch branch for configurations without instruction cache (will be merge in master, WIP)
+- Optional debug extension allowing Eclipse debugging via a GDB >> openOCD >> JTAG connection
+- Optional interrupts and exception handling with Machine and User modes as defined in the [RISC-V Privileged ISA Specification v1.9](https://riscv.org/specifications/privileged-isa/).
+- Two implementations of shift instructions: Single cycle and shiftNumber cycles
+- Each stage can have optional bypass or interlock hazard logic
+- [FreeRTOS port](https://github.com/Dolu1990/FreeRTOS-RISCV)
+- The data cache supports atomic LR/SC
+- Optional RV32 compressed instruction support in the reworkFetch branch for configurations without instruction cache (will be merge in master, WIP)
 
-The hardware description of this CPU is done by using an very software oriented approach
-(without any overhead in the generated hardware). There is a list of software concepts used :
+The hardware description of this CPU is done by using a very software oriented approach
+(without any overhead in the generated hardware). Here is a list of software concepts used:
 
 - There is very few fixed things. Nearly everything is plugin based. The PC manager is a plugin, the register file is a plugin, the hazard controller is a plugin ...
-- There is an automatic a tool which allow plugins to insert data in the pipeline at a given stage, and allow other plugins to read it in another stages through automatic pipelining.
-- There is an service system which provide a very dynamic framework. As instance, a plugin could provide an exception service which could then be used by others plugins to emit exceptions from the pipeline.
+- There is an automatic a tool which allows plugins to insert data in the pipeline at a given stage, and allows other plugins to read it in another stage through automatic pipelining.
+- There is an service system which provides a very dynamic framework. For instance, a plugin could provide an exception service which can then be used by other plugins to emit exceptions from the pipeline.
 
 There is a gitter channel for all questions about VexRiscv :<br>
 [![Gitter](https://badges.gitter.im/SpinalHDL/VexRiscv.svg)](https://gitter.im/SpinalHDL/VexRiscv?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
-For commercial support, please contact spinalhdl@gmail.com
+For commercial support, please contact spinalhdl@gmail.com.
 
 ## Area usage and maximal frequency 
 
-The following number where obtains by synthesis the CPU as toplevel without any specific synthesis option to save area or to get better maximal frequency (neutral).<br>
+The following numbers were obtained by synthesizing the CPU as toplevel without any specific synthesis options to save area or to get better maximal frequency (neutral).<br>
 The clock constraint is set to a unattainable value, which tends to increase the design area.<br>
-The dhrystone benchmark were compiled with -O3 -fno-inline<br>
-All the cached configuration have some cache trashing during the dhrystone benchmark except the `VexRiscv full max perf` one. This of course reduce the performance. It is possible to produce dhrystone binaries which fit inside a 4KB I$ and 4KB D$ (I already had this case once) but currently it isn't the case.<br>
-The used CPU corresponding configuration can be find in src/scala/vexriscv/demo.
+The dhrystone benchmark was compiled with the `-O3 -fno-inline` option.<br>
+All the cached configurations have some cache trashing during the dhrystone benchmark except the `VexRiscv full max perf` one. This of course reduces the performance. It is possible to produce 
+dhrystone binaries which fit inside a 4KB I$ and 4KB D$ (I already had this case once) but currently it isn't the case.<br>
+The CPU configurations used below can be found in the `src/scala/vexriscv/demo` directory.
 
 ```
 VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass, no interrupt) ->
@@ -108,7 +109,7 @@ VexRiscv full with MMU (RV32IM, 1.26 DMIPS/Mhz with cache trashing, 4KB-I$, 4KB-
   Cyclone IV -> 100 Mhz 2,976 LUT 2,201 FF 
 ```
 
-There is a summary of the configuration which produce 1.44 DMIPS : 
+The following configuration results in 1.44 DMIPS/MHz: 
 
 - 5 stage : F -> D -> E -> M  -> WB
 - single cycle ADD/SUB/Bitwise/Shift ALU
@@ -116,7 +117,7 @@ There is a summary of the configuration which produce 1.44 DMIPS :
 - memory load values are bypassed in the WB stage (late result) 
 - 33 cycle division with bypassing in the M stage (late result)
 - single cycle multiplication with bypassing in the WB stage (late result)
-- dynamic branch prediction done in the F stage with an direct mapped target buffer cache (no penalities on corrects predictions)
+- dynamic branch prediction done in the F stage with an direct mapped target buffer cache (no penalties on correct predictions)
 
 ## Dependencies
 
@@ -150,14 +151,11 @@ sudo make install
 ```
 
 ## CPU generation
-You can find two example of CPU instantiation in :
+You can find two example CPU instances in:
 - src/main/scala/vexriscv/GenFull.scala
 - src/main/scala/vexriscv/GenSmallest.scala
 
-To generate the corresponding RTL as a VexRiscv.v file, run (it could take time the first time you run it):
-
-NOTE :
-The VexRiscv could need the unreleased master-head of SpinalHDL. If it fail to compile, just get the SpinalHDL repository and do a "sbt clean compile publish-local" in it as described in the dependencies chapter.
+To generate the corresponding RTL as a VexRiscv.v file, run: 
 
 ```sh
 sbt "run-main vexriscv.demo.GenFull"
@@ -165,6 +163,11 @@ sbt "run-main vexriscv.demo.GenFull"
 # or
 sbt "run-main vexriscv.demo.GenSmallest"
 ```
+
+NOTES:
+- it could take time the first time you run it
+- The VexRiscv could need the unreleased master-head of SpinalHDL. If it fails to compile, just get the SpinalHDL repository and 
+   do a "sbt clean compile publish-local" in it as described in the dependencies chapter.
 
 ## Regression tests
 To run tests (need the verilator simulator), go in the src/test/cpp/regression folder and run :
