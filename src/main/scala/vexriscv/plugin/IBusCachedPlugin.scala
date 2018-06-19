@@ -137,6 +137,8 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         if((!twoCycleRam || wayCount == 1) && !compressedGen && !injectorStage){
           decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), cache.io.cpu.fetch.data)
         }
+      } else {
+        cache.io.cpu.fetch.isUser := (if (privilegeService != null) privilegeService.isUser(decode) else False)
       }
 
 

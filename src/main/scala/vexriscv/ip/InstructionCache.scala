@@ -381,8 +381,8 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     io.cpu.fetch.physicalAddress := io.cpu.fetch.mmuBus.rsp.physicalAddress
 
     val resolution = ifGen(!twoCycleCache)( new Area{
-      def stage[T <: Data](that : T) = RegNextWhen(that,!io.cpu.decode.isStuck)
-      val mmuRsp = stage(io.cpu.fetch.mmuBus.rsp)
+//      def stage[T <: Data](that : T) = RegNextWhen(that,!io.cpu.decode.isStuck)
+      val mmuRsp = io.cpu.fetch.mmuBus.rsp
 
       io.cpu.fetch.cacheMiss := !hit.valid
       io.cpu.fetch.error := hit.error

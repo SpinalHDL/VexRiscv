@@ -31,39 +31,40 @@ object TestsWorkspace {
     SpinalConfig(mergeAsyncProcess = false).generateVerilog {
       val configFull = VexRiscvConfig(
         plugins = List(
-//          new IBusSimplePlugin(
-//            resetVector = 0x80000000l,
-//            relaxedPcCalculation = true,
-//            relaxedBusCmdValid = false,
-//            prediction = DYNAMIC_TARGET,
-//            historyRamSizeLog2 = 10,
-//            catchAccessFault = true,
-//            compressedGen = false,
-//            busLatencyMin = 1
-//          ),
-          new IBusCachedPlugin(
+          new IBusSimplePlugin(
             resetVector = 0x80000000l,
-            compressedGen = true,
-            prediction = DYNAMIC_TARGET,
-            injectorStage = true,
-            config = InstructionCacheConfig(
-              cacheSize = 1024*16,
-              bytePerLine = 32,
-              wayCount = 1,
-              addressWidth = 32,
-              cpuDataWidth = 32,
-              memDataWidth = 32,
-              catchIllegalAccess = true,
-              catchAccessFault = true,
-              catchMemoryTranslationMiss = true,
-              asyncTagMemory = false,
-              twoCycleRam = false,
-              twoCycleCache = true
-            ),
-            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-              portTlbSize = 4
-            )
+            relaxedPcCalculation = true,
+            relaxedBusCmdValid = false,
+            prediction = NONE,
+            historyRamSizeLog2 = 10,
+            catchAccessFault = true,
+            compressedGen = false,
+            busLatencyMin = 3,
+            injectorStage = false
           ),
+//          new IBusCachedPlugin(
+//            resetVector = 0x80000000l,
+//            compressedGen = true,
+//            prediction = DYNAMIC_TARGET,
+//            injectorStage = true,
+//            config = InstructionCacheConfig(
+//              cacheSize = 1024*16,
+//              bytePerLine = 32,
+//              wayCount = 1,
+//              addressWidth = 32,
+//              cpuDataWidth = 32,
+//              memDataWidth = 32,
+//              catchIllegalAccess = true,
+//              catchAccessFault = true,
+//              catchMemoryTranslationMiss = true,
+//              asyncTagMemory = false,
+//              twoCycleRam = false,
+//              twoCycleCache = true
+//            ),
+//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//              portTlbSize = 4
+//            )
+//          ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = true,
 //            catchAccessFault = true,

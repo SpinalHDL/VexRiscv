@@ -2,6 +2,7 @@ package vexriscv
 
 import java.io.File
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.FunSuite
 import spinal.core._
 import vexriscv.demo._
@@ -46,20 +47,23 @@ class ShiftDimension extends VexRiscvDimension("Shift") {
 }
 
 class BranchDimension extends VexRiscvDimension("Branch") {
-  override val positions = List(
+  override val positions = (for(catchAll <- List(false,true)) yield List(
     new VexRiscvPosition("Late") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new BranchPlugin(
         earlyBranch = false,
-        catchAddressMisaligned = false
+        catchAddressMisaligned = catchAll
       )
+
+      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
     },
     new VexRiscvPosition("Early") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new BranchPlugin(
         earlyBranch = true,
-        catchAddressMisaligned = false
+        catchAddressMisaligned = catchAll
       )
+      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
     }
-  )
+  )).flatten
 }
 
 
@@ -219,7 +223,7 @@ class SrcDimension extends VexRiscvDimension("Src") {
 
 
 class IBusDimension extends VexRiscvDimension("IBus") {
-  override val positions = ((for(prediction <- List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET);
+  override val positions = (for(catchAll <- List(false,true)) yield ((for(prediction <- List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET);
                                 latency <- List(1,3);
                                 compressed <- List(false, true);
                                 injectorStage <- List(false, true);
@@ -230,12 +234,13 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       resetVector = 0x80000000l,
       relaxedPcCalculation = relaxedPcCalculation,
       prediction = prediction,
-      catchAccessFault = false,
+      catchAccessFault = catchAll,
       compressedGen = compressed,
       busLatencyMin = latency,
       injectorStage = injectorStage
     )
     override def instructionAnticipatedOk() = injectorStage
+    override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
   }) :+ new VexRiscvPosition("SimpleFullRelaxedDeep"){
     override def testParam = "IBUS=SIMPLE COMPRESSED=yes"
     override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
@@ -243,11 +248,12 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       relaxedPcCalculation = true,
       relaxedBusCmdValid = true,
       prediction = STATIC,
-      catchAccessFault = false,
+      catchAccessFault = catchAll,
       compressedGen = true,
       busLatencyMin = 3,
       injectorStage = false
     )
+    override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
   } :+ new VexRiscvPosition("SimpleFullRelaxedStd") with InstructionAnticipatedPosition{
     override def testParam = "IBUS=SIMPLE"
     override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
@@ -255,11 +261,12 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       relaxedPcCalculation = true,
       relaxedBusCmdValid = true,
       prediction = STATIC,
-      catchAccessFault = false,
+      catchAccessFault = catchAll,
       compressedGen = false,
       busLatencyMin = 1,
       injectorStage = true
     )
+    override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
     override def instructionAnticipatedOk() = true
   }) ++ (for(prediction <- List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET);
              twoCycleCache <- List(false, true);
@@ -284,16 +291,17 @@ class IBusDimension extends VexRiscvDimension("IBus") {
         addressWidth = 32,
         cpuDataWidth = 32,
         memDataWidth = 32,
-        catchIllegalAccess = false,
-        catchAccessFault = false,
-        catchMemoryTranslationMiss = false,
+        catchIllegalAccess = catchAll,
+        catchAccessFault = catchAll,
+        catchMemoryTranslationMiss = catchAll,
         asyncTagMemory = false,
         twoCycleRam = twoCycleRam,
         twoCycleCache = twoCycleCache
       )
     )
+    override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
     override def instructionAnticipatedOk() = !twoCycleCache || ((!twoCycleRam || wayCount == 1) && !compressed)
-  })
+  })).flatten
 
 //  override def default = List(positions.last)
 }
@@ -302,22 +310,24 @@ class IBusDimension extends VexRiscvDimension("IBus") {
 
 
 class DBusDimension extends VexRiscvDimension("DBus") {
-  override val positions = List(
+  override val positions = (for(catchAll <- List(false,true)) yield List(
     new VexRiscvPosition("SimpleLate") {
       override def testParam = "DBUS=SIMPLE"
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DBusSimplePlugin(
-        catchAddressMisaligned = false,
-        catchAccessFault = false,
+        catchAddressMisaligned = catchAll,
+        catchAccessFault = catchAll,
         earlyInjection = false
       )
+      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
     },
     new VexRiscvPosition("SimpleEarly") {
       override def testParam = "DBUS=SIMPLE"
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DBusSimplePlugin(
-        catchAddressMisaligned = false,
-        catchAccessFault = false,
+        catchAddressMisaligned = catchAll,
+        catchAccessFault = catchAll,
         earlyInjection = true
       )
+      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
     }
   ) ++ (for(wayCount <- List(1);
             cacheSize <- List(512, 4096)) yield new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount) {
@@ -331,10 +341,10 @@ class DBusDimension extends VexRiscvDimension("DBus") {
           addressWidth      = 32,
           cpuDataWidth      = 32,
           memDataWidth      = 32,
-          catchAccessError  = false,
-          catchIllegal      = false,
-          catchUnaligned    = false,
-          catchMemoryTranslationMiss = false,
+          catchAccessError  = catchAll,
+          catchIllegal      = catchAll,
+          catchUnaligned    = catchAll,
+          catchMemoryTranslationMiss = catchAll,
           atomicEntriesCount = 0
         ),
         memoryTranslatorPortConfig = null
@@ -343,24 +353,35 @@ class DBusDimension extends VexRiscvDimension("DBus") {
         ioRange      = _(31 downto 28) === 0xF
       )
     }
-  })
+    override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
+  })).flatten
 }
 
 
 
 trait CatchAllPosition
 
-class CsrDimension extends VexRiscvDimension("Src") {
+class CsrDimension extends VexRiscvDimension("Csr") {
   override val positions = List(
-    new VexRiscvPosition("None") {
-      override def applyOn(config: VexRiscvConfig): Unit = {}
-      override def testParam = "CSR=no"
-    },
+//    new VexRiscvPosition("None") {
+//      override def applyOn(config: VexRiscvConfig): Unit = {}
+//      override def testParam = "CSR=no"
+//    },
     new VexRiscvPosition("All") with CatchAllPosition{
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all)
-      override def testParam = "CSR=no"
+      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l))
     }
   )
+}
+
+class DecoderDimension extends VexRiscvDimension("Decoder") {
+  override val positions = (for(catchAll <- List(false,true)) yield List(
+    new VexRiscvPosition("") {
+      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DecoderSimplePlugin(
+        catchIllegalInstruction = catchAll
+      )
+      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
+    }
+  )).flatten
 }
 
 
@@ -396,7 +417,8 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension
+    new CsrDimension,
+    new DecoderDimension
   )
 
 
@@ -411,12 +433,10 @@ class TestIndividualFeatures extends FunSuite {
   def doTest(positionsToApply : List[VexRiscvPosition], prefix : String = ""): Unit ={
     usedPositions ++= positionsToApply
     def gen = {
+      FileUtils.deleteQuietly(new File("VexRiscv.v"))
       SpinalVerilog{
         val config = VexRiscvConfig(
           plugins = List(
-            new DecoderSimplePlugin(
-              catchIllegalInstruction = false
-            ),
             new IntAluPlugin,
             new YamlPlugin("cpu0.yaml")
           )
@@ -430,15 +450,17 @@ class TestIndividualFeatures extends FunSuite {
       gen
     }
     test(prefix + name + "_test") {
-      val testCmd = "make clean run REDO=5 MMU=no DEBUG_PLUGIN=no " + (positionsToApply).map(_.testParam).mkString(" ")
+      val debug = false
+      val stdCmd = if(debug) "make clean run REDO=1 TRACE=yes MMU=no DEBUG_PLUGIN=no DHRYSTONE=no " else "make clean run REDO=10 TRACE=yess MMU=no DEBUG_PLUGIN=no "
+      val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
       val str = doCmd(testCmd)
       assert(!str.contains("FAIL"))
-      val intFind = "(\\d+\\.?)+".r
-      val dmips = intFind.findFirstIn("DMIPS per Mhz\\:                              (\\d+.?)+".r.findAllIn(str).toList.last).get.toDouble
+//      val intFind = "(\\d+\\.?)+".r
+//      val dmips = intFind.findFirstIn("DMIPS per Mhz\\:                              (\\d+.?)+".r.findAllIn(str).toList.last).get.toDouble
     }
   }
 
-  dimensions.foreach(d => d.positions.foreach(_.dimension = d))
+  dimensions.foreach(d => d.positions.foreach(p => p.dimension = d))
 
 
   for(i <- 0 until 200){

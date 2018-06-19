@@ -242,10 +242,10 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
           memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(6) | U(4)).resized
           memoryExceptionPort.valid := input(ALIGNEMENT_FAULT)
         } else if(!catchAddressMisaligned){
-          memoryExceptionPort.valid := dBus.rsp.ready && dBus.rsp.error
+          memoryExceptionPort.valid := dBus.rsp.ready && dBus.rsp.error && !input(INSTRUCTION)(5)
           memoryExceptionPort.code  := 5
         } else {
-          memoryExceptionPort.valid := dBus.rsp.ready && dBus.rsp.error
+          memoryExceptionPort.valid := dBus.rsp.ready && dBus.rsp.error && !input(INSTRUCTION)(5)
           memoryExceptionPort.code  := 5
           when(input(ALIGNEMENT_FAULT)){
             memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(6) | U(4)).resized
