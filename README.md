@@ -57,7 +57,7 @@ For commercial support, please contact spinalhdl@gmail.com.
 ## Area usage and maximal frequency 
 
 The following numbers were obtained by synthesizing the CPU as toplevel without any specific synthesis options to save area or to get better maximal frequency (neutral).<br>
-The clock constraint is set to a unattainable value, which tends to increase the design area.<br>
+The clock constraint is set to an unattainable value, which tends to increase the design area.<br>
 The dhrystone benchmark was compiled with the `-O3 -fno-inline` option.<br>
 All the cached configurations have some cache trashing during the dhrystone benchmark except the `VexRiscv full max perf` one. This of course reduces the performance. It is possible to produce 
 dhrystone binaries which fit inside a 4KB I$ and 4KB D$ (I already had this case once) but currently it isn't the case.<br>
@@ -253,7 +253,7 @@ To generate the Briey SoC Hardware:
 sbt "run-main vexriscv.demo.Briey"
 ```
 
-To run the verilator simulation of the Briey SoC which can be then connected to OpenOCD/GDB, first get those dependencies:
+To run the verilator simulation of the Briey SoC which can then be connected to OpenOCD/GDB, first get those dependencies:
 
 ```sh
 sudo apt-get install build-essential xorg-dev libudev-dev libts-dev libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libpulse-dev libopenal-dev libogg-dev libvorbis-dev libaudiofile-dev libpng12-dev libfreetype6-dev libusb-dev libdbus-1-dev zlib1g-dev libdirectfb-dev libsdl2-dev
@@ -271,9 +271,9 @@ To connect OpenOCD (https://github.com/SpinalHDL/openocd_riscv) to the simulatio
 src/openocd -f tcl/interface/jtag_tcp.cfg -c "set BRIEY_CPU0_YAML /home/spinalvm/Spinal/VexRiscv/cpu0.yaml" -f tcl/target/briey.cfg
 ```
 
-You can find multiples software examples and demos here: https://github.com/SpinalHDL/VexRiscvSocSoftware/tree/master/projects/briey
+You can find multiple software examples and demos here: https://github.com/SpinalHDL/VexRiscvSocSoftware/tree/master/projects/briey
 
-You can find some FPGA project which instantiate the Briey SoC there (DE1-SoC, DE0-Nano): https://drive.google.com/drive/folders/0B-CqLXDTaMbKZGdJZlZ5THAxRTQ?usp=sharing
+You can find some FPGA projects which instantiate the Briey SoC here (DE1-SoC, DE0-Nano): https://drive.google.com/drive/folders/0B-CqLXDTaMbKZGdJZlZ5THAxRTQ?usp=sharing
 
 Here are some measurements of Briey SoC timings and area : 
 
@@ -369,7 +369,7 @@ sudo mv /opt/riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6 /opt/riscv
 echo 'export PATH=/opt/riscv/bin:$PATH' >> ~/.bashrc 
 ```
 
-If you want to compile from rv32i and rv32im gcc from source code and install them in /opt/, do the following (will take one hour):
+If you want to compile the rv32i and rv32im GCC toolchain from source code and install them in `/opt/`, do the following (will take one hour):
 
 ```sh
 # Be carefull, sometime the git clone has issue to successfully clone riscv-gnu-toolchain.
@@ -400,7 +400,9 @@ echo -e "\\nRISC-V Toolchain installation completed!"
 
 ## CPU parametrization and instantiation example
 
-You can find many examples of different configurations in the https://github.com/SpinalHDL/VexRiscv/tree/master/src/main/scala/vexriscv/demo folder. Here is one such example:
+You can find many examples of different configurations in the https://github.com/SpinalHDL/VexRiscv/tree/master/src/main/scala/vexriscv/demo folder. 
+
+Here is one such example:
 
 ```scala
 import vexriscv._
@@ -535,7 +537,7 @@ class SimdAddPlugin extends Plugin[VexRiscv]{
 }
 ```
 
-If you want to add this plugin to a given CPU, you just need to add it in its parameterized plugin list.
+If you want to add this plugin to a given CPU, you just need to add it to its parameterized plugin list.
 
 This example is a very simple one, but each plugin can really have access to the whole CPU:
 - Halt a given stage of the CPU
@@ -576,7 +578,7 @@ The second one (`CustomCsrDemoGpioPlugin`) creates a GPIO peripheral directly ma
 
 ## CPU clock and resets
 
-Without the debug plugin, the CPU will have `clk` input and a `reset` input, which is very standard. But with the debug plugin the situation is the following :
+Without the debug plugin, the CPU will have a standard `clk` input and a `reset` input. But with the debug plugin the situation is the following :
 
 - clk : As before, the clock which drive the whole CPU design, including the debug logic
 - reset : Reset all the CPU states excepted the debug logics
@@ -604,14 +606,15 @@ toplevelReset >----+--------> debugReset       |
 ## VexRiscv Architecture
 
 VexRiscv is implemented via a 5 stage in-order pipeline on which many optional and complementary plugins add functionalities to provide a functional RISC-V CPU. 
-This approach is completely unconventional and only possible on meta hardware description languages (SpinalHDL in the current case) but has proven its advantages via the VexRiscv implementation:
+This approach is completely unconventional and only possible through meta hardware description languages (SpinalHDL in the current case) but has proven its advantages 
+via the VexRiscv implementation:
 
 - You can swap/turn on/turn off parts of the CPU directly via the plugin system
 - You can add new functionalities/instruction without having to modify any sources code of the CPU
 - It allows the CPU configuration to cover a very large spectrum of implementation without cooking spaghetti code
 - It allows your code base to truly produce a parametrized CPU design
 
-If you generate the CPU without any plugin, it will only contain the definition of the 5 stages and their basic arbitration, but nothing else, 
+If you generate the CPU without any plugin, it will only contain the definition of the 5 pipeline stages and their basic arbitration, but nothing else, 
 as everything else, including the program counter is added into the CPU via plugins.
 
 ### Plugins
@@ -722,7 +725,7 @@ Simple and light multi-way instruction cache.
 | catchAccessFault  | Boolean | Catch when the memeory bus is responding with an error  |
 | catchMemoryTranslationMiss  | Boolean  |  Catch when the MMU miss a TLB |
 
-Note: If you enable the twoCycleRam and the wayCount is bigger than one, then the register file plugin should be configured to read the regFile in a asynchronous manner.
+Note: If you enable the twoCycleRam option and if wayCount is bigger than one, then the register file plugin should be configured to read the regFile in a asynchronous manner.
 
 #### DecoderSimplePlugin
 
