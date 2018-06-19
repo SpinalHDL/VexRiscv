@@ -7,7 +7,7 @@
 - [CPU generation](#cpu-generation)
 - [Regression tests](#regression-tests)
 - [Interactive debug of the simulated CPU via GDB OpenOCD and Verilator](#interactive-debug-of-the-simulated-cpu-via-gdb-openocd-and-verilator)
-- [Using eclipse to run the software and debug it](#using-eclipse-to-run-the-software-and-debug-it)
+- [Using Eclipse to run the software and debug it](#using-Eclipse-to-run-the-software-and-debug-it)
   * [By using Zylin plugin](#by-using-zylin-plugin)
   * [By using FreedomStudio](#by-using-freedomstudio)
 - [Briey SoC](#briey-soc)
@@ -45,7 +45,7 @@ This repository hosts a RISC-V implementation written in SpinalHDL. Here are som
 The hardware description of this CPU is done by using a very software oriented approach
 (without any overhead in the generated hardware). Here is a list of software concepts used:
 
-- There is very few fixed things. Nearly everything is plugin based. The PC manager is a plugin, the register file is a plugin, the hazard controller is a plugin ...
+- There are very few fixed things. Nearly everything is plugin based. The PC manager is a plugin, the register file is a plugin, the hazard controller is a plugin, ...
 - There is an automatic a tool which allows plugins to insert data in the pipeline at a given stage, and allows other plugins to read it in another stage through automatic pipelining.
 - There is an service system which provides a very dynamic framework. For instance, a plugin could provide an exception service which can then be used by other plugins to emit exceptions from the pipeline.
 
@@ -159,14 +159,17 @@ To generate the corresponding RTL as a VexRiscv.v file, run:
 
 ```sh
 sbt "run-main vexriscv.demo.GenFull"
+```
 
-# or
+or
+
+```sh
 sbt "run-main vexriscv.demo.GenSmallest"
 ```
 
 NOTES:
-- it could take time the first time you run it
-- The VexRiscv could need the unreleased master-head of SpinalHDL. If it fails to compile, just get the SpinalHDL repository and 
+- It could take time the first time you run it.
+- The VexRiscv project may need an unreleased master-head of the SpinalHDL repo. If it fails to compile, just get the SpinalHDL repository and 
    do a "sbt clean compile publish-local" in it as described in the dependencies chapter.
 
 ## Regression tests
@@ -174,23 +177,23 @@ To run tests (need the verilator simulator), go in the src/test/cpp/regression f
 
 ```sh
 # To test the GenFull CPU 
-# (Don't worry about the CSR test not passing, basicaly the GenFull isn't the truly full version of the CPU, some CSR feature are disable in it)
+# (Don't worry about the CSR test not passing, basicaly the GenFull isn't the truly full version of the CPU, some CSR features are disable in it)
 make clean run
 
 # To test the GenSmallest CPU
 make clean run IBUS=SIMPLE DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no
 ```
 
-Those self tested tests include :
+The self-test includes:
 - ISA tests from https://github.com/riscv/riscv-tests/tree/master/isa
 - Dhrystone benchmark
-- 24 tests FreeRTOS tests
+- 24 FreeRTOS tests
 - Some handwritten tests to check the CSR, debug module and MMU plugins
 
-You can enable FreeRTOS tests by adding 'FREERTOS=yes' in the command line, will take time. Also, it use THREAD_COUNT host CPU threads to run multiple regression in parallel.
+You can enable FreeRTOS tests by adding `FREERTOS=yes` to the command line, but it will take time to run. Also, it uses THREAD_COUNT host CPU threads to run multiple regression in parallel.
 
 ## Interactive debug of the simulated CPU via GDB OpenOCD and Verilator
-It's as described to run tests, but you just have to add DEBUG_PLUGIN_EXTERNAL=yes in the make arguments.
+It's as described to run tests, but you just have to add `DEBUG_PLUGIN_EXTERNAL=yes` in the make arguments.
 Work for the GenFull, but not for the GenSmallest as this configuration has no debug module.
 
 Then you can use the https://github.com/SpinalHDL/openocd_riscv tool to create a GDB server connected to the target (the simulated CPU)
@@ -214,12 +217,12 @@ continue
 # Now it should print messages in the Verilator simulation of the CPU
 ```
 
-## Using eclipse to run the software and debug it
+## Using Eclipse to run the software and debug it
 
 ### By using Zylin plugin
-You can use the eclipse + Zylin embedded CDT plugin to do it (http://opensource.zylin.com/embeddedcdt.html). Tested with Helios Service Release 2 (http://www.eclipse.org/downloads/download.php?file=/technology/epp/downloads/release/helios/SR2/eclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz) and the corresponding zylin plugin.
+You can use the Eclipse + Zylin embedded CDT plugin to do it (http://opensource.zylin.com/embeddedcdt.html). Tested with Helios Service Release 2 (http://www.Eclipse.org/downloads/download.php?file=/technology/epp/downloads/release/helios/SR2/Eclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz) and the corresponding zylin plugin.
 
-To following commands will download eclipse and install the plugin.
+To following commands will download Eclipse and install the plugin.
 ```sh
 wget http://www.eclipse.org/downloads/download.php?file=/technology/epp/downloads/release/helios/SR2/eclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz
 tar -xvzf download.php?file=%2Ftechnology%2Fepp%2Fdownloads%2Frelease%2Fhelios%2FSR2%2Feclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz
@@ -229,22 +232,22 @@ cd eclipse
 
 See https://drive.google.com/drive/folders/1NseNHH05B6lmIXqQFVwK8xRjWE4ydeG-?usp=sharing to import a makefile project and create a debug configuration.
 
-Note that sometime this eclipse need to be restarted in order to be able to place new breakpoints.
+Note that sometime this Eclipse need to be restarted in order to be able to place new breakpoints.
 
 ### By using FreedomStudio
 
-You can get FreedomStudio (which is package with eclipse and some plugins) there https://www.sifive.com/products/tools/
+You can get FreedomStudio (which is package with Eclipse and some plugins) here: https://www.sifive.com/products/tools/
 
 See https://drive.google.com/drive/folders/1a7FyMOYgFc9UDhfsWUSCjyqDCvOrts2J?usp=sharing to import a makefile project and create a debug configuration.
 
 
 ## Briey SoC
-As a demonstrator, a SoC named Briey is implemented in src/main/scala/vexriscv/demo/Briey.scala. This SoC is very similar to the Pinsec one  :
+As a demonstrator, a SoC named Briey is implemented in `src/main/scala/vexriscv/demo/Briey.scala`. This SoC is very similar to 
+the [Pinsec SOC](https://spinalhdl.github.io/SpinalDoc/spinal/lib/pinsec/hardware/):
 
 ![Alt text](assets/brieySoc.png?raw=true "")
 
-
-To generate the Briey SoC Hardware :
+To generate the Briey SoC Hardware:
 
 ```sh
 sbt "run-main vexriscv.demo.Briey"
@@ -284,7 +287,7 @@ There is some measurements of Briey SoC timings and area :
 
 Murax is a very light SoC (fit in ICE40 FPGA) which could work without any external component.
 - VexRiscv RV32I[M]
-- JTAG debugger (eclipse/GDB/openocd ready)
+- JTAG debugger (Eclipse/GDB/openocd ready)
 - 8 kB of on-chip ram
 - Interrupt support
 - APB bus for peripherals
@@ -957,7 +960,7 @@ Simple software refilled MMU implementation. Allow others plugins as DBusCachedP
 
 #### DebugPlugin
 
-This plugin implement enough CPU debug feature to allow a comfortable GDB/eclipse debugging. To access those debug feature it provide a simple memory bus interface, the JTAG interface is provided by another bridge, which allow to efficiently connect multiple CPU to the same JTAG.
+This plugin implement enough CPU debug feature to allow a comfortable GDB/Eclipse debugging. To access those debug feature it provide a simple memory bus interface, the JTAG interface is provided by another bridge, which allow to efficiently connect multiple CPU to the same JTAG.
 
 | Parameters | type | description |
 | ------ | ----------- | ------ | 
