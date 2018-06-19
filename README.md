@@ -925,8 +925,8 @@ This plugin is able to unroll the iterative calculation process to reduce the nu
 | mulUnrollFactor    | Int | Number of combinatorial stages used to speed up the multiplication, should be > 0 |
 | divUnrollFactor    | Int | Number of combinatorial stages used to speed up the division, should be > 0 |
 
-The number of cycles used to execute a multiplication is '32/mulUnroolFactor'
-The number of cycles used to execute a division is '32/divUnroolFactor + 1'
+The number of cycles used to execute a multiplication is '32/mulUnrollFactor'
+The number of cycles used to execute a division is '32/divUnrollFactor + 1'
 
 Both mul/div are processed into the memory stage (late result).
 
