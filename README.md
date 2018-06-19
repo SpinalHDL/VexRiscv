@@ -47,7 +47,7 @@ The hardware description of this CPU is done by using a very software oriented a
 
 - There are very few fixed things. Nearly everything is plugin based. The PC manager is a plugin, the register file is a plugin, the hazard controller is a plugin, ...
 - There is an automatic a tool which allows plugins to insert data in the pipeline at a given stage, and allows other plugins to read it in another stage through automatic pipelining.
-- There is an service system which provides a very dynamic framework. For instance, a plugin could provide an exception service which can then be used by other plugins to emit exceptions from the pipeline.
+- There is a service system which provides a very dynamic framework. For instance, a plugin could provide an exception service which can then be used by other plugins to emit exceptions from the pipeline.
 
 There is a gitter channel for all questions about VexRiscv :<br>
 [![Gitter](https://badges.gitter.im/SpinalHDL/VexRiscv.svg)](https://gitter.im/SpinalHDL/VexRiscv?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
@@ -117,7 +117,7 @@ The following configuration results in 1.44 DMIPS/MHz:
 - memory load values are bypassed in the WB stage (late result) 
 - 33 cycle division with bypassing in the M stage (late result)
 - single cycle multiplication with bypassing in the WB stage (late result)
-- dynamic branch prediction done in the F stage with an direct mapped target buffer cache (no penalties on correct predictions)
+- dynamic branch prediction done in the F stage with a direct mapped target buffer cache (no penalties on correct predictions)
 
 ## Dependencies
 
@@ -570,7 +570,7 @@ To retrieve the plugin related signals in your waveform viewer, just filter with
 Here are two examples about how to add a custom CSR to the CPU via the plugin system: 
 https://github.com/SpinalHDL/VexRiscv/blob/master/src/main/scala/vexriscv/demo/CustomCsrDemoPlugin.scala
 
-The first one (`CustomCsrDemoPlugin`) adds an instruction counter and an clock cycle counter into the CSR mapping (and also do tricky stuff as a demonstration).
+The first one (`CustomCsrDemoPlugin`) adds an instruction counter and a clock cycle counter into the CSR mapping (and also do tricky stuff as a demonstration).
 
 The second one (`CustomCsrDemoGpioPlugin`) creates a GPIO peripheral directly mapped into the CSR.
 
@@ -718,7 +718,7 @@ Simple and light multi-way instruction cache.
 | addressWidth  | Int | Address width, should be 32 |
 | cpuDataWidth  | Int | Cpu data width, should be 32 |
 | memDataWidth  | Int | Memory data width, could potentialy be something else than 32, but only 32 is currently tested |
-| catchIllegalAccess  | Boolean  | Catch when an memory access is done on non valid memory address (MMU) |
+| catchIllegalAccess  | Boolean  | Catch when a memory access is done on non valid memory address (MMU) |
 | catchAccessFault  | Boolean | Catch when the memeory bus is responding with an error  |
 | catchMemoryTranslationMiss  | Boolean  |  Catch when the MMU miss a TLB |
 
@@ -733,9 +733,9 @@ To provide this kind of information, each plugin which implements an instruction
 
 | Parameters | type | description |
 | ------ | ----------- | ------ | 
-| catchIllegalInstruction | Boolean | If set to true, instruction which have no decoding specification will generate an trap exception  |
+| catchIllegalInstruction | Boolean | If set to true, instruction which have no decoding specification will generate a trap exception  |
 
-Here is an usage example : 
+Here is a usage example : 
 
 ```scala
     //Specify the instruction decoding which should be applied when the instruction match the 'key' pattern
@@ -767,7 +767,7 @@ This plugin implements the register file.
 | regFileReadyKind | RegFileReadKind | Can bet set to ASYNC or SYNC. Specifies the kind of memory read used to implement the register file. ASYNC means zero cycle latency memory read, while SYNC means one cycle latency memory read which can be mapped into standard FPGA memory blocks   |
 | zeroBoot | Boolean | Load all registers with zeroes at the beginning of simulations to keep everything deterministic in logs/traces|
 
-This register file use an `don't care` read-during-write policy, so the bypassing/hazard plugin should take care of this.
+This register file use a `don't care` read-during-write policy, so the bypassing/hazard plugin should take care of this.
 
 #### HazardSimplePlugin
 
@@ -808,7 +808,7 @@ The result is injected into the pipeline directly at the end of the execute stag
 
 #### FullBarrelShifterPlugin
 
-Implements SLL/SRL/SRA instructions by using an full barrel shifter, so it execute all shifts in a single cycle.
+Implements SLL/SRL/SRA instructions by using a full barrel shifter, so it execute all shifts in a single cycle.
 
 | Parameters | type | description |
 | ------ | ----------- | ------ | 
@@ -822,7 +822,7 @@ as separate plugin.
 | Parameters | type | description |
 | ------ | ----------- | ------ | 
 | earlyBranch | Boolean | By default the branch is done in the Memory stage to relax timings, but if this option is set it's done in the Execute stage|
-| catchAddressMisaligned | Boolean | If a jump/branch is done in an unaligned PC address, it will fire an trap exception |
+| catchAddressMisaligned | Boolean | If a jump/branch is done in an unaligned PC address, it will fire a trap exception |
 | prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation, see below for more descriptions |
 | historyRamSizeLog2 | Int | Specify the number of entries in the direct mapped prediction cache of DYNAMIC/DYNAMIC_TARGET implementation. 2 pow historyRamSizeLog2 entries |
 
@@ -834,7 +834,7 @@ No prediction: each PC change due to a jump/branch will produce a penalty.
 
 ##### Prediction STATIC
 
-In the decode stage, an conditional branch pointing backwards or an JAL is branched speculatively. If the speculation is right, the branch penalty is reduced to a single cycle, 
+In the decode stage, a conditional branch pointing backwards or a JAL is branched speculatively. If the speculation is right, the branch penalty is reduced to a single cycle, 
 otherwise the standard penalty is applied.
 
 ##### Prediction DYNAMIC
@@ -1031,7 +1031,7 @@ https://github.com/SpinalHDL/openocd_riscv
 
 #### YamlPlugin
 
-This plugin offers a service to others plugins to generate an usefull Yaml file about the CPU configuration. It contains, for instance, the sequence of instruction required 
+This plugin offers a service to others plugins to generate a usefull Yaml file about the CPU configuration. It contains, for instance, the sequence of instruction required 
 to flush the data cache (information used by openocd).
 
 
