@@ -497,6 +497,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       when(exception || (interrupt && pipelineLiberator.done)){
         jumpInterface.valid := True
         jumpInterface.payload := mtvec
+        memory.arbitration.flushAll := True //Mouai
         mstatus.MIE  := False
         mstatus.MPIE := mstatus.MIE
         mstatus.MPP  := privilege
