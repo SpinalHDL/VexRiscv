@@ -1734,7 +1734,7 @@ string riscvTestDiv[] = {
 };
 
 string freeRtosTests[] = {
-		"AltBlock", "AltQTest", "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
+		"AltQTest", "AltBlock",  "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
 		"QueueSet", "recmutex", "semtest", "TaskNotify", "BlockQ", "crhook", "dynamic",
 		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
 		 //"flop", "sp_flop" // <- Simple test

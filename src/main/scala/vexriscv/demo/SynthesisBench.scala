@@ -101,8 +101,8 @@ object VexRiscvSynthesisBench {
     }
 
 
-    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full)
-//    val rtls = List(noCacheNoMmuMaxPerf, fullNoMmuMaxPerf)
+//    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full)
+    val rtls = List(smallestNoCsr, smallest, smallAndProductive)
     //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
 //    val rtls = List(smallAndProductive,  full)
 

@@ -8,6 +8,9 @@ import StreamVexPimper._
 import scala.collection.mutable.ArrayBuffer
 
 
+//TODO val killLastStage = jump.pcLoad.valid || decode.arbitration.isRemoved
+// DBUSSimple check memory halt execute optimization
+
 abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
                                val resetVector : BigInt,
                                val keepPcPlus4 : Boolean,
@@ -28,9 +31,8 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
   assert(!(cmdToRspStageCount == 1 && !injectorStage))
   assert(!(compressedGen && !decodePcGen))
   var fetcherHalt : Bool = null
-  lazy val decodeNextPcValid = Bool //TODO remove me ?
-  lazy val decodeNextPc = UInt(32 bits)
-  def nextPc() = (False, decodeNextPc)
+  lazy val pcValids = Vec(Bool, 4)
+  def pcValid(stage : Stage) = pcValids(pipeline.indexOf(stage))
   var incomingInstruction : Bool = null
   override def incoming() = incomingInstruction
 
@@ -303,16 +305,29 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         inputBeforeStage
       })
 
-      if (decodePcGen) {
-        decodeNextPcValid := True
-        decodeNextPc := decodePc.pcReg
-      } else {
-        val lastStageStream = if (injectorStage) inputBeforeStage
-        else if (cmdToRspStageCount > 1) iBusRsp.inputPipeline(cmdToRspStageCount - 2)
-        else throw new Exception("Fetch should at least have two stages")
 
-        decodeNextPcValid := RegNext(lastStageStream.isStall)
-        decodeNextPc := decode.input(PC)
+      def pcUpdatedGen(input : Bool, stucks : Seq[Bool], relaxedInput : Boolean) : Seq[Bool] = {
+        stucks.scanLeft(input)((i, stuck) => {
+          val reg = RegInit(False)
+          if(!relaxedInput) when(flush) {
+            reg := False
+          }
+          when(!stuck) {
+            reg := i
+          }
+          if(relaxedInput || i != input) when(flush) {
+            reg := False
+          }
+          reg
+        }).tail
+      }
+
+      val nextPcCalc = if (decodePcGen) {
+        val valids = pcUpdatedGen(True, List(execute, memory, writeBack).map(_.arbitration.isStuck), true)
+        pcValids := Vec(valids.takeRight(4))
+      } else new Area{
+        val valids = pcUpdatedGen(True, iBusRsp.inputPipeline.map(!_.ready) ++ (if (injectorStage) List(!decodeInput.ready) else Nil) ++ List(execute, memory, writeBack).map(_.arbitration.isStuck), relaxedPcCalculation)
+        pcValids := Vec(valids.takeRight(4))
       }
 
       decodeInput.ready := !decode.arbitration.isStuck
