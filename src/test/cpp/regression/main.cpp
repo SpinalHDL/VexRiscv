@@ -401,7 +401,7 @@ public:
 		}
 		#endif
 
-
+        bool failed = false;
 		try {
 			// run simulation for 100 clock periods
 			for (i = 16; i < timeout*2; i+=2) {
@@ -501,6 +501,7 @@ public:
 			cout << "FAIL " <<  name << endl;
 			cycles += instanceCycles;
 			staticMutex.unlock();
+			failed = true;
 		}
 
 
@@ -510,6 +511,12 @@ public:
 		#ifdef TRACE
 		tfp->close();
 		#endif
+        #ifdef STOP_ON_FAIL
+            if(failed){
+                sleep(1);
+                exit(-1);
+            }
+        #endif
 		return this;
 	}
 };
@@ -1908,25 +1915,31 @@ int main(int argc, char **argv, char **env) {
 
 		#ifdef FREERTOS
 			//redo(1,Workspace("freeRTOS_demo").loadHex("../../resources/hex/freeRTOS_demo.hex")->bootAt(0x80000000u)->run(100e6);)
-			queue<std::function<void()>> tasks;
+			vector <std::function<void()>> tasks;
 
 			for(const string &name : freeRtosTests){
-				tasks.push([=]() { Workspace(name + "_rv32i_O0").loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
-				tasks.push([=]() { Workspace(name + "_rv32i_O3").loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+				tasks.push_back([=]() { Workspace(name + "_rv32i_O0").loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
+				tasks.push_back([=]() { Workspace(name + "_rv32i_O3").loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
 				#ifdef COMPRESSED
-                    tasks.push([=]() { Workspace(name + "_rv32ic_O0").loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
-                    tasks.push([=]() { Workspace(name + "_rv32ic_O3").loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                    tasks.push_back([=]() { Workspace(name + "_rv32ic_O0").loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                    tasks.push_back([=]() { Workspace(name + "_rv32ic_O3").loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
 				#endif
 				#if defined(MUL) && defined(DIV)
                     #ifdef COMPRESSED
-                        tasks.push([=]() { Workspace(name + "_rv32imac_O3").loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                        tasks.push_back([=]() { Workspace(name + "_rv32imac_O3").loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #else
-                        tasks.push([=]() { Workspace(name + "_rv32im_O3").loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                        tasks.push_back([=]() { Workspace(name + "_rv32im_O3").loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #endif
 				#endif
 			}
 
-			multiThreadedExecute(tasks);
+            while(tasks.size() > FREERTOS_COUNT){
+                tasks.erase(tasks.begin() + (rand()%tasks.size()));
+            }
+
+
+            queue <std::function<void()>> tasksSelected(std::deque<std::function<void()>>(tasks.begin(), tasks.end()));
+			multiThreadedExecute(tasksSelected);
 		#endif
 	}
 

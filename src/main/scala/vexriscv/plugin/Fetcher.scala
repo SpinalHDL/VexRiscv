@@ -31,6 +31,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
   assert(!(cmdToRspStageCount == 1 && !injectorStage))
   assert(!(compressedGen && !decodePcGen))
   var fetcherHalt : Bool = null
+  var fetcherflushIt : Bool = null
   lazy val pcValids = Vec(Bool, 4)
   def pcValid(stage : Stage) = pcValids(pipeline.indexOf(stage))
   var incomingInstruction : Bool = null
@@ -45,6 +46,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
   var predictionJumpInterface : Flow[UInt] = null
 
   override def haltIt(): Unit = fetcherHalt := True
+  override def flushIt(): Unit = fetcherflushIt := True
 
   case class JumpInfo(interface :  Flow[UInt], stage: Stage, priority : Int)
   val jumpInfos = ArrayBuffer[JumpInfo]()
@@ -58,6 +60,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
 //  var decodeExceptionPort : Flow[ExceptionCause] = null
   override def setup(pipeline: VexRiscv): Unit = {
     fetcherHalt = False
+    fetcherflushIt = False
     incomingInstruction = False
     if(catchAccessFault) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
@@ -100,10 +103,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       pcLoad.payload := MuxOH(OHMasking.first(valids.asBits), pcs)
     }
 
-
-
-    val killLastStage = jump.pcLoad.valid || decode.arbitration.isRemoved
-    def flush = killLastStage
+    def flush = jump.pcLoad.valid || fetcherflushIt
 
     class PcFetch extends Area{
       val preOutput = Stream(UInt(32 bits))
@@ -296,7 +296,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         incomingInstruction setWhen (inputBeforeStage.valid)
       }
       val decodeInput = (if (injectorStage) {
-        val decodeInput = inputBeforeStage.m2sPipeWithFlush(killLastStage, collapsBubble = false)
+        val decodeInput = inputBeforeStage.m2sPipeWithFlush(flush, collapsBubble = false)
         decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), inputBeforeStage.rsp.inst)
         iBusRsp.readyForError.clearWhen(decodeInput.valid)
         incomingInstruction setWhen (decodeInput.valid)
@@ -323,15 +323,17 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       }
 
       val nextPcCalc = if (decodePcGen) {
-        val valids = pcUpdatedGen(True, List(execute, memory, writeBack).map(_.arbitration.isStuck), true)
+        val valids = pcUpdatedGen(True, False :: List(execute, memory, writeBack).map(_.arbitration.isStuck), true)
         pcValids := Vec(valids.takeRight(4))
       } else new Area{
         val valids = pcUpdatedGen(True, iBusRsp.inputPipeline.map(!_.ready) ++ (if (injectorStage) List(!decodeInput.ready) else Nil) ++ List(execute, memory, writeBack).map(_.arbitration.isStuck), relaxedPcCalculation)
         pcValids := Vec(valids.takeRight(4))
       }
 
+      val decodeRemoved = RegInit(False) setWhen(decode.arbitration.isRemoved) clearWhen(!decode.arbitration.isStuck)
+
       decodeInput.ready := !decode.arbitration.isStuck
-      decode.arbitration.isValid := decodeInput.valid
+      decode.arbitration.isValid := decodeInput.valid && !decodeRemoved
       decode.insert(PC) := (if (decodePcGen) decodePc.pcReg else decodeInput.pc)
       decode.insert(INSTRUCTION) := decodeInput.rsp.inst
       decode.insert(INSTRUCTION_READY) := True

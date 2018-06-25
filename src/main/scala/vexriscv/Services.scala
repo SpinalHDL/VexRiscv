@@ -13,6 +13,7 @@ trait JumpService{
 
 trait IBusFetcher{
   def haltIt() : Unit
+  def flushIt() : Unit
   def incoming() : Bool
   def pcValid(stage : Stage) : Bool
   def getInjectionPort() : Stream[Bits]

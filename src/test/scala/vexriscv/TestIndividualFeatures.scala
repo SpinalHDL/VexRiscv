@@ -15,9 +15,12 @@ import scala.sys.process._
 import scala.util.Random
 
 
+abstract class ConfigUniverse
+
 abstract class  ConfigDimension[T](val name: String) {
   def positions: Seq[T]
   def default : Seq[T] = List(positions(0))
+  def random(universes : Seq[ConfigUniverse], r : Random) : T = positions(r.nextInt(positions.length))
 }
 
 abstract class  VexRiscvDimension(name: String) extends ConfigDimension[VexRiscvPosition](name)
@@ -30,6 +33,15 @@ abstract class ConfigPosition[T](val name: String) {
 
 abstract class  VexRiscvPosition(name: String) extends ConfigPosition[VexRiscvConfig](name){
   def testParam : String = ""
+}
+
+class VexRiscvUniverse extends ConfigUniverse
+
+object VexRiscvUniverse{
+  val CATCH_ALL = new VexRiscvUniverse
+  val MMU = new VexRiscvUniverse
+
+  val universes = List(CATCH_ALL, MMU)
 }
 
 class ShiftDimension extends VexRiscvDimension("Shift") {
@@ -361,14 +373,28 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 
 trait CatchAllPosition
 
+//TODO CSR without exception
+//TODO FREERTOS
 class CsrDimension extends VexRiscvDimension("Csr") {
   override val positions = List(
-//    new VexRiscvPosition("None") {
-//      override def applyOn(config: VexRiscvConfig): Unit = {}
-//      override def testParam = "CSR=no"
-//    },
+    new VexRiscvPosition("None") {
+      override def applyOn(config: VexRiscvConfig): Unit = {}
+      override def testParam = "CSR=no"
+    },
     new VexRiscvPosition("All") with CatchAllPosition{
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l))
+    }
+  )
+}
+
+class DebugDimension extends VexRiscvDimension("Debug") {
+  override val positions = List(
+    new VexRiscvPosition("None") {
+      override def applyOn(config: VexRiscvConfig): Unit = {}
+      override def testParam = "DEBUG_PLUGIN=no"
+    },
+    new VexRiscvPosition("Enable") with CatchAllPosition{
+      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset")))
     }
   )
 }
@@ -418,7 +444,8 @@ class TestIndividualFeatures extends FunSuite {
     new RegFileDimension,
     new SrcDimension,
     new CsrDimension,
-    new DecoderDimension
+    new DecoderDimension,
+    new DebugDimension
   )
 
 
@@ -451,7 +478,9 @@ class TestIndividualFeatures extends FunSuite {
     }
     test(prefix + name + "_test") {
       val debug = false
-      val stdCmd = if(debug) "make clean run REDO=1 TRACE=yes MMU=no DEBUG_PLUGIN=no DHRYSTONE=no " else "make clean run REDO=10 TRACE=yess MMU=no DEBUG_PLUGIN=no "
+      val stdCmd = if(debug) "make clean run REDO=1 TRACE=yes MMU=no DHRYSTONE=no " else "make clean run REDO=10 TRACE=no MMU=no "
+//      val stdCmd = "make clean run REDO=40 DHRYSTONE=no STOP_ON_FAIL=yes TRACE=yess MMU=no"
+
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
       val str = doCmd(testCmd)
       assert(!str.contains("FAIL"))
@@ -462,13 +491,24 @@ class TestIndividualFeatures extends FunSuite {
 
   dimensions.foreach(d => d.positions.foreach(p => p.dimension = d))
 
+  val testId = None
+  val seed = Random.nextLong()
 
+//  val testId = Some(6)
+//  val seed = -6369023953274056616l
+
+  val rand = new Random(seed)
+
+  println(s"Seed=$seed")
   for(i <- 0 until 200){
     var positions : List[VexRiscvPosition] = null
+    val universe = VexRiscvUniverse.universes.filter(e => rand.nextBoolean())
     do{
-      positions = dimensions.map(d => d.positions(Random.nextInt(d.positions.size)))
+      positions = dimensions.map(d => d.random(universe, rand))
     }while(!positions.forall(_.isCompatibleWith(positions)))
-    doTest(positions," random_" + i + "_")
+
+    if(testId.isEmpty || testId.get == i)
+      doTest(positions," random_" + i + "_")
   }
 
   println(s"${usedPositions.size}/$positionsCount positions")

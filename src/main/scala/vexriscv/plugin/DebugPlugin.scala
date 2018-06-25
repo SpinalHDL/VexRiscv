@@ -203,6 +203,7 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
 
       when(execute.input(IS_EBREAK)){
         when(execute.arbitration.isValid ) {
+          iBusFetcher.flushIt()
           iBusFetcher.haltIt()
           decode.arbitration.flushAll := True
         }
