@@ -33,14 +33,14 @@ object TestsWorkspace {
         plugins = List(
           new IBusSimplePlugin(
             resetVector = 0x80000000l,
-            relaxedPcCalculation = true,
+            relaxedPcCalculation = false,
             relaxedBusCmdValid = false,
-            prediction = DYNAMIC_TARGET,
+            prediction = NONE,
             historyRamSizeLog2 = 10,
             catchAccessFault = true,
             compressedGen = true,
-            busLatencyMin = 3,
-            injectorStage = false
+            busLatencyMin = 1,
+            injectorStage = true
           ),
 //          new IBusCachedPlugin(
 //            resetVector = 0x80000000l,

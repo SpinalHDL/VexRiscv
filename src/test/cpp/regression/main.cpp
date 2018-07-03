@@ -511,7 +511,7 @@ public:
 		#ifdef TRACE
 		tfp->close();
 		#endif
-        #ifdef STOP_ON_FAIL
+        #ifdef STOP_ON_ERROR
             if(failed){
                 sleep(1);
                 exit(-1);
@@ -1744,6 +1744,7 @@ string freeRtosTests[] = {
 		"AltQTest", "AltBlock",  "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
 		"QueueSet", "recmutex", "semtest", "TaskNotify", "BlockQ", "crhook", "dynamic",
 		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
+		//"sp_flop"
 		 //"flop", "sp_flop" // <- Simple test
 		 // "AltBlckQ" ???
 };
@@ -1799,6 +1800,9 @@ static void multiThreadedExecute(queue<std::function<void()>> &lambdas){
 
 
 int main(int argc, char **argv, char **env) {
+    #ifdef SEED
+    srand48(SEED);
+    #endif
 	Verilated::randReset(2);
 	Verilated::commandArgs(argc, argv);
 
@@ -1914,6 +1918,9 @@ int main(int argc, char **argv, char **env) {
 
 
 		#ifdef FREERTOS
+		    #ifdef SEED
+            srand48(SEED);
+            #endif
 			//redo(1,Workspace("freeRTOS_demo").loadHex("../../resources/hex/freeRTOS_demo.hex")->bootAt(0x80000000u)->run(100e6);)
 			vector <std::function<void()>> tasks;
 
@@ -1934,7 +1941,7 @@ int main(int argc, char **argv, char **env) {
 			}
 
             while(tasks.size() > FREERTOS_COUNT){
-                tasks.erase(tasks.begin() + (rand()%tasks.size()));
+                tasks.erase(tasks.begin() + (VL_RANDOM_I(32)%tasks.size()));
             }
 
 

@@ -327,10 +327,13 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         pcValids := Vec(valids.takeRight(4))
       } else new Area{
         val valids = pcUpdatedGen(True, iBusRsp.inputPipeline.map(!_.ready) ++ (if (injectorStage) List(!decodeInput.ready) else Nil) ++ List(execute, memory, writeBack).map(_.arbitration.isStuck), relaxedPcCalculation)
+        if(relaxedPcCalculation && fetchPrediction != null) when(fetchPc.predictionPcLoad.valid){
+          valids(0).getDrivingReg := False
+        }
         pcValids := Vec(valids.takeRight(4))
       }
 
-      val decodeRemoved = RegInit(False) setWhen(decode.arbitration.isRemoved) clearWhen(!decode.arbitration.isStuck)
+      val decodeRemoved = RegInit(False) setWhen(decode.arbitration.isRemoved) clearWhen(flush) //!decode.arbitration.isStuck || decode.arbitration.isFlushed
 
       decodeInput.ready := !decode.arbitration.isStuck
       decode.arbitration.isValid := decodeInput.valid && !decodeRemoved

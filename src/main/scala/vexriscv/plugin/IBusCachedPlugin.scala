@@ -124,13 +124,13 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
 
       //Connect fetch cache side
       cache.io.cpu.fetch.isValid := iBusRsp.inputPipeline(0).valid
-      cache.io.cpu.fetch.isStuck := !iBusRsp.input.ready
+      cache.io.cpu.fetch.isStuck := !iBusRsp.inputPipeline(0).ready
       cache.io.cpu.fetch.pc := iBusRsp.inputPipeline(0).payload
 
 
       if(twoCycleCache){
         cache.io.cpu.decode.isValid := iBusRsp.inputPipeline(1).valid
-        cache.io.cpu.decode.isStuck := !iBusRsp.input.ready
+        cache.io.cpu.decode.isStuck := !iBusRsp.inputPipeline(1).ready
         cache.io.cpu.decode.pc := iBusRsp.inputPipeline(1).payload
         cache.io.cpu.decode.isUser := (if (privilegeService != null) privilegeService.isUser(decode) else False)
 
@@ -152,9 +152,11 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         issueDetected \= True
         redoFetch := iBusRsp.readyForError
       }
+
+
+      assert(decodePcGen == compressedGen)
       cache.io.cpu.fill.valid  := redoFetch
       redoBranch.valid   := redoFetch
-      assert(decodePcGen == compressedGen)
       redoBranch.payload := (if(decodePcGen) decode.input(PC) else cacheRsp.pc)
       cache.io.cpu.fill.payload := cacheRsp.physicalAddress
 

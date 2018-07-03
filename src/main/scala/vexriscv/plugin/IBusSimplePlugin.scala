@@ -126,6 +126,9 @@ class IBusSimplePlugin(resetVector : BigInt,
     prediction = prediction,
     historyRamSizeLog2 = historyRamSizeLog2,
     injectorStage = injectorStage){
+  assert(!(prediction == DYNAMIC_TARGET && relaxedBusCmdValid), "IBusSimplePlugin doesn't allow dynamic_target prediction and relaxedBusCmdValid together")
+  assert(!relaxedBusCmdValid)
+
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
 

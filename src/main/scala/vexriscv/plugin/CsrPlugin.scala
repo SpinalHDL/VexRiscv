@@ -54,6 +54,8 @@ case class CsrPluginConfig(
 
                           ){
   assert(!ucycleAccess.canWrite)
+
+  def noException = this.copy(ecallGen = false, catchIllegalAccess = false)
 }
 
 object CsrPluginConfig{

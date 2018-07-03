@@ -17,10 +17,15 @@ import scala.util.Random
 
 abstract class ConfigUniverse
 
-abstract class  ConfigDimension[T](val name: String) {
-  def positions: Seq[T]
-  def default : Seq[T] = List(positions(0))
-  def random(universes : Seq[ConfigUniverse], r : Random) : T = positions(r.nextInt(positions.length))
+abstract class  ConfigDimension[T <: ConfigPosition[_]](val name: String) {
+  def randomPosition(universes : Seq[ConfigUniverse], r : Random) : T = {
+    val ret = randomPositionImpl(universes, r)
+    ret.dimension = this
+    ret
+  }
+
+  protected def randomPositionImpl(universes : Seq[ConfigUniverse], r : Random) : T
+  protected def random[X](r : Random, positions : List[X]) : X = positions(r.nextInt(positions.length))
 }
 
 abstract class  VexRiscvDimension(name: String) extends ConfigDimension[VexRiscvPosition](name)
@@ -45,7 +50,7 @@ object VexRiscvUniverse{
 }
 
 class ShiftDimension extends VexRiscvDimension("Shift") {
-  override val positions = List(
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = random(r, List(
     new VexRiscvPosition("FullLate") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new FullBarrielShifterPlugin(earlyInjection = false)
     },
@@ -55,33 +60,28 @@ class ShiftDimension extends VexRiscvDimension("Shift") {
     new VexRiscvPosition("Light") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new LightShifterPlugin
     }
-  )
+  ))
 }
 
 class BranchDimension extends VexRiscvDimension("Branch") {
-  override val positions = (for(catchAll <- List(false,true)) yield List(
-    new VexRiscvPosition("Late") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new BranchPlugin(
-        earlyBranch = false,
-        catchAddressMisaligned = catchAll
-      )
 
-      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
-    },
-    new VexRiscvPosition("Early") {
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
+    val early = r.nextBoolean()
+    new VexRiscvPosition(if(early) "Early" else "Late") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new BranchPlugin(
-        earlyBranch = true,
+        earlyBranch = early,
         catchAddressMisaligned = catchAll
       )
-      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
     }
-  )).flatten
+  }
 }
 
 
 
 class MulDivDimension extends VexRiscvDimension("MulDiv") {
-  override val positions = List(
+
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = random(r, List(
     new VexRiscvPosition("NoMulDiv") {
       override def applyOn(config: VexRiscvConfig): Unit = {}
       override def testParam = "MUL=no DIV=no"
@@ -105,11 +105,33 @@ class MulDivDimension extends VexRiscvDimension("MulDiv") {
           genMul = true,
           genDiv = true,
           mulUnroolFactor = 32,
+          divUnroolFactor = 4
+        )
+      }
+    },
+    new VexRiscvPosition("MulDivFpgaNoDsp") {
+      override def testParam = "MUL=yes DIV=yes"
+      override def applyOn(config: VexRiscvConfig): Unit = {
+        config.plugins += new MulDivIterativePlugin(
+          genMul = true,
+          genDiv = true,
+          mulUnroolFactor = 1,
+          divUnroolFactor = 1
+        )
+      }
+    },
+    new VexRiscvPosition("MulDivFpgaNoDspFastMul") {
+      override def testParam = "MUL=yes DIV=yes"
+      override def applyOn(config: VexRiscvConfig): Unit = {
+        config.plugins += new MulDivIterativePlugin(
+          genMul = true,
+          genDiv = true,
+          mulUnroolFactor = 8,
           divUnroolFactor = 1
         )
       }
     }
-  )
+  ))
 }
 
 trait InstructionAnticipatedPosition{
@@ -117,15 +139,18 @@ trait InstructionAnticipatedPosition{
 }
 
 class RegFileDimension extends VexRiscvDimension("RegFile") {
-  override val positions = List(
+
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = random(r, List(
     new VexRiscvPosition("Async") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new RegFilePlugin(
-        regFileReadyKind = plugin.ASYNC
+        regFileReadyKind = plugin.ASYNC,
+        zeroBoot = true
       )
     },
     new VexRiscvPosition("Sync") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new RegFilePlugin(
-        regFileReadyKind = plugin.SYNC
+        regFileReadyKind = plugin.SYNC,
+        zeroBoot = true
       )
 
       override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = positions.exists{
@@ -133,240 +158,216 @@ class RegFileDimension extends VexRiscvDimension("RegFile") {
         case _ => false
       }
     }
-  )
+  ))
 }
 
 
 
 class HazardDimension extends VexRiscvDimension("Hazard") {
-  override val positions = List(
-    new VexRiscvPosition("Interlock") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new HazardSimplePlugin(
-        bypassExecute = false,
-        bypassMemory = false,
-        bypassWriteBack = false,
-        bypassWriteBackBuffer = false,
-        pessimisticUseSrc = false,
-        pessimisticWriteRegFile = false,
-        pessimisticAddressMatch = false
-      )
-    },
-    new VexRiscvPosition("BypassAll") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new HazardSimplePlugin(
-        bypassExecute = true,
-        bypassMemory = true,
-        bypassWriteBack = true,
-        bypassWriteBackBuffer = true,
-        pessimisticUseSrc = false,
-        pessimisticWriteRegFile = false,
-        pessimisticAddressMatch = false
-      )
-    },
-    new VexRiscvPosition("BypassExecute") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new HazardSimplePlugin(
-        bypassExecute = true,
-        bypassMemory = false,
-        bypassWriteBack = false,
-        bypassWriteBackBuffer = false,
-        pessimisticUseSrc = false,
-        pessimisticWriteRegFile = false,
-        pessimisticAddressMatch = false
-      )
-    },
-    new VexRiscvPosition("BypassMemory") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new HazardSimplePlugin(
-        bypassExecute = false,
-        bypassMemory = true,
-        bypassWriteBack = false,
-        bypassWriteBackBuffer = false,
-        pessimisticUseSrc = false,
-        pessimisticWriteRegFile = false,
-        pessimisticAddressMatch = false
-      )
-    },
-    new VexRiscvPosition("BypassWriteBack") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new HazardSimplePlugin(
-        bypassExecute = false,
-        bypassMemory = false,
-        bypassWriteBack = true,
-        bypassWriteBackBuffer = false,
-        pessimisticUseSrc = false,
-        pessimisticWriteRegFile = false,
-        pessimisticAddressMatch = false
-      )
-    },
-    new VexRiscvPosition("BypassWriteBackBuffer") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new HazardSimplePlugin(
-        bypassExecute = false,
-        bypassMemory = false,
-        bypassWriteBack = false,
-        bypassWriteBackBuffer = true,
-        pessimisticUseSrc = false,
-        pessimisticWriteRegFile = false,
-        pessimisticAddressMatch = false
-      )
+
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) : VexRiscvPosition = {
+    if(r.nextDouble() < 0.8){
+      random(r, List(
+        new VexRiscvPosition("Interlock") {
+          override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new HazardSimplePlugin(
+            bypassExecute = false,
+            bypassMemory = false,
+            bypassWriteBack = false,
+            bypassWriteBackBuffer = false,
+            pessimisticUseSrc = false,
+            pessimisticWriteRegFile = false,
+            pessimisticAddressMatch = false
+          )
+        },
+        new VexRiscvPosition("BypassAll") {
+          override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new HazardSimplePlugin(
+            bypassExecute = true,
+            bypassMemory = true,
+            bypassWriteBack = true,
+            bypassWriteBackBuffer = true,
+            pessimisticUseSrc = false,
+            pessimisticWriteRegFile = false,
+            pessimisticAddressMatch = false
+          )
+        }
+      ))
+    }else {
+      random(r, List(
+        new VexRiscvPosition("BypassExecute") {
+          override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new HazardSimplePlugin(
+            bypassExecute = true,
+            bypassMemory = false,
+            bypassWriteBack = false,
+            bypassWriteBackBuffer = false,
+            pessimisticUseSrc = false,
+            pessimisticWriteRegFile = false,
+            pessimisticAddressMatch = false
+          )
+        },
+        new VexRiscvPosition("BypassMemory") {
+          override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new HazardSimplePlugin(
+            bypassExecute = false,
+            bypassMemory = true,
+            bypassWriteBack = false,
+            bypassWriteBackBuffer = false,
+            pessimisticUseSrc = false,
+            pessimisticWriteRegFile = false,
+            pessimisticAddressMatch = false
+          )
+        },
+        new VexRiscvPosition("BypassWriteBack") {
+          override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new HazardSimplePlugin(
+            bypassExecute = false,
+            bypassMemory = false,
+            bypassWriteBack = true,
+            bypassWriteBackBuffer = false,
+            pessimisticUseSrc = false,
+            pessimisticWriteRegFile = false,
+            pessimisticAddressMatch = false
+          )
+        },
+        new VexRiscvPosition("BypassWriteBackBuffer") {
+          override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new HazardSimplePlugin(
+            bypassExecute = false,
+            bypassMemory = false,
+            bypassWriteBack = false,
+            bypassWriteBackBuffer = true,
+            pessimisticUseSrc = false,
+            pessimisticWriteRegFile = false,
+            pessimisticAddressMatch = false
+          )
+        }
+      ))
     }
-  )
-}
+  }}
 
 
 class SrcDimension extends VexRiscvDimension("Src") {
-  override val positions = List(
-    new VexRiscvPosition("Early") {
+
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    val separatedAddSub, executeInsertion = r.nextBoolean()
+    new VexRiscvPosition((if (separatedAddSub) "AddSub" else "") + (if (executeInsertion) "Execute" else "")) {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new SrcPlugin(
-        separatedAddSub = false,
-        executeInsertion = false
-      )
-    },
-    new VexRiscvPosition("Late") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new SrcPlugin(
-        separatedAddSub = false,
-        executeInsertion = true
-      )
-    },
-    new VexRiscvPosition("AddSub") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new SrcPlugin(
-        separatedAddSub = true,
-        executeInsertion = false
+        separatedAddSub = separatedAddSub,
+        executeInsertion = executeInsertion
       )
     }
-  )
+  }
 }
 
 
 class IBusDimension extends VexRiscvDimension("IBus") {
-  override val positions = (for(catchAll <- List(false,true)) yield ((for(prediction <- List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET);
-                                latency <- List(1,3);
-                                compressed <- List(false, true);
-                                injectorStage <- List(false, true);
-                                relaxedPcCalculation <- List(false, true);
-                                if latency > 1 || injectorStage) yield new VexRiscvPosition("Simple" + latency + (if(relaxedPcCalculation) "Relax" else "") + (if(injectorStage) "InjStage" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
-    override def testParam = "IBUS=SIMPLE" + (if(compressed) " COMPRESSED=yes" else "")
-    override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
-      resetVector = 0x80000000l,
-      relaxedPcCalculation = relaxedPcCalculation,
-      prediction = prediction,
-      catchAccessFault = catchAll,
-      compressedGen = compressed,
-      busLatencyMin = latency,
-      injectorStage = injectorStage
-    )
-    override def instructionAnticipatedOk() = injectorStage
-    override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
-  }) :+ new VexRiscvPosition("SimpleFullRelaxedDeep"){
-    override def testParam = "IBUS=SIMPLE COMPRESSED=yes"
-    override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
-      resetVector = 0x80000000l,
-      relaxedPcCalculation = true,
-      relaxedBusCmdValid = true,
-      prediction = STATIC,
-      catchAccessFault = catchAll,
-      compressedGen = true,
-      busLatencyMin = 3,
-      injectorStage = false
-    )
-    override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
-  } :+ new VexRiscvPosition("SimpleFullRelaxedStd") with InstructionAnticipatedPosition{
-    override def testParam = "IBUS=SIMPLE"
-    override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
-      resetVector = 0x80000000l,
-      relaxedPcCalculation = true,
-      relaxedBusCmdValid = true,
-      prediction = STATIC,
-      catchAccessFault = catchAll,
-      compressedGen = false,
-      busLatencyMin = 1,
-      injectorStage = true
-    )
-    override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
-    override def instructionAnticipatedOk() = true
-  }) ++ (for(prediction <- List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET);
-             twoCycleCache <- List(false, true);
-             twoCycleRam <- List(false, true);
-             wayCount <- List(1, 4);
-             cacheSize <- List(512, 4096);
-             compressed <- List(false, true);
-             injectorStage <- List(false, true);
-             relaxedPcCalculation <- List(false, true);
-            if !(!twoCycleCache && twoCycleRam ) && !(prediction != NONE && (wayCount == 1 || cacheSize == 4096 ))) yield new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
-    override def testParam = "IBUS=CACHED" + (if(compressed) " COMPRESSED=yes" else "")
-    override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusCachedPlugin(
-      resetVector = 0x80000000l,
-      compressedGen = compressed,
-      prediction = prediction,
-      relaxedPcCalculation = relaxedPcCalculation,
-      injectorStage = injectorStage,
-      config = InstructionCacheConfig(
-        cacheSize = cacheSize,
-        bytePerLine = 32,
-        wayCount = wayCount,
-        addressWidth = 32,
-        cpuDataWidth = 32,
-        memDataWidth = 32,
-        catchIllegalAccess = catchAll,
-        catchAccessFault = catchAll,
-        catchMemoryTranslationMiss = catchAll,
-        asyncTagMemory = false,
-        twoCycleRam = twoCycleRam,
-        twoCycleCache = twoCycleCache
-      )
-    )
-    override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
-    override def instructionAnticipatedOk() = !twoCycleCache || ((!twoCycleRam || wayCount == 1) && !compressed)
-  })).flatten
 
-//  override def default = List(positions.last)
+
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    if(r.nextDouble() < 0.5){
+      val latency = r.nextInt(5) + 1
+      val compressed = r.nextBoolean()
+      val injectorStage = r.nextBoolean() || latency == 1
+      val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
+      val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
+      val relaxedPcCalculation = r.nextBoolean()
+      val relaxedBusCmdValid =false // r.nextBoolean() && relaxedPcCalculation && prediction != DYNAMIC_TARGET
+      new VexRiscvPosition("Simple" + latency + (if(relaxedPcCalculation) "Relax" else "") + (if(relaxedBusCmdValid) "Valid" else "") + (if(injectorStage) "InjStage" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
+        override def testParam = "IBUS=SIMPLE" + (if(compressed) " COMPRESSED=yes" else "")
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
+          resetVector = 0x80000000l,
+          relaxedPcCalculation = relaxedPcCalculation,
+          relaxedBusCmdValid = relaxedBusCmdValid,
+          prediction = prediction,
+          catchAccessFault = catchAll,
+          compressedGen = compressed,
+          busLatencyMin = latency,
+          injectorStage = injectorStage
+        )
+        override def instructionAnticipatedOk() = injectorStage
+      }
+    } else {
+      val compressed = r.nextBoolean()
+      val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
+      val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
+      val relaxedPcCalculation, twoCycleCache, injectorStage = r.nextBoolean()
+      val twoCycleRam = r.nextBoolean() && twoCycleCache
+      val cacheSize = 512 << r.nextInt(5)
+      val wayCount = 1 << r.nextInt(3)
+      new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
+        override def testParam = "IBUS=CACHED" + (if(compressed) " COMPRESSED=yes" else "")
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusCachedPlugin(
+          resetVector = 0x80000000l,
+          compressedGen = compressed,
+          prediction = prediction,
+          relaxedPcCalculation = relaxedPcCalculation,
+          injectorStage = injectorStage,
+          config = InstructionCacheConfig(
+            cacheSize = cacheSize,
+            bytePerLine = 32,
+            wayCount = wayCount,
+            addressWidth = 32,
+            cpuDataWidth = 32,
+            memDataWidth = 32,
+            catchIllegalAccess = catchAll,
+            catchAccessFault = catchAll,
+            catchMemoryTranslationMiss = catchAll,
+            asyncTagMemory = false,
+            twoCycleRam = twoCycleRam,
+            twoCycleCache = twoCycleCache
+          )
+        )
+        override def instructionAnticipatedOk() = !twoCycleCache || ((!twoCycleRam || wayCount == 1) && !compressed)
+      }
+    }
+  }
 }
 
 
 
 
 class DBusDimension extends VexRiscvDimension("DBus") {
-  override val positions = (for(catchAll <- List(false,true)) yield List(
-    new VexRiscvPosition("SimpleLate") {
-      override def testParam = "DBUS=SIMPLE"
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DBusSimplePlugin(
-        catchAddressMisaligned = catchAll,
-        catchAccessFault = catchAll,
-        earlyInjection = false
-      )
-      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
-    },
-    new VexRiscvPosition("SimpleEarly") {
-      override def testParam = "DBUS=SIMPLE"
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DBusSimplePlugin(
-        catchAddressMisaligned = catchAll,
-        catchAccessFault = catchAll,
-        earlyInjection = true
-      )
-      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
+
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    if(r.nextDouble() < 0.4){
+      val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
+      val earlyInjection = r.nextBoolean()
+      new VexRiscvPosition("Simple" + (if(earlyInjection) "Early" else "Late")) {
+        override def testParam = "DBUS=SIMPLE"
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DBusSimplePlugin(
+          catchAddressMisaligned = catchAll,
+          catchAccessFault = catchAll,
+          earlyInjection = earlyInjection
+        )
+//        override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
+      }
+    } else {
+      val cacheSize = 512 << r.nextInt(5)
+      val wayCount = 1
+      val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
+      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount) {
+        override def testParam = "DBUS=CACHED"
+
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new DBusCachedPlugin(
+            config = new DataCacheConfig(
+              cacheSize = cacheSize,
+              bytePerLine = 32,
+              wayCount = wayCount,
+              addressWidth = 32,
+              cpuDataWidth = 32,
+              memDataWidth = 32,
+              catchAccessError = catchAll,
+              catchIllegal = catchAll,
+              catchUnaligned = catchAll,
+              catchMemoryTranslationMiss = catchAll,
+              atomicEntriesCount = 0
+            ),
+            memoryTranslatorPortConfig = null
+          )
+          config.plugins += new StaticMemoryTranslatorPlugin(
+            ioRange = _ (31 downto 28) === 0xF
+          )
+        }
+      }
     }
-  ) ++ (for(wayCount <- List(1);
-            cacheSize <- List(512, 4096)) yield new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount) {
-    override def testParam = "DBUS=CACHED"
-    override def applyOn(config: VexRiscvConfig): Unit = {
-      config.plugins += new DBusCachedPlugin(
-        config = new DataCacheConfig(
-          cacheSize         = cacheSize,
-          bytePerLine       = 32,
-          wayCount          = wayCount,
-          addressWidth      = 32,
-          cpuDataWidth      = 32,
-          memDataWidth      = 32,
-          catchAccessError  = catchAll,
-          catchIllegal      = catchAll,
-          catchUnaligned    = catchAll,
-          catchMemoryTranslationMiss = catchAll,
-          atomicEntriesCount = 0
-        ),
-        memoryTranslatorPortConfig = null
-      )
-      config.plugins += new StaticMemoryTranslatorPlugin(
-        ioRange      = _(31 downto 28) === 0xF
-      )
-    }
-    override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
-  })).flatten
+  }
 }
 
 
@@ -374,40 +375,53 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 trait CatchAllPosition
 
 //TODO CSR without exception
-//TODO FREERTOS
 class CsrDimension extends VexRiscvDimension("Csr") {
-  override val positions = List(
-    new VexRiscvPosition("None") {
-      override def applyOn(config: VexRiscvConfig): Unit = {}
-      override def testParam = "CSR=no"
-    },
-    new VexRiscvPosition("All") with CatchAllPosition{
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l))
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
+    if(catchAll){
+      new VexRiscvPosition("All") with CatchAllPosition{
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l))
+        override def testParam = "FREERTOS=4"
+      }
+    } else if(r.nextDouble() < 0.2){
+      new VexRiscvPosition("AllNoException") with CatchAllPosition{
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l).noException)
+        override def testParam = "CSR=no FREERTOS=no"
+      }
+    } else {
+      new VexRiscvPosition("None") {
+        override def applyOn(config: VexRiscvConfig): Unit = {}
+        override def testParam = "CSR=no"
+      }
     }
-  )
+  }
 }
 
 class DebugDimension extends VexRiscvDimension("Debug") {
-  override val positions = List(
+
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = random(r, List(
     new VexRiscvPosition("None") {
       override def applyOn(config: VexRiscvConfig): Unit = {}
       override def testParam = "DEBUG_PLUGIN=no"
     },
-    new VexRiscvPosition("Enable") with CatchAllPosition{
+    new VexRiscvPosition("Enable") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset")))
     }
-  )
+  ))
 }
 
 class DecoderDimension extends VexRiscvDimension("Decoder") {
-  override val positions = (for(catchAll <- List(false,true)) yield List(
+
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
     new VexRiscvPosition("") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DecoderSimplePlugin(
         catchIllegalInstruction = catchAll
       )
-      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
+
+//      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
     }
-  )).flatten
+  }
 }
 
 
@@ -449,16 +463,16 @@ class TestIndividualFeatures extends FunSuite {
   )
 
 
-  def genDefaultsPositions(dims : Seq[VexRiscvDimension], stack : List[VexRiscvPosition] = Nil) : Seq[List[VexRiscvPosition]] = dims match {
-    case head :: tail => head.default.flatMap(p => genDefaultsPositions(tail, p :: stack))
-    case Nil => List(stack)
-  }
+//  def genDefaultsPositions(dims : Seq[VexRiscvDimension], stack : List[VexRiscvPosition] = Nil) : Seq[List[VexRiscvPosition]] = dims match {
+//    case head :: tail => head.default.flatMap(p => genDefaultsPositions(tail, p :: stack))
+//    case Nil => List(stack)
+//  }
 
-  val usedPositions = mutable.HashSet[VexRiscvPosition]();
-  val positionsCount = dimensions.map(d => d.positions.length).sum
+//  val usedPositions = mutable.HashSet[VexRiscvPosition]();
+//  val positionsCount = dimensions.map(d => d.positions.length).sum
 
-  def doTest(positionsToApply : List[VexRiscvPosition], prefix : String = ""): Unit ={
-    usedPositions ++= positionsToApply
+  def doTest(positionsToApply : List[VexRiscvPosition], prefix : String = "", testSeed : Int): Unit ={
+//    usedPositions ++= positionsToApply
     def gen = {
       FileUtils.deleteQuietly(new File("VexRiscv.v"))
       SpinalVerilog{
@@ -476,42 +490,55 @@ class TestIndividualFeatures extends FunSuite {
     test(prefix + name + "_gen") {
       gen
     }
+
+
     test(prefix + name + "_test") {
       val debug = false
-      val stdCmd = if(debug) "make clean run REDO=1 TRACE=yes MMU=no DHRYSTONE=no " else "make clean run REDO=10 TRACE=no MMU=no "
-//      val stdCmd = "make clean run REDO=40 DHRYSTONE=no STOP_ON_FAIL=yes TRACE=yess MMU=no"
+      val stdCmd = (if(debug) "make clean run REDO=1 TRACE=yes TRACE_ACCESS=yes MMU=no STOP_ON_ERROR=yes DHRYSTONE=no THREAD_COUNT=1 TRACE_START=4000000 " else "make clean run REDO=10 TRACE=no MMU=no THREAD_COUNT=2 ") + s" SEED=${testSeed} "
+//      val stdCmd = "make clean run REDO=40 DHRYSTONE=no STOP_ON_ERROR=yes TRACE=yess MMU=no"
 
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
-      val str = doCmd(testCmd)
+      val str = doCmd(testCmd.replace("FREERTOS","miaou"))  //TODO remove
       assert(!str.contains("FAIL"))
 //      val intFind = "(\\d+\\.?)+".r
 //      val dmips = intFind.findFirstIn("DMIPS per Mhz\\:                              (\\d+.?)+".r.findAllIn(str).toList.last).get.toDouble
     }
   }
 
-  dimensions.foreach(d => d.positions.foreach(p => p.dimension = d))
+//  dimensions.foreach(d => d.positions.foreach(p => p.dimension = d))
 
-  val testId = None
+  val testId : Option[mutable.HashSet[Int]] = None
   val seed = Random.nextLong()
 
-//  val testId = Some(6)
-//  val seed = -6369023953274056616l
+//  val testId = Some(mutable.HashSet(18,34,77,85,118,129,132,134,152,167,175,188,191,198,199)) //37/29 sp_flop_rv32i_O3
+//val testId = Some(mutable.HashSet(18))
+//  val testId = Some(mutable.HashSet(129, 134))
+//  val seed = -2412372746600605141l
+
+
+//val testId = Some(mutable.HashSet(37))
+//  val seed = 4331444545509090137l
 
   val rand = new Random(seed)
 
+  test("Info"){
+    println(seed)
+  }
   println(s"Seed=$seed")
   for(i <- 0 until 200){
     var positions : List[VexRiscvPosition] = null
-    val universe = VexRiscvUniverse.universes.filter(e => rand.nextBoolean())
+    val universe = VexRiscvUniverse.universes.filter(e => rand.nextBoolean()) :+ VexRiscvUniverse.CATCH_ALL //TODO
+
     do{
-      positions = dimensions.map(d => d.random(universe, rand))
+      positions = dimensions.map(d => d.randomPosition(universe, rand))
     }while(!positions.forall(_.isCompatibleWith(positions)))
 
-    if(testId.isEmpty || testId.get == i)
-      doTest(positions," random_" + i + "_")
+    val testSeed = rand.nextInt()
+    if(testId.isEmpty || testId.get.contains(i))
+      doTest(positions," random_" + i + "_", testSeed)
   }
 
-  println(s"${usedPositions.size}/$positionsCount positions")
+//  println(s"${usedPositions.size}/$positionsCount positions")
 
 //  for (dimension <- dimensions) {
 //    for (position <- dimension.positions/* if position.name.contains("Cached")*/) {

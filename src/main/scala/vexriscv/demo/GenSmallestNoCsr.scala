@@ -25,14 +25,16 @@ object GenSmallestNoCsr extends App{
         ),
         new DBusSimplePlugin(
           catchAddressMisaligned = false,
-          catchAccessFault = false
+          catchAccessFault = false,
+          earlyInjection = false
         ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = false
         ),
         new RegFilePlugin(
           regFileReadyKind = plugin.SYNC,
-          zeroBoot = false
+          zeroBoot = false,
+          writeRfInMemoryStage = false
         ),
         new IntAluPlugin,
         new SrcPlugin(
