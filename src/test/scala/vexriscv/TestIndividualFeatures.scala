@@ -375,13 +375,13 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 trait CatchAllPosition
 
 //TODO CSR without exception
-class CsrDimension extends VexRiscvDimension("Csr") {
+class CsrDimension(freertos : String) extends VexRiscvDimension("Csr") {
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
     if(catchAll){
       new VexRiscvPosition("All") with CatchAllPosition{
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l))
-        override def testParam = "FREERTOS=4"
+        override def testParam = s"FREERTOS=$freertos"
       }
     } else if(r.nextDouble() < 0.2){
       new VexRiscvPosition("AllNoException") with CatchAllPosition{
@@ -457,7 +457,7 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension,
+    new CsrDimension(sys.env.getOrElse("VEXRISCV_FREERTOS", "4")),
     new DecoderDimension,
     new DebugDimension
   )
@@ -494,11 +494,11 @@ class TestIndividualFeatures extends FunSuite {
 
     test(prefix + name + "_test") {
       val debug = false
-      val stdCmd = (if(debug) "make clean run REDO=1 TRACE=yes TRACE_ACCESS=yes MMU=no STOP_ON_ERROR=yes DHRYSTONE=no THREAD_COUNT=1 TRACE_START=4000000 " else "make clean run REDO=10 TRACE=no MMU=no THREAD_COUNT=2 ") + s" SEED=${testSeed} "
+      val stdCmd = (if(debug) "make clean run REDO=1 TRACE=yes TRACE_ACCESS=yes MMU=no STOP_ON_ERROR=yes DHRYSTONE=no THREAD_COUNT=1 TRACE_START=0 " else "make clean run REDO=10 TRACE=no MMU=no THREAD_COUNT=4 ") + s" SEED=${testSeed} "
 //      val stdCmd = "make clean run REDO=40 DHRYSTONE=no STOP_ON_ERROR=yes TRACE=yess MMU=no"
 
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
-      val str = doCmd(testCmd.replace("FREERTOS","miaou"))  //TODO remove
+      val str = doCmd(testCmd)
       assert(!str.contains("FAIL"))
 //      val intFind = "(\\d+\\.?)+".r
 //      val dmips = intFind.findFirstIn("DMIPS per Mhz\\:                              (\\d+.?)+".r.findAllIn(str).toList.last).get.toDouble
@@ -508,15 +508,15 @@ class TestIndividualFeatures extends FunSuite {
 //  dimensions.foreach(d => d.positions.foreach(p => p.dimension = d))
 
   val testId : Option[mutable.HashSet[Int]] = None
-  val seed = Random.nextLong()
+//  val seed = Random.nextLong()
 
 //  val testId = Some(mutable.HashSet(18,34,77,85,118,129,132,134,152,167,175,188,191,198,199)) //37/29 sp_flop_rv32i_O3
 //val testId = Some(mutable.HashSet(18))
 //  val testId = Some(mutable.HashSet(129, 134))
-//  val seed = -2412372746600605141l
+  val seed = -2412372746600605141l
 
 
-//val testId = Some(mutable.HashSet(37))
+//  val testId = Some(mutable.HashSet(1))
 //  val seed = 4331444545509090137l
 
   val rand = new Random(seed)
@@ -537,7 +537,7 @@ class TestIndividualFeatures extends FunSuite {
     if(testId.isEmpty || testId.get.contains(i))
       doTest(positions," random_" + i + "_", testSeed)
   }
-
+//TODO main.cpp freertos
 //  println(s"${usedPositions.size}/$positionsCount positions")
 
 //  for (dimension <- dimensions) {
@@ -548,3 +548,20 @@ class TestIndividualFeatures extends FunSuite {
 //    }
 //  }
 }
+
+
+
+/*
+val seed = -2412372746600605141l
+
+129
+FAIL AltQTest_rv32i_O3
+FAIL AltQTest_rv32ic_O3
+FAIL GenQTest_rv32i_O0
+
+134
+FAIL AltQTest_rv32i_O3
+
+  val seed = 4331444545509090137l
+1 => flops i O0
+ */
