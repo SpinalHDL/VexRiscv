@@ -457,7 +457,7 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension(sys.env.getOrElse("VEXRISCV_FREERTOS", "4")),
+    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "4")),
     new DecoderDimension,
     new DebugDimension
   )
@@ -494,7 +494,7 @@ class TestIndividualFeatures extends FunSuite {
 
     test(prefix + name + "_test") {
       val debug = false
-      val stdCmd = (if(debug) "make clean run REDO=1 TRACE=yes TRACE_ACCESS=yes MMU=no STOP_ON_ERROR=yes DHRYSTONE=no THREAD_COUNT=1 TRACE_START=0 " else "make clean run REDO=10 TRACE=no MMU=no THREAD_COUNT=4 ") + s" SEED=${testSeed} "
+      val stdCmd = (if(debug) "make clean run REDO=1 TRACE=yes TRACE_ACCESS=yes MMU=no STOP_ON_ERROR=yes DHRYSTONE=no THREAD_COUNT=1 TRACE_START=0 " else s"make clean run REDO=10 TRACE=no MMU=no THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", Runtime.getRuntime().availableProcessors().toString)} ") + s" SEED=${testSeed} "
 //      val stdCmd = "make clean run REDO=40 DHRYSTONE=no STOP_ON_ERROR=yes TRACE=yess MMU=no"
 
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
@@ -508,12 +508,12 @@ class TestIndividualFeatures extends FunSuite {
 //  dimensions.foreach(d => d.positions.foreach(p => p.dimension = d))
 
   val testId : Option[mutable.HashSet[Int]] = None
-//  val seed = Random.nextLong()
+  val seed = Random.nextLong()
 
 //  val testId = Some(mutable.HashSet(18,34,77,85,118,129,132,134,152,167,175,188,191,198,199)) //37/29 sp_flop_rv32i_O3
 //val testId = Some(mutable.HashSet(18))
 //  val testId = Some(mutable.HashSet(129, 134))
-  val seed = -2412372746600605141l
+//  val seed = -2412372746600605141l
 
 
 //  val testId = Some(mutable.HashSet(1))
@@ -522,10 +522,10 @@ class TestIndividualFeatures extends FunSuite {
   val rand = new Random(seed)
 
   test("Info"){
-    println(seed)
+    println(S"MAIN_SEED=$seed")
   }
   println(s"Seed=$seed")
-  for(i <- 0 until 200){
+  for(i <- 0 until sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "200").toInt){
     var positions : List[VexRiscvPosition] = null
     val universe = VexRiscvUniverse.universes.filter(e => rand.nextBoolean()) :+ VexRiscvUniverse.CATCH_ALL //TODO
 

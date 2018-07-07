@@ -3,21 +3,16 @@
 from os import system
 from sys import argv
 
-def remote(cmd):
-	cmd = "gcloud compute ssh miaou -- '" + cmd + "'"
-	print(cmd)
-	system(cmd)
+from gcloud import GCInstance
 
-def localToRemote(source, target):
-	remote("rm -rf target")
-	cmd = "gcloud compute scp " + source + " miaou:" + target
-	print(cmd)
-	system(cmd)
+gci = GCInstance("vexriscv")
+gci.create("n1-highcpu-8")
+gci.start()
+gci.stopHours(20)
 
-system("gcloud compute instances create miaou --machine-type=f1-micro")
-system("rm -rf archive.tar.gz; git ls-files -z | xargs -0 tar -czf archive.tar.gz")
-localToRemote("archive.tar.gz", "")
-remote("tar -xzf archive.tar.gz")
-remote("mkdir z;cd z; pwd")
-remote("pwd")
+gci.local("rm -rf archive.tar.gz; git ls-files -z | xargs -0 tar -czf archive.tar.gz")
+gci.localToRemote("archive.tar.gz", "")
+gci.localToRemote("src/test/python/gcloud/run.sh", "")
+gci.remote("rm -rf run.txt; setsid nohup sh run.sh &> run.txt")
 
+#setsid nohup (sbt test;sudo poweroff) &> sbtTest.txt
