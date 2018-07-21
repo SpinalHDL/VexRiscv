@@ -308,10 +308,13 @@ To generate the Murax SoC Hardware :
 # To generate the SoC without any content in the ram
 sbt "run-main vexriscv.demo.Murax"
 
-# To generate the SoC with a demo program in the SoC
-# Will blink led and echo UART RX to UART TX   (in the verilator sim, type some text and press enter to send UART frames to the Murax RX pin)
+# To generate the SoC with a demo program already in ram
 sbt "run-main vexriscv.demo.MuraxWithRamInit"
 ```
+
+The demo program included by default with `MuraxWithRamInit` will blink the
+LEDs and echo characters received on the UART back to the user. To see this
+when running the Verilator sim, type some text and press enter.
 
 Then go in src/test/cpp/murax and run the simulation with :
 
