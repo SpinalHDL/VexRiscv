@@ -3,10 +3,10 @@
 VERILOG = ../../../Murax.v toplevel.v
 
 generate :
-	(cd ../../..; sbt "run-main vexriscv.demo.Murax")
+	(cd ../../..; sbt "run-main vexriscv.demo.MuraxWithRamInit")
 
 ../../../Murax.v :
-	(cd ../../..; sbt "run-main vexriscv.demo.Murax")
+	(cd ../../..; sbt "run-main vexriscv.demo.MuraxWithRamInit")
 
 ../../../Murax.v*.bin:
 
@@ -28,6 +28,9 @@ time: bin/toplevel.bin
 	icetime -tmd hx8k bin/toplevel.asc
 
 prog : bin/toplevel.bin
+	iceprog -S bin/toplevel.bin
+
+sudo-prog : bin/toplevel.bin
 	sudo iceprog -S bin/toplevel.bin
 
 clean :
