@@ -124,7 +124,8 @@ The following configuration results in 1.44 DMIPS/MHz:
 On Ubuntu 14 :
 
 ```sh
-# JAVA JDK 8. Do not try with JDK >= 9sudo add-apt-repository -y ppa:openjdk-r/ppa
+# JAVA JDK 8. Do not try with JDK >= 9
+sudo add-apt-repository -y ppa:openjdk-r/ppa
 sudo apt-get update
 sudo apt-get install openjdk-8-jdk -y
 sudo update-alternatives --config java
