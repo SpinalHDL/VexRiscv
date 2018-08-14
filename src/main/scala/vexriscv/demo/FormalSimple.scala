@@ -20,7 +20,6 @@ object FormalSimple extends App{
           catchAccessFault = false,
           compressedGen = true
         ),
-
         new DBusSimplePlugin(
           catchAddressMisaligned = true,
           catchAccessFault = false

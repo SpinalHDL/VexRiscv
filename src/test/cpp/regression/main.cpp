@@ -187,6 +187,8 @@ public:
 	VerilatedVcdC* tfp;
 	#endif
 
+	uint32_t seed;
+
 	bool withInstructionReadCheck = true;
 	void setIStall(bool enable) { iStall = enable; }
 	void setDStall(bool enable) { dStall = enable; }
@@ -199,6 +201,8 @@ public:
 
 
 	Workspace(string name){
+	    //seed = VL_RANDOM_I(32)^VL_RANDOM_I(32)^0x1093472;
+	    //srand48(seed);
     //    setIStall(false);
    //     setDStall(false);
 		staticMutex.lock();
@@ -498,7 +502,7 @@ public:
 			staticMutex.unlock();
 		} catch (const std::exception& e) {
 			staticMutex.lock();
-			cout << "FAIL " <<  name << endl;
+			cout << "FAIL " <<  name << endl; //<<  " seed : " << seed <<
 			cycles += instanceCycles;
 			staticMutex.unlock();
 			failed = true;
@@ -1744,6 +1748,7 @@ string freeRtosTests[] = {
 		"AltQTest", "AltBlock",  "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
 		"QueueSet", "recmutex", "semtest", "TaskNotify", "BlockQ", "crhook", "dynamic",
 		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
+		//"BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ"
 //		"flop"
 //		 "flop", "sp_flop" // <- Simple test
 		 // "AltBlckQ" ???

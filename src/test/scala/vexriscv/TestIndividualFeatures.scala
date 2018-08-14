@@ -288,8 +288,13 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
       val relaxedPcCalculation, twoCycleCache, injectorStage = r.nextBoolean()
       val twoCycleRam = r.nextBoolean() && twoCycleCache
-      val cacheSize = 512 << r.nextInt(5)
-      val wayCount = 1 << r.nextInt(3)
+      var cacheSize = 0
+      var wayCount = 0
+      do{
+        cacheSize = 512 << r.nextInt(5)
+        wayCount = 1 << r.nextInt(3)
+      }while(cacheSize/wayCount < 512)
+
       new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
         override def testParam = "IBUS=CACHED" + (if(compressed) " COMPRESSED=yes" else "")
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusCachedPlugin(
@@ -457,7 +462,7 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "4")),
+    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "yes")), //todo restore yes to 4 ?
     new DecoderDimension,
     new DebugDimension
   )
@@ -498,6 +503,7 @@ class TestIndividualFeatures extends FunSuite {
 //      val stdCmd = "make clean run REDO=40 DHRYSTONE=no STOP_ON_ERROR=yes TRACE=yess MMU=no"
 
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
+      println(testCmd)
       val str = doCmd(testCmd)
       assert(!str.contains("FAIL"))
 //      val intFind = "(\\d+\\.?)+".r
@@ -516,13 +522,15 @@ class TestIndividualFeatures extends FunSuite {
 //  val seed = -2412372746600605141l
 
 
-//  val testId = Some(mutable.HashSet(1))
-//  val seed = 4331444545509090137l
+//  val testId = Some(mutable.HashSet[Int](32))
+//  val seed = -1807241812308067688l
+
+  //TODO restore all mai  n.cpp rtos tests and restore config count in gcloud
 
   val rand = new Random(seed)
 
   test("Info"){
-    println(S"MAIN_SEED=$seed")
+    println(s"MAIN_SEED=$seed")
   }
   println(s"Seed=$seed")
   for(i <- 0 until sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "200").toInt){
