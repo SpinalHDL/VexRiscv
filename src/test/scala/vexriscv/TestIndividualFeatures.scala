@@ -462,7 +462,7 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "4")), 
+    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "4")),
     new DecoderDimension,
     new DebugDimension
   )
@@ -534,7 +534,7 @@ class TestIndividualFeatures extends FunSuite {
   println(s"Seed=$seed")
   for(i <- 0 until sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "100").toInt){
     var positions : List[VexRiscvPosition] = null
-    val universe = VexRiscvUniverse.universes.filter(e => rand.nextBoolean()) :+ VexRiscvUniverse.CATCH_ALL //TODO
+    val universe = VexRiscvUniverse.universes.filter(e => rand.nextBoolean())
 
     do{
       positions = dimensions.map(d => d.randomPosition(universe, rand))
