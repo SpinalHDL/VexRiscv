@@ -52,10 +52,10 @@ object VexRiscvUniverse{
 class ShiftDimension extends VexRiscvDimension("Shift") {
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = random(r, List(
     new VexRiscvPosition("FullLate") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new FullBarrielShifterPlugin(earlyInjection = false)
+      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new FullBarrelShifterPlugin(earlyInjection = false)
     },
     new VexRiscvPosition("FullEarly") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new FullBarrielShifterPlugin(earlyInjection = true)
+      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new FullBarrelShifterPlugin(earlyInjection = true)
     },
     new VexRiscvPosition("Light") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new LightShifterPlugin
@@ -93,8 +93,8 @@ class MulDivDimension extends VexRiscvDimension("MulDiv") {
         config.plugins += new MulDivIterativePlugin(
           genMul = false,
           genDiv = true,
-          mulUnroolFactor = 32,
-          divUnroolFactor = 1
+          mulUnrollFactor = 32,
+          divUnrollFactor = 1
         )
       }
     },
@@ -104,8 +104,8 @@ class MulDivDimension extends VexRiscvDimension("MulDiv") {
         config.plugins += new MulDivIterativePlugin(
           genMul = true,
           genDiv = true,
-          mulUnroolFactor = 32,
-          divUnroolFactor = 4
+          mulUnrollFactor = 32,
+          divUnrollFactor = 4
         )
       }
     },
@@ -115,8 +115,8 @@ class MulDivDimension extends VexRiscvDimension("MulDiv") {
         config.plugins += new MulDivIterativePlugin(
           genMul = true,
           genDiv = true,
-          mulUnroolFactor = 1,
-          divUnroolFactor = 1
+          mulUnrollFactor = 1,
+          divUnrollFactor = 1
         )
       }
     },
@@ -126,8 +126,8 @@ class MulDivDimension extends VexRiscvDimension("MulDiv") {
         config.plugins += new MulDivIterativePlugin(
           genMul = true,
           genDiv = true,
-          mulUnroolFactor = 8,
-          divUnroolFactor = 1
+          mulUnrollFactor = 8,
+          divUnrollFactor = 1
         )
       }
     }

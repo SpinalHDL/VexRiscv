@@ -108,7 +108,7 @@ object TestsWorkspace {
           new SrcPlugin(
             separatedAddSub = false
           ),
-          new FullBarrielShifterPlugin(earlyInjection = false),
+          new FullBarrelShifterPlugin(earlyInjection = false),
   //        new LightShifterPlugin,
           new HazardSimplePlugin(
             bypassExecute           = true,
@@ -125,8 +125,8 @@ object TestsWorkspace {
           new MulDivIterativePlugin(
             genMul = false,
             genDiv = true,
-            mulUnroolFactor = 32,
-            divUnroolFactor = 1
+            mulUnrollFactor = 32,
+            divUnrollFactor = 1
           ),
 //          new DivPlugin,
           new CsrPlugin(CsrPluginConfig.all(0x80000020l).copy(deterministicInteruptionEntry = false)),

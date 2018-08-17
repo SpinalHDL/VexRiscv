@@ -6,7 +6,7 @@ import spinal.lib.Reverse
 
 
 
-class FullBarrielShifterPlugin(earlyInjection : Boolean = false) extends Plugin[VexRiscv]{
+class FullBarrelShifterPlugin(earlyInjection : Boolean = false) extends Plugin[VexRiscv]{
   object ShiftCtrlEnum extends SpinalEnum(binarySequential){
     val DISABLE, SLL, SRL, SRA = newElement()
   }

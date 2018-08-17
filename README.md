@@ -7,7 +7,7 @@
 - [CPU generation](#cpu-generation)
 - [Regression tests](#regression-tests)
 - [Interactive debug of the simulated CPU via GDB OpenOCD and Verilator](#interactive-debug-of-the-simulated-cpu-via-gdb-openocd-and-verilator)
-- [Using eclipse to run the software and debug it](#using-eclipse-to-run-the-software-and-debug-it)
+- [Using Eclipse to run the software and debug it](#using-Eclipse-to-run-the-software-and-debug-it)
   * [By using Zylin plugin](#by-using-zylin-plugin)
   * [By using FreedomStudio](#by-using-freedomstudio)
 - [Briey SoC](#briey-soc)
@@ -24,109 +24,114 @@
 
 ## Description
 
-This repository host an RISC-V implementation written in SpinalHDL. There is some specs :
+This repository hosts a RISC-V implementation written in SpinalHDL. Here are some specs :
 
 - RV32I[M] instruction set
-- Pipelined on 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
+- Pipelined with 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
 - 1.44 DMIPS/Mhz when all features are enabled
 - Optimized for FPGA, fully portable
 - AXI4 and Avalon ready
-- Optional MUL/DIV extension
+- Optional MUL/DIV extensions
 - Optional instruction and data caches
 - Optional MMU
-- Optional debug extension allowing eclipse debugging via an GDB >> openOCD >> JTAG connection
-- Optional interrupts and exception handling with the Machine and the User mode from the riscv-privileged-v1.9.1 spec.
-- Two implementation of shift instructions, Single cycle / shiftNumber cycles
-- Each stage could have bypass or interlock hazard logic
-- FreeRTOS port https://github.com/Dolu1990/FreeRTOS-RISCV
-- The data cache support atomic LR/SC
-- RV32 compressed instruction are supported in the reworkFetch branch for configurations without instruction cache (will be merge in master, WIP)
+- Optional debug extension allowing Eclipse debugging via a GDB >> openOCD >> JTAG connection
+- Optional interrupts and exception handling with Machine and User modes as defined in the [RISC-V Privileged ISA Specification v1.9](https://riscv.org/specifications/privileged-isa/).
+- Two implementations of shift instructions: Single cycle and shiftNumber cycles
+- Each stage can have optional bypass or interlock hazard logic
+- [FreeRTOS port](https://github.com/Dolu1990/FreeRTOS-RISCV)
+- The data cache supports atomic LR/SC
+- Optional RV32 compressed instruction support in the reworkFetch branch for configurations without instruction cache (will be merge in master, WIP)
 
-The hardware description of this CPU is done by using an very software oriented approach
-(without any overhead in the generated hardware). There is a list of software concepts used :
+The hardware description of this CPU is done by using a very software oriented approach
+(without any overhead in the generated hardware). Here is a list of software concepts used:
 
-- There is very few fixed things. Nearly everything is plugin based. The PC manager is a plugin, the register file is a plugin, the hazard controller is a plugin ...
-- There is an automatic a tool which allow plugins to insert data in the pipeline at a given stage, and allow other plugins to read it in another stages through automatic pipelining.
-- There is an service system which provide a very dynamic framework. As instance, a plugin could provide an exception service which could then be used by others plugins to emit exceptions from the pipeline.
+- There are very few fixed things. Nearly everything is plugin based. The PC manager is a plugin, the register file is a plugin, the hazard controller is a plugin, ...
+- There is an automatic a tool which allows plugins to insert data in the pipeline at a given stage, and allows other plugins to read it in another stage through automatic pipelining.
+- There is a service system which provides a very dynamic framework. For instance, a plugin could provide an exception service which can then be used by other plugins to emit exceptions from the pipeline.
 
 There is a gitter channel for all questions about VexRiscv :<br>
 [![Gitter](https://badges.gitter.im/SpinalHDL/VexRiscv.svg)](https://gitter.im/SpinalHDL/VexRiscv?utm_source=badge&utm_medium=badge&utm_campaign=pr-badge)
 
-For commercial support, please contact spinalhdl@gmail.com
+For commercial support, please contact spinalhdl@gmail.com.
 
-## Area usage and maximal frequency 
+## Area usage and maximal frequency
 
-The following number where obtains by synthesis the CPU as toplevel without any specific synthesis option to save area or to get better maximal frequency (neutral).<br>
-The clock constraint is set to a unattainable value, which tends to increase the design area.<br>
-The dhrystone benchmark were compiled with -O3 -fno-inline<br>
-All the cached configuration have some cache trashing during the dhrystone benchmark except the `VexRiscv full max perf` one. This of course reduce the performance. It is possible to produce dhrystone binaries which fit inside a 4KB I$ and 4KB D$ (I already had this case once) but currently it isn't the case.<br>
-The used CPU corresponding configuration can be find in src/scala/vexriscv/demo.
+The following numbers were obtained by synthesizing the CPU as toplevel without any specific synthesis options to save area or to get better maximal frequency (neutral).<br>
+The clock constraint is set to an unattainable value, which tends to increase the design area.<br>
+The dhrystone benchmark was compiled with the `-O3 -fno-inline` option.<br>
+All the cached configurations have some cache trashing during the dhrystone benchmark except the `VexRiscv full max perf` one. This of course reduces the performance. It is possible to produce
+dhrystone binaries which fit inside a 4KB I$ and 4KB D$ (I already had this case once) but currently it isn't the case.<br>
+The CPU configurations used below can be found in the `src/scala/vexriscv/demo` directory.
 
 ```
 VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass, no interrupt) ->
   Artix 7    -> 346 Mhz 481 LUT 539 FF
   Cyclone V  -> 201 Mhz 347 ALMs
-  Cyclone IV -> 190 Mhz 673 LUT 529 FF 
+  Cyclone IV -> 190 Mhz 673 LUT 529 FF
   iCE40      -> 81 Mhz 1130 LC
-  
+
 VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass) ->
-  Artix 7    -> 340 Mhz 562 LUT 589 FF 
+  Artix 7    -> 340 Mhz 562 LUT 589 FF
   Cyclone V  -> 202 Mhz 387 ALMs
-  Cyclone IV -> 180 Mhz 780 LUT 579 FF 
+  Cyclone IV -> 180 Mhz 780 LUT 579 FF
   iCE40      -> 71 Mhz 1278 LC
-  
+
 VexRiscv small and productive (RV32I, 0.82 DMIPS/Mhz)  ->
-  Artix 7    -> 327 Mhz 698 LUT 558 FF 
+  Artix 7    -> 327 Mhz 698 LUT 558 FF
   Cyclone V  -> 158 Mhz 524 ALMs
-  Cyclone IV -> 146 Mhz 1,061 LUT 552 FF 
+  Cyclone IV -> 146 Mhz 1,061 LUT 552 FF
   iCE40      -> 55 Mhz 1541 LC
-  
+
 VexRiscv small and productive with I$ (RV32I, 0.72 DMIPS/Mhz, 4KB-I$)  ->
-  Artix 7    -> 331 Mhz 727 LUT 600 FF 
+  Artix 7    -> 331 Mhz 727 LUT 600 FF
   Cyclone V  -> 152 Mhz 536 ALMs
-  Cyclone IV -> 156 Mhz 1,075 LUT 565 FF 
+  Cyclone IV -> 156 Mhz 1,075 LUT 565 FF
   iCE40      -> 54 Mhz 1686 LC
 
 VexRiscv full no cache (RV32IM, 1.22 DMIPS/Mhz, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
-  Artix 7    -> 295 Mhz 1399 LUT 971 FF 
+  Artix 7    -> 295 Mhz 1399 LUT 971 FF
   Cyclone V  -> 151 Mhz 922 ALMs
-  Cyclone IV -> 136 Mhz 1,859 LUT 992 FF 
-      
+  Cyclone IV -> 136 Mhz 1,859 LUT 992 FF
+
 VexRiscv full (RV32IM, 1.21 DMIPS/Mhz with cache trashing, 4KB-I$,4KB-D$, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
-  Artix 7    -> 253 Mhz 1840 LUT 1394 FF 
+  Artix 7    -> 253 Mhz 1840 LUT 1394 FF
   Cyclone V  -> 126 Mhz 1,172 ALMs
   Cyclone IV -> 117 Mhz 2,548 LUT 1,703 FF
-      
+
 VexRiscv full max perf -> (RV32IM, 1.44 DMIPS/Mhz, 16KB-I$,16KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch prediction in the fetch stage, branch and shift operations done in the Execute stage) ->
-  Artix 7    -> 183 Mhz 1813 LUT 1424 FF 
+  Artix 7    -> 183 Mhz 1813 LUT 1424 FF
   Cyclone V  -> 93 Mhz 1,253 ALMs
-  Cyclone IV -> 84 Mhz 2,642 LUT 1,711 FF 
+  Cyclone IV -> 84 Mhz 2,642 LUT 1,711 FF
 
 VexRiscv full with MMU (RV32IM, 1.26 DMIPS/Mhz with cache trashing, 4KB-I$, 4KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, MMU) ->
-  Artix 7    -> 214 Mhz 2070 LUT 1913 FF 
+  Artix 7    -> 214 Mhz 2070 LUT 1913 FF
   Cyclone V  -> 108 Mhz 1,430 ALMs
-  Cyclone IV -> 100 Mhz 2,976 LUT 2,201 FF 
+  Cyclone IV -> 100 Mhz 2,976 LUT 2,201 FF
 ```
 
-There is a summary of the configuration which produce 1.44 DMIPS : 
+The following configuration results in 1.44 DMIPS/MHz:
 
 - 5 stage : F -> D -> E -> M  -> WB
 - single cycle ADD/SUB/Bitwise/Shift ALU
 - branch/jump done in the E stage
-- memory load values are bypassed in the WB stage (late result) 
+- memory load values are bypassed in the WB stage (late result)
 - 33 cycle division with bypassing in the M stage (late result)
 - single cycle multiplication with bypassing in the WB stage (late result)
-- dynamic branch prediction done in the F stage with an direct mapped target buffer cache (no penalities on corrects predictions)
+- dynamic branch prediction done in the F stage with a direct mapped target buffer cache (no penalties on correct predictions)
 
 ## Dependencies
 
 On Ubuntu 14 :
 
 ```sh
-# JAVA JDK 7 or 8
-sudo apt-get install openjdk-8-jdk
+# JAVA JDK 8. Do not try with JDK >= 9
+sudo add-apt-repository -y ppa:openjdk-r/ppa
+sudo apt-get update
+sudo apt-get install openjdk-8-jdk -y
+sudo update-alternatives --config java
+sudo update-alternatives --config javac
 
-# SBT
+# Install SBT - https://www.scala-sbt.org/
 echo "deb https://dl.bintray.com/sbt/debian /" | sudo tee -a /etc/apt/sources.list.d/sbt.list
 sudo apt-key adv --keyserver hkp://keyserver.ubuntu.com:80 --recv 2EE0EA64E40A89B84B2DF73499E82A75642AC823
 sudo apt-get update
@@ -139,63 +144,57 @@ unsetenv VERILATOR_ROOT  # For csh; ignore error if on bash
 unset VERILATOR_ROOT  # For bash
 cd verilator
 git pull        # Make sure we're up-to-date
-git tag         # See what versions exist
+git checkout verilator_3_918
 autoconf        # Create ./configure script
 ./configure
 make
 sudo make install
 ```
 
-The VexRiscv need the unreleased master-head of SpinalHDL :
-
-```sh
-# Compile and localy publish the latest SpinalHDL
-rm -rf SpinalHDL
-git clone https://github.com/SpinalHDL/SpinalHDL.git
-cd SpinalHDL
-sbt clean compile publish-local
-cd ..
-```
-
 ## CPU generation
-You can find two example of CPU instantiation in :
+You can find two example CPU instances in:
 - src/main/scala/vexriscv/GenFull.scala
 - src/main/scala/vexriscv/GenSmallest.scala
 
-To generate the corresponding RTL as a VexRiscv.v file, run (it could take time the first time you run it):
-
-NOTE :
-The VexRiscv could need the unreleased master-head of SpinalHDL. If it fail to compile, just get the SpinalHDL repository and do a "sbt clean compile publish-local" in it as described in the dependencies chapter.
+To generate the corresponding RTL as a VexRiscv.v file, run:
 
 ```sh
 sbt "run-main vexriscv.demo.GenFull"
+```
 
-# or
+or
+
+```sh
 sbt "run-main vexriscv.demo.GenSmallest"
 ```
+
+NOTES:
+- It could take time the first time you run it.
+- The VexRiscv project may need an unreleased master-head of the SpinalHDL repo. If it fails to compile, just get the SpinalHDL repository and
+   do a "sbt clean compile publish-local" in it as described in the dependencies chapter.
 
 ## Regression tests
 To run tests (need the verilator simulator), go in the src/test/cpp/regression folder and run :
 
 ```sh
-# To test the GenFull CPU 
-# (Don't worry about the CSR test not passing, basicaly the GenFull isn't the truly full version of the CPU, some CSR feature are disable in it)
+# To test the GenFull CPU
+# (Don't worry about the CSR test not passing, basicaly the GenFull isn't the truly full version of the CPU, some CSR features are disable in it)
 make clean run
 
 # To test the GenSmallest CPU
 make clean run IBUS=SIMPLE DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no
 ```
 
-Those self tested tests include :
+The self-test includes:
 - ISA tests from https://github.com/riscv/riscv-tests/tree/master/isa
 - Dhrystone benchmark
-- 24 tests FreeRTOS tests
+- 24 FreeRTOS tests
 - Some handwritten tests to check the CSR, debug module and MMU plugins
 
-You can enable FreeRTOS tests by adding 'FREERTOS=yes' in the command line, will take time. Also, it use THREAD_COUNT host CPU threads to run multiple regression in parallel.
+You can enable FreeRTOS tests by adding `FREERTOS=yes` to the command line, but it will take time to run. Also, it uses THREAD_COUNT host CPU threads to run multiple regression in parallel.
 
 ## Interactive debug of the simulated CPU via GDB OpenOCD and Verilator
-It's as described to run tests, but you just have to add DEBUG_PLUGIN_EXTERNAL=yes in the make arguments.
+It's as described to run tests, but you just have to add `DEBUG_PLUGIN_EXTERNAL=yes` in the make arguments.
 Work for the GenFull, but not for the GenSmallest as this configuration has no debug module.
 
 Then you can use the https://github.com/SpinalHDL/openocd_riscv tool to create a GDB server connected to the target (the simulated CPU)
@@ -219,12 +218,12 @@ continue
 # Now it should print messages in the Verilator simulation of the CPU
 ```
 
-## Using eclipse to run the software and debug it
+## Using Eclipse to run the software and debug it
 
 ### By using Zylin plugin
-You can use the eclipse + Zylin embedded CDT plugin to do it (http://opensource.zylin.com/embeddedcdt.html). Tested with Helios Service Release 2 (http://www.eclipse.org/downloads/download.php?file=/technology/epp/downloads/release/helios/SR2/eclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz) and the corresponding zylin plugin.
+You can use the Eclipse + Zylin embedded CDT plugin to do it (http://opensource.zylin.com/embeddedcdt.html). Tested with Helios Service Release 2 (http://www.Eclipse.org/downloads/download.php?file=/technology/epp/downloads/release/helios/SR2/Eclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz) and the corresponding zylin plugin.
 
-To following commands will download eclipse and install the plugin.
+To following commands will download Eclipse and install the plugin.
 ```sh
 wget http://www.eclipse.org/downloads/download.php?file=/technology/epp/downloads/release/helios/SR2/eclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz
 tar -xvzf download.php?file=%2Ftechnology%2Fepp%2Fdownloads%2Frelease%2Fhelios%2FSR2%2Feclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz
@@ -234,34 +233,34 @@ cd eclipse
 
 See https://drive.google.com/drive/folders/1NseNHH05B6lmIXqQFVwK8xRjWE4ydeG-?usp=sharing to import a makefile project and create a debug configuration.
 
-Note that sometime this eclipse need to be restarted in order to be able to place new breakpoints.
+Note that sometime this Eclipse need to be restarted in order to be able to place new breakpoints.
 
 ### By using FreedomStudio
 
-You can get FreedomStudio (which is package with eclipse and some plugins) there https://www.sifive.com/products/tools/
+You can get FreedomStudio (which is package with Eclipse and some plugins) here: https://www.sifive.com/products/tools/
 
 See https://drive.google.com/drive/folders/1a7FyMOYgFc9UDhfsWUSCjyqDCvOrts2J?usp=sharing to import a makefile project and create a debug configuration.
 
 
 ## Briey SoC
-As a demonstrator, a SoC named Briey is implemented in src/main/scala/vexriscv/demo/Briey.scala. This SoC is very similar to the Pinsec one  :
+As a demonstrator, a SoC named Briey is implemented in `src/main/scala/vexriscv/demo/Briey.scala`. This SoC is very similar to
+the [Pinsec SOC](https://spinalhdl.github.io/SpinalDoc/spinal/lib/pinsec/hardware/):
 
 ![Alt text](assets/brieySoc.png?raw=true "")
 
-
-To generate the Briey SoC Hardware :
+To generate the Briey SoC Hardware:
 
 ```sh
 sbt "run-main vexriscv.demo.Briey"
 ```
 
-To run the verilator simulation of the Briey SoC which can be then connected to OpenOCD/GDB, first get those dependencies :
+To run the verilator simulation of the Briey SoC which can then be connected to OpenOCD/GDB, first get those dependencies:
 
 ```sh
 sudo apt-get install build-essential xorg-dev libudev-dev libts-dev libgl1-mesa-dev libglu1-mesa-dev libasound2-dev libpulse-dev libopenal-dev libogg-dev libvorbis-dev libaudiofile-dev libpng12-dev libfreetype6-dev libusb-dev libdbus-1-dev zlib1g-dev libdirectfb-dev libsdl2-dev
 ```
 
-Then go in src/test/cpp/briey and run the simulation with (UART TX is printed in the terminal, VGA is displayed in a GUI):
+Then go in `src/test/cpp/briey` and run the simulation with (UART TX is printed in the terminal, VGA is displayed in a GUI):
 
 ```sh
 make clean run
@@ -273,23 +272,23 @@ To connect OpenOCD (https://github.com/SpinalHDL/openocd_riscv) to the simulatio
 src/openocd -f tcl/interface/jtag_tcp.cfg -c "set BRIEY_CPU0_YAML /home/spinalvm/Spinal/VexRiscv/cpu0.yaml" -f tcl/target/briey.cfg
 ```
 
-You can find multiples software examples and demo there : https://github.com/SpinalHDL/VexRiscvSocSoftware/tree/master/projects/briey
+You can find multiple software examples and demos here: https://github.com/SpinalHDL/VexRiscvSocSoftware/tree/master/projects/briey
 
-You can find some FPGA project which instantiate the Briey SoC there (DE1-SoC, DE0-Nano): https://drive.google.com/drive/folders/0B-CqLXDTaMbKZGdJZlZ5THAxRTQ?usp=sharing
+You can find some FPGA projects which instantiate the Briey SoC here (DE1-SoC, DE0-Nano): https://drive.google.com/drive/folders/0B-CqLXDTaMbKZGdJZlZ5THAxRTQ?usp=sharing
 
-There is some measurements of Briey SoC timings and area : 
+Here are some measurements of Briey SoC timings and area :
 
 ```
-  Artix 7    -> 239 Mhz 3227 LUT 3410 FF 
+  Artix 7    -> 239 Mhz 3227 LUT 3410 FF
   Cyclone V  -> 125 Mhz 2,207 ALMs
   Cyclone IV -> 112 Mhz 4,594 LUT 3,620
 ```
 
 ## Murax SoC
 
-Murax is a very light SoC (fit in ICE40 FPGA) which could work without any external component.
+Murax is a very light SoC (it fits in an ICE40 FPGA) which can work without any external components:
 - VexRiscv RV32I[M]
-- JTAG debugger (eclipse/GDB/openocd ready)
+- JTAG debugger (Eclipse/GDB/openocd ready)
 - 8 kB of on-chip ram
 - Interrupt support
 - APB bus for peripherals
@@ -297,12 +296,11 @@ Murax is a very light SoC (fit in ICE40 FPGA) which could work without any exter
 - one 16 bits prescaler, two 16 bits timers
 - one UART with tx/rx fifo
 
-Depending the CPU configuration, on the ICE40-hx8k FPGA with icestorm for synthesis, the full SoC will get following area/performance :
+Depending the CPU configuration, on the ICE40-hx8k FPGA with icestorm for synthesis, the full SoC has the following area/performance :
 - RV32I interlocked stages => 51 Mhz, 2387 LC 0.45 DMIPS/Mhz
 - RV32I bypassed stages    => 45 Mhz, 2718 LC 0.65 DMIPS/Mhz
 
-You can find its implementation there : src/main/scala/vexriscv/demo/Murax.scala
-
+Its implementation can be found here: `src/main/scala/vexriscv/demo/Murax.scala`.
 
 To generate the Murax SoC Hardware :
 
@@ -310,10 +308,13 @@ To generate the Murax SoC Hardware :
 # To generate the SoC without any content in the ram
 sbt "run-main vexriscv.demo.Murax"
 
-# To generate the SoC with a demo program in the SoC
-# Will blink led and echo UART RX to UART TX   (in the verilator sim, type some text and press enter to send UART frames to the Murax RX pin)
+# To generate the SoC with a demo program already in ram
 sbt "run-main vexriscv.demo.MuraxWithRamInit"
 ```
+
+The demo program included by default with `MuraxWithRamInit` will blink the
+LEDs and echo characters received on the UART back to the user. To see this
+when running the Verilator sim, type some text and press enter.
 
 Then go in src/test/cpp/murax and run the simulation with :
 
@@ -327,9 +328,9 @@ To connect OpenOCD (https://github.com/SpinalHDL/openocd_riscv) to the simulatio
 src/openocd -f tcl/interface/jtag_tcp.cfg -c "set MURAX_CPU0_YAML /home/spinalvm/Spinal/VexRiscv/cpu0.yaml" -f tcl/target/murax.cfg
 ```
 
-You can find multiples software examples and demo there : https://github.com/SpinalHDL/VexRiscvSocSoftware/tree/master/projects/murax
+You can find multiple software examples and demos here: https://github.com/SpinalHDL/VexRiscvSocSoftware/tree/master/projects/murax
 
-There is some measurements of Murax SoC timings and area  :
+Here are some timing and area measurements of the Murax SoC:
 
 ```
 Murax interlocked stages (0.45 DMIPS/Mhz, 8 bits GPIO) ->
@@ -347,21 +348,23 @@ MuraxFast bypassed stages (0.65 DMIPS/Mhz, 8 bits GPIO) ->
   iCE40Ultra -> 22 Mhz 2702 LC (icestorm)
 ```
 
-There is some scripts to generate the SoC and call the icestorm toolchain there : scripts/Murax/
+Some scripts to generate the SoC and call the icestorm toolchain can be found here: `scripts/Murax/`
 
-Note that now a toplevel simulation testbench with the same feature + a GUI is implemented with SpinalSim. You can find it in src/test/scala/vexriscv/MuraxSim.scala.
+A toplevel simulation testbench with the same features + a GUI are implemented with SpinalSim. You can find it in `src/test/scala/vexriscv/MuraxSim.scala`.
 
-To run it : 
+To run it :
 
 ```sh
-#This will generate the Murax RTL + run its testbench. You need Verilator 3.9xx installated.
+# This will generate the Murax RTL + run its testbench. You need Verilator 3.9xx installated.
 sbt "test:runMain vexriscv.MuraxSim"
 ```
 
 ## Build the RISC-V GCC
 
-In fact, now you can find some prebuild GCC : <br>
-- https://www.sifive.com/products/tools/   =>   SiFive GNU Embedded Toolchain
+A prebuild GCC toolsuite can be found here:
+
+- https://www.sifive.com/products/tools/  => SiFive GNU Embedded Toolchain
+
 The VexRiscvSocSoftware makefiles are expecting to find this prebuild version in /opt/riscv/__contentOfThisPreBuild__
 
 ```sh
@@ -369,10 +372,10 @@ wget https://static.dev.sifive.com/dev-tools/riscv64-unknown-elf-gcc-20171231-x8
 tar -xzvf riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6.tar.gz
 sudo mv riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6 /opt/riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6
 sudo mv /opt/riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6 /opt/riscv
-echo 'export PATH=/opt/riscv/bin:$PATH' >> ~/.bashrc 
+echo 'export PATH=/opt/riscv/bin:$PATH' >> ~/.bashrc
 ```
 
-But if you want to compile from sources in /opt/ the rv32i and rv32im gcc, do the following (will take one hour):
+If you want to compile the rv32i and rv32im GCC toolchain from source code and install them in `/opt/`, do the following (will take one hour):
 
 ```sh
 # Be carefull, sometime the git clone has issue to successfully clone riscv-gnu-toolchain.
@@ -401,10 +404,11 @@ cd ..
 echo -e "\\nRISC-V Toolchain installation completed!"
 ```
 
-
 ## CPU parametrization and instantiation example
 
-You can find many example of different config in the https://github.com/SpinalHDL/VexRiscv/tree/master/src/main/scala/vexriscv/demo folder. There is one :
+You can find many examples of different configurations in the https://github.com/SpinalHDL/VexRiscv/tree/master/src/main/scala/vexriscv/demo folder.
+
+Here is one such example:
 
 ```scala
 import vexriscv._
@@ -455,7 +459,7 @@ val cpu = new VexRiscv(
 
 ## Add a custom instruction to the CPU via the plugin system
 
-There is an example of an simple plugin which add an simple SIMD_ADD instruction :
+Here is an example of a simple plugin which adds a simple SIMD_ADD instruction:
 
 ```scala
 import spinal.core._
@@ -534,9 +538,9 @@ class SimdAddPlugin extends Plugin[VexRiscv]{
 }
 ```
 
-Then if you want to add this plugin to a given CPU, you just need to add it in its parameterized plugin list.
+If you want to add this plugin to a given CPU, you just need to add it to its parameterized plugin list.
 
-This example is a very simple one, but each plugin can really have access to the whole CPU
+This example is a very simple one, but each plugin can really have access to the whole CPU:
 - Halt a given stage of the CPU
 - Unschedule instructions
 - Emit an exception
@@ -547,7 +551,8 @@ This example is a very simple one, but each plugin can really have access to the
 - Provide an alternative implementation
 - ...
 
-As a demonstrator, this SimdAddPlugin was integrated in the src/main/scala/vexriscv/demo/GenCustomSimdAdd.scala CPU configuration and is self tested by the src/test/cpp/custom/simd_add application by running the following commands :
+As a demonstrator, this SimdAddPlugin was integrated in the `src/main/scala/vexriscv/demo/GenCustomSimdAdd.scala` CPU configuration
+and is self-tested by the `src/test/cpp/custom/simd_add` application by running the following commands :
 
 ```sh
 # Generate the CPU
@@ -561,26 +566,27 @@ cd src/test/cpp/regression/
 make clean run IBUS=SIMPLE DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no DHRYSTONE=no REDO=2 CUSTOM_SIMD_ADD=yes
 ```
 
-To retrieve the plugin related signals in the wave, just filter with `simd`.
+To retrieve the plugin related signals in your waveform viewer, just filter with `simd`.
 
 ## Adding a new CSR via the plugin system
 
-You can find two example about how to add custom CSR into the CPU via the plugin system there : 
+Here are two examples about how to add a custom CSR to the CPU via the plugin system:
 https://github.com/SpinalHDL/VexRiscv/blob/master/src/main/scala/vexriscv/demo/CustomCsrDemoPlugin.scala
 
-The first one (CustomCsrDemoPlugin) is adding an instruction counter and an clock cycle counter into the CSR mapping (and also do tricky stuff as a demonstration).<br>
-While the second one (CustomCsrDemoGpioPlugin) is creating an GPIO peripheral directly mapped into the CSR.
+The first one (`CustomCsrDemoPlugin`) adds an instruction counter and a clock cycle counter into the CSR mapping (and also do tricky stuff as a demonstration).
+
+The second one (`CustomCsrDemoGpioPlugin`) creates a GPIO peripheral directly mapped into the CSR.
 
 ## CPU clock and resets
 
-Without the debug plugin, the CPU will have `clk` input and a `reset` input, which is very standard. But with the debug plugin the situation is the following :
+Without the debug plugin, the CPU will have a standard `clk` input and a `reset` input. But with the debug plugin the situation is the following :
 
 - clk : As before, the clock which drive the whole CPU design, including the debug logic
 - reset : Reset all the CPU states excepted the debug logics
 - debugReset : Reset the debug logic of the CPU
-- debug_resetOut : It is a CPU output signal which allow the JTAG to reset the CPU + the memory interconnect + the peripherals
+- debug_resetOut : a CPU output signal which allows the JTAG to reset the CPU + the memory interconnect + the peripherals
 
-So there is the reset interconnect in case you use the debug plugin :
+So here is the reset interconnect in case you use the debug plugin :
 
 ```
                                 VexRiscv
@@ -600,18 +606,21 @@ toplevelReset >----+--------> debugReset       |
 
 ## VexRiscv Architecture
 
-VexRiscv is implemented via an 5 stages in order pipeline on which many optional and complementary plugins will add functionalities to provide a functional RISC-V CPU. This approach is completely unconventional and only possible on meta hardware description languages (SpinalHDL in the current case) but had proved its advantages via the VexRiscv implementation :
+VexRiscv is implemented via a 5 stage in-order pipeline on which many optional and complementary plugins add functionalities to provide a functional RISC-V CPU.
+This approach is completely unconventional and only possible through meta hardware description languages (SpinalHDL in the current case) but has proven its advantages
+via the VexRiscv implementation:
 
 - You can swap/turn on/turn off parts of the CPU directly via the plugin system
 - You can add new functionalities/instruction without having to modify any sources code of the CPU
-- It allow the CPU configuration to cover a very large spectrum of implementation without cooking spagetti code  
-- To resume it allow your code base to truly produce a parametrized CPU design
+- It allows the CPU configuration to cover a very large spectrum of implementation without cooking spaghetti code
+- It allows your code base to truly produce a parametrized CPU design
 
-So again, if you generate the CPU without any plugin, it will only contain the 5 stages definition and their basic arbitration, but nothing else, as everything else, including the program counter is added into the CPU via plugins.
+If you generate the CPU without any plugin, it will only contain the definition of the 5 pipeline stages and their basic arbitration, but nothing else,
+as everything else, including the program counter is added into the CPU via plugins.
 
 ### Plugins
 
-This chapter is describing plugins currently implemented.
+This chapter describes plugins currently implemented.
 
 - [IBusSimplePlugin](#ibussimpleplugin)
 - [IBusCachedPlugin](#ibuscachedplugin)
@@ -621,7 +630,7 @@ This chapter is describing plugins currently implemented.
 - [SrcPlugin](#srcplugin)
 - [IntAluPlugin](#intaluplugin)
 - [LightShifterPlugin](#lightshifterplugin)
-- [FullBarrielShifterPlugin](#fullbarrielshifterplugin)
+- [FullBarrelShifterPlugin](#fullbarrelshifterplugin)
 - [BranchPlugin](#branchplugin)
 - [DBusSimplePlugin](#dbussimpleplugin)
 - [DBusCachedPlugin](#dbuscachedplugin)
@@ -636,17 +645,17 @@ This chapter is describing plugins currently implemented.
 
 #### PcManagerSimplePlugin
 
-This plugin implement the programme counter and over an jump service to all plugins.
+This plugin implements the program counter and a jump service to all plugins.
 
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
+| ------ | ----------- | ------ |
 | resetVector | BigInt | Address of the program counter after the reset |
 | relaxedPcCalculation | Boolean | By default jump have an asynchronous immediate effect on the program counter, which allow to reduce the branch penalties by one cycle but could reduce the FMax as it will combinatorialy drive the instruction bus address signal. To avoid this you can set this parameter to true, which will make the jump affecting the programm counter in a sequancial way, which will cut the combinatorial path but add one additional cycle of penalty when a jump occur. |
 
 
 
-This plugin operate into the prefetch stage.
+This plugin operates on the prefetch stage.
 
 #### IBusSimplePlugin
 
@@ -664,7 +673,7 @@ This plugin implement the CPU frontend (instruction fetch) via a very simple and
 | prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation, see bellow for more descriptions |
 | historyRamSizeLog2 | Int | Specify the number of entries in the direct mapped prediction cache of DYNAMIC/DYNAMIC_TARGET implementation. 2 pow historyRamSizeLog2 entries |
 
-There is the SimpleBus interface definition 
+Here is the SimpleBus interface definition
 
 ```scala
 case class IBusSimpleCmd() extends Bundle{
@@ -672,7 +681,7 @@ case class IBusSimpleCmd() extends Bundle{
 }
 
 case class IBusSimpleRsp() extends Bundle with IMasterSlave{
-  val ready = Bool 
+  val ready = Bool
   val error = Bool
   val inst  = Bits(32 bits)
 
@@ -707,19 +716,19 @@ trait JumpService{
 
 #### IBusCachedPlugin
 
-Simple and light multi way instruction cache.
+Simple and light multi-way instruction cache.
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
+| ------ | ----------- | ------ |
 | cacheSize  | Int | Total storage capacity of the cache |
-| bytePerLine  | Int | Number of byte per cache line  |
-| wayCount  | Int | Number of cache way |
+| bytePerLine  | Int | Number of bytes per cache line  |
+| wayCount  | Int | Number of cache ways |
 | twoCycleRam  | Boolean | Check the tags values in the decode stage instead of the fetch stage to relax timings |
 | asyncTagMemory  | Boolean | Read the cache tags in a asyncronus manner instead of syncronous one |
 | addressWidth  | Int | Address width, should be 32 |
 | cpuDataWidth  | Int | Cpu data width, should be 32 |
 | memDataWidth  | Int | Memory data width, could potentialy be something else than 32, but only 32 is currently tested |
-| catchIllegalAccess  | Boolean  | Catch when an memory access is done on non valid memory address (MMU) |
+| catchIllegalAccess  | Boolean  | Catch when a memory access is done on non valid memory address (MMU) |
 | catchAccessFault  | Boolean | Catch when the memeory bus is responding with an error  |
 | catchMemoryTranslationMiss  | Boolean  |  Catch when the MMU miss a TLB |
 | resetVector | BigInt | Address of the program counter after the reset |
@@ -728,18 +737,20 @@ Simple and light multi way instruction cache.
 | prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation, see bellow for more descriptions |
 | historyRamSizeLog2 | Int | Specify the number of entries in the direct mapped prediction cache of DYNAMIC/DYNAMIC_TARGET implementation. 2 pow historyRamSizeLog2 entries |
 
-Note : If you enable the twoCycleRam and and the wayCount is bigger than one, then the register file plugin should be configured to read the regFile in a asyncronus manner.
+Note: If you enable the twoCycleRam option and if wayCount is bigger than one, then the register file plugin should be configured to read the regFile in a asynchronous manner.
 
 #### DecoderSimplePlugin
 
-This plugin will provide instruction decoding capabilities to others plugins. <br>
-As instance, the pipeline hazard plugin will need to know, for a given instruction, if it is using the register file source 1/2 in order stall the pipeline until the hazard is gone. So to provide this kind of information, each plugin which implement an instruction will document to the DecoderSimplePlugin plugin this kind of informations. 
+This plugin provides instruction decoding capabilities to others plugins.
+
+For instance, for a given instruction, the pipeline hazard plugin needs to know if it uses the register file source 1/2 in order stall the pipeline until the hazard is gone.
+To provide this kind of information, each plugin which implements an instruction documents this kind of information to the DecoderSimplePlugin plugin.
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
-| catchIllegalInstruction | Boolean | If set to true, instruction which have no decoding specification will generate an trap exception  |
+| ------ | ----------- | ------ |
+| catchIllegalInstruction | Boolean | If set to true, instruction which have no decoding specification will generate a trap exception  |
 
-There is an usage example : 
+Here is a usage example :
 
 ```scala
     //Specify the instruction decoding which should be applied when the instruction match the 'key' pattern
@@ -760,63 +771,62 @@ There is an usage example :
   }
 ```
 
-This plugin operate in the Decode stage
+This plugin operates in the Decode stage.
 
 #### RegFilePlugin
 
-This plugin implement the register file.
+This plugin implements the register file.
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
-| regFileReadyKind | RegFileReadKind | Can bet set to ASYNC or SYNC. Specify the kind of memory read used to implement the register file. ASYNC mean zero cycle latency memory read, while SYNC mean one cycle latency memory read which can be mapped into standard FPGA memory blocks   |
+| ------ | ----------- | ------ |
+| regFileReadyKind | RegFileReadKind | Can bet set to ASYNC or SYNC. Specifies the kind of memory read used to implement the register file. ASYNC means zero cycle latency memory read, while SYNC means one cycle latency memory read which can be mapped into standard FPGA memory blocks   |
 | zeroBoot | Boolean | Load all registers with zeroes at the beginning of simulations to keep everything deterministic in logs/traces|
 
-
-This register file use an `don't care` read during write policy, so the bypassing/hazard plugin should take care of this.
+This register file use a `don't care` read-during-write policy, so the bypassing/hazard plugin should take care of this.
 
 #### HazardSimplePlugin
 
-This plugin check the pipeline instruction dependencies and depending them, it will stop the instruction in the decoding stage or bypass the instruction results from the following stages to the decode stage.
+This plugin checks the pipeline instruction dependencies and, if necessary or possible, will stop the instruction in the decoding stage or bypass the instruction results
+from the later stages to the decode stage.
 
-As the register file is implemented with a `don't care` read during write policy, this plugin also have to manage hazard comming from this.
+Since the register file is implemented with a `don't care` read-during-write policy, this plugin also manages these kind of hazards.
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
-| bypassExecute | Boolean | Enable the bypassing of instruction results comming from the Execute stage |
-| bypassMemory | Boolean | Enable the bypassing of instruction results comming from the Memory stage |
-| bypassWriteBack | Boolean | Enable the bypassing of instruction results comming from the WriteBack stage |
+| ------ | ----------- | ------ |
+| bypassExecute | Boolean | Enable the bypassing of instruction results coming from the Execute stage |
+| bypassMemory | Boolean | Enable the bypassing of instruction results coming from the Memory stage |
+| bypassWriteBack | Boolean | Enable the bypassing of instruction results coming from the WriteBack stage |
 | bypassWriteBackBuffer | Boolean | Enable the bypassing of the previous cycle register file written value  |
-
 
 #### SrcPlugin
 
-This plugin muxes different inputs values to produce SRC1/SRC2/SRC_ADD/SRC_SUB/SRC_LESS values which are common values used by many plugins in the exectue stage (ALU / Branch / Load / Store).
+This plugin muxes different input values to produce SRC1/SRC2/SRC_ADD/SRC_SUB/SRC_LESS values which are common values used by many plugins in the execute stage (ALU/Branch/Load/Store).
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
-| separatedAddSub | RegFileReadKind | By default SRC_ADD/SRC_SUB are generated from a single controllable adder/substractor, but if this is set to true, it use separated adder/substractors |
+| ------ | ----------- | ------ |
+| separatedAddSub | RegFileReadKind | By default SRC_ADD/SRC_SUB are generated from a single controllable adder/substractor, but if this is set to true, it use separate adder/substractors |
 | executeInsertion | Boolean | By default SRC1/SRC2 are generated in the Decode stage, but if this parameter is true, it is done in the Execute stage (It will relax the bypassing network) |
 
-Excepted SRC1/SRC2, this plugin do everything at the begining of Execute stage.
+Except for SRC1/SRC2, this plugin does everything at the begining of Execute stage.
 
 #### IntAluPlugin
 
-This plugin implement all ADD/SUB/SLT/SLTU/XOR/OR/AND/LUI/AUIPC instructions in the execute stage by using the SrcPlugin outputs. It is a realy simple plugin.
+This plugin implements all ADD/SUB/SLT/SLTU/XOR/OR/AND/LUI/AUIPC instructions in the execute stage by using the SrcPlugin outputs. It is a realy simple plugin.
 
 The result is injected into the pipeline directly at the end of the execute stage.
 
 #### LightShifterPlugin
 
-Implement SLL/SRL/SRA instructions by using an iterative shifter register, whill use one cycle per bit shift.
+Implements SLL/SRL/SRA instructions by using an iterative shifter register, while using one cycle per bit shift.
 
 The result is injected into the pipeline directly at the end of the execute stage.
 
-#### FullBarrielShifterPlugin
+#### FullBarrelShifterPlugin
 
-Implement SLL/SRL/SRA instructions by using an full barriel shifter, so it execute all shifts in a single cycle.
+Implements SLL/SRL/SRA instructions by using a full barrel shifter, so it execute all shifts in a single cycle.
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
+| ------ | ----------- | ------ |
 | earlyInjection | Boolean | By default the result of the shift is injected into the pipeline in the Memory stage to relax timings, but if this option is true it will be done in the Execute stage |
 
 #### BranchPlugin
@@ -824,7 +834,7 @@ Implement SLL/SRL/SRA instructions by using an full barriel shifter, so it execu
 This plugin implement all branch/jump instructions (JAL/JALR/BEQ/BNE/BLT/BGE/BLTU/BGEU) with primitives used by the cpu frontend plugins to implement branch prediction. The prediction implementation is set in the frontend plugins (IBusX)
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
+| ------ | ----------- | ------ |
 | earlyBranch | Boolean | By default the branch is done in the Memory stage to relax timings, but if this option is set it's done in the Execute stage|
 | catchAddressMisaligned | Boolean | If a jump/branch is done in an unaligned PC address, it will fire an trap exception |
 
@@ -832,31 +842,34 @@ Each miss predicted jumps will produce between 2 and 4 cycles penalty depending 
 
 ##### Prediction NONE
 
-No prediction, each PC changes due to a jump/branch will produce a penalty.
+No prediction: each PC change due to a jump/branch will produce a penalty.
 
 ##### Prediction STATIC
 
-In the decode stage, if the instruction is an conditional branch pointing backward or an JAL, it branch it speculatively. If the speculation is right it the branch penality is reduced to a single cycle, else the standard penalty is applied.
+In the decode stage, a conditional branch pointing backwards or a JAL is branched speculatively. If the speculation is right, the branch penalty is reduced to a single cycle,
+otherwise the standard penalty is applied.
 
 ##### Prediction DYNAMIC
 
-It is the same than the STATIC prediction, excepted that to do the prediction, it use a direct mapped 2 bit history cache (BHT) which remember if the branch is more likely to be taken or not.
+Same as the STATIC prediction, except that to do the prediction, it use a direct mapped 2 bit history cache (BHT) which remembers if the branch is more likely to be taken or not.
 
 ##### Prediction DYNAMIC_TARGET
 
-This predictor is using a direct mapped branch target buffer (BTB) in the Fetch stage which store the PC of the instruction, the target PC of the instruction and a 2 bit history to remember if the branch is more likely to be taken or not. This is the most efficient branch predictor actualy implemented on VexRiscv as when the branch prediction is right, is produce no branch penalty. The down side is that this predictor has a long combinatorial path comming from the prediction cache read port to the programm counter by passing through the jump interface.
+This predictor uses a direct mapped branch target buffer (BTB) in the Fetch stage which store the PC of the instruction, the target PC of the instruction and a 2 bit history to remember
+if the branch is more likely to be taken or not. This is the most efficient branch predictor actualy implemented on VexRiscv as when the branch prediction is right, it produce no branch penalty.
+The down side is that this predictor has a long combinatorial path coming from the prediction cache read port to the programm counter by passing through the jump interface.
 
 #### DBusSimplePlugin
 
-This plugin implement the load and store instructions (LB/LH/LW/LBU/LHU/LWU/SB/SH/SW) via a simple and neutral memory bus going out of the CPU.
+This plugin implements the load and store instructions (LB/LH/LW/LBU/LHU/LWU/SB/SH/SW) via a simple and neutral memory bus going out of the CPU.
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
-| catchAddressMisaligned | Boolean | If a memory access is done in an unaligned memory address, it will fire an trap exception |
-| catchAccessFault | Boolean | If a memory read return an error, it will fire an trap exception  |
-| earlyInjection | Boolean | By default, the memory read values are injected into the pipeline in the WriteBack stage to relax the timings, if this parameter is true it's done in the Memory stage |
+| ------ | ----------- | ------ |
+| catchAddressMisaligned | Boolean | If a memory access is done to an unaligned memory address, it will fire a trap exception |
+| catchAccessFault | Boolean | If a memory read returns an error, it will fire a trap exception  |
+| earlyInjection | Boolean | By default, the memory read values are injected into the pipeline in the WriteBack stage to relax the timings. If this parameter is true, it's done in the Memory stage |
 
-There is the DBusSimpleBus
+Here is the DBusSimpleBus
 
 ```scala
 case class DBusSimpleCmd() extends Bundle{
@@ -888,51 +901,53 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
 }
 ```
 
-Note that bridges are implemented to convert this interface into AXI4 and Avalon
+Note that bridges are available to convert this interface into AXI4 and Avalon
 
-There is at least one cycle latency between que cmd and the rsp. the rsp.ready flag should be false after a read cmd until the rsp is present.
-
+There is at least one cycle latency between a cmd and the corresponding rsp. The rsp.ready flag should be false after a read cmd until the rsp is present.
 
 #### DBusCachedPlugin
 
-Single way cache implementation with a victime buffer, documentation WIP
+Single way cache implementation with a victim buffer. (Documentation is WIP)
 
 #### MulPlugin
 
-Implement the multiplication instruction from the RISC-V M extension. Its implementation was done in a FPGA friendly way by using 4 multiplication of 17*17 bits. The processing is fully pipelined between the Execute/Memory/Writeback stage. The results of the instructions is always inserted in the WriteBack stage.
+Implements the multiplication instruction from the RISC-V M extension. Its implementation was done in a FPGA friendly way by using 4 17*17 bit multiplications.
+The processing is fully pipelined between the Execute/Memory/Writeback stage. The results of the instructions are always inserted in the WriteBack stage.
 
 #### DivPlugin
 
-Implement the division/modulo instruction from the RISC-V M extension. It is done by a simple iterative manner which always take 34 cycles. The result is inserted into the Memory stage.
+Implements the division/modulo instruction from the RISC-V M extension. It is done in a simple iterative way which always takes 34 cycles. The result is inserted into the
+Memory stage.
 
-This plugin is now based on the MulDivIterativePlugin one. 
+This plugin is now based on the MulDivIterativePlugin one.
 
 #### MulDivIterativePlugin
 
-This plugin implement the multiplication, division and modulo of the RISC-V M extension by an iterative manner, which is friendly for small FPGA which don't provide DSP blocks.
+This plugin implements the multiplication, division and modulo of the RISC-V M extension in an iterative way, which is friendly for small FPGAs that don't have DSP blocks.
 
-This plugin is able to unrool the iterative calculation process to reduce the number of cycles used to execute mul/div instructions.
+This plugin is able to unroll the iterative calculation process to reduce the number of cycles used to execute mul/div instructions.
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
-| genMul    | Boolean | Enable the multiplication support, can be set to false if you wan for instance to use the MulPlugin instead |
-| genDiv    | Boolean |  Enable the division support |
-| mulUnroolFactor    | Int | Number of combinatorial stages used to speed up the multiplication, should be > 0 |
-| divUnroolFactor    | Int | Number of combinatorial stages used to speed up the division, should be > 0 |
+| ------ | ----------- | ------ |
+| genMul    | Boolean | Enables multiplication support. Can be set to false if you want to use the MulPlugin instead |
+| genDiv    | Boolean |  Enables division support |
+| mulUnrollFactor    | Int | Number of combinatorial stages used to speed up the multiplication, should be > 0 |
+| divUnrollFactor    | Int | Number of combinatorial stages used to speed up the division, should be > 0 |
 
-The number of cycles used to execute a multiplication is '32/mulUnroolFactor'
-The number of cycles used to execute a division is '32/divUnroolFactor + 1'
+The number of cycles used to execute a multiplication is '32/mulUnrollFactor'
+The number of cycles used to execute a division is '32/divUnrollFactor + 1'
 
-Both mul/div are processed into the memory stage (late result)
+Both mul/div are processed into the memory stage (late result).
 
 #### CsrPlugin
 
-Implement most of the Machine mode and a very little bit of the User mode specified in the RISC-V previlegied spec. The access mode of most of the CSR is parameterizable (NONE/READ_ONLY/WRITE_ONLY/READ_WRITE) to reduce the area usage of useless features.
+Implements most of the Machine mode and a few of the User mode registers as specified in the RISC-V priviledged spec.
+The access mode of most of the CSR is parameterizable (NONE/READ_ONLY/WRITE_ONLY/READ_WRITE) to reduce the area usage of unneeded features.
 
 (CsrAccess can be NONE/READ_ONLY/WRITE_ONLY/READ_WRITE)
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
+| ------ | ----------- | ------ |
 | catchIllegalAccess   | Boolean |  |
 | mvendorid            | BigInt |  |
 | marchid              | BigInt |  |
@@ -952,30 +967,32 @@ Implement most of the Machine mode and a very little bit of the User mode specif
 | wfiGen               | Boolean |  |
 | ecallGen             | Boolean |  |
 
-If an interrupt occur, before jumping to mtvec, the plugin will stop the Prefetch stage and wait that all the instructions in the following stages end their execution.
+If an interrupt occurs, before jumping to mtvec, the plugin will stop the Prefetch stage and wait for all the instructions in the later pipeline stages to complete their execution.
 
-If an exception occur, the plugin will kill the corresponding instruction, flush all previous instruction, and wait until the previously killed instruction reach the WriteBack stage before jumping to mtvec.
-
+If an exception occur, the plugin will kill the corresponding instruction, flush all previous instructions, and wait until the previously killed instructions reach the WriteBack
+stage before jumping to mtvec.
 
 #### StaticMemoryTranslatorPlugin
 
-Static memory translator plugin which allow to specify which range of the memory addresses is IO mapped and shouldn't be cached
+Static memory translator plugin which allows one to specify which range of the memory addresses is IO mapped and shouldn't be cached.
 
 #### MemoryTranslatorPlugin
 
-Simple software refilled MMU implementation. Allow others plugins as DBusCachedPlugin/IBusCachedPlugin to instanciate memory address translation ports. Each port has a small dedicated fully associative TLB cache which is refilled from a larger software filled TLB cache via an query which will look up one entry per cycle.
+Simple software refilled MMU implementation. Allows others plugins such as DBusCachedPlugin/IBusCachedPlugin to instanciate memory address translation ports. Each port has a small dedicated
+fully associative TLB cache which is refilled from a larger software filled TLB cache via a query which looks up one entry per cycle.
 
 #### DebugPlugin
 
-This plugin implement enough CPU debug feature to allow a comfortable GDB/eclipse debugging. To access those debug feature it provide a simple memory bus interface, the JTAG interface is provided by another bridge, which allow to efficiently connect multiple CPU to the same JTAG.
+This plugin implements enough CPU debug features to allow comfortable GDB/Eclipse debugging. To access those debug features, it provides a simple memory bus interface.
+The JTAG interface is provided by another bridge, which makes it possible to efficiently connect multiple CPUs to the same JTAG.
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
+| ------ | ----------- | ------ |
 | debugClockDomain   | ClockDomain | As the debug unit is able to reset the CPU itself, it should use another clock domain to avoid killing itself (only the reset wire should differ) |
 
-The internals of the debug plugin are done in a manner which reduce the area usage and the FMax impact of this plugin. 
+The internals of the debug plugin are done in a manner which reduces the area usage and the FMax impact of this plugin.
 
-There is the simple bus to access it, the rsp come one cycle after the request : 
+Here is the simple bus to access it, the rsp come one cycle after the request :
 
 ```scala
 case class DebugExtensionCmd() extends Bundle{
@@ -989,17 +1006,17 @@ case class DebugExtensionRsp() extends Bundle{
 
 case class DebugExtensionBus() extends Bundle with IMasterSlave{
   val cmd = Stream(DebugExtensionCmd())
-  val rsp = DebugExtensionRsp() 
+  val rsp = DebugExtensionRsp()
 
   override def asMaster(): Unit = {
     master(cmd)
     in(rsp)
   }
 }
-``` 
+```
 
 
-There is the register mapping : 
+Here is the register mapping :
 
 ```
 Read address 0x00 ->
@@ -1014,7 +1031,7 @@ Write address 0x00 ->
   bit 17 : set haltIt
   bit 24 : clear resetIt
   bit 25 : clear haltIt and haltedByBreak
-  
+
 Read Address 0x04 ->
   bits (31 downto 0) : Last value written into the register file
 Write Address 0x04 ->
@@ -1026,4 +1043,7 @@ https://github.com/SpinalHDL/openocd_riscv
 
 #### YamlPlugin
 
-This plugin offer a service to others plugin to generate an usefull Yaml file about the CPU configuration, it will contain, for instance, the sequence of instruction required to flush the data cache (information used by openocd)
+This plugin offers a service to others plugins to generate a usefull Yaml file about the CPU configuration. It contains, for instance, the sequence of instruction required
+to flush the data cache (information used by openocd).
+
+

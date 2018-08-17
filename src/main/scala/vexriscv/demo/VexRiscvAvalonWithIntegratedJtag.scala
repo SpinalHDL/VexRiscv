@@ -87,7 +87,7 @@ object VexRiscvAvalonWithIntegratedJtag{
             separatedAddSub = false,
             executeInsertion = true
           ),
-          new FullBarrielShifterPlugin,
+          new FullBarrelShifterPlugin,
           new MulPlugin,
           new DivPlugin,
           new HazardSimplePlugin(
