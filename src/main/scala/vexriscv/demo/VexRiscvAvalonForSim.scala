@@ -26,10 +26,12 @@ object VexRiscvAvalonForSim{
       //CPU configuration
       val cpuConfig = VexRiscvConfig(
         plugins = List(
-          new PcManagerSimplePlugin(0x00000000l, false),
           new IBusSimplePlugin(
-            interfaceKeepData = false,
-            catchAccessFault = false
+            resetVector = 0x00000000l,
+            relaxedPcCalculation = false,
+            prediction = STATIC,
+            catchAccessFault = false,
+            compressedGen = false
           ),
           new DBusSimplePlugin(
             catchAddressMisaligned = false,
@@ -102,8 +104,7 @@ object VexRiscvAvalonForSim{
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = false,
-            catchAddressMisaligned = true,
-            prediction = STATIC
+            catchAddressMisaligned = true
           ),
           new CsrPlugin(
             config = CsrPluginConfig(

@@ -1,10 +1,11 @@
 package vexriscv.plugin
 
-import vexriscv.{Stageable, ExceptionService, ExceptionCause, VexRiscv}
+import vexriscv._
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi._
-import spinal.lib.bus.avalon.{AvalonMMConfig, AvalonMM}
+import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
+
 
 
 case class IBusSimpleCmd() extends Bundle{
@@ -12,14 +13,14 @@ case class IBusSimpleCmd() extends Bundle{
 }
 
 case class IBusSimpleRsp() extends Bundle with IMasterSlave{
-  val ready = Bool
   val error = Bool
   val inst  = Bits(32 bits)
 
   override def asMaster(): Unit = {
-    out(ready,error,inst)
+    out(error,inst)
   }
 }
+
 
 object IBusSimpleBus{
   def getAxi4Config() = Axi4Config(
@@ -40,12 +41,14 @@ object IBusSimpleBus{
     dataWidth = 32
   ).getReadOnlyConfig.copy(
     useResponse = true,
-    maximumPendingReadTransactions = 1
+    maximumPendingReadTransactions = 8
   )
 }
-case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMasterSlave{
+
+
+case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMasterSlave {
   var cmd = Stream(IBusSimpleCmd())
-  var rsp = IBusSimpleRsp()
+  var rsp = Flow(IBusSimpleRsp())
 
   override def asMaster(): Unit = {
     master(cmd)
@@ -64,7 +67,7 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
     cmd.ready := axi.ar.ready
 
 
-    rsp.ready := axi.r.valid
+    rsp.valid := axi.r.valid
     rsp.inst := axi.r.data
     rsp.error := !axi.r.isOKAY()
     axi.r.ready := True
@@ -87,7 +90,7 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
     mm.address := (cmd.pc >> 2) @@ U"00"
     cmd.ready := mm.waitRequestn
 
-    rsp.ready := mm.readDataValid
+    rsp.valid := mm.readDataValid
     rsp.inst := mm.readData
     rsp.error := mm.response =/= AvalonMM.Response.OKAY
 
@@ -95,12 +98,44 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
   }
 }
 
-class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) extends Plugin[VexRiscv]{
-  var iBus : IBusSimpleBus = null
 
-  object IBUS_ACCESS_ERROR extends Stageable(Bool)
+
+
+
+
+class IBusSimplePlugin(resetVector : BigInt,
+                       catchAccessFault : Boolean = false,
+                       relaxedPcCalculation : Boolean = false,
+                       prediction : BranchPrediction = NONE,
+                       historyRamSizeLog2 : Int = 10,
+                       keepPcPlus4 : Boolean = false,
+                       compressedGen : Boolean = false,
+                       busLatencyMin : Int = 1,
+                       pendingMax : Int = 7,
+                       injectorStage : Boolean = true,
+                       relaxedBusCmdValid : Boolean = false
+                      ) extends IBusFetcherImpl(
+    catchAccessFault = catchAccessFault,
+    resetVector = resetVector,
+    keepPcPlus4 = keepPcPlus4,
+    decodePcGen = compressedGen,
+    compressedGen = compressedGen,
+    cmdToRspStageCount = busLatencyMin,
+    injectorReadyCutGen = false,
+    relaxedPcCalculation = relaxedPcCalculation,
+    prediction = prediction,
+    historyRamSizeLog2 = historyRamSizeLog2,
+    injectorStage = injectorStage){
+  assert(!(prediction == DYNAMIC_TARGET && relaxedBusCmdValid), "IBusSimplePlugin doesn't allow dynamic_target prediction and relaxedBusCmdValid together")
+  assert(!relaxedBusCmdValid)
+
+  var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
+
   override def setup(pipeline: VexRiscv): Unit = {
+    super.setup(pipeline)
+    iBus = master(IBusSimpleBus(false)).setName("iBus")
+
     if(catchAccessFault) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode,1)
@@ -110,51 +145,74 @@ class IBusSimplePlugin(interfaceKeepData : Boolean, catchAccessFault : Boolean) 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
-    iBus = master(IBusSimpleBus(interfaceKeepData)).setName("iBus")
-    prefetch plug new Area {
-      val pendingCmd = RegInit(False) clearWhen (iBus.rsp.ready) setWhen (iBus.cmd.fire)
 
-      //Emit iBus.cmd request
-      iBus.cmd.valid := prefetch.arbitration.isValid && !prefetch.arbitration.removeIt && !prefetch.arbitration.isStuckByOthers && !(pendingCmd && !iBus.rsp.ready) //prefetch.arbitration.isValid && !prefetch.arbitration.isStuckByOthers
-      iBus.cmd.pc := prefetch.output(PC)
-      prefetch.arbitration.haltItself setWhen (!iBus.cmd.ready || (pendingCmd && !iBus.rsp.ready))
-    }
+    pipeline plug new FetchArea(pipeline) {
 
-    //Bus rsp buffer
-    val rspBuffer = if(!interfaceKeepData) new Area{
-      val valid = RegInit(False) setWhen(iBus.rsp.ready) clearWhen(!fetch.arbitration.isStuck)
-      val error = Reg(Bool)
-      val data = Reg(Bits(32 bits))
-      when(!valid) {
-        data := iBus.rsp.inst
-        error := iBus.rsp.error
+      //Avoid sending to many iBus cmd
+      val pendingCmd = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
+      val pendingCmdNext = pendingCmd + iBus.cmd.fire.asUInt - iBus.rsp.fire.asUInt
+      pendingCmd := pendingCmdNext
+
+      val cmd = if(relaxedBusCmdValid) new Area {
+        assert(relaxedPcCalculation, "relaxedBusCmdValid can only be used with relaxedPcCalculation")
+        def input = fetchPc.output
+        def output = iBusRsp.input
+
+        val fork = StreamForkVex(input, 2, flush)
+        val busFork = fork(0)
+        val pipFork = fork(1)
+        output << pipFork
+
+        val okBus = pendingCmd =/= pendingMax
+        iBus.cmd.valid := busFork.valid && okBus
+        iBus.cmd.pc := busFork.payload(31 downto 2) @@ "00"
+        busFork.ready := iBus.cmd.ready && okBus
+      } else new Area {
+        def input = fetchPc.output
+        def output = iBusRsp.input
+
+        output << input.continueWhen(iBus.cmd.fire)
+
+        iBus.cmd.valid := input.valid && output.ready && pendingCmd =/= pendingMax
+        iBus.cmd.pc := input.payload(31 downto 2) @@ "00"
       }
-    } else null
 
-    //Insert iBus.rsp into INSTRUCTION
-    fetch.insert(INSTRUCTION) := iBus.rsp.inst
-    fetch.insert(IBUS_ACCESS_ERROR) := iBus.rsp.error
-    if(!interfaceKeepData) {
-      when(rspBuffer.valid) {
-        fetch.insert(INSTRUCTION) := rspBuffer.data
-        fetch.insert(IBUS_ACCESS_ERROR) := rspBuffer.error
+
+      val rsp = new Area {
+        import iBusRsp._
+        //Manage flush for iBus transactions in flight
+        val discardCounter = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
+        discardCounter := discardCounter - (iBus.rsp.fire && discardCounter =/= 0).asUInt
+        when(flush) {
+          discardCounter := (if(relaxedPcCalculation) pendingCmdNext else pendingCmd - iBus.rsp.fire.asUInt)
+        }
+
+
+        val rspBuffer = StreamFifoLowLatency(IBusSimpleRsp(), cmdToRspStageCount + (if(relaxedBusCmdValid) 1 else 0))
+        rspBuffer.io.push << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
+        rspBuffer.io.flush := flush
+
+        val fetchRsp = FetchRsp()
+        fetchRsp.pc := inputPipeline.last.payload
+        fetchRsp.rsp := rspBuffer.io.pop.payload
+        fetchRsp.rsp.error.clearWhen(!rspBuffer.io.pop.valid) //Avoid interference with instruction injection from the debug plugin
+
+
+        var issueDetected = False
+        val join = StreamJoin(Seq(inputPipeline.last, rspBuffer.io.pop), fetchRsp)
+        inputPipeline.last.ready setWhen(!inputPipeline.last.valid)
+        output << join.haltWhen(issueDetected)
+
+        if(catchAccessFault){
+          decodeExceptionPort.valid := False
+          decodeExceptionPort.code  := 1
+          decodeExceptionPort.badAddr := join.pc
+          when(join.valid && join.rsp.error && !issueDetected){
+            issueDetected \= True
+            decodeExceptionPort.valid  := iBusRsp.readyForError
+          }
+        }
       }
-    }
-
-    fetch.insert(IBUS_ACCESS_ERROR) clearWhen(!fetch.arbitration.isValid) //Avoid interference with instruction injection from the debug plugin
-
-    if(interfaceKeepData)
-      fetch.arbitration.haltItself setWhen(fetch.arbitration.isValid && !iBus.rsp.ready)
-    else
-      fetch.arbitration.haltItself setWhen(fetch.arbitration.isValid && !iBus.rsp.ready && !rspBuffer.valid)
-
-    decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck,decode.input(INSTRUCTION),fetch.output(INSTRUCTION))
-    decode.insert(INSTRUCTION_READY) := True
-
-    if(catchAccessFault){
-      decodeExceptionPort.valid := decode.arbitration.isValid && decode.input(IBUS_ACCESS_ERROR)
-      decodeExceptionPort.code  := 1
-      decodeExceptionPort.badAddr := decode.input(PC)
     }
   }
 }

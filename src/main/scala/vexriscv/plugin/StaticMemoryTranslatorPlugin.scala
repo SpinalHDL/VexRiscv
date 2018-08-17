@@ -5,14 +5,14 @@ import spinal.core._
 import spinal.lib._
 
 import scala.collection.mutable.ArrayBuffer
-case class StaticMemoryTranslatorPort(bus : MemoryTranslatorBus, stage : Stage)
+case class StaticMemoryTranslatorPort(bus : MemoryTranslatorBus, priority : Int)
 
 class StaticMemoryTranslatorPlugin(ioRange : UInt => Bool) extends Plugin[VexRiscv] with MemoryTranslator {
   val portsInfo = ArrayBuffer[StaticMemoryTranslatorPort]()
 
-  override def newTranslationPort(stage : Stage,args : Any): MemoryTranslatorBus = {
+  override def newTranslationPort(priority : Int,args : Any): MemoryTranslatorBus = {
 //    val exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(stage)
-    val port = StaticMemoryTranslatorPort(MemoryTranslatorBus(),stage)
+    val port = StaticMemoryTranslatorPort(MemoryTranslatorBus(),priority)
     portsInfo += port
     port.bus
   }
@@ -34,6 +34,7 @@ class StaticMemoryTranslatorPlugin(ioRange : UInt => Bool) extends Plugin[VexRis
         port.bus.rsp.allowUser := True
         port.bus.rsp.isIoAccess := ioRange(port.bus.rsp.physicalAddress)
         port.bus.rsp.miss := False
+        port.bus.rsp.hit := True
       }
     }
   }

@@ -9,13 +9,14 @@ import spinal.lib._
 import spinal.lib.bus.amba3.apb._
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.com.jtag.Jtag
-import spinal.lib.com.uart.{Uart, UartCtrlGenerics, UartCtrlMemoryMappedConfig, Apb3UartCtrl}
+import spinal.lib.com.uart.{Apb3UartCtrl, Uart, UartCtrlGenerics, UartCtrlMemoryMappedConfig}
 import spinal.lib.graphic.RgbConfig
-import spinal.lib.graphic.vga.{Vga, Axi4VgaCtrlGenerics, Axi4VgaCtrl}
+import spinal.lib.graphic.vga.{Axi4VgaCtrl, Axi4VgaCtrlGenerics, Vga}
 import spinal.lib.io.TriStateArray
 import spinal.lib.memory.sdram._
-import spinal.lib.soc.pinsec.{PinsecTimerCtrlExternal, PinsecTimerCtrl}
-import spinal.lib.system.debugger.{SystemDebugger, JtagBridge, JtagAxi4SharedDebugger, SystemDebuggerConfig}
+import spinal.lib.misc.HexTools
+import spinal.lib.soc.pinsec.{PinsecTimerCtrl, PinsecTimerCtrlExternal}
+import spinal.lib.system.debugger.{JtagAxi4SharedDebugger, JtagBridge, SystemDebugger, SystemDebuggerConfig}
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -53,6 +54,8 @@ object BrieyConfig{
         //            catchAccessFault = true
         //          ),
         new IBusCachedPlugin(
+          resetVector = 0x80000000l,
+          prediction = STATIC,
           config = InstructionCacheConfig(
             cacheSize = 4096,
             bytePerLine =32,
@@ -64,7 +67,8 @@ object BrieyConfig{
             catchAccessFault = true,
             catchMemoryTranslationMiss = true,
             asyncTagMemory = false,
-            twoCycleRam = true
+            twoCycleRam = true,
+            twoCycleCache = true
           )
           //            askMemoryTranslation = true,
           //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
@@ -122,8 +126,7 @@ object BrieyConfig{
         ),
         new BranchPlugin(
           earlyBranch = false,
-          catchAddressMisaligned = true,
-          prediction = STATIC
+          catchAddressMisaligned = true
         ),
         new CsrPlugin(
           config = CsrPluginConfig(

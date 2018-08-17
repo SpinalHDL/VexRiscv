@@ -242,10 +242,10 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
           memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(6) | U(4)).resized
           memoryExceptionPort.valid := input(ALIGNEMENT_FAULT)
         } else if(!catchAddressMisaligned){
-          memoryExceptionPort.valid := dBus.rsp.ready && dBus.rsp.error
+          memoryExceptionPort.valid := dBus.rsp.ready && dBus.rsp.error && !input(INSTRUCTION)(5)
           memoryExceptionPort.code  := 5
         } else {
-          memoryExceptionPort.valid := dBus.rsp.ready && dBus.rsp.error
+          memoryExceptionPort.valid := dBus.rsp.ready && dBus.rsp.error && !input(INSTRUCTION)(5)
           memoryExceptionPort.code  := 5
           when(input(ALIGNEMENT_FAULT)){
             memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(6) | U(4)).resized
@@ -287,7 +287,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Bool
       }
 
       if(!earlyInjection)
-        assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
+        assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow writeback stage stall when read happend")
 
       //formal
       insert(FORMAL_MEM_RDATA) := input(MEMORY_READ_DATA)

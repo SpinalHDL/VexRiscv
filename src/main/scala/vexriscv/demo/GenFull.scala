@@ -17,6 +17,7 @@ object GenFull extends App{
           relaxedPcCalculation = false
         ),
         new IBusCachedPlugin(
+          prediction = DYNAMIC,
           config = InstructionCacheConfig(
             cacheSize = 4096,
             bytePerLine =32,
@@ -28,7 +29,8 @@ object GenFull extends App{
             catchAccessFault = true,
             catchMemoryTranslationMiss = true,
             asyncTagMemory = false,
-            twoCycleRam = true
+            twoCycleRam = true,
+            twoCycleCache = true
           ),
           memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
             portTlbSize = 4
@@ -84,8 +86,7 @@ object GenFull extends App{
         new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
           earlyBranch = false,
-          catchAddressMisaligned = true,
-          prediction = DYNAMIC
+          catchAddressMisaligned = true
         ),
         new YamlPlugin("cpu0.yaml")
       )

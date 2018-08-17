@@ -8,7 +8,9 @@ MUL?=yes
 DIV?=yes
 CSR?=yes
 MMU?=yes
+SEED?=no
 ATOMIC?=no
+NO_STALL?=no
 DEBUG_PLUGIN?=STD
 DEBUG_PLUGIN_EXTERNAL?=no
 CUSTOM_SIMD_ADD?=no
@@ -21,6 +23,8 @@ TRACE_WITH_TIME=no
 REF_TIME=no
 THREAD_COUNT?=4
 MTIME_INSTR_FACTOR?=no
+COMPRESSED?=no
+STOP_ON_ERROR?=no
 
 
 ADDCFLAGS += -CFLAGS -DIBUS_${IBUS}
@@ -30,13 +34,33 @@ ADDCFLAGS += -CFLAGS -pthread
 
 ADDCFLAGS += -CFLAGS -DTHREAD_COUNT=${THREAD_COUNT}
 
+ifeq ($(COMPRESSED),yes)
+	ADDCFLAGS += -CFLAGS -DCOMPRESSED
+endif
+
 ifeq ($(DHRYSTONE),yes)
 	ADDCFLAGS += -CFLAGS -DDHRYSTONE
+endif
+
+ifeq ($(STOP_ON_ERROR),yes)
+	ADDCFLAGS += -CFLAGS -DSTOP_ON_ERROR
+endif
+
+
+ifeq ($(NO_STALL),yes)
+	ADDCFLAGS += -CFLAGS -DSTALL=0
+else
+    ADDCFLAGS += -CFLAGS -DSTALL=1
 endif
 
 ifneq ($(MTIME_INSTR_FACTOR),no)
 	ADDCFLAGS += -CFLAGS -DMTIME_INSTR_FACTOR=${MTIME_INSTR_FACTOR}
 endif
+
+ifneq ($(SEED),no)
+	ADDCFLAGS += -CFLAGS -DSEED=${SEED}
+endif
+
 
 ifeq ($(TRACE),yes)
 	VERILATOR_ARGS += --trace
@@ -104,6 +128,12 @@ endif
 ADDCFLAGS += -CFLAGS -DTRACE_START=${TRACE_START}
 ifeq ($(FREERTOS),yes)
 	ADDCFLAGS += -CFLAGS -DFREERTOS
+	ADDCFLAGS += -CFLAGS -DFREERTOS_COUNT=99999
+else
+ifneq ($(FREERTOS),no)
+    ADDCFLAGS += -CFLAGS -DFREERTOS
+    ADDCFLAGS += -CFLAGS -DFREERTOS_COUNT=$(FREERTOS)
+endif
 endif
 
 all: clean run
@@ -117,7 +147,7 @@ verilate: ../../../../VexRiscv.v
 	verilator -cc  ../../../../VexRiscv.v  -O3 -CFLAGS -std=c++11 -LDFLAGS -pthread  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-UNOPTFLAT -Wno-WIDTH --x-assign unique --exe main.cpp
  	
 compile: verilate
-	make  -j  -C obj_dir/ -f VVexRiscv.mk VVexRiscv
+	make  -j${THREAD_COUNT} -C obj_dir/ -f VVexRiscv.mk VVexRiscv
  	
 clean:
 	rm -rf obj_dir

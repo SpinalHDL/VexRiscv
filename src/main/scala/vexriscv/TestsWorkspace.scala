@@ -31,32 +31,40 @@ object TestsWorkspace {
     SpinalConfig(mergeAsyncProcess = false).generateVerilog {
       val configFull = VexRiscvConfig(
         plugins = List(
-          new PcManagerSimplePlugin(
+          new IBusSimplePlugin(
             resetVector = 0x80000000l,
-            relaxedPcCalculation = false
+            relaxedPcCalculation = false,
+            relaxedBusCmdValid = false,
+            prediction = NONE,
+            historyRamSizeLog2 = 10,
+            catchAccessFault = true,
+            compressedGen = true,
+            busLatencyMin = 1,
+            injectorStage = true
           ),
-//          new IBusSimplePlugin(
-//            interfaceKeepData = false,
-//            catchAccessFault = true
+//          new IBusCachedPlugin(
+//            resetVector = 0x80000000l,
+//            compressedGen = true,
+//            prediction = DYNAMIC_TARGET,
+//            injectorStage = true,
+//            config = InstructionCacheConfig(
+//              cacheSize = 1024*16,
+//              bytePerLine = 32,
+//              wayCount = 1,
+//              addressWidth = 32,
+//              cpuDataWidth = 32,
+//              memDataWidth = 32,
+//              catchIllegalAccess = true,
+//              catchAccessFault = true,
+//              catchMemoryTranslationMiss = true,
+//              asyncTagMemory = false,
+//              twoCycleRam = false,
+//              twoCycleCache = true
+//            ),
+//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//              portTlbSize = 4
+//            )
 //          ),
-          new IBusCachedPlugin(
-            config = InstructionCacheConfig(
-              cacheSize = 1024*16,
-              bytePerLine = 32,
-              wayCount = 1,
-              addressWidth = 32,
-              cpuDataWidth = 32,
-              memDataWidth = 32,
-              catchIllegalAccess = true,
-              catchAccessFault = true,
-              catchMemoryTranslationMiss = true,
-              asyncTagMemory = false,
-              twoCycleRam = false
-            ),
-            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-              portTlbSize = 4
-            )
-          ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = true,
 //            catchAccessFault = true,
@@ -94,13 +102,13 @@ object TestsWorkspace {
           ),
           new RegFilePlugin(
             regFileReadyKind = plugin.ASYNC,
-            zeroBoot = false
+            zeroBoot = true
           ),
           new IntAluPlugin,
           new SrcPlugin(
             separatedAddSub = false
           ),
-          new FullBarrelShifterPlugin(earlyInjection = true),
+          new FullBarrelShifterPlugin(earlyInjection = false),
   //        new LightShifterPlugin,
           new HazardSimplePlugin(
             bypassExecute           = true,
@@ -113,9 +121,9 @@ object TestsWorkspace {
           ),
   //        new HazardSimplePlugin(false, true, false, true),
   //        new HazardSimplePlugin(false, false, false, false),
-//          new MulPlugin,
+          new MulPlugin,
           new MulDivIterativePlugin(
-            genMul = true,
+            genMul = false,
             genDiv = true,
             mulUnrollFactor = 32,
             divUnrollFactor = 1
@@ -124,113 +132,14 @@ object TestsWorkspace {
           new CsrPlugin(CsrPluginConfig.all(0x80000020l).copy(deterministicInteruptionEntry = false)),
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
-            earlyBranch = true,
-            catchAddressMisaligned = true,
-            prediction = DYNAMIC_TARGET,
-            historyRamSizeLog2 = 8
+            earlyBranch = false,
+            catchAddressMisaligned = true
           ),
           new YamlPlugin("cpu0.yaml")
         )
       )
 
 
-      val configLight = VexRiscvConfig(
-        plugins = List(
-          new PcManagerSimplePlugin(0x00000000l, false),
-          new IBusSimplePlugin(
-            interfaceKeepData = true,
-            catchAccessFault = false
-          ),
-
-          new DBusSimplePlugin(
-            catchAddressMisaligned = false,
-            catchAccessFault = false
-          ),
-          new DecoderSimplePlugin(
-            catchIllegalInstruction = false
-          ),
-          new RegFilePlugin(
-            regFileReadyKind = plugin.ASYNC,
-            zeroBoot = false
-          ),
-          new IntAluPlugin,
-          new SrcPlugin(
-            separatedAddSub = false
-          ),
-  //        new FullBarrelShifterPlugin,
-          new LightShifterPlugin,
-  //        new HazardSimplePlugin(true, true, true, true),
-          //        new HazardSimplePlugin(false, true, false, true),
-          new HazardSimplePlugin(
-            bypassExecute           = false,
-            bypassMemory            = false,
-            bypassWriteBack         = false,
-            bypassWriteBackBuffer   = false,
-            pessimisticUseSrc       = false,
-            pessimisticWriteRegFile = false,
-            pessimisticAddressMatch = false
-          ),
-//          new HazardPessimisticPlugin,
-          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
-  //        new MulPlugin,
-  //        new DivPlugin,
-  //        new MachineCsr(csrConfig),
-          new BranchPlugin(
-            earlyBranch = false,
-            catchAddressMisaligned = false,
-            prediction = NONE
-          )
-        )
-      )
-
-
-
-      val configTest = VexRiscvConfig(
-        plugins = List(
-          new PcManagerSimplePlugin(0x00000000l, true),
-          new IBusSimplePlugin(
-            interfaceKeepData = true,
-            catchAccessFault = true
-          ),
-          new DBusSimplePlugin(
-            catchAddressMisaligned = true,
-            catchAccessFault = true
-          ),
-          new CsrPlugin(CsrPluginConfig.small(0x80000020l)),
-          new DecoderSimplePlugin(
-            catchIllegalInstruction = true
-          ),
-          new RegFilePlugin(
-            regFileReadyKind = plugin.SYNC,
-            zeroBoot = false
-          ),
-          new IntAluPlugin,
-          new SrcPlugin(
-            separatedAddSub = false
-          ),
-          new FullBarrelShifterPlugin,
-  //        new LightShifterPlugin,
-          //        new HazardSimplePlugin(true, true, true, true),
-          //        new HazardSimplePlugin(false, true, false, true),
-          new HazardSimplePlugin(
-            bypassExecute           = false,
-            bypassMemory            = false,
-            bypassWriteBack         = false,
-            bypassWriteBackBuffer   = false,
-            pessimisticUseSrc       = false,
-            pessimisticWriteRegFile = false,
-            pessimisticAddressMatch = false
-          ),
-//          new MulPlugin,
-//          new DivPlugin,
-          //        new MachineCsr(csrConfig),
-          new BranchPlugin(
-            earlyBranch = false,
-            catchAddressMisaligned = true,
-            prediction = NONE
-          )
-        )
-      )
 
       val toplevel = new VexRiscv(configFull)
 //      val toplevel = new VexRiscv(configLight)

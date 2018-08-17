@@ -95,17 +95,13 @@ case class DebugExtensionIo() extends Bundle with IMasterSlave{
 }
 
 
-//Allow to avoid instruction cache plugin to be confused by new instruction poping in the pipeline
-trait InstructionInjector{
-  def isInjecting(stage : Stage) : Bool
-}
 
-class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] with InstructionInjector {
+class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] {
 
   var io : DebugExtensionIo = null
   val injectionAsks = ArrayBuffer[(Stage, Bool)]()
-  var isInjectingOnDecode : Bool = null
-  override def isInjecting(stage: Stage) : Bool = if(stage == pipeline.decode) isInjectingOnDecode else False
+  var injectionPort : Stream[Bits] = null
+
 
   object IS_EBREAK extends Stageable(Bool)
   override def setup(pipeline: VexRiscv): Unit = {
@@ -125,22 +121,23 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
       ALU_CTRL  -> AluCtrlEnum.ADD_SUB //Used to get the PC value in busReadDataReg
     ))
 
-    isInjectingOnDecode = Bool()
+    injectionPort = pipeline.service(classOf[IBusFetcher]).getInjectionPort()
   }
+
 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
 
     val logic = debugClockDomain {pipeline plug new Area{
-      val insertDecodeInstruction = False
+      val iBusFetcher = service(classOf[IBusFetcher])
       val firstCycle = RegNext(False) setWhen (io.bus.cmd.ready)
       val secondCycle = RegNext(firstCycle)
       val resetIt = RegInit(False)
       val haltIt = RegInit(False)
       val stepIt = RegInit(False)
 
-      val isPipActive = RegNext(List(fetch, decode, execute, memory, writeBack).map(_.arbitration.isValid).orR)
+      val isPipActive = RegNext(List(decode,execute, memory, writeBack).map(_.arbitration.isValid).orR)
       val isPipBusy = isPipActive || RegNext(isPipActive)
       val haltedByBreak = RegInit(False)
 
@@ -159,6 +156,9 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
         io.bus.rsp.data(4) := stepIt
       }
 
+      injectionPort.valid := False
+      injectionPort.payload := io.bus.cmd.data
+
       when(io.bus.cmd.valid) {
         switch(io.bus.cmd.address(2 downto 2)) {
           is(0) {
@@ -171,52 +171,70 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
           }
           is(1) {
             when(io.bus.cmd.wr) {
-              insertDecodeInstruction := True
-              decode.arbitration.isValid setWhen (firstCycle)
-              decode.arbitration.haltItself setWhen (secondCycle)
-              io.bus.cmd.ready := !(firstCycle || secondCycle || decode.arbitration.isValid)
+              injectionPort.valid := True
+              io.bus.cmd.ready := injectionPort.ready
             }
           }
         }
       }
 
-      Component.current.addPrePopTask(() => {
-        //Check if the decode instruction is driven by a register
-        val instructionDriver = try {decode.input(INSTRUCTION).getDrivingReg} catch { case _ : Throwable => null}
-        if(instructionDriver != null){ //If yes =>
-          //Insert the instruction by writing the "fetch to decode instruction register",
-          // Work even if it need to cross some hierarchy (caches)
-          instructionDriver.component.rework {
-            when(insertDecodeInstruction.pull()) {
-              instructionDriver := io.bus.cmd.data.pull()
-            }
-          }
-        } else{
-          //Insert the instruction via a mux in the decode stage
-          when(RegNext(insertDecodeInstruction)){
-            decode.input(INSTRUCTION) := RegNext(io.bus.cmd.data)
-          }
+
+
+
+//      Component.current.addPrePopTask(() => {
+//        //Check if the decode instruction is driven by a register
+//        val instructionDriver = try {decode.input(INSTRUCTION).getDrivingReg} catch { case _ : Throwable => null}
+//        if(instructionDriver != null){ //If yes =>
+//          //Insert the instruction by writing the "fetch to decode instruction register",
+//          // Work even if it need to cross some hierarchy (caches)
+//          instructionDriver.component.rework {
+//            when(insertDecodeInstruction.pull()) {
+//              instructionDriver := io.bus.cmd.data.pull()
+//            }
+//          }
+//        } else{
+//          //Insert the instruction via a mux in the decode stage
+//          when(RegNext(insertDecodeInstruction)){
+//            decode.input(INSTRUCTION) := RegNext(io.bus.cmd.data)
+//          }
+//        }
+//      })
+//
+
+      when(execute.input(IS_EBREAK)){
+        when(execute.arbitration.isValid ) {
+          iBusFetcher.flushIt()
+          iBusFetcher.haltIt()
+          decode.arbitration.flushAll := True
         }
-      })
-
-
-      when(execute.arbitration.isFiring && execute.input(IS_EBREAK)) {
-        prefetch.arbitration.haltByOther := True
-        decode.arbitration.flushAll := True
-        haltIt := True
-        haltedByBreak := True
+        when(execute.arbitration.isFiring) {
+          haltIt := True
+          haltedByBreak := True
+        }
       }
 
       when(haltIt) {
-        prefetch.arbitration.haltByOther := True
+        iBusFetcher.haltIt()
+//        decode.arbitration.haltByOther := True
       }
 
-      when(stepIt && prefetch.arbitration.isFiring) {
-        haltIt := True
+      when(stepIt && iBusFetcher.incoming()) {
+        iBusFetcher.haltIt()
+        when(decode.arbitration.isValid) {
+          haltIt := True
+        }
       }
+
       when(stepIt && Cat(pipeline.stages.map(_.arbitration.redoIt)).asBits.orR) {
         haltIt := False
       }
+
+      //Avoid having two C instruction executed in a single step
+      if(pipeline(RVC_GEN)){
+        val cleanStep = RegNext(stepIt && decode.arbitration.isFiring) init(False)
+        decode.arbitration.removeIt setWhen(cleanStep)
+      }
+
       io.resetOut := RegNext(resetIt)
 
       if(serviceExist(classOf[InterruptionInhibitor])) {
@@ -230,8 +248,5 @@ class DebugPlugin(val debugClockDomain : ClockDomain) extends Plugin[VexRiscv] w
         }
       }
     }}
-
-
-    isInjectingOnDecode := RegNext(logic.insertDecodeInstruction) init(False)
   }
 }

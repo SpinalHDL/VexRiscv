@@ -11,8 +11,10 @@ trait RegFileReadKind
 object ASYNC extends RegFileReadKind
 object SYNC extends RegFileReadKind
 
-class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = false) extends Plugin[VexRiscv]{
+class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = false, writeRfInMemoryStage : Boolean = false) extends Plugin[VexRiscv]{
   import Riscv._
+
+  assert(!writeRfInMemoryStage)
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -59,7 +61,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = fals
     }
 
     //Write register file
-    writeBack plug new Area {
+    (if(writeRfInMemoryStage) memory else writeBack) plug new Area {
       import writeBack._
 
       val regFileWrite = global.regFile.writePort.addAttribute(Verilator.public)

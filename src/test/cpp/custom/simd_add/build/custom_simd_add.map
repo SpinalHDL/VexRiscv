@@ -8,12 +8,12 @@ onChipRam        0x0000000000000000 0x0000000000002000 w !xr
 Linker script and memory map
 
 LOAD build/src/crt.o
-LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/rv32i/ilp32/libgcc.a
+LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.2.0/rv32i/ilp32/libgcc.a
 START GROUP
-LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/../../../../riscv64-unknown-elf/lib/rv32i/ilp32/libc.a
-LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/../../../../riscv64-unknown-elf/lib/rv32i/ilp32/libgloss.a
+LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.2.0/../../../../riscv64-unknown-elf/lib/rv32i/ilp32/libc.a
+LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.2.0/../../../../riscv64-unknown-elf/lib/rv32i/ilp32/libgloss.a
 END GROUP
-LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.1.1/rv32i/ilp32/libgcc.a
+LOAD /opt/riscv/bin/../lib/gcc/riscv64-unknown-elf/7.2.0/rv32i/ilp32/libgcc.a
                 0x0000000000000000                . = 0x0
 
 .crt_section    0x0000000000000000       0xd0

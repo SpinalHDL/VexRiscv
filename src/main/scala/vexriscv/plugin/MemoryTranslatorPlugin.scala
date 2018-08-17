@@ -5,7 +5,12 @@ import spinal.core._
 import spinal.lib._
 
 import scala.collection.mutable.ArrayBuffer
-case class MemoryTranslatorPort(bus : MemoryTranslatorBus, stage : Stage, args : MemoryTranslatorPortConfig/*, exceptionBus: Flow[ExceptionCause]*/)
+
+object MemoryTranslatorPort{
+  val PRIORITY_DATA = 1
+  val PRIORITY_INSTRUCTION = 0
+}
+case class MemoryTranslatorPort(bus : MemoryTranslatorBus, priority : Int, args : MemoryTranslatorPortConfig/*, exceptionBus: Flow[ExceptionCause]*/)
 
 case class MemoryTranslatorPortConfig(portTlbSize : Int)
 
@@ -16,9 +21,9 @@ class MemoryTranslatorPlugin(tlbSize : Int,
 
   val portsInfo = ArrayBuffer[MemoryTranslatorPort]()
 
-  override def newTranslationPort(stage : Stage,args : Any): MemoryTranslatorBus = {
+  override def newTranslationPort(priority : Int,args : Any): MemoryTranslatorBus = {
 //    val exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(stage)
-    val port = MemoryTranslatorPort(MemoryTranslatorBus(),stage,args.asInstanceOf[MemoryTranslatorPortConfig]/*,exceptionBus*/)
+    val port = MemoryTranslatorPort(MemoryTranslatorBus(),priority,args.asInstanceOf[MemoryTranslatorPortConfig]/*,exceptionBus*/)
     portsInfo += port
     port.bus
   }
@@ -41,7 +46,7 @@ class MemoryTranslatorPlugin(tlbSize : Int,
     import Riscv._
 
     //Sorted by priority
-    val sortedPortsInfo = portsInfo.sortWith((a,b) => indexOf(a.stage) > indexOf(b.stage))
+    val sortedPortsInfo = portsInfo.sortWith((a,b) => a.priority > b.priority)
 
     case class CacheLine() extends Bundle {
       val valid = Bool
@@ -94,7 +99,7 @@ class MemoryTranslatorPlugin(tlbSize : Int,
         }
 
         sharedMiss.setWhen(sharedIterator >= tlbSize && sharedAccessed === B"00")
-        when(!port.stage.arbitration.isStuck){
+        when(port.bus.end){
           sharedIterator := 0
           sharedMiss.clear()
           sharedAccessAsked.clear()
@@ -108,13 +113,15 @@ class MemoryTranslatorPlugin(tlbSize : Int,
           port.bus.rsp.allowWrite := cacheLine.allowWrite
           port.bus.rsp.allowExecute := cacheLine.allowExecute
           port.bus.rsp.allowUser := cacheLine.allowUser
-          port.stage.arbitration.haltItself setWhen (port.bus.cmd.isValid && !cacheHit && !sharedMiss)
+          port.bus.rsp.hit := cacheHit
+//          port.stage.arbitration.haltItself setWhen (port.bus.cmd.isValid && !cacheHit && !sharedMiss)
         } otherwise {
           port.bus.rsp.physicalAddress := port.bus.cmd.virtualAddress
           port.bus.rsp.allowRead := True
           port.bus.rsp.allowWrite := True
           port.bus.rsp.allowExecute := True
           port.bus.rsp.allowUser := True
+          port.bus.rsp.hit := True
         }
         port.bus.rsp.isIoAccess := ioRange(port.bus.rsp.physicalAddress)
         port.bus.rsp.miss := sharedMiss

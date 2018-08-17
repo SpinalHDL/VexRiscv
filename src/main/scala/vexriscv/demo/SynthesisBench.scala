@@ -101,17 +101,17 @@ object VexRiscvSynthesisBench {
     }
 
 
-    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full)
-//    val rtls = List(noCacheNoMmuMaxPerf, fullNoMmuMaxPerf)
+//    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full)
+val rtls = List(smallestNoCsr)
     //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
 //    val rtls = List(smallAndProductive,  full)
 
-    val targets = XilinxStdTargets(
+    val targets = /*XilinxStdTargets(
       vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
     ) ++ AlteraStdTargets(
       quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin",
       quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin"
-    ) ++  IcestormStdTargets()
+    ) ++  */IcestormStdTargets()
 
 //    val targets = IcestormStdTargets()
     Bench(rtls, targets, "/eda/tmp/")

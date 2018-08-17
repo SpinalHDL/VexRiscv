@@ -278,6 +278,8 @@ object SymplifyBit{
   }
 
 
+  def getPrimeImplicantsByTrue(trueTerms: Seq[Masked], inputWidth : Int) : Seq[Masked] = getPrimeImplicantsByTrueAndDontCare(trueTerms, Nil, inputWidth)
+
   // Return primes implicants for the trueTerms, default value is False.
   // You can insert don't care values by adding non-prime implicants in the trueTerms
   // Will simplify the trueTerms from the most constrained ones to the least constrained ones

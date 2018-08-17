@@ -34,6 +34,7 @@ object VexRiscvAvalonWithIntegratedJtag{
 //            catchAccessFault = false
 //          ),
           new IBusCachedPlugin(
+            prediction = STATIC,
             config = InstructionCacheConfig(
               cacheSize = 4096,
               bytePerLine =32,
@@ -45,7 +46,8 @@ object VexRiscvAvalonWithIntegratedJtag{
               catchAccessFault = true,
               catchMemoryTranslationMiss = true,
               asyncTagMemory = false,
-              twoCycleRam = true
+              twoCycleRam = true,
+              twoCycleCache = true
             )
             //            askMemoryTranslation = true,
             //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
@@ -100,8 +102,7 @@ object VexRiscvAvalonWithIntegratedJtag{
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = false,
-            catchAddressMisaligned = true,
-            prediction = STATIC
+            catchAddressMisaligned = true
           ),
           new CsrPlugin(
             config = CsrPluginConfig(

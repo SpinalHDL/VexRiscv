@@ -34,6 +34,7 @@ object VexRiscvCachedWishboneForSim{
 //            catchAccessFault = false
 //          ),
           new IBusCachedPlugin(
+            prediction = STATIC,
             config = InstructionCacheConfig(
               cacheSize = 4096,
               bytePerLine =32,
@@ -100,8 +101,7 @@ object VexRiscvCachedWishboneForSim{
 //          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = false,
-            catchAddressMisaligned = true,
-            prediction = STATIC
+            catchAddressMisaligned = true
           ),
           new CsrPlugin(
             config = CsrPluginConfig.small(mtvecInit = 0x80000020l)

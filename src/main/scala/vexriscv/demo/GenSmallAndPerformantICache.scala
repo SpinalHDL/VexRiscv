@@ -28,7 +28,8 @@ object GenSmallAndProductiveICache extends App{
             catchAccessFault = false,
             catchMemoryTranslationMiss = false,
             asyncTagMemory = false,
-            twoCycleRam = false
+            twoCycleRam = false,
+            twoCycleCache = true
           )
         ),
         new DBusSimplePlugin(
@@ -60,8 +61,7 @@ object GenSmallAndProductiveICache extends App{
         ),
         new BranchPlugin(
           earlyBranch = false,
-          catchAddressMisaligned = false,
-          prediction = NONE
+          catchAddressMisaligned = false
         ),
         new YamlPlugin("cpu0.yaml")
       )

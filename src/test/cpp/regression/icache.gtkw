@@ -1,0 +1,67 @@
+[*]
+[*] GTKWave Analyzer v3.3.86 (w)1999-2017 BSI
+[*] Wed Apr 11 18:53:23 2018
+[*]
+[dumpfile] "/home/spinalvm/hdl/VexRiscv/src/test/cpp/regression/rv32ui-p-lui.vcd"
+[dumpfile_mtime] "Wed Apr 11 18:52:18 2018"
+[dumpfile_size] 325049
+[savefile] "/home/spinalvm/hdl/VexRiscv/src/test/cpp/regression/icache.gtkw"
+[timestart] 1006
+[size] 1784 950
+[pos] -383 -155
+*-5.000000 1046 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[treeopen] TOP.
+[treeopen] TOP.VexRiscv.
+[sst_width] 370
+[signals_width] 349
+[sst_expanded] 1
+[sst_vpaned_height] 271
+@28
+TOP.VexRiscv.decode_arbitration_isValid
+TOP.VexRiscv.decode_arbitration_redoIt
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_prefetch_haltIt
+@22
+TOP.VexRiscv.iBus_cmd_payload_address[31:0]
+@28
+TOP.VexRiscv.iBus_cmd_payload_size[2:0]
+TOP.VexRiscv.iBus_cmd_ready
+@29
+TOP.VexRiscv.iBus_cmd_valid
+@22
+TOP.VexRiscv.iBus_rsp_payload_data[31:0]
+@28
+TOP.VexRiscv.iBus_rsp_payload_error
+TOP.VexRiscv.iBus_rsp_valid
+[color] 2
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_prefetch_isValid
+[color] 2
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_prefetch_haltIt
+@22
+[color] 2
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_prefetch_pc[31:0]
+@28
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_fetch_isValid
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_fetch_isStuck
+@22
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_fetch_data[31:0]
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_fetch_pc[31:0]
+@28
+[color] 6
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_decode_isValid
+[color] 6
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_decode_cacheMiss
+[color] 6
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_decode_error
+[color] 6
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_decode_illegalAccess
+[color] 6
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_decode_isStuck
+[color] 6
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_decode_isUser
+[color] 6
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_decode_mmuMiss
+@22
+[color] 6
+TOP.VexRiscv.IBusCachedPlugin_cache.io_cpu_decode_pc[31:0]
+[pattern_trace] 1
+[pattern_trace] 0

@@ -182,10 +182,12 @@ public:
 	double cyclesPerSecond = 10e6;
 	double allowedCycles = 0.0;
 	uint32_t bootPc = -1;
-	uint32_t iStall = 1,dStall = 1;
+	uint32_t iStall = STALL,dStall = STALL;
 	#ifdef TRACE
 	VerilatedVcdC* tfp;
 	#endif
+
+	uint32_t seed;
 
 	bool withInstructionReadCheck = true;
 	void setIStall(bool enable) { iStall = enable; }
@@ -199,6 +201,8 @@ public:
 
 
 	Workspace(string name){
+	    //seed = VL_RANDOM_I(32)^VL_RANDOM_I(32)^0x1093472;
+	    //srand48(seed);
     //    setIStall(false);
    //     setDStall(false);
 		staticMutex.lock();
@@ -241,7 +245,7 @@ public:
 
 	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
 		if(addr % 4 != 0) {
-			cout << "Warning, unaligned IBusAccess : " << addr << endl;
+			//cout << "Warning, unaligned IBusAccess : " << addr << endl;
 		//	fail();
 		}
 		*data =     (  (mem[addr + 0] << 0)
@@ -386,10 +390,22 @@ public:
 		#ifdef  REF
 		if(bootPc != -1) top->VexRiscv->core->prefetch_pc = bootPc;
 		#else
-		if(bootPc != -1) top->VexRiscv->prefetch_PcManagerSimplePlugin_pcReg = bootPc;
+		if(bootPc != -1) {
+		    #ifdef IBUS_SIMPLE
+                top->VexRiscv->IBusSimplePlugin_fetchPc_pcReg = bootPc;
+                #ifdef COMPRESSED
+                top->VexRiscv->IBusSimplePlugin_decodePc_pcReg = bootPc;
+                #endif
+            #else
+                top->VexRiscv->IBusCachedPlugin_fetchPc_pcReg = bootPc;
+                #ifdef COMPRESSED
+                top->VexRiscv->IBusCachedPlugin_decodePc_pcReg = bootPc;
+                #endif
+            #endif
+		}
 		#endif
 
-
+        bool failed = false;
 		try {
 			// run simulation for 100 clock periods
 			for (i = 16; i < timeout*2; i+=2) {
@@ -431,19 +447,27 @@ public:
 
 
 
-
-				if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
-					regTraces <<
-						#ifdef TRACE_WITH_TIME
-						currentTime <<
-						 #endif
-						 " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
-				}
+                if(top->VexRiscv->writeBack_arbitration_isFiring){
+                    if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
+                        regTraces <<
+                            #ifdef TRACE_WITH_TIME
+                            currentTime <<
+                             #endif
+                             " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
+                    } else {
+                        regTraces <<
+                                #ifdef TRACE_WITH_TIME
+                                currentTime <<
+                                 #endif
+                                 " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << endl;
+                    }
+                }
 
 				for(SimElement* simElement : simElements) simElement->preCycle();
 
 				dump(i + 1);
 
+                #ifndef COMPRESSED
 				if(withInstructionReadCheck){
 					if(top->VexRiscv->decode_arbitration_isValid && !top->VexRiscv->decode_arbitration_haltItself && !top->VexRiscv->decode_arbitration_flushAll){
 						uint32_t expectedData;
@@ -452,6 +476,7 @@ public:
 						assertEq(top->VexRiscv->decode_INSTRUCTION,expectedData);
 					}
 				}
+				#endif
 
 				checks();
 				//top->eval();
@@ -477,9 +502,10 @@ public:
 			staticMutex.unlock();
 		} catch (const std::exception& e) {
 			staticMutex.lock();
-			cout << "FAIL " <<  name << endl;
+			cout << "FAIL " <<  name << endl; //<<  " seed : " << seed <<
 			cycles += instanceCycles;
 			staticMutex.unlock();
+			failed = true;
 		}
 
 
@@ -489,6 +515,12 @@ public:
 		#ifdef TRACE
 		tfp->close();
 		#endif
+        #ifdef STOP_ON_ERROR
+            if(failed){
+                sleep(1);
+                exit(-1);
+            }
+        #endif
 		return this;
 	}
 };
@@ -498,9 +530,8 @@ public:
 #ifdef IBUS_SIMPLE
 class IBusSimple : public SimElement{
 public:
-	uint32_t inst_next = VL_RANDOM_I(32);
-	bool error_next = false;
-	bool pending = false;
+	uint32_t pendings[256];
+	uint32_t rPtr = 0, wPtr = 0;
 
 	Workspace *ws;
 	VVexRiscv* top;
@@ -511,26 +542,33 @@ public:
 
 	virtual void onReset(){
 		top->iBus_cmd_ready = 1;
-		top->iBus_rsp_ready = 1;
+		top->iBus_rsp_valid = 0;
 	}
 
 	virtual void preCycle(){
-		if (top->iBus_cmd_valid && top->iBus_cmd_ready && !pending) {
+		if (top->iBus_cmd_valid && top->iBus_cmd_ready) {
 			//assertEq(top->iBus_cmd_payload_pc & 3,0);
-			pending = true;
-			ws->iBusAccess(top->iBus_cmd_payload_pc,&inst_next,&error_next);
+			pendings[wPtr] = (top->iBus_cmd_payload_pc);
+			wPtr = (wPtr + 1) & 0xFF;
+			//ws->iBusAccess(top->iBus_cmd_payload_pc,&inst_next,&error_next);
 		}
 	}
 	//TODO doesn't catch when instruction removed ?
 	virtual void postCycle(){
-		top->iBus_rsp_ready = !pending;
-		if(pending && (!ws->iStall || VL_RANDOM_I(7) < 100)){
-			top->iBus_rsp_inst = inst_next;
-			pending = false;
-			top->iBus_rsp_ready = 1;
-			top->iBus_rsp_error = error_next;
+		top->iBus_rsp_valid = 0;
+		if(rPtr != wPtr && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+	        uint32_t inst_next;
+	        bool error_next;
+		    ws->iBusAccess(pendings[rPtr], &inst_next,&error_next);
+        	rPtr = (rPtr + 1) & 0xFF;
+			top->iBus_rsp_payload_inst = inst_next;
+			top->iBus_rsp_valid = 1;
+			top->iBus_rsp_payload_error = error_next;
+		} else {
+		    top->iBus_rsp_payload_inst = VL_RANDOM_I(32);
+		    top->iBus_rsp_payload_error = VL_RANDOM_I(1);
 		}
-		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100 && !pending;
+		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100;
 	}
 };
 #endif
@@ -1402,17 +1440,19 @@ public:
 	}
 
 	virtual void checks(){
-		if(top->VexRiscv->writeBack_INSTRUCTION == 0x00000073){
+		if(top->VexRiscv->writeBack_arbitration_isFiring && top->VexRiscv->writeBack_INSTRUCTION == 0x00000013){
 			uint32_t instruction;
 			bool error;
-			iBusAccess(top->VexRiscv->writeBack_PC, &instruction, &error);
+			Workspace::iBusAccess(top->VexRiscv->writeBack_PC, &instruction, &error);
+			//printf("%x => %x\n", top->VexRiscv->writeBack_PC, instruction );
 			if(instruction == 0x00000073){
 				uint32_t code = top->VexRiscv->RegFilePlugin_regFile[28];
-				if((code & 1) == 0){
+				uint32_t code2 = top->VexRiscv->RegFilePlugin_regFile[3];
+				if((code & 1) == 0 && (code2 & 1) == 0){
 					cout << "Wrong error code"<< endl;
 					fail();
 				}
-				if(code == 1){
+				if(code == 1 || code2 == 1){
 					pass();
 				}else{
 					cout << "Error code " << code/2 << endl;
@@ -1425,6 +1465,7 @@ public:
 	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error){
 		Workspace::iBusAccess(addr,data,error);
 		if(*data == 0x0ff0000f) *data = 0x00000013;
+		if(*data == 0x00000073) *data = 0x00000013;
 	}
 };
 #endif
@@ -1513,9 +1554,10 @@ public:
 
 	uint32_t readCmd(uint32_t size, uint32_t address){
 		accessCmd(false, 2, address, VL_RANDOM_I(32));
-		if(recv(clientSocket, buffer, 4, 0) != 4){
-			printf("Should read 4 bytes");
-			fail();
+		int error;
+		if((error = recv(clientSocket, buffer, 4, 0)) != 4){
+			printf("Should read 4 bytes, had %d", error);
+			while(1);
 		}
 
 		return *((uint32_t*) buffer);
@@ -1558,25 +1600,25 @@ public:
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
 		if((readValue = readCmd(2,debugAddress + 4)) != 0x8000000C){
-			printf("wrong break PC %x\n",readValue);
+			printf("wrong breakA PC %x\n",readValue);
 			clientFail = true; return;
 		}
 
 		writeCmd(2, debugAddress + 4, 0x13 + (1 << 15)); //Read regfile
 		if((readValue = readCmd(2,debugAddress + 4)) != 10){
-			printf("wrong break PC %x\n",readValue);
+			printf("wrong breakB PC %x\n",readValue);
 			clientFail = true; return;
 		}
 
 		writeCmd(2, debugAddress + 4, 0x13 + (2 << 15)); //Read regfile
 		if((readValue = readCmd(2,debugAddress + 4)) != 20){
-			printf("wrong break PC %x\n",readValue);
+			printf("wrong breakC PC %x\n",readValue);
 			clientFail = true; return;
 		}
 
 		writeCmd(2, debugAddress + 4, 0x13 + (3 << 15)); //Read regfile
 		if((readValue = readCmd(2,debugAddress + 4)) != 30){
-			printf("wrong break PC %x\n",readValue);
+			printf("wrong breakD PC %x\n",readValue);
 			clientFail = true; return;
 		}
 
@@ -1588,7 +1630,7 @@ public:
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
 		if((readValue = readCmd(2,debugAddress + 4)) != 0x80000014){
-			printf("wrong break PC 2 %x\n",readValue);
+			printf("wrong breakE PC 3 %x\n",readValue);
 			clientFail = true; return;
 		}
 
@@ -1609,7 +1651,7 @@ public:
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
 		if((readValue = readCmd(2,debugAddress + 4)) != 0x80000024){
-			printf("wrong break PC 2 %x\n",readValue);
+			printf("wrong breakF PC 3 %x\n",readValue);
 			clientFail = true; return;
 		}
 
@@ -1703,10 +1745,12 @@ string riscvTestDiv[] = {
 };
 
 string freeRtosTests[] = {
-		"AltBlock", "AltQTest", "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
+		"AltQTest", "AltBlock",  "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
 		"QueueSet", "recmutex", "semtest", "TaskNotify", "BlockQ", "crhook", "dynamic",
 		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
-		 //"flop", "sp_flop" // <- Simple test
+		//"BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ"
+//		"flop"
+//		 "flop", "sp_flop" // <- Simple test
 		 // "AltBlckQ" ???
 };
 
@@ -1761,6 +1805,9 @@ static void multiThreadedExecute(queue<std::function<void()>> &lambdas){
 
 
 int main(int argc, char **argv, char **env) {
+    #ifdef SEED
+    srand48(SEED);
+    #endif
 	Verilated::randReset(2);
 	Verilated::commandArgs(argc, argv);
 
@@ -1798,6 +1845,7 @@ int main(int argc, char **argv, char **env) {
 			for(const string &name : riscvTestMemory){
 				redo(REDO,RiscvTest(name).run();)
 			}
+
 			#ifdef MUL
 			for(const string &name : riscvTestMul){
 				redo(REDO,RiscvTest(name).run();)
@@ -1809,10 +1857,20 @@ int main(int argc, char **argv, char **env) {
 			}
 			#endif
 
+            #ifdef COMPRESSED
+            redo(REDO,RiscvTest("rv32uc-p-rvc").bootAt(0x800000FCu)->run());
+            #endif
+
 			#ifdef CSR
-				uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
-				8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
-				redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
+			    #ifndef COMPRESSED
+				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
+				    8,6,9,6,10,4,11,4,    12,13,2,   14,2,     15,5,16,17,1 };
+				    redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
+                #else
+				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
+				    8,6,9,6,10,4,11,4,    12,13,   14,2,     15,5,16,17,1 };
+				    redo(REDO,TestX28("machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
+                #endif
 			#endif
 			#ifdef MMU
 				uint32_t mmuRef[] = {1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
@@ -1842,30 +1900,60 @@ int main(int argc, char **argv, char **env) {
 
 		#ifdef DHRYSTONE
 			Dhrystone("dhrystoneO3_Stall","dhrystoneO3",true,true).run(1.5e6);
+			#if defined(COMPRESSED)
+			    Dhrystone("dhrystoneO3C_Stall","dhrystoneO3C",true,true).run(1.5e6);
+            #endif
 			#if defined(MUL) && defined(DIV)
 				Dhrystone("dhrystoneO3M_Stall","dhrystoneO3M",true,true).run(1.9e6);
+				#if defined(COMPRESSED)
+				    Dhrystone("dhrystoneO3MC_Stall","dhrystoneO3MC",true,true).run(1.9e6);
+				#endif
 			#endif
 			Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.9e6);
+			#if defined(COMPRESSED)
+			Dhrystone("dhrystoneO3C","dhrystoneO3C",false,false).run(1.9e6);
+            #endif
 			#if defined(MUL) && defined(DIV)
 				Dhrystone("dhrystoneO3M","dhrystoneO3M",false,false).run(1.9e6);
+				#if defined(COMPRESSED)
+				    Dhrystone("dhrystoneO3MC","dhrystoneO3MC",false,false).run(1.9e6);
+				#endif
 			#endif
 		#endif
 
 
 		#ifdef FREERTOS
+		    #ifdef SEED
+            srand48(SEED);
+            #endif
 			//redo(1,Workspace("freeRTOS_demo").loadHex("../../resources/hex/freeRTOS_demo.hex")->bootAt(0x80000000u)->run(100e6);)
-			queue<std::function<void()>> tasks;
+			vector <std::function<void()>> tasks;
 
-			for(const string &name : freeRtosTests){
-				tasks.push([=]() { Workspace(name + "_rv32i_O0").loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
-				tasks.push([=]() { Workspace(name + "_rv32i_O3").loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
-				#if defined(MUL) && defined(DIV)
-				tasks.push([=]() { Workspace(name + "_rv32im_O0").loadHex("../../resources/freertos/" + name + "_rv32im_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
-				tasks.push([=]() { Workspace(name + "_rv32im_O3").loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
-				#endif
+            /*for(int redo = 0;redo < 4;redo++)*/{
+                for(const string &name : freeRtosTests){
+                    tasks.push_back([=]() { Workspace(name + "_rv32i_O0").loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                    tasks.push_back([=]() { Workspace(name + "_rv32i_O3").loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                    #ifdef COMPRESSED
+                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O0").loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O3").loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                    #endif
+                    #if defined(MUL) && defined(DIV)
+                        #ifdef COMPRESSED
+                            tasks.push_back([=]() { Workspace(name + "_rv32imac_O3").loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                        #else
+                            tasks.push_back([=]() { Workspace(name + "_rv32im_O3").loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                        #endif
+                    #endif
+                }
 			}
 
-			multiThreadedExecute(tasks);
+            while(tasks.size() > FREERTOS_COUNT){
+                tasks.erase(tasks.begin() + (VL_RANDOM_I(32)%tasks.size()));
+            }
+
+
+            queue <std::function<void()>> tasksSelected(std::deque<std::function<void()>>(tasks.begin(), tasks.end()));
+			multiThreadedExecute(tasksSelected);
 		#endif
 	}
 
