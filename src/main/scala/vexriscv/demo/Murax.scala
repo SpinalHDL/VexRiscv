@@ -57,7 +57,7 @@ object MuraxConfig{
         relaxedPcCalculation = true,
         prediction = NONE,
         catchAccessFault = false,
-        compressedGen = true
+        compressedGen = false
       ),
       new DBusSimplePlugin(
         catchAddressMisaligned = false,
