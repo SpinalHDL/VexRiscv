@@ -462,7 +462,7 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "yes")), //todo restore yes to 4 ?
+    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "4")), 
     new DecoderDimension,
     new DebugDimension
   )
@@ -522,10 +522,9 @@ class TestIndividualFeatures extends FunSuite {
 //  val seed = -2412372746600605141l
 
 
-//  val testId = Some(mutable.HashSet[Int](32))
-//  val seed = -1807241812308067688l
+//  val testId = Some(mutable.HashSet[Int](6))
+//  val seed = 157974189776419693l
 
-  //TODO restore all mai  n.cpp rtos tests and restore config count in gcloud
 
   val rand = new Random(seed)
 
@@ -533,7 +532,7 @@ class TestIndividualFeatures extends FunSuite {
     println(s"MAIN_SEED=$seed")
   }
   println(s"Seed=$seed")
-  for(i <- 0 until sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "200").toInt){
+  for(i <- 0 until sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "100").toInt){
     var positions : List[VexRiscvPosition] = null
     val universe = VexRiscvUniverse.universes.filter(e => rand.nextBoolean()) :+ VexRiscvUniverse.CATCH_ALL //TODO
 
@@ -545,7 +544,7 @@ class TestIndividualFeatures extends FunSuite {
     if(testId.isEmpty || testId.get.contains(i))
       doTest(positions," random_" + i + "_", testSeed)
   }
-//TODO main.cpp freertos
+
 //  println(s"${usedPositions.size}/$positionsCount positions")
 
 //  for (dimension <- dimensions) {
