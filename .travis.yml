@@ -11,6 +11,8 @@ scala:
 sbt_args: -no-colors -J-Xss2m
 
 script:
+  - export VEXRISCV_REGRESSION_CONFIG_COUNT=100
+  - export VEXRISCV_REGRESSION_FREERTOS_COUNT=no
   - sbt -jvm-opts travis/jvmopts.compile compile
   - sbt -jvm-opts travis/jvmopts.test test
 
