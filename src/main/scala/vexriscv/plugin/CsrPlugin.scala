@@ -382,6 +382,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         when(enable && decode.arbitration.isValid){
           decode.arbitration.haltByOther := True
         }
+        //TODO !!! can lose instruction that had exception !!!!
         val done = !List(execute, memory, writeBack).map(_.arbitration.isValid).orR && fetcher.pcValid(mepcCaptureStage)
       }
 
@@ -492,8 +493,9 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
       //Interrupt/Exception entry logic
       pipelineLiberator.enable setWhen(interrupt)
-
-      when(exception || (interrupt && pipelineLiberator.done)){
+      val interruptCode = ((mip.MEIP && mie.MEIE) ? U(11) | ((mip.MSIP && mie.MSIE) ? U(3) | U(7))).addTag(Verilator.public)
+      val interruptJump = False.addTag(Verilator.public)
+      when(exception || (interrupt && pipelineLiberator.done)){ //TODO remove interrupt &&
         jumpInterface.valid := True
         jumpInterface.payload := mtvec
         memory.arbitration.flushAll := True
@@ -503,7 +505,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         mstatus.MPP  := privilege
         mepc := mepcCaptureStage.input(PC)
         mcause.interrupt := interrupt
-        mcause.exceptionCode := ((mip.MEIP && mie.MEIE) ? U(11) | ((mip.MSIP && mie.MSIE) ? U(3) | U(7)))
+        mcause.exceptionCode := interruptCode
+        interruptJump := interrupt;
       }
 
       when(RegNext(exception)){
