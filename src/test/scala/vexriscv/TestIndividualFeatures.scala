@@ -513,8 +513,8 @@ class TestIndividualFeatures extends FunSuite {
 
 //  dimensions.foreach(d => d.positions.foreach(p => p.dimension = d))
 
-//  val testId : Option[mutable.HashSet[Int]] = None
-//  val seed = Random.nextLong()
+  val testId : Option[mutable.HashSet[Int]] = None
+  val seed = Random.nextLong()
 
 //  val testId = Some(mutable.HashSet(18,34,77,85,118,129,132,134,152,167,175,188,191,198,199)) //37/29 sp_flop_rv32i_O3
 //val testId = Some(mutable.HashSet(18))
@@ -522,8 +522,8 @@ class TestIndividualFeatures extends FunSuite {
 //  val seed = -2412372746600605141l
 
 
-  val testId = Some(mutable.HashSet[Int](15))
-  val seed = -8861778219266506530l
+//  val testId = Some(mutable.HashSet[Int](15))
+//  val seed = -8861778219266506530l
 
 
   val rand = new Random(seed)

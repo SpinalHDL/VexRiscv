@@ -6,8 +6,8 @@ from sys import argv
 from gcloud import GCInstance
 
 gci = GCInstance("vexriscv")
-gci.create("n1-standard-1")
-#gci.create("n1-highcpu-8")
+#gci.create("n1-standard-1")
+gci.create("n1-highcpu-8")
 gci.start()
 gci.stopHours(20)
 gci.stopScript("src/test/python/gcloud/stopScript.sh")

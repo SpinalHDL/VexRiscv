@@ -13,7 +13,7 @@ object GenSmallAndProductiveICache extends App{
     config = VexRiscvConfig(
       plugins = List(
         new PcManagerSimplePlugin(
-          resetVector = 0x00000000l,
+          resetVector = 0x80000000l,
           relaxedPcCalculation = false
         ),
         new IBusCachedPlugin(
@@ -42,7 +42,7 @@ object GenSmallAndProductiveICache extends App{
         ),
         new RegFilePlugin(
           regFileReadyKind = plugin.SYNC,
-          zeroBoot = false
+          zeroBoot = true
         ),
         new IntAluPlugin,
         new SrcPlugin(

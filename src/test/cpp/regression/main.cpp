@@ -346,7 +346,20 @@ public:
 		#define i32_sb_imm ((iBits(8, 4) << 1) + (iBits(25,6) << 5) + (iBits(7,1) << 11) + (iSign() << 12))
 		#define i32_csr iBits(20, 12)
 		#define i32_func3 iBits(12, 3)
-
+		#define i16_addi4spn_imm ((iBits(6, 1) << 2) + (iBits(5, 1) << 3) + (iBits(11, 2) << 4) + (iBits(7, 4) << 6))
+		#define i16_lw_imm ((iBits(6, 1) << 2) + (iBits(10, 3) << 3) + (iBits(5, 1) << 6))
+		#define i16_addr2 (iBits(2,3) + 8)
+		#define i16_addr1 (iBits(7,3) + 8)
+		#define i16_rf1 regs[i16_addr1]
+		#define i16_rf2 regs[i16_addr2]
+		#define rf_sp regs[2]
+		#define i16_imm (iBits(2, 5) + (iBitsSigned(12, 1) << 5))
+		#define i16_j_imm ((iBits(3, 3) << 1) + (iBits(11, 1) << 4) + (iBits(2, 1) << 5) + (iBits(7, 1) << 6) + (iBits(6, 1) << 7) + (iBits(9, 2) << 8) + (iBits(8, 1) << 10) + (iBitsSigned(12, 1) << 11))
+		#define i16_addi16sp_imm ((iBits(6, 1) << 4) + (iBits(2, 1) << 5) + (iBits(5, 1) << 6) + (iBits(3, 2) << 7) + (iBitsSigned(12, 1) << 9))
+		#define i16_zimm (iBits(2, 5))
+		#define i16_b_imm ((iBits(3, 2) << 1) + (iBits(10, 2) << 3) + (iBits(2, 1) << 5) + (iBits(5, 2) << 6) + (iBitsSigned(12, 1) << 8))
+		#define i16_lwsp_imm ((iBits(4, 3) << 2) + (iBits(12, 1) << 5) + (iBits(2, 2) << 6))
+		#define i16_swsp_imm ((iBits(9, 4) << 2) + (iBits(7, 2) << 6))
 		uint32_t i;
 		uint32_t u32Buf;
 		if (pc & 2) {
@@ -360,7 +373,7 @@ public:
 		} else {
 			iRead(pc, &i);
 		}
-		if (i & 0x3 == 0x3) {
+		if ((i & 0x3) == 0x3) {
 			//32 bit
 			switch (i & 0x7F) {
 			case 0x37:rfWrite(rd32, i & 0xFFFFF000);pcWrite(pc + 4);break; // LUI
@@ -482,9 +495,64 @@ public:
 			default: decodingError(); break;
 			}
 		} else {
-			//16 bit
-			decodingError();
+			switch((iBits(0, 2) << 3) + iBits(13, 3)){
+			case 0: rfWrite(i16_addr2, rf_sp + i16_addi4spn_imm); pcWrite(pc + 2); break;
+			case 2:  {
+				uint32_t data;
+				dRead(i16_rf1 + i16_lw_imm, 4, &data);
+				rfWrite(i16_addr2, data); pcWrite(pc + 2);
+				break;
+			}
+			case 6: dWrite(i16_rf1 + i16_lw_imm, 4, i16_rf2); pcWrite(pc + 2); break;
+			case 8: rfWrite(rd32, regs[rd32] + i16_imm); pcWrite(pc + 2); break;
+			case 9: rfWrite(1, pc + 2);pcWrite(pc + i16_j_imm); break;
+			case 10: rfWrite(rd32, i16_imm);pcWrite(pc + 2); break;
+			case 11:
+				if(rd32 == 2) { rfWrite(2, rf_sp + i16_addi16sp_imm);pcWrite(pc + 2);  }
+				else {  		rfWrite(rd32, i16_imm << 12);pcWrite(pc + 2);  } break;
+			case 12:
+				switch(iBits(10,2)){
+				case 0: rfWrite(i16_addr1, uint32_t(i16_rf1) >> i16_zimm); pcWrite(pc + 2);break;
+				case 1: rfWrite(i16_addr1, i16_rf1 >> i16_zimm); pcWrite(pc + 2);break;
+				case 2: rfWrite(i16_addr1, i16_rf1 & i16_imm); pcWrite(pc + 2);break;
+				case 3:
+					switch(iBits(5,2)){
+					case 0: rfWrite(i16_addr1, i16_rf1 - i16_rf2); pcWrite(pc + 2);break;
+					case 1: rfWrite(i16_addr1, i16_rf1 ^ i16_rf2); pcWrite(pc + 2);break;
+					case 2: rfWrite(i16_addr1, i16_rf1 | i16_rf2); pcWrite(pc + 2);break;
+					case 3: rfWrite(i16_addr1, i16_rf1 & i16_rf2); pcWrite(pc + 2);break;
+					}
+					break;
+				}
+				break;
+			case 13: pcWrite(pc + i16_j_imm); break;
+			case 14: pcWrite(i16_rf1 == 0 ? pc + i16_b_imm : pc + 2); break;
+			case 15: pcWrite(i16_rf1 != 0 ? pc + i16_b_imm : pc + 2); break;
+			case 16: rfWrite(rd32, regs[rd32] << i16_zimm); pcWrite(pc + 2); break;
+			case 18:{
+				uint32_t data;
+				dRead(rf_sp + i16_lwsp_imm, 4, &data);
+				rfWrite(rd32, data); pcWrite(pc + 2);  break;
+			}
+			case 20:
+				if(i & 0x1000){
+					if(iBits(2,10) == 0){
 
+					} else if(iBits(2,5) == 0){
+						rfWrite(1, pc + 2); pcWrite(regs[rd32] & ~1);
+					} else {
+						rfWrite(rd32, regs[rd32] + regs[iBits(2,5)]); pcWrite(pc + 2);
+					}
+				} else {
+					if(iBits(2,5) == 0){
+						pcWrite(regs[rd32] & ~1);
+					} else {
+						rfWrite(rd32, regs[iBits(2,5)]); pcWrite(pc + 2);
+					}
+				}
+				break;
+			case 22: dWrite(rf_sp + i16_swsp_imm, 4, regs[iBits(2,5)]); pcWrite(pc + 2); break;
+			}
 		}
 	}
 };
@@ -517,6 +585,7 @@ public:
 	uint64_t mTime = 0;
 	VVexRiscv* top;
 	bool resetDone = false;
+	bool riscvRefEnable = false;
 	uint64_t i;
 	double cyclesPerSecond = 10e6;
 	double allowedCycles = 0.0;
@@ -657,8 +726,13 @@ public:
     Workspace* bootAt(uint32_t pc) {
     	bootPc = pc;
     	riscvRef.pc = pc;
+		return this;
     }
 
+    Workspace* withRiscvRef(){
+    	riscvRefEnable = true;
+		return this;
+    }
 
 	void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
 		if(addr % 4 != 0) {
@@ -883,17 +957,18 @@ public:
 				top->clk = 0;
 				top->eval();
 
-
-				if(top->VexRiscv->CsrPlugin_interruptJump){
-					riscvRef.exception(true, top->VexRiscv->CsrPlugin_interruptCode);
-				}
+				#ifdef CSR
+					if(top->VexRiscv->CsrPlugin_interruptJump){
+						if(riscvRefEnable) riscvRef.exception(true, top->VexRiscv->CsrPlugin_interruptCode);
+					}
+				#endif
                 if(top->VexRiscv->writeBack_arbitration_isFiring){
-                   	if(top->VexRiscv->writeBack_PC != riscvRef.pc){
+                   	if(riscvRefEnable && top->VexRiscv->writeBack_PC != riscvRef.pc){
 						cout << "pc missmatch" << endl;
 						fail();
 					}
 
-                	riscvRef.step();
+                   	if(riscvRefEnable) riscvRef.step();
 
 
 
@@ -917,8 +992,7 @@ public:
                                  #endif
                                  " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << endl;
                     }
-
-                    if(	rfWriteValid != riscvRef.rfWriteValid ||
+					if(riscvRefEnable) if(rfWriteValid != riscvRef.rfWriteValid ||
 						(rfWriteValid && (rfWriteAddress!= riscvRef.rfWriteAddress || rfWriteData!= riscvRef.rfWriteData))){
                     	cout << "regFile write missmatch at " << endl;
                     	fail();
@@ -1936,6 +2010,7 @@ public:
 	Dhrystone(string name,string hexName,bool iStall, bool dStall) : Workspace(name) {
 		setIStall(iStall);
 		setDStall(dStall);
+		withRiscvRef();
 		loadHex("../../resources/hex/" + hexName + ".hex");
 		this->hexName = hexName;
 	}
@@ -2206,23 +2281,23 @@ string riscvTestDiv[] = {
 };
 
 string freeRtosTests[] = {
-    "test1","test1","test1","test1","test1","test1","test1","test1",
-    "test1","test1","test1","test1","test1","test1","test1","test1",
-    "test1","test1","test1","test1","test1","test1","test1","test1",
-    "test1","test1","test1","test1","test1","test1","test1","test1",
-    "test1","test1","test1","test1","test1","test1","test1","test1",
-    "test1","test1","test1","test1","test1","test1","test1","test1",
-    "test1","test1","test1","test1","test1","test1","test1","test1",
-    "test1","test1","test1","test1","test1","test1","test1","test1",
-    "test1","test1","test1","test1","test1","test1","test1","test1",
-    "test1","test1","test1","test1","test1","test1","test1","test1",
-    "test1","test1","test1","test1","test1","test1","test1","test1",
-    "test1","test1","test1","test1","test1","test1","test1","test1",
-    "test1","test1","test1","test1","test1","test1","test1","test1"
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1"
 
-		/*"AltQTest", "AltBlock",  "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
+		"AltQTest", "AltBlock",  "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
 		"QueueSet", "recmutex", "semtest", "TaskNotify", "BlockQ", "crhook", "dynamic",
-		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"*/
+		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
 		//"BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ"
 //		"flop"
 //		 "flop", "sp_flop" // <- Simple test
@@ -2318,7 +2393,7 @@ int main(int argc, char **argv, char **env) {
 
 		#ifdef ISA_TEST
 
-//			redo(REDO,TestA().run();)
+		//	redo(REDO,TestA().run();)
 
 
 
@@ -2414,17 +2489,17 @@ int main(int argc, char **argv, char **env) {
 
             /*for(int redo = 0;redo < 4;redo++)*/{
                 for(const string &name : freeRtosTests){
-                    //tasks.push_back([=]() { Workspace(name + "_rv32i_O0").loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
-                    //tasks.push_back([=]() { Workspace(name + "_rv32i_O3").loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                    tasks.push_back([=]() { Workspace(name + "_rv32i_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                    tasks.push_back([=]() { Workspace(name + "_rv32i_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #ifdef COMPRESSED
-                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O0").loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
-                 //       tasks.push_back([=]() { Workspace(name + "_rv32ic_O3").loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
+                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #endif
                     #if defined(MUL) && defined(DIV)
                         #ifdef COMPRESSED
-                     //       tasks.push_back([=]() { Workspace(name + "_rv32imac_O3").loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                            tasks.push_back([=]() { Workspace(name + "_rv32imac_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                         #else
-                      //      tasks.push_back([=]() { Workspace(name + "_rv32im_O3").loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                            tasks.push_back([=]() { Workspace(name + "_rv32im_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                         #endif
                     #endif
                 }

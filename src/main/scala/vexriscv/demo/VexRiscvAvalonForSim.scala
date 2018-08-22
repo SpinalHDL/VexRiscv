@@ -82,7 +82,7 @@ object VexRiscvAvalonForSim{
           ),
           new RegFilePlugin(
             regFileReadyKind = plugin.SYNC,
-            zeroBoot = false
+            zeroBoot = true
           ),
           new IntAluPlugin,
           new SrcPlugin(

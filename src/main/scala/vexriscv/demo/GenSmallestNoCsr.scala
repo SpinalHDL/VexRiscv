@@ -17,7 +17,7 @@ object GenSmallestNoCsr extends App{
 //        ),
 
         new IBusSimplePlugin(
-          resetVector = 0x00000000l,
+          resetVector = 0x80000000l,
           relaxedPcCalculation = false,
           prediction = NONE,
           catchAccessFault = false,
@@ -33,7 +33,7 @@ object GenSmallestNoCsr extends App{
         ),
         new RegFilePlugin(
           regFileReadyKind = plugin.SYNC,
-          zeroBoot = false,
+          zeroBoot = true,
           writeRfInMemoryStage = false
         ),
         new IntAluPlugin,
