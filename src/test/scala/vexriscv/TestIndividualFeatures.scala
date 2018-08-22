@@ -462,7 +462,7 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "4")),
+    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "yes")),
     new DecoderDimension,
     new DebugDimension
   )
@@ -522,8 +522,8 @@ class TestIndividualFeatures extends FunSuite {
 //  val seed = -2412372746600605141l
 
 
-//  val testId = Some(mutable.HashSet[Int](6))
-//  val seed = 157974189776419693l
+//  val testId = Some(mutable.HashSet[Int](15))
+//  val seed = -8861778219266506530l
 
 
   val rand = new Random(seed)

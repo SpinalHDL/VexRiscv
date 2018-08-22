@@ -1,3 +1,5 @@
+DEBUG=yes
+
 IBUS?=CACHED
 DBUS?=CACHED
 TRACE?=no
@@ -33,6 +35,13 @@ ADDCFLAGS += -CFLAGS -DREDO=${REDO}
 ADDCFLAGS += -CFLAGS -pthread
 
 ADDCFLAGS += -CFLAGS -DTHREAD_COUNT=${THREAD_COUNT}
+
+ifeq ($(DEBUG),yes)
+	ADDCFLAGS += -CFLAGS -O0 -CFLAGS -g
+else
+	ADDCFLAGS += -CFLAGS -O3 
+
+endif
 
 ifeq ($(COMPRESSED),yes)
 	ADDCFLAGS += -CFLAGS -DCOMPRESSED
@@ -144,7 +153,7 @@ run: compile
 verilate: ../../../../VexRiscv.v
 	rm -f VexRiscv.v*.bin
 	cp ../../../../VexRiscv.v*.bin . | true
-	verilator -cc  ../../../../VexRiscv.v  -O3 -CFLAGS -std=c++11 -LDFLAGS -pthread  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-UNOPTFLAT -Wno-WIDTH --x-assign unique --exe main.cpp
+	verilator -cc  ../../../../VexRiscv.v  -O3 -CFLAGS -std=c++11 -LDFLAGS -pthread  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-UNOPTFLAT -Wno-WIDTH --x-assign 0 --exe main.cpp
  	
 compile: verilate
 	make  -j${THREAD_COUNT} -C obj_dir/ -f VVexRiscv.mk VVexRiscv
