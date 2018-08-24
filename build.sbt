@@ -2,7 +2,7 @@ name := "VexRiscv"
 
 organization := "com.github.spinalhdl"
 
-version := "1.0"
+version := "1.0.0"
 
 scalaVersion := "2.11.6"
 
