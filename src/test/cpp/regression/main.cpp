@@ -624,6 +624,8 @@ public:
     		bool error;
     	};
 
+        uint32_t periphWriteTimer = 0;
+    	queue<MemWrite> periphWritesGolden;
     	queue<MemWrite> periphWrites;
     	queue<MemRead> periphRead;
     	Workspace *ws;
@@ -663,11 +665,11 @@ public:
         }
         virtual void dWrite(int32_t address, int32_t size, uint32_t data){
     		if((address & 0xF0000000) == 0xF0000000){
-				MemWrite t = periphWrites.front();
-				if(t.address != address || t.size != size || t.data != data){
-					fail();
-				}
-				periphWrites.pop();
+				MemWrite w;
+				w.address = address;
+				w.size = size;
+				w.data = data;
+				periphWritesGolden.push(w);
     		}else {
     			mem.write(address, size, (uint8_t*)&data);
     		}
@@ -677,6 +679,23 @@ public:
         void step() {
         	rfWriteValid = false;
         	RiscvGolden::step();
+
+        	switch(periphWrites.empty() + uint32_t(periphWritesGolden.empty())*2){
+        	case 3: periphWriteTimer = 0; break;
+        	case 1: case 2: if(periphWriteTimer++ == 20){ cout << "periphWrite timout" << endl; fail();} break;
+        	case 0:
+    			MemWrite t = periphWrites.front();
+    			MemWrite t2 = periphWritesGolden.front();
+    			if(t.address != t2.address || t.size != t2.size || t.data != t2.data){
+    				cout << "periphWrite missmatch" << endl;
+    				fail();
+    			}
+    			periphWrites.pop();
+    			periphWritesGolden.pop();
+    			break;
+        	}
+
+
         }
     };
 
@@ -903,7 +922,7 @@ public:
 		if(bootPc != -1) top->VexRiscv->core->prefetch_pc = bootPc;
 		#else
 		if(bootPc != -1) {
-		    #ifdef IBUS_SIMPLE
+		    #if defined(IBUS_SIMPLE) || defined(IBUS_SIMPLE_WISHBONE)
                 top->VexRiscv->IBusSimplePlugin_fetchPc_pcReg = bootPc;
                 #ifdef COMPRESSED
                 top->VexRiscv->IBusSimplePlugin_decodePc_pcReg = bootPc;
@@ -1261,9 +1280,8 @@ public:
 #endif
 
 
-#ifdef IBUS_CACHED_WISHBONE
+#if defined(IBUS_CACHED_WISHBONE) || defined(IBUS_SIMPLE_WISHBONE)
 #include <queue>
-
 
 class IBusCachedWishbone : public SimElement{
 public:
@@ -1282,21 +1300,24 @@ public:
 	}
 
 	virtual void preCycle(){
-	    top->iBusWishbone_DAT_MISO = VL_RANDOM_I(32);
-		if (top->iBusWishbone_CYC && top->iBusWishbone_STB && top->iBusWishbone_ACK) {
-			if(top->iBusWishbone_WE){
 
-			} else {
-		        bool error;
-			    ws->iBusAccess(top->iBusWishbone_ADR << 2,&top->iBusWishbone_DAT_MISO,&error);
-			    top->iBusWishbone_ERR = error;
-			}
-		}
 	}
 
 	virtual void postCycle(){
+
 		if(ws->iStall)
 			top->iBusWishbone_ACK = VL_RANDOM_I(7) < 100;
+
+        top->iBusWishbone_DAT_MISO = VL_RANDOM_I(32);
+        if (top->iBusWishbone_CYC && top->iBusWishbone_STB && top->iBusWishbone_ACK) {
+            if(top->iBusWishbone_WE){
+
+            } else {
+                bool error;
+                ws->iBusAccess(top->iBusWishbone_ADR << 2,&top->iBusWishbone_DAT_MISO,&error);
+                top->iBusWishbone_ERR = error;
+            }
+        }
 	}
 };
 #endif
@@ -1398,7 +1419,7 @@ public:
 };
 #endif
 
-#ifdef DBUS_CACHED_WISHBONE
+#if defined(DBUS_CACHED_WISHBONE) || defined(DBUS_SIMPLE_WISHBONE)
 #include <queue>
 
 
@@ -1419,22 +1440,23 @@ public:
 	}
 
 	virtual void preCycle(){
-	    top->dBusWishbone_DAT_MISO = VL_RANDOM_I(32);
-		if (top->dBusWishbone_CYC && top->dBusWishbone_STB && top->dBusWishbone_ACK) {
-			if(top->dBusWishbone_WE){
-			    bool dummy;
-                ws->dBusAccess(top->dBusWishbone_ADR << 2 ,1,2,top->dBusWishbone_SEL,&top->dBusWishbone_DAT_MOSI,&dummy);
-			} else {
-			    bool error;
-			    ws->dBusAccess(top->dBusWishbone_ADR << 2,0,2,0xF,&top->dBusWishbone_DAT_MISO,&error);
-                top->dBusWishbone_ERR = error;
-			}
-		}
+
 	}
 
 	virtual void postCycle(){
 		if(ws->iStall)
 			top->dBusWishbone_ACK = VL_RANDOM_I(7) < 100;
+        top->dBusWishbone_DAT_MISO = VL_RANDOM_I(32);
+        if (top->dBusWishbone_CYC && top->dBusWishbone_STB && top->dBusWishbone_ACK) {
+            if(top->dBusWishbone_WE){
+                bool dummy;
+                ws->dBusAccess(top->dBusWishbone_ADR << 2 ,1,2,top->dBusWishbone_SEL,&top->dBusWishbone_DAT_MOSI,&dummy);
+            } else {
+                bool error;
+                ws->dBusAccess(top->dBusWishbone_ADR << 2,0,2,0xF,&top->dBusWishbone_DAT_MISO,&error);
+                top->dBusWishbone_ERR = error;
+            }
+        }
 	}
 };
 #endif
@@ -1871,7 +1893,7 @@ void Workspace::fillSimELements(){
 	#ifdef IBUS_CACHED_AVALON
 		simElements.push_back(new IBusCachedAvalon(this));
 	#endif
-	#ifdef IBUS_CACHED_WISHBONE
+	#if defined(IBUS_CACHED_WISHBONE) || defined(IBUS_SIMPLE_WISHBONE)
 		simElements.push_back(new IBusCachedWishbone(this));
 	#endif
 	#ifdef DBUS_SIMPLE
@@ -1886,7 +1908,7 @@ void Workspace::fillSimELements(){
 	#ifdef DBUS_CACHED_AVALON
 		simElements.push_back(new DBusCachedAvalon(this));
 	#endif
-	#ifdef DBUS_CACHED_WISHBONE
+	#if defined(DBUS_CACHED_WISHBONE) || defined(DBUS_SIMPLE_WISHBONE)
 		simElements.push_back(new DBusCachedWishbone(this));
 	#endif
 	#ifdef DEBUG_PLUGIN_STD
