@@ -11,6 +11,7 @@ import javax.swing._
 
 import spinal.lib.com.jtag.sim.JtagTcp
 import spinal.lib.com.uart.sim.{UartDecoder, UartEncoder}
+import vexriscv.test.{JLedArray, JSwitchArray}
 
 import scala.collection.mutable
 

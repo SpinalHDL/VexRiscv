@@ -218,7 +218,7 @@ class BranchPlugin(earlyBranch : Boolean,
         )
       )
 
-      insert(BRANCH_DO) := input(PREDICTION_HAD_BRANCHED) =/= insert(BRANCH_COND_RESULT)
+      insert(BRANCH_DO) := input(PREDICTION_HAD_BRANCHED) =/= input(BRANCH_COND_RESULT)
 
       //Calculation of the branch target / correction
       val imm = IMM(input(INSTRUCTION))
