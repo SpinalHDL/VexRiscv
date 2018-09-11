@@ -4,7 +4,7 @@ import spinal.core._
 import spinal.lib._
 import vexriscv.{VexRiscv, _}
 
-class MulDivIterativePlugin(genMul : Boolean, genDiv : Boolean, mulUnrollFactor : Int, divUnrollFactor : Int) extends Plugin[VexRiscv]{
+class MulDivIterativePlugin(genMul : Boolean = true, genDiv : Boolean = true, mulUnrollFactor : Int = 1, divUnrollFactor : Int = 1) extends Plugin[VexRiscv]{
   object IS_MUL extends Stageable(Bool)
   object IS_DIV extends Stageable(Bool)
   object IS_REM extends Stageable(Bool)
