@@ -681,18 +681,17 @@ case class IBusSimpleCmd() extends Bundle{
 }
 
 case class IBusSimpleRsp() extends Bundle with IMasterSlave{
-  val ready = Bool
   val error = Bool
   val inst  = Bits(32 bits)
 
   override def asMaster(): Unit = {
-    out(ready,error,inst)
+    out(error,inst)
   }
 }
 
 case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMasterSlave{
   var cmd = Stream(IBusSimpleCmd())
-  var rsp = IBusSimpleRsp()
+  var rsp = Flow(IBusSimpleRsp())
 
   override def asMaster(): Unit = {
     master(cmd)
@@ -701,7 +700,8 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 }
 ```
 
-There is at least one cycle latency between que cmd and the rsp. the rsp.ready flag should be false after a cmd until the rsp is present.
+**Important** : There should be at least one cycle latency between que cmd and the rsp. The IBus.cmd can remove request when a CPU jump occure or when the CPU is halted by someting in the pipeline. As many arbitration aren't made for this behaviour, it is important to add a buffer to the iBus.cmd to avoid this. Ex : iBus.cmd.s2mPipe, which add a zero latency buffer and cut the iBus.cmd.ready path.
+You can also do iBus.cmd.s2mPipe.m2sPipe, which will cut all combinatorial path of the bus but then as a latency of 1 cycle. which mean you should probably set the busLatencyMin to 2.
 
 Note that bridges are implemented to convert this interface into AXI4 and Avalon
 
