@@ -64,7 +64,7 @@ class MemoryTranslatorPlugin(tlbSize : Int,
       val shared = new Area {
         val cache = Mem(CacheLine(), tlbSize)
         var free = True
-        val readAddr = cache.addressType.assignDontCare()
+        val readAddr = cache.addressType().assignDontCare()
         val readData = RegNext(cache.readSync(readAddr))
       }
 

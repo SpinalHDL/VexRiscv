@@ -5,6 +5,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
+import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 
 
 
@@ -42,6 +43,21 @@ object IBusSimpleBus{
   ).getReadOnlyConfig.copy(
     useResponse = true,
     maximumPendingReadTransactions = 8
+  )
+
+  def getWishboneConfig() = WishboneConfig(
+    addressWidth = 30,
+    dataWidth = 32,
+    selWidth = 4,
+    useSTALL = false,
+    useLOCK = false,
+    useERR = true,
+    useRTY = false,
+    tgaWidth = 0,
+    tgcWidth = 0,
+    tgdWidth = 0,
+    useBTE = true,
+    useCTI = true
   )
 }
 
@@ -96,6 +112,29 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
     mm
   }
+
+  def toWishbone(): Wishbone = {
+    val wishboneConfig = IBusSimpleBus.getWishboneConfig()
+    val bus = Wishbone(wishboneConfig)
+    val cmdPipe = cmd.stage()
+
+    bus.ADR := (cmdPipe.pc >>  2)
+    bus.CTI := B"000"
+    bus.BTE := "00"
+    bus.SEL := "1111"
+    bus.WE  := False
+    bus.DAT_MOSI.assignDontCare()
+    bus.CYC := cmdPipe.valid
+    bus.STB := cmdPipe.valid
+
+
+    cmdPipe.ready := cmdPipe.valid && bus.ACK
+    rsp.valid := bus.CYC && bus.ACK
+    rsp.inst := bus.DAT_MISO
+    rsp.error := False //TODO
+    bus
+  }
+
 }
 
 

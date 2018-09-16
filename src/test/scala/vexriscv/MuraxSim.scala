@@ -11,6 +11,7 @@ import javax.swing._
 
 import spinal.lib.com.jtag.sim.JtagTcp
 import spinal.lib.com.uart.sim.{UartDecoder, UartEncoder}
+import vexriscv.test.{JLedArray, JSwitchArray}
 
 import scala.collection.mutable
 
@@ -21,7 +22,7 @@ object MuraxSim {
 //    def config = MuraxConfig.default.copy(onChipRamSize = 256 kB)
     def config = MuraxConfig.default.copy(onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")
 
-    SimConfig.allOptimisation.compile(new Murax(config)).doSimUntilVoid{dut =>
+    SimConfig.allOptimisation.withWave.compile(new Murax(config)).doSimUntilVoid{dut =>
       val mainClkPeriod = (1e12/dut.config.coreFrequency.toDouble).toLong
       val jtagClkPeriod = mainClkPeriod*4
       val uartBaudRate = 115200

@@ -1,7 +1,7 @@
-package vexriscv
+package vexriscv.test
 
-import java.awt.{Color, Dimension, Graphics}
 import java.awt.event.{MouseEvent, MouseListener}
+import java.awt.{Color, Dimension, Graphics}
 import javax.swing.JPanel
 
 abstract class JLedArray(ledCount : Int,ledDiameter : Int = 20, blackThickness : Int = 2) extends JPanel{

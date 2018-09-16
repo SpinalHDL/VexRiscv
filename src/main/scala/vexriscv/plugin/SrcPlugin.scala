@@ -4,7 +4,7 @@ import vexriscv.{RVC_GEN, Riscv, VexRiscv}
 import spinal.core._
 
 
-class SrcPlugin(separatedAddSub : Boolean, executeInsertion : Boolean = false) extends Plugin[VexRiscv]{
+class SrcPlugin(separatedAddSub : Boolean = false, executeInsertion : Boolean = false) extends Plugin[VexRiscv]{
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._

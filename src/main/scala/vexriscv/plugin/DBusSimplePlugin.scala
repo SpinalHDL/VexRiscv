@@ -4,7 +4,9 @@ import vexriscv._
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi._
-import spinal.lib.bus.avalon.{AvalonMMConfig, AvalonMM}
+import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
+import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
+import vexriscv.ip.DataCacheMemCmd
 
 
 case class DBusSimpleCmd() extends Bundle{
@@ -44,6 +46,21 @@ object DBusSimpleBus{
     useByteEnable = true,
     useResponse = true,
     maximumPendingReadTransactions = 1
+  )
+
+  def getWishboneConfig() = WishboneConfig(
+    addressWidth = 30,
+    dataWidth = 32,
+    selWidth = 4,
+    useSTALL = false,
+    useLOCK = false,
+    useERR = true,
+    useRTY = false,
+    tgaWidth = 0,
+    tgcWidth = 0,
+    tgdWidth = 0,
+    useBTE = true,
+    useCTI = true
   )
 }
 
@@ -133,10 +150,39 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
 
     mm
   }
+
+  def toWishbone(): Wishbone = {
+    val wishboneConfig = DBusSimpleBus.getWishboneConfig()
+    val bus = Wishbone(wishboneConfig)
+    val cmdStage = cmd.halfPipe()
+
+    bus.ADR := cmdStage.address >> 2
+    bus.CTI :=B"000"
+    bus.BTE := "00"
+    bus.SEL := (cmdStage.size.mux (
+      U(0) -> B"0001",
+      U(1) -> B"0011",
+      default -> B"1111"
+    ) << cmdStage.address(1 downto 0)).resized
+    when(!cmdStage.wr) {
+      bus.SEL := "1111"
+    }
+    bus.WE  := cmdStage.wr
+    bus.DAT_MOSI := cmdStage.data
+
+    cmdStage.ready := cmdStage.valid && bus.ACK
+    bus.CYC := cmdStage.valid
+    bus.STB := cmdStage.valid
+
+    rsp.ready := cmdStage.valid && !bus.WE && bus.ACK
+    rsp.data  := bus.DAT_MISO
+    rsp.error := False //TODO
+    bus
+  }
 }
 
 
-class DBusSimplePlugin(catchAddressMisaligned : Boolean, catchAccessFault : Boolean, earlyInjection : Boolean = false) extends Plugin[VexRiscv]{
+class DBusSimplePlugin(catchAddressMisaligned : Boolean = false, catchAccessFault : Boolean = false, earlyInjection : Boolean = false) extends Plugin[VexRiscv]{
 
   var dBus  : DBusSimpleBus = null
 

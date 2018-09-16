@@ -5,10 +5,10 @@ import spinal.core._
 import spinal.lib._
 
 
-class HazardSimplePlugin(bypassExecute : Boolean,
-                         bypassMemory: Boolean,
-                         bypassWriteBack: Boolean,
-                         bypassWriteBackBuffer : Boolean,
+class HazardSimplePlugin(bypassExecute : Boolean = false,
+                         bypassMemory: Boolean = false,
+                         bypassWriteBack: Boolean = false,
+                         bypassWriteBackBuffer : Boolean = false,
                          pessimisticUseSrc : Boolean = false,
                          pessimisticWriteRegFile : Boolean = false,
                          pessimisticAddressMatch : Boolean = false) extends Plugin[VexRiscv] {

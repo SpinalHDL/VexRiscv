@@ -126,7 +126,7 @@ object StreamVexPimper{
       val ret = cloneOf(pimped)
 
       val rValid = RegInit(False)
-      val rData = Reg(pimped.dataType)
+      val rData = Reg(pimped.payloadType)
       if(!discardInput) rValid.clearWhen(flush)
 
       pimped.ready := (Bool(collapsBubble) && !ret.valid) || ret.ready
@@ -148,7 +148,7 @@ object StreamVexPimper{
       val ret = cloneOf(pimped)
 
       val rValid = RegInit(False)
-      val rBits = Reg(pimped.dataType)
+      val rBits = Reg(pimped.payloadType)
 
       ret.valid := pimped.valid || rValid
       pimped.ready := !rValid
