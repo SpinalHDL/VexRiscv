@@ -49,7 +49,7 @@ trait PredictionInterface{
 }
 
 class BranchPlugin(earlyBranch : Boolean,
-                   catchAddressMisaligned : Boolean) extends Plugin[VexRiscv] with PredictionInterface{
+                   catchAddressMisaligned : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
 
 
   lazy val branchStage = if(earlyBranch) pipeline.execute else pipeline.memory

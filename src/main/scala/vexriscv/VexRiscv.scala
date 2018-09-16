@@ -6,7 +6,7 @@ import spinal.core._
 import scala.collection.mutable.ArrayBuffer
 
 object VexRiscvConfig{
-  def apply(plugins : Seq[Plugin[VexRiscv]]) : VexRiscvConfig = {
+  def apply(plugins : Seq[Plugin[VexRiscv]] = ArrayBuffer()) : VexRiscvConfig = {
     val config = VexRiscvConfig()
     config.plugins ++= plugins
     config

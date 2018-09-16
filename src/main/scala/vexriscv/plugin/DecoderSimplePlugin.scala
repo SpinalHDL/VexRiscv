@@ -44,7 +44,7 @@ case class Masked(value : BigInt,care : BigInt){
   def toString(bitCount : Int) = (0 until bitCount).map(i => if(care.testBit(i)) (if(value.testBit(i)) "1" else "0") else "-").reverseIterator.reduce(_+_)
 }
 
-class DecoderSimplePlugin(catchIllegalInstruction : Boolean, forceLegalInstructionComputation : Boolean = false) extends Plugin[VexRiscv] with DecoderService {
+class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false, forceLegalInstructionComputation : Boolean = false) extends Plugin[VexRiscv] with DecoderService {
   override def add(encoding: Seq[(MaskedLiteral, Seq[(Stageable[_ <: BaseType], Any)])]): Unit = encoding.foreach(e => this.add(e._1,e._2))
   override def add(key: MaskedLiteral, values: Seq[(Stageable[_ <: BaseType], Any)]): Unit = {
     val instructionModel = encodings.getOrElseUpdate(key,ArrayBuffer[(Stageable[_ <: BaseType], BaseType)]())
