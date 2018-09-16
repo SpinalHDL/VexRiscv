@@ -130,7 +130,7 @@ class MuraxSimpleBusToApbBridge(apb3Config: Apb3Config, pipelineBridge : Boolean
   }
 }
 
-class MuraxSimpleBusDecoder(master : SimpleBus, val specification : List[(SimpleBus,SizeMapping)], pipelineMaster : Boolean) extends Area{
+class MuraxSimpleBusDecoder(master : SimpleBus, val specification : Seq[(SimpleBus,SizeMapping)], pipelineMaster : Boolean) extends Area{
   val masterPipelined = SimpleBus(master.config)
   if(!pipelineMaster) {
     masterPipelined.cmd << master.cmd
@@ -146,7 +146,7 @@ class MuraxSimpleBusDecoder(master : SimpleBus, val specification : List[(Simple
   val hits = for((slaveBus, memorySpace) <- specification) yield {
     val hit = memorySpace.hit(masterPipelined.cmd.address)
     slaveBus.cmd.valid   := masterPipelined.cmd.valid && hit
-    slaveBus.cmd.payload := masterPipelined.cmd.payload
+    slaveBus.cmd.payload := masterPipelined.cmd.payload.resized
     hit
   }
   val noHit = !hits.orR
