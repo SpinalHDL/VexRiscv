@@ -1,5 +1,7 @@
 package vexriscv.demo
 
+import java.nio.{ByteBuffer, ByteOrder}
+
 import spinal.core._
 import spinal.lib.bus.amba3.apb.{Apb3, Apb3Config, Apb3SlaveFactory}
 import spinal.lib.bus.misc.SizeMapping
@@ -95,6 +97,27 @@ class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpl
   }
 }
 
+
+
+case class Apb3Rom(onChipRamBinFile : String) extends Component{
+  import java.nio.file.{Files, Paths}
+  val byteArray = Files.readAllBytes(Paths.get(onChipRamBinFile))
+  val wordCount = (byteArray.length+3)/4
+  val buffer = ByteBuffer.wrap(Files.readAllBytes(Paths.get(onChipRamBinFile))).order(ByteOrder.LITTLE_ENDIAN);
+  val wordArray = (0 until wordCount).map(i => {
+    val v = buffer.getInt
+    if(v < 0)  BigInt(v.toLong & 0xFFFFFFFFl) else  BigInt(v)
+  })
+
+  val io = new Bundle{
+    val apb = slave(Apb3(log2Up(wordCount*4),32))
+  }
+
+  val rom = Mem(Bits(32 bits), wordCount) initBigInt(wordArray)
+//  io.apb.PRDATA := rom.readSync(io.apb.PADDR >> 2)
+  io.apb.PRDATA := rom.readAsync(RegNext(io.apb.PADDR >> 2))
+  io.apb.PREADY := True
+}
 
 class MuraxSimpleBusToApbBridge(apb3Config: Apb3Config, pipelineBridge : Boolean, simpleBusConfig : SimpleBusConfig) extends Component{
   assert(apb3Config.dataWidth == simpleBusConfig.dataWidth)

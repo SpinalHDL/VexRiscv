@@ -44,18 +44,13 @@ case class MuraxConfig(coreFrequency : HertzNumber,
   require(pipelineApbBridge || pipelineMainBus, "At least pipelineMainBus or pipelineApbBridge should be enable to avoid wipe transactions")
   val genXpi = xipConfig != null
 
-  def addXip(): MuraxConfig = copy(xipConfig = SpiDdrMasterCtrl.MemoryMappingParameters(
-    SpiDdrMasterCtrl.Parameters(8, 12, SpiDdrParameter(2, 1)).addAllMods(),
-    cmdFifoDepth = 32,
-    rspFifoDepth = 32,
-    xip = SpiDdrMasterCtrl.XipBusParameters(addressWidth = 24, dataWidth = 32)
-  ))
 }
 
 
 
 object MuraxConfig{
-  def default =  MuraxConfig(
+  def default : MuraxConfig = default(false)
+  def default(withXip : Boolean) =  MuraxConfig(
     coreFrequency         = 12 MHz,
     onChipRamSize         = 8 kB,
     onChipRamHexFile      = null,
@@ -63,10 +58,15 @@ object MuraxConfig{
     pipelineMainBus       = false,
     pipelineApbBridge     = true,
     gpioWidth = 32,
-    xipConfig = null,
+    xipConfig = ifGen(withXip) (SpiDdrMasterCtrl.MemoryMappingParameters(
+      SpiDdrMasterCtrl.Parameters(8, 12, SpiDdrParameter(2, 1)).addAllMods(),
+      cmdFifoDepth = 32,
+      rspFifoDepth = 32,
+      xip = SpiDdrMasterCtrl.XipBusParameters(addressWidth = 24, dataWidth = 32)
+    )),
     cpuPlugins = ArrayBuffer( //DebugPlugin added by the toplevel
       new IBusSimplePlugin(
-        resetVector = 0x80000000l,
+        resetVector = if(withXip) 0xF001E000l else 0x80000000l,
         relaxedPcCalculation = true,
         prediction = NONE,
         catchAccessFault = false,
@@ -224,7 +224,9 @@ case class Murax(config : MuraxConfig) extends Component{
     val timerInterrupt = False
     val externalInterrupt = False
     for(plugin <- cpu.plugins) plugin match{
-      case plugin : IBusSimplePlugin => mainBusArbiter.io.iBus <> plugin.iBus
+      case plugin : IBusSimplePlugin =>
+        mainBusArbiter.io.iBus.cmd <> plugin.iBus.cmd.halfPipe() //TODO !!
+        mainBusArbiter.io.iBus.rsp <> plugin.iBus.rsp
       case plugin : DBusSimplePlugin => {
         if(!pipelineDBus)
           mainBusArbiter.io.dBus <> plugin.dBus
@@ -289,7 +291,7 @@ case class Murax(config : MuraxConfig) extends Component{
       apbMapping += ctrl.io.apb     -> (0x1F000, 4 kB)
 
       val accessBus = new SimpleBus(SimpleBusConfig(24,32))
-      mainBusMapping += accessBus -> (0x90000000l, 16 MB)
+      mainBusMapping += accessBus -> (0xE0000000l, 16 MB)
 
       ctrl.io.xip.cmd.valid <> (accessBus.cmd.valid && !accessBus.cmd.wr)
       ctrl.io.xip.cmd.ready <> accessBus.cmd.ready
@@ -297,6 +299,9 @@ case class Murax(config : MuraxConfig) extends Component{
 
       ctrl.io.xip.rsp.valid <> accessBus.rsp.valid
       ctrl.io.xip.rsp.payload <> accessBus.rsp.data
+
+      val bootloader = Apb3Rom("src/main/c/murax/xipBootloader/crt.bin")
+      apbMapping += bootloader.io.apb     -> (0x1E000, 4 kB)
     })
 
 
@@ -327,7 +332,7 @@ object Murax{
 
 object MuraxWithXip{
   def main(args: Array[String]) {
-    SpinalVerilog(Murax(MuraxConfig.default.addXip()))
+    SpinalVerilog(Murax(MuraxConfig.default(withXip = true)))
   }
 }
 

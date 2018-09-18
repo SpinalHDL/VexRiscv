@@ -9,8 +9,8 @@ module toplevel(
     output  io_B12,
     input   io_B10,
 
-    input  io_P12,
-    output  io_P11,
+    output  io_P12,
+    input  io_P11,
     output  io_R11,
     output  io_R12,
 
@@ -46,9 +46,9 @@ module toplevel(
   wire [1:0] io_xpi_data_1_write;
   wire [0:0] io_xpi_ss;
 
-  assign io_P11 = io_xpi_data_0_write[0];
-  assign io_xpi_data_1_read[0] = io_P12;
-  assign io_xpi_data_1_read[1] = io_P12;
+  assign io_P12 = io_xpi_data_0_write[0];
+  assign io_xpi_data_1_read[0] = io_P11;
+  assign io_xpi_data_1_read[1] = io_P11;
   assign io_R11 = io_xpi_sclk_write[0];
   assign io_R12 = io_xpi_ss[0];
 
