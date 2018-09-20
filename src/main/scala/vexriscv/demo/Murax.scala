@@ -40,6 +40,7 @@ case class MuraxConfig(coreFrequency : HertzNumber,
                        gpioWidth          : Int,
                        uartCtrlConfig     : UartCtrlMemoryMappedConfig,
                        xipConfig          : SpiDdrMasterCtrl.MemoryMappingParameters,
+                       hardwareBreakpointCount : Int,
                        cpuPlugins         : ArrayBuffer[Plugin[VexRiscv]]){
   require(pipelineApbBridge || pipelineMainBus, "At least pipelineMainBus or pipelineApbBridge should be enable to avoid wipe transactions")
   val genXpi = xipConfig != null
@@ -64,6 +65,7 @@ object MuraxConfig{
       rspFifoDepth = 32,
       xip = SpiDdrMasterCtrl.XipBusParameters(addressWidth = 24, dataWidth = 32)
     )),
+    hardwareBreakpointCount = if(withXip) 3 else 0,
     cpuPlugins = ArrayBuffer( //DebugPlugin added by the toplevel
       new IBusSimplePlugin(
         resetVector = if(withXip) 0xF001E000l else 0x80000000l,
@@ -77,7 +79,7 @@ object MuraxConfig{
         catchAccessFault = false,
         earlyInjection = false
       ),
-      new CsrPlugin(CsrPluginConfig.smallest(mtvecInit = 0x80000020l)),
+      new CsrPlugin(CsrPluginConfig.smallest(mtvecInit = if(withXip) 0xE0040020l else 0x80000000l)),
       new DecoderSimplePlugin(
         catchIllegalInstruction = false
       ),
@@ -216,7 +218,7 @@ case class Murax(config : MuraxConfig) extends Component{
     //Instanciate the CPU
     val cpu = new VexRiscv(
       config = VexRiscvConfig(
-        plugins = cpuPlugins += new DebugPlugin(debugClockDomain)
+        plugins = cpuPlugins += new DebugPlugin(debugClockDomain, hardwareBreakpointCount)
       )
     )
 

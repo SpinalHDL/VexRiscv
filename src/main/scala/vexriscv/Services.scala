@@ -89,3 +89,7 @@ class CacheReport {
   @BeanProperty var size = 0
   @BeanProperty var bytePerLine = 0
 }
+
+class DebugReport {
+  @BeanProperty var hardwareBreakpointCount = 0
+}
