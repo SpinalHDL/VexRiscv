@@ -166,6 +166,10 @@ case class Murax(config : MuraxConfig) extends Component{
     val uart = master(Uart())
 
     val xip = ifGen(genXip)(master(SpiXdrMaster(xipConfig.ctrl.spi)))
+
+    //AXI Streams
+    val axis_input = slave(Stream(Bits(32 bits)))
+    val axis_output = master(Stream(Bits(32 bits)))
   }
 
 
@@ -293,7 +297,7 @@ case class Murax(config : MuraxConfig) extends Component{
       val ctrl = Apb3SpiXdrMasterCtrl(xipConfig)
       ctrl.io.spi <> io.xip
       externalInterrupt setWhen(ctrl.io.interrupt)
-      apbMapping += ctrl.io.apb     -> (0x1F000, 4 kB)
+      apbMapping += ctrl.io.apb    -> (0x1F000, 4 kB)
 
       val accessBus = new PipelinedMemoryBus(PipelinedMemoryBusConfig(24,32))
       mainBusMapping += accessBus -> (0xE0000000l, 16 MB)
@@ -309,7 +313,11 @@ case class Murax(config : MuraxConfig) extends Component{
       apbMapping += bootloader.io.apb     -> (0x1E000, 4 kB)
     })
 
+    val axis = Apb3Axis( Apb3Config( addressWidth = 8, dataWidth = 32 ))
+    axis.io.input << io.axis_input
+    io.axis_output << axis.io.output
 
+    apbMapping += axis.io.apb     -> (0x30000, 4 kB)
 
     //******** Memory mappings *********
     val apbDecoder = Apb3Decoder(
