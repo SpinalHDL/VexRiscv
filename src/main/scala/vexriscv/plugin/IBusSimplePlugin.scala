@@ -159,9 +159,8 @@ class IBusSimplePlugin(resetVector : BigInt,
     keepPcPlus4 = keepPcPlus4,
     decodePcGen = compressedGen,
     compressedGen = compressedGen,
-    cmdToRspStageCount = busLatencyMin,
+    cmdToRspStageCount = busLatencyMin + (if(relaxedPcCalculation) 1 else 0),
     injectorReadyCutGen = false,
-    relaxedPcCalculation = relaxedPcCalculation,
     prediction = prediction,
     historyRamSizeLog2 = historyRamSizeLog2,
     injectorStage = injectorStage){
@@ -187,34 +186,47 @@ class IBusSimplePlugin(resetVector : BigInt,
 
     pipeline plug new FetchArea(pipeline) {
 
+
+
       //Avoid sending to many iBus cmd
       val pendingCmd = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
       val pendingCmdNext = pendingCmd + iBus.cmd.fire.asUInt - iBus.rsp.fire.asUInt
       pendingCmd := pendingCmdNext
 
       val cmd = if(relaxedBusCmdValid) new Area {
-        assert(relaxedPcCalculation, "relaxedBusCmdValid can only be used with relaxedPcCalculation")
-        def input = fetchPc.output
-        def output = iBusRsp.input
+        ???
+      /*  def inputStage = iBusRsp.stages(0)
+        val busFork = Stream(UInt(32 bits))
+        val busForkedReg = RegInit(False)
+        if(!relaxedPcCalculation) busForkedReg clearWhen(flush)
+        busForkedReg setWhen(iBus.cmd.fire)
+        busForkedReg clearWhen(inputStage.output.ready)
+        if(relaxedPcCalculation) busForkedReg clearWhen(flush)
+        val busForked = Bool
+        busForked := (if(!relaxedPcCalculation) (busForkedReg && !flush) else (busForkedReg))
 
-        val fork = StreamForkVex(input, 2, flush)
-        val busFork = fork(0)
-        val pipFork = fork(1)
-        output << pipFork
+
+        busFork.valid := inputStage.input.valid && !busForkedReg
+        busFork.payload := inputStage.input.payload
+
+        inputStage.halt setWhen()
+        output.valid := (inputStage.input.valid && iBus.cmd.fire) || busForked
+        output.payload := input.payload
+        input.ready := output.fire
+
 
         val okBus = pendingCmd =/= pendingMax
         iBus.cmd.valid := busFork.valid && okBus
         iBus.cmd.pc := busFork.payload(31 downto 2) @@ "00"
-        busFork.ready := iBus.cmd.ready && okBus
+        busFork.ready := iBus.cmd.ready && okBus*/
       } else new Area {
-        def input = fetchPc.output
-        def output = iBusRsp.input
+        def stage = iBusRsp.stages(if(relaxedPcCalculation) 1 else 0)
+        stage.halt setWhen(stage.input.valid && (!iBus.cmd.valid || !iBus.cmd.ready))
 
-        output << input.continueWhen(iBus.cmd.fire)
-
-        iBus.cmd.valid := input.valid && output.ready && pendingCmd =/= pendingMax
-        iBus.cmd.pc := input.payload(31 downto 2) @@ "00"
+        iBus.cmd.valid := stage.input.valid && stage.output.ready && pendingCmd =/= pendingMax
+        iBus.cmd.pc := stage.input.payload(31 downto 2) @@ "00"
       }
+
 
 
       val rsp = new Area {
@@ -226,20 +238,19 @@ class IBusSimplePlugin(resetVector : BigInt,
           discardCounter := (if(relaxedPcCalculation) pendingCmdNext else pendingCmd - iBus.rsp.fire.asUInt)
         }
 
-
-        val rspBuffer = StreamFifoLowLatency(IBusSimpleRsp(), cmdToRspStageCount + (if(relaxedBusCmdValid) 1 else 0))
+        val rspBuffer = StreamFifoLowLatency(IBusSimpleRsp(), cmdToRspStageCount - (if(relaxedPcCalculation) 0 else 0))
         rspBuffer.io.push << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
         rspBuffer.io.flush := flush
 
         val fetchRsp = FetchRsp()
-        fetchRsp.pc := inputPipeline.last.payload
+        fetchRsp.pc := stages.last.output.payload
         fetchRsp.rsp := rspBuffer.io.pop.payload
         fetchRsp.rsp.error.clearWhen(!rspBuffer.io.pop.valid) //Avoid interference with instruction injection from the debug plugin
 
 
         var issueDetected = False
-        val join = StreamJoin(Seq(inputPipeline.last, rspBuffer.io.pop), fetchRsp)
-        inputPipeline.last.ready setWhen(!inputPipeline.last.valid)
+        val join = StreamJoin(Seq(stages.last.output, rspBuffer.io.pop), fetchRsp)
+        stages.last.output.ready setWhen(!stages.last.output.valid)
         output << join.haltWhen(issueDetected)
 
         if(catchAccessFault){
