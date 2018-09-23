@@ -47,7 +47,7 @@ object MuraxSim {
         baudPeriod = uartBaudPeriod
       )
 
-      if(config.xipConfig != null)dut.io.xpi.data(1).read #= 0
+      if(config.xipConfig != null)dut.io.xip.data(1).read #= 0
 
       val guiThread = fork{
         val guiToSim = mutable.Queue[Any]()

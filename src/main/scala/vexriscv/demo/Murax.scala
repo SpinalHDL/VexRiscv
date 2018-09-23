@@ -162,7 +162,7 @@ case class Murax(config : MuraxConfig) extends Component{
     val gpioA = master(TriStateArray(gpioWidth bits))
     val uart = master(Uart())
 
-    val xpi = ifGen(genXpi)(master(SpiDdrMaster(xipConfig.ctrl.spi)))
+    val xip = ifGen(genXpi)(master(SpiDdrMaster(xipConfig.ctrl.spi)))
   }
 
 
@@ -286,9 +286,9 @@ case class Murax(config : MuraxConfig) extends Component{
     timerInterrupt setWhen(timer.io.interrupt)
     apbMapping += timer.io.apb     -> (0x20000, 4 kB)
 
-    val xpi = ifGen(genXpi)(new Area{
+    val xip = ifGen(genXpi)(new Area{
       val ctrl = Apb3SpiDdrMasterCtrl(xipConfig)
-      ctrl.io.spi <> io.xpi
+      ctrl.io.spi <> io.xip
       externalInterrupt setWhen(ctrl.io.interrupt)
       apbMapping += ctrl.io.apb     -> (0x1F000, 4 kB)
 

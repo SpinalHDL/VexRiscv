@@ -37,20 +37,20 @@ module toplevel(
   assign io_led = io_gpioA_write[7 : 0];
 
 
-  wire [1:0] io_xpi_sclk_write;
-  wire  io_xpi_data_0_writeEnable;
-  wire [1:0] io_xpi_data_0_read;
-  wire [1:0] io_xpi_data_0_write;
-  wire  io_xpi_data_1_writeEnable;
-  wire [1:0] io_xpi_data_1_read;
-  wire [1:0] io_xpi_data_1_write;
-  wire [0:0] io_xpi_ss;
+  wire [1:0] io_xip_sclk_write;
+  wire  io_xip_data_0_writeEnable;
+  wire [1:0] io_xip_data_0_read;
+  wire [1:0] io_xip_data_0_write;
+  wire  io_xip_data_1_writeEnable;
+  wire [1:0] io_xip_data_1_read;
+  wire [1:0] io_xip_data_1_write;
+  wire [0:0] io_xip_ss;
 
-  assign io_P12 = io_xpi_data_0_write[0];
-  assign io_xpi_data_1_read[0] = io_P11;
-  assign io_xpi_data_1_read[1] = io_P11;
-  assign io_R11 = io_xpi_sclk_write[0];
-  assign io_R12 = io_xpi_ss[0];
+  assign io_P12 = io_xip_data_0_write[0];
+  assign io_xip_data_1_read[0] = io_P11;
+  assign io_xip_data_1_read[1] = io_P11;
+  assign io_R11 = io_xip_sclk_write[0];
+  assign io_R12 = io_xip_ss[0];
 
   Murax murax ( 
     .io_asyncReset(0),
@@ -64,13 +64,13 @@ module toplevel(
     .io_gpioA_writeEnable(io_gpioA_writeEnable),
     .io_uart_txd(io_B12),
     .io_uart_rxd(io_B10),
-    .io_xpi_sclk_write(io_xpi_sclk_write),
-    .io_xpi_data_0_writeEnable(io_xpi_data_0_writeEnable),
-    .io_xpi_data_0_read(io_xpi_data_0_read),
-    .io_xpi_data_0_write(io_xpi_data_0_write),
-    .io_xpi_data_1_writeEnable(io_xpi_data_1_writeEnable),
-    .io_xpi_data_1_read(io_xpi_data_1_read),
-    .io_xpi_data_1_write(io_xpi_data_1_write),
-    .io_xpi_ss(io_xpi_ss)
+    .io_xip_sclk_write(io_xip_sclk_write),
+    .io_xip_data_0_writeEnable(io_xip_data_0_writeEnable),
+    .io_xip_data_0_read(io_xip_data_0_read),
+    .io_xip_data_0_write(io_xip_data_0_write),
+    .io_xip_data_1_writeEnable(io_xip_data_1_writeEnable),
+    .io_xip_data_1_read(io_xip_data_1_read),
+    .io_xip_data_1_write(io_xip_data_1_write),
+    .io_xip_ss(io_xip_ss)
   );		
 endmodule
