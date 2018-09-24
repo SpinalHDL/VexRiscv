@@ -28,7 +28,7 @@ import spinal.lib.eda.altera.{InterruptReceiverTag, ResetEmitterTag}
 
 object TestsWorkspace {
   def main(args: Array[String]) {
-    SpinalConfig(mergeAsyncProcess = false).generateVerilog {
+    SpinalConfig(mergeAsyncProcess = false, anonymSignalPrefix = "zz_").generateVerilog {
       val configFull = VexRiscvConfig(
         plugins = List(
 //          new IBusSimplePlugin(
@@ -44,11 +44,11 @@ object TestsWorkspace {
 //          ),
           new IBusCachedPlugin(
             resetVector = 0x80000000l,
-            compressedGen = true,
-            prediction = DYNAMIC_TARGET,
+            compressedGen = false,
+            prediction = NONE,
             injectorStage = true,
             config = InstructionCacheConfig(
-              cacheSize = 1024*16,
+              cacheSize = 4096,
               bytePerLine = 32,
               wayCount = 1,
               addressWidth = 32,
@@ -72,7 +72,7 @@ object TestsWorkspace {
 //          ),
           new DBusCachedPlugin(
             config = new DataCacheConfig(
-              cacheSize         = 4096*4,
+              cacheSize         = 4096,
               bytePerLine       = 32,
               wayCount          = 1,
               addressWidth      = 32,

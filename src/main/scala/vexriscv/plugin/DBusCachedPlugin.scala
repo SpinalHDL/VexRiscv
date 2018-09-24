@@ -12,7 +12,7 @@ class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
 
   override def build(pipeline: VexRiscv): Unit = {
     super.build(pipeline)
-    dBus.asDirectionLess()
+    dBus.setAsDirectionLess()
     dAxi = master(dBus.toAxi4Shared().toAxi4()).setName("dAxi")
     dBus = null //For safety, as nobody should use it anymore :)
   }

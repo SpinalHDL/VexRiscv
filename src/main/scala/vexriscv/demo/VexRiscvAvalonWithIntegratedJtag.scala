@@ -139,31 +139,31 @@ object VexRiscvAvalonWithIntegratedJtag{
         var iBus : AvalonMM = null
         for (plugin <- cpuConfig.plugins) plugin match {
           case plugin: IBusSimplePlugin => {
-            plugin.iBus.asDirectionLess() //Unset IO properties of iBus
+            plugin.iBus.setAsDirectionLess() //Unset IO properties of iBus
             iBus = master(plugin.iBus.toAvalon())
               .setName("iBusAvalon")
               .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
           }
           case plugin: IBusCachedPlugin => {
-            plugin.iBus.asDirectionLess() //Unset IO properties of iBus
+            plugin.iBus.setAsDirectionLess() //Unset IO properties of iBus
             iBus = master(plugin.iBus.toAvalon())
               .setName("iBusAvalon")
               .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
           }
           case plugin: DBusSimplePlugin => {
-            plugin.dBus.asDirectionLess()
+            plugin.dBus.setAsDirectionLess()
             master(plugin.dBus.toAvalon())
               .setName("dBusAvalon")
               .addTag(ClockDomainTag(ClockDomain.current))
           }
           case plugin: DBusCachedPlugin => {
-            plugin.dBus.asDirectionLess()
+            plugin.dBus.setAsDirectionLess()
             master(plugin.dBus.toAvalon())
               .setName("dBusAvalon")
               .addTag(ClockDomainTag(ClockDomain.current))
           }
           case plugin: DebugPlugin => {
-            plugin.io.bus.asDirectionLess()
+            plugin.io.bus.setAsDirectionLess()
             val jtag = slave(new Jtag())
               .setName("jtag")
             jtag <> plugin.io.bus.fromJtag()

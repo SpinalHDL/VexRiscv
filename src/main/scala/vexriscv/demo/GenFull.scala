@@ -54,7 +54,7 @@ object GenFull extends App{
           )
         ),
         new MemoryTranslatorPlugin(
-          tlbSize = 64,
+          tlbSize = 32,
           virtualRange = _(31 downto 28) === 0xC,
           ioRange      = _(31 downto 28) === 0xF
         ),
@@ -82,7 +82,7 @@ object GenFull extends App{
         ),
         new MulPlugin,
         new DivPlugin,
-        new CsrPlugin(CsrPluginConfig.small),
+        new CsrPlugin(CsrPluginConfig.small(0x80000020l)),
         new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
           earlyBranch = false,

@@ -129,6 +129,7 @@ class MemoryTranslatorPlugin(tlbSize : Int,
     }
 
     //Manage TLBW0 and TLBW1 instructions
+    //TODO not exception safe (sideeffect)
     execute plug new Area{
       import execute._
       val tlbWriteBuffer = Reg(UInt(20 bits))

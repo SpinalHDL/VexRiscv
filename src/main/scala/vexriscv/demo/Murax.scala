@@ -43,7 +43,7 @@ case class MuraxConfig(coreFrequency : HertzNumber,
                        hardwareBreakpointCount : Int,
                        cpuPlugins         : ArrayBuffer[Plugin[VexRiscv]]){
   require(pipelineApbBridge || pipelineMainBus, "At least pipelineMainBus or pipelineApbBridge should be enable to avoid wipe transactions")
-  val genXpi = xipConfig != null
+  val genXip = xipConfig != null
 
 }
 
@@ -162,7 +162,7 @@ case class Murax(config : MuraxConfig) extends Component{
     val gpioA = master(TriStateArray(gpioWidth bits))
     val uart = master(Uart())
 
-    val xip = ifGen(genXpi)(master(SpiDdrMaster(xipConfig.ctrl.spi)))
+    val xip = ifGen(genXip)(master(SpiDdrMaster(xipConfig.ctrl.spi)))
   }
 
 
@@ -286,7 +286,7 @@ case class Murax(config : MuraxConfig) extends Component{
     timerInterrupt setWhen(timer.io.interrupt)
     apbMapping += timer.io.apb     -> (0x20000, 4 kB)
 
-    val xip = ifGen(genXpi)(new Area{
+    val xip = ifGen(genXip)(new Area{
       val ctrl = Apb3SpiDdrMasterCtrl(xipConfig)
       ctrl.io.spi <> io.xip
       externalInterrupt setWhen(ctrl.io.interrupt)
