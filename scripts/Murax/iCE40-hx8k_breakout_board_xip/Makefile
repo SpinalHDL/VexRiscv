@@ -1,38 +1,38 @@
 
 
-VERILOG = ../../../Murax.v toplevel.v
+VERILOG = ../../../Murax_iCE40_hx8k_breakout_board_xip.v
 
 generate :
-	#(cd ../../..; sbt "run-main vexriscv.demo.MuraxWithXip")
+	#(cd ../../..; sbt "run-main vexriscv.demo.Murax_iCE40_hx8k_breakout_board_xip")
 
-../../../Murax.v :
-	#(cd ../../..; sbt "run-main vexriscv.demo.MuraxWithXip")
+../../../Murax_iCE40_hx8k_breakout_board_xip.v :
+	#(cd ../../..; sbt "run-main vexriscv.demo.Murax_iCE40_hx8k_breakout_board_xip")
 
-../../../Murax.v*.bin:
+../../../Murax_iCE40_hx8k_breakout_board_xip.v*.bin:
 
-bin/toplevel.blif : ${VERILOG} ../../../Murax.v*.bin
+bin/Murax_iCE40_hx8k_breakout_board_xip.blif : ${VERILOG} ../../../Murax_iCE40_hx8k_breakout_board_xip.v*.bin
 	mkdir -p bin
-	rm -f Murax.v*.bin
-	cp ../../../Murax.v*.bin . | true
-	yosys -v3 -p "synth_ice40 -top toplevel -blif bin/toplevel.blif" ${VERILOG}
+	rm -f Murax_iCE40_hx8k_breakout_board_xip.v*.bin
+	cp ../../../Murax_iCE40_hx8k_breakout_board_xip.v*.bin . | true
+	yosys -v3 -p "synth_ice40 -top Murax_iCE40_hx8k_breakout_board_xip -blif bin/Murax_iCE40_hx8k_breakout_board_xip.blif" ${VERILOG}
 
-bin/toplevel.asc : toplevel.pcf bin/toplevel.blif
-	arachne-pnr -p toplevel.pcf -d 8k --max-passes 600 -P ct256 bin/toplevel.blif -o bin/toplevel.asc
+bin/Murax_iCE40_hx8k_breakout_board_xip.asc : Murax_iCE40_hx8k_breakout_board_xip.pcf bin/Murax_iCE40_hx8k_breakout_board_xip.blif
+	arachne-pnr -p Murax_iCE40_hx8k_breakout_board_xip.pcf -d 8k --max-passes 600 -P ct256 bin/Murax_iCE40_hx8k_breakout_board_xip.blif -o bin/Murax_iCE40_hx8k_breakout_board_xip.asc
 
-bin/toplevel.bin : bin/toplevel.asc
-	icepack bin/toplevel.asc bin/toplevel.bin
+bin/Murax_iCE40_hx8k_breakout_board_xip.bin : bin/Murax_iCE40_hx8k_breakout_board_xip.asc
+	icepack bin/Murax_iCE40_hx8k_breakout_board_xip.asc bin/Murax_iCE40_hx8k_breakout_board_xip.bin
 
-compile : bin/toplevel.bin
+compile : bin/Murax_iCE40_hx8k_breakout_board_xip.bin
 
-time: bin/toplevel.bin
-	icetime -tmd hx8k bin/toplevel.asc
+time: bin/Murax_iCE40_hx8k_breakout_board_xip.bin
+	icetime -tmd hx8k bin/Murax_iCE40_hx8k_breakout_board_xip.asc
 
-prog : bin/toplevel.bin
-	iceprog -S bin/toplevel.bin
+prog : bin/Murax_iCE40_hx8k_breakout_board_xip.bin
+	iceprog -S bin/Murax_iCE40_hx8k_breakout_board_xip.bin
 
-sudo-prog : bin/toplevel.bin
-	sudo iceprog -S bin/toplevel.bin
+sudo-prog : bin/Murax_iCE40_hx8k_breakout_board_xip.bin
+	sudo iceprog -S bin/Murax_iCE40_hx8k_breakout_board_xip.bin
 
 clean :
 	rm -rf bin
-	rm -f Murax.v*.bin
+	rm -f Murax_iCE40_hx8k_breakout_board_xip.v*.bin

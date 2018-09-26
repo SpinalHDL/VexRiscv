@@ -332,9 +332,148 @@ object Murax{
   }
 }
 
-object MuraxWithXip{
+object Murax_iCE40_hx8k_breakout_board_xip{
+
+  case class SB_GB() extends BlackBox{
+    val USER_SIGNAL_TO_GLOBAL_BUFFER = in Bool()
+    val GLOBAL_BUFFER_OUTPUT = out Bool()
+  }
+
+  case class SB_IO_SCLK() extends BlackBox{
+    addGeneric("PIN_TYPE", B"010000")
+    val PACKAGE_PIN = out Bool()
+    val OUTPUT_CLK = in Bool()
+    val CLOCK_ENABLE = in Bool()
+    val D_OUT_0 = in Bool()
+    val D_OUT_1 = in Bool()
+    setDefinitionName("SB_IO")
+  }
+
+  case class SB_IO_DATA() extends BlackBox{
+    addGeneric("PIN_TYPE", B"110000")
+    val PACKAGE_PIN = inout(Analog(Bool))
+    val CLOCK_ENABLE = in Bool()
+    val INPUT_CLK = in Bool()
+    val OUTPUT_CLK = in Bool()
+    val OUTPUT_ENABLE = in Bool()
+    val D_OUT_0 = in Bool()
+    val D_OUT_1 = in Bool()
+    val D_IN_0 = out Bool()
+    val D_IN_1 = out Bool()
+    setDefinitionName("SB_IO")
+  }
+
+  case class Murax_iCE40_hx8k_breakout_board_xip() extends Component{
+    val io = new Bundle {
+      val J3  = in  Bool()
+      val H16 = in  Bool()
+      val G15 = in  Bool()
+      val G16 = out Bool()
+      val F15 = in  Bool()
+      val B12 = out Bool()
+      val B10 = in  Bool()
+
+
+      //p12 as mosi mean flash config
+      val P12 = inout(Analog(Bool))
+      val P11 = inout(Analog(Bool))
+      val R11 = out Bool()
+      val R12 = out Bool()
+
+      val led = out Bits(8 bits)
+    }
+    val murax = Murax(MuraxConfig.default(withXip = true))
+    murax.io.asyncReset := False
+
+    val mainClkBuffer = SB_GB()
+    mainClkBuffer.USER_SIGNAL_TO_GLOBAL_BUFFER <> io.J3
+    mainClkBuffer.GLOBAL_BUFFER_OUTPUT <> murax.io.mainClk
+
+    val jtagClkBuffer = SB_GB()
+    jtagClkBuffer.USER_SIGNAL_TO_GLOBAL_BUFFER <> io.H16
+    jtagClkBuffer.GLOBAL_BUFFER_OUTPUT <> murax.io.jtag.tck
+
+    io.led <> murax.io.gpioA.write(7 downto 0)
+
+    murax.io.jtag.tdi <> io.G15
+    murax.io.jtag.tdo <> io.G16
+    murax.io.jtag.tms <> io.F15
+    murax.io.gpioA.read <> 0
+    murax.io.uart.txd <> io.B12
+    murax.io.uart.rxd <> io.B10
+
+
+
+    val xip = new ClockingArea(murax.systemClockDomain) {
+      RegNext(murax.io.xip.ss.asBool) <> io.R12
+
+      val sclkIo = SB_IO_SCLK()
+      sclkIo.PACKAGE_PIN <> io.R11
+      sclkIo.CLOCK_ENABLE := True
+
+      sclkIo.OUTPUT_CLK := ClockDomain.current.readClockWire
+      sclkIo.D_OUT_0 <> murax.io.xip.sclk.write(0)
+      sclkIo.D_OUT_1 <> RegNext(murax.io.xip.sclk.write(1))
+
+      val datas = for ((data, pin) <- (murax.io.xip.data, List(io.P12, io.P11).reverse).zipped) yield new Area {
+        val dataIo = SB_IO_DATA()
+        dataIo.PACKAGE_PIN := pin
+        dataIo.CLOCK_ENABLE := True
+
+        dataIo.OUTPUT_CLK := ClockDomain.current.readClockWire
+        dataIo.OUTPUT_ENABLE <> data.writeEnable
+        dataIo.D_OUT_0 <> data.write(0)
+        dataIo.D_OUT_1 <> RegNext(data.write(1))
+
+        dataIo.INPUT_CLK := ClockDomain.current.readClockWire
+        data.read(0) := dataIo.D_IN_0
+        data.read(1) := RegNext(dataIo.D_IN_1)
+      }
+    }
+
+  }
+
   def main(args: Array[String]) {
-    SpinalVerilog(Murax(MuraxConfig.default(withXip = true)))
+    SpinalVerilog(Murax_iCE40_hx8k_breakout_board_xip())
+    /*SpinalVerilog{
+      val c = Murax(MuraxConfig.default(withXip = true))
+
+
+
+
+      c.rework {
+        c.resetCtrlClockDomain {
+          c.io.xip.setAsDirectionLess.allowDirectionLessIo.flattenForeach(_.unsetName())
+
+          out(RegNext(c.io.xip.ss)).setName("io_xip_ss")
+
+          val sclk = SB_IO_SCLK()
+          sclk.PACKAGE_PIN := inout(Analog(Bool)).setName("io_xip_sclk")
+          sclk.CLOCK_ENABLE := True
+
+          sclk.OUTPUT_CLK := ClockDomain.current.readClockWire
+          sclk.D_OUT_0 <> c.io.xip.sclk.write(0)
+          sclk.D_OUT_1 <> RegNext(c.io.xip.sclk.write(1))
+
+          for (i <- 0 until c.io.xip.p.dataWidth) {
+            val data = c.io.xip.data(i)
+            val bb = SB_IO_DATA()
+            bb.PACKAGE_PIN := inout(Analog(Bool)).setName(s"io_xip_data_$i" )
+            bb.CLOCK_ENABLE := True
+
+            bb.OUTPUT_CLK := ClockDomain.current.readClockWire
+            bb.OUTPUT_ENABLE <> data.writeEnable
+            bb.D_OUT_0 <> data.write(0)
+            bb.D_OUT_1 <> RegNext(data.write(1))
+
+            bb.INPUT_CLK := ClockDomain.current.readClockWire
+            data.read(0) := bb.D_IN_0
+            data.read(1) := RegNext(bb.D_IN_1)
+          }
+        }
+      }
+      c
+    }*/
   }
 }
 
