@@ -51,6 +51,13 @@ case class CsrPluginConfig(
                             wfiGen              : Boolean,
                             ecallGen            : Boolean,
                             sscratchGen         : Boolean = false,
+                            stvecAccess         : CsrAccess = CsrAccess.NONE,
+                            sepcAccess          : CsrAccess = CsrAccess.NONE,
+                            scauseAccess        : CsrAccess = CsrAccess.NONE,
+                            sbadaddrAccess      : CsrAccess = CsrAccess.NONE,
+                            scycleAccess        : CsrAccess = CsrAccess.NONE,
+                            sinstretAccess      : CsrAccess = CsrAccess.NONE,
+                            satpAccess          : CsrAccess = CsrAccess.NONE,
                             deterministicInteruptionEntry : Boolean = false //Only used for simulatation purposes
 
                           ){
@@ -380,6 +387,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       if(mhartid   != null) READ_ONLY(CSR.MHARTID  , U(mhartid  ))
 
       //Machine CSR
+      //TODO machine mode shadow supervisor
       misaAccess(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
       READ_ONLY(CSR.MIP, 11 -> mip.MEIP, 7 -> mip.MTIP)
       READ_WRITE(CSR.MIP, 3 -> mip.MSIP)
@@ -395,6 +403,20 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       mcycleAccess(CSR.MCYCLEH, mcycle(63 downto 32))
       minstretAccess(CSR.MINSTRET, minstret(31 downto 0))
       minstretAccess(CSR.MINSTRETH, minstret(63 downto 32))
+
+      //Supervisor CSR
+      READ_ONLY(CSR.SIP, 9 -> sip.SEIP, 5 -> sip.STIP)
+      READ_WRITE(CSR.SIP, 1 -> sip.SSIP)
+      READ_WRITE(CSR.SIE, 9 -> sie.SEIE, 5 -> sie.STIE, 1 -> sie.SSIE)
+
+      stvecAccess(CSR.STVEC, stvec)
+      sepcAccess(CSR.SEPC, sepc)
+      READ_WRITE(CSR.SSTATUS,9 -> sstatus.SPP, 5 -> sstatus.SPIE, 1 -> sstatus.SIE)
+      if(sscratchGen) READ_WRITE(CSR.SSCRATCH, sscratch)
+      scauseAccess(CSR.SCAUSE, xlen-1 -> scause.interrupt, 0 -> scause.exceptionCode)
+      sbadaddrAccess(CSR.SBADADDR, stval)
+      satpAccess(CSR.SATP, 31 -> satp.MODE, 22 -> satp.ASID, 0 -> satp.PPN)
+
 
       //User CSR
       ucycleAccess(CSR.UCYCLE, mcycle(31 downto 0))

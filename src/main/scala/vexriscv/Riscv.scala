@@ -131,6 +131,18 @@ object Riscv{
     def MCYCLEH   = 0xB80 // MRW Upper 32 bits of mcycle, RV32I only.
     def MINSTRETH = 0xB82 // MRW Upper 32 bits of minstret, RV32I only.
 
+    val SSTATUS     = 0x100
+    val SIE         = 0x104
+    val STVEC       = 0x105
+    val SCOUNTEREN  = 0x106
+    val SSCRATCH    = 0x140
+    val SEPC        = 0x141
+    val SCAUSE      = 0x142
+    val SBADADDR    = 0x143
+    val SIP         = 0x144
+    val SATP        = 0x180
+
+
 
     def UCYCLE    = 0xC00 // UR Machine ucycle counter.
   }
