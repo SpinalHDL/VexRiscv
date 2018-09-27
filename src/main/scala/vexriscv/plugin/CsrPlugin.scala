@@ -50,6 +50,7 @@ case class CsrPluginConfig(
                             ucycleAccess        : CsrAccess,
                             wfiGen              : Boolean,
                             ecallGen            : Boolean,
+                            sscratchGen         : Boolean = false,
                             deterministicInteruptionEntry : Boolean = false //Only used for simulatation purposes
 
                           ){
@@ -195,8 +196,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
   var jumpInterface : Flow[UInt] = null
   var pluginExceptionPort : Flow[ExceptionCause] = null
-  var timerInterrupt : Bool = null
-  var externalInterrupt : Bool = null
+  var timerInterrupt, externalInterrupt : Bool = null
+  var timerInterruptS, externalInterruptS : Bool = null
   var privilege : Bits = null
   var selfException : Flow[ExceptionCause] = null
   var contextSwitching : Bool = null
@@ -310,6 +311,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
 
       //Define CSR registers
+      // Status => MXR, SUM, TVM, TW, TSE ?
       val misa = new Area{
         val base = Reg(UInt(2 bits)) init(U"01") allowUnsetRegToAvoidLatch
         val extensions = Reg(Bits(26 bits)) init(misaExtensionsInit) allowUnsetRegToAvoidLatch
@@ -334,11 +336,42 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         val interrupt = Reg(Bool)
         val exceptionCode = Reg(UInt(exceptionCodeWidth bits))
       }
-      val mbadaddr = Reg(UInt(xlen bits))
+      val mtval = Reg(UInt(xlen bits))
       val mcycle   = Reg(UInt(64 bits)) randBoot()
       val minstret = Reg(UInt(64 bits)) randBoot()
 
 
+
+      val medeleg = Reg(Bits(32 bits)) init(0)
+      val mideleg = Reg(Bits(32 bits)) init(0)
+
+      val sstatus = new Area{
+        val SIE, SPIE = RegInit(False)
+        val SPP = RegInit(B"1")
+      }
+
+      val sip = new Area{
+        val SEIP = RegNext(externalInterruptS) init(False)
+        val STIP = RegNext(timerInterruptS) init(False)
+        val SSIP = RegInit(False)
+      }
+      val sie = new Area{
+        val SEIE, STIE, SSIE = RegInit(False)
+      }
+      val stvec = Reg(UInt(xlen bits)).allowUnsetRegToAvoidLatch
+      val sscratch = if(sscratchGen) Reg(Bits(xlen bits)) else null
+
+      val scause   = new Area{
+        val interrupt = Reg(Bool)
+        val exceptionCode = Reg(UInt(exceptionCodeWidth bits))
+      }
+      val stval = Reg(UInt(xlen bits))
+      val sepc = Reg(UInt(xlen bits))
+      val satp = new Area{
+        val PPN = Reg(Bits(22 bits))
+        val ASID = Reg(Bits(9 bits))
+        val MODE = Reg(Bits(1 bits))
+      }
 
       //Define CSR registers accessibility
       if(mvendorid != null) READ_ONLY(CSR.MVENDORID, U(mvendorid))
@@ -357,7 +390,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       READ_WRITE(CSR.MSTATUS,11 -> mstatus.MPP, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
       if(mscratchGen) READ_WRITE(CSR.MSCRATCH, mscratch)
       mcauseAccess(CSR.MCAUSE, xlen-1 -> mcause.interrupt, 0 -> mcause.exceptionCode)
-      mbadaddrAccess(CSR.MBADADDR, mbadaddr)
+      mbadaddrAccess(CSR.MBADADDR, mtval)
       mcycleAccess(CSR.MCYCLE, mcycle(31 downto 0))
       mcycleAccess(CSR.MCYCLEH, mcycle(63 downto 32))
       minstretAccess(CSR.MINSTRET, minstret(31 downto 0))
@@ -490,7 +523,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       }
 
       when(RegNext(exception)){
-        mbadaddr := (if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionContext.badAddr else U(0))
+        mtval := (if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionContext.badAddr else U(0))
         mcause.exceptionCode := (if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionContext.code else U(0))
       }
 
