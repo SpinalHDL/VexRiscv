@@ -45,6 +45,8 @@ before_install:
   - sudo make install
   - cd ..
 
+  - git clone https://github.com/SpinalHDL/SpinalHDL.git
+  
   - cd VexRiscv
   #- curl -T README.md -udolu1990:$BINTRAY_KEY https://api.bintray.com/content/spinalhdl/VexRiscv/test/0.0.4/README.md
   #- curl -X POST -udolu1990:$BINTRAY_KEY https://api.bintray.com/content/spinalhdl/VexRiscv/test/0.0.4/publish
