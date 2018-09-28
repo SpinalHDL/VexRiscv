@@ -205,13 +205,13 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
   var pluginExceptionPort : Flow[ExceptionCause] = null
   var timerInterrupt, externalInterrupt : Bool = null
   var timerInterruptS, externalInterruptS : Bool = null
-  var privilege : Bits = null
+  var privilege : UInt = null
   var selfException : Flow[ExceptionCause] = null
   var contextSwitching : Bool = null
   override def isContextSwitching = contextSwitching
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
-    val NONE, EBREAK, MRET= newElement()
+    val NONE, EBREAK, XRET = newElement()
     val WFI = if(wfiGen) newElement() else null
     val ECALL = if(ecallGen) newElement() else null
   }
@@ -263,8 +263,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       CSRRWI -> immediatActions,
       CSRRSI -> immediatActions,
       CSRRCI -> immediatActions,
-      // EBREAK -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.EBREAK)), //TODO
-      MRET   -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.MRET))
+      MRET   -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.XRET)),
+      SRET   -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.XRET))
     ))
     if(wfiGen)   decoderService.add(WFI,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.WFI))
     if(ecallGen) decoderService.add(ECALL,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.ECALL))
@@ -284,7 +284,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
     externalInterrupt = in Bool() setName("externalInterrupt")
     contextSwitching = Bool().setName("contextSwitching")
 
-    privilege = RegInit(B"11")
+    privilege = RegInit(U"11")
 
     if(catchIllegalAccess)
       selfException = newExceptionPort(pipeline.execute)
@@ -328,7 +328,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       val mepc = Reg(UInt(xlen bits))
       val mstatus = new Area{
         val MIE, MPIE = RegInit(False)
-        val MPP = RegInit(B"11")
+        val MPP = RegInit(U"11")
       }
       val mip = new Area{
         val MEIP = RegNext(externalInterrupt) init(False)
@@ -354,7 +354,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
       val sstatus = new Area{
         val SIE, SPIE = RegInit(False)
-        val SPP = RegInit(B"1")
+        val SPP = RegInit(U"1")
       }
 
       val sip = new Area{
@@ -429,6 +429,50 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         minstret := minstret + 1
       }
 
+      case class InterruptSource(cond : Bool, id : Int)
+      case class InterruptModel(privilege : Int, privilegeCond : Bool, sources : ArrayBuffer[InterruptSource])
+      val interruptModel = ArrayBuffer[InterruptModel]()
+      interruptModel += InterruptModel(1, sstatus.SIE && privilege <= "01", ArrayBuffer(
+        InterruptSource(sip.STIP && sie.STIE,  5),
+        InterruptSource(sip.SSIP && sie.SSIE,  1),
+        InterruptSource(sip.SEIP && sie.SEIE,  9)
+      ))
+
+      interruptModel += InterruptModel(3, mstatus.MIE , ArrayBuffer(
+        InterruptSource(mip.MTIP && mie.MTIE,  7),
+        InterruptSource(mip.MSIP && mie.MSIE,  3),
+        InterruptSource(mip.MEIP && mie.MEIE, 11)
+      ))
+
+      case class DelegatorModel(value : Bits, source : Int, target : Int)
+      def solveDelegators(delegators : Seq[DelegatorModel], id : Int, upTo : Int): UInt = {
+        val filtredDelegators = delegators.filter(_.target <= upTo)
+        val ret = U(filtredDelegators.last.target, 2 bits)
+        for(d <- filtredDelegators){
+          when(!d.value(id)){
+            ret := d.source
+          }
+        }
+        ret
+      }
+
+      def solveDelegators(delegators : Seq[DelegatorModel], id : UInt, upTo : UInt): UInt = {
+        val ret = U(delegators.last.target, 2 bits)
+        for(d <- delegators){
+          when(!d.value(id) || d.target > upTo){
+            ret := d.source
+          }
+        }
+        ret
+      }
+
+      val interruptDelegators = ArrayBuffer[DelegatorModel]()
+      interruptDelegators += DelegatorModel(mideleg,0, 2)
+
+      val exceptionDelegators = ArrayBuffer[DelegatorModel]()
+      exceptionDelegators += DelegatorModel(medeleg,0, 2)
+
+
       val mepcCaptureStage = if(exceptionPortsInfos.nonEmpty) writeBack else decode
 
 
@@ -438,6 +482,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         val exceptionValids = Vec(stages.map(s => Bool().setPartialName(s.getName())))
         val exceptionValidsRegs = Vec(stages.map(s => Reg(Bool).init(False).setPartialName(s.getName()))).allowUnsetRegToAvoidLatch
         val exceptionContext = Reg(ExceptionCause())
+        val exceptionTargetPrivilege = solveDelegators(exceptionDelegators, exceptionContext.code, privilege)
 
         val groupedByStage = exceptionPortsInfos.map(_.stage).distinct.map(s => {
           val stagePortsInfos = exceptionPortsInfos.filter(_.stage == s).sortWith(_.priority > _.priority)
@@ -490,30 +535,31 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
 
 
-      val interruptRequest = ((mip.MSIP && mie.MSIE) || (mip.MEIP && mie.MEIE) || (mip.MTIP && mie.MTIE)) && mstatus.MIE
-      val interrupt = interruptRequest && allowInterrupts
-      val exception = if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValids.last && allowException else False
-      val writeBackWasWfi = if(wfiGen) RegNext(writeBack.arbitration.isFiring && writeBack.input(ENV_CTRL) === EnvCtrlEnum.WFI) init(False) else False
 
 
+      val interrupt = False
+      val interruptCode = UInt(4 bits).assignDontCare().addTag(Verilator.public)
+      val interruptTargetPrivilege = UInt(2 bits).assignDontCare()
 
-      val deteriministicLogic = if(deterministicInteruptionEntry) new Area{
-        val counter = Reg(UInt(4 bits)) init(0)
 
-        when(!interruptRequest || !mstatus.MIE){
-          counter := 0
-        } otherwise {
-          when(counter < 6){
-            when(writeBack.arbitration.isFiring){
-              counter := counter + 1
-            }
+      for(model <- interruptModel){
+        when(model.privilegeCond){
+          when(model.sources.map(_.cond).orR){
+            interrupt := True
           }
-          val counterPlusPending = counter + CountOne(stages.tail.map(_.arbitration.isValid))
-          when(counterPlusPending < 6){
-            inhibateInterrupts()
+          for(source <- model.sources){
+            when(source.cond){
+              interruptCode := source.id
+              interruptTargetPrivilege := solveDelegators(interruptDelegators, source.id, model.privilege)
+            }
           }
         }
       }
+      interrupt.clearWhen(!allowInterrupts)
+
+      val exception = if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValids.last && allowException else False
+      val writeBackWasWfi = if(wfiGen) RegNext(writeBack.arbitration.isFiring && writeBack.input(ENV_CTRL) === EnvCtrlEnum.WFI) init(False) else False
+
 
 
       //Used to make the pipeline empty softly (for interrupts)
@@ -527,37 +573,60 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       }
 
       //Interrupt/Exception entry logic
-      val interruptCode = ((mip.MEIP && mie.MEIE) ? U(11) | ((mip.MSIP && mie.MSIE) ? U(3) | U(7))).addTag(Verilator.public)
       val interruptJump = Bool.addTag(Verilator.public)
       interruptJump := interrupt && pipelineLiberator.done
 
-      when(exception || interruptJump){
+      val hadException = RegNext(exception) init(False)
+      writeBack.arbitration.haltItself setWhen(exception)
+
+
+      val targetPrivilege = CombInit(interruptTargetPrivilege)
+      if(exceptionPortCtrl != null) when(hadException) {
+        targetPrivilege := exceptionPortCtrl.exceptionTargetPrivilege
+      }
+
+      when(hadException || (interruptJump && !exception)){
         jumpInterface.valid := True
         jumpInterface.payload := mtvec
         memory.arbitration.flushAll := True
         if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValidsRegs.last := False
-        mstatus.MIE  := False
-        mstatus.MPIE := mstatus.MIE
-        mstatus.MPP  := privilege
+
+        switch(targetPrivilege){
+          is(1){
+            sstatus.SIE  := False
+            sstatus.SPIE := sstatus.SIE
+            sstatus.SPP  := privilege
+            if(exceptionPortCtrl != null) {
+              stval := exceptionPortCtrl.exceptionContext.badAddr
+              scause.exceptionCode := exceptionPortCtrl.exceptionContext.code
+            }
+          }
+          is(3){
+            mstatus.MIE  := False
+            mstatus.MPIE := mstatus.MIE
+            mstatus.MPP  := privilege
+            if(exceptionPortCtrl != null) {
+              mtval := exceptionPortCtrl.exceptionContext.badAddr
+              mcause.exceptionCode := exceptionPortCtrl.exceptionContext.code
+            }
+          }
+        }
+
         mepc := mepcCaptureStage.input(PC)
         mcause.interrupt := interruptJump
         mcause.exceptionCode := interruptCode
       }
 
-      when(RegNext(exception)){
-        mtval := (if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionContext.badAddr else U(0))
-        mcause.exceptionCode := (if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionContext.code else U(0))
-      }
 
-
-      //Manage MRET instructions
-      when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.MRET) {
+      //Manage MRET / SRET instructions
+      when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.XRET) {
         when(memory.arbitration.isValid || writeBack.arbitration.isValid){
           execute.arbitration.haltItself := True
         } otherwise {
           jumpInterface.valid := True
           jumpInterface.payload := mepc
           decode.arbitration.flushAll := True
+          //TODO
           mstatus.MIE := mstatus.MPIE
           privilege := mstatus.MPP
         }
@@ -663,7 +732,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
               }
             }
           }
-          illegalAccess setWhen(privilege.asUInt < csrAddress(9 downto 8).asUInt)
+          illegalAccess setWhen(privilege < csrAddress(9 downto 8).asUInt)
         })
       }
     }
