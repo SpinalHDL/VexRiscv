@@ -211,7 +211,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
   override def isContextSwitching = contextSwitching
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
-    val NONE, EBREAK, XRET = newElement()
+    val NONE, XRET = newElement()
     val WFI = if(wfiGen) newElement() else null
     val ECALL = if(ecallGen) newElement() else null
   }
@@ -385,17 +385,16 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       if(marchid   != null) READ_ONLY(CSR.MARCHID  , U(marchid  ))
       if(mimpid    != null) READ_ONLY(CSR.MIMPID   , U(mimpid   ))
       if(mhartid   != null) READ_ONLY(CSR.MHARTID  , U(mhartid  ))
+      misaAccess(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
 
       //Machine CSR
-      //TODO machine mode shadow supervisor
-      misaAccess(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
+      READ_WRITE(CSR.MSTATUS,11 -> mstatus.MPP, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
       READ_ONLY(CSR.MIP, 11 -> mip.MEIP, 7 -> mip.MTIP)
       READ_WRITE(CSR.MIP, 3 -> mip.MSIP)
       READ_WRITE(CSR.MIE, 11 -> mie.MEIE, 7 -> mie.MTIE, 3 -> mie.MSIE)
 
       mtvecAccess(CSR.MTVEC, mtvec)
       mepcAccess(CSR.MEPC, mepc)
-      READ_WRITE(CSR.MSTATUS,11 -> mstatus.MPP, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
       if(mscratchGen) READ_WRITE(CSR.MSCRATCH, mscratch)
       mcauseAccess(CSR.MCAUSE, xlen-1 -> mcause.interrupt, 0 -> mcause.exceptionCode)
       mbadaddrAccess(CSR.MBADADDR, mtval)
@@ -405,13 +404,15 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       minstretAccess(CSR.MINSTRETH, minstret(63 downto 32))
 
       //Supervisor CSR
+      for(offset <- List(0, 0x200)) {
+        READ_WRITE(CSR.SSTATUS,8 -> sstatus.SPP, 5 -> sstatus.SPIE, 1 -> sstatus.SIE)
+      }
       READ_ONLY(CSR.SIP, 9 -> sip.SEIP, 5 -> sip.STIP)
       READ_WRITE(CSR.SIP, 1 -> sip.SSIP)
       READ_WRITE(CSR.SIE, 9 -> sie.SEIE, 5 -> sie.STIE, 1 -> sie.SSIE)
 
       stvecAccess(CSR.STVEC, stvec)
       sepcAccess(CSR.SEPC, sepc)
-      READ_WRITE(CSR.SSTATUS,9 -> sstatus.SPP, 5 -> sstatus.SPIE, 1 -> sstatus.SIE)
       if(sscratchGen) READ_WRITE(CSR.SSCRATCH, sscratch)
       scauseAccess(CSR.SCAUSE, xlen-1 -> scause.interrupt, 0 -> scause.exceptionCode)
       sbadaddrAccess(CSR.SBADADDR, stval)
@@ -577,7 +578,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       interruptJump := interrupt && pipelineLiberator.done
 
       val hadException = RegNext(exception) init(False)
-      writeBack.arbitration.haltItself setWhen(exception)
+      writeBack.arbitration.haltItself setWhen(exception && !hadException)
 
 
       val targetPrivilege = CombInit(interruptTargetPrivilege)
@@ -618,32 +619,6 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       }
 
 
-      //Manage MRET / SRET instructions
-      when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.XRET) {
-        when(memory.arbitration.isValid || writeBack.arbitration.isValid){
-          execute.arbitration.haltItself := True
-        } otherwise {
-          jumpInterface.valid := True
-          jumpInterface.payload := mepc
-          decode.arbitration.flushAll := True
-          //TODO
-          mstatus.MIE := mstatus.MPIE
-          privilege := mstatus.MPP
-        }
-      }
-
-      //Manage ECALL instructions
-      if(ecallGen) when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.ECALL){
-        pluginExceptionPort.valid := True
-        pluginExceptionPort.code := 11
-      }
-
-      //Manage WFI instructions
-      if(wfiGen) when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.WFI){
-        when(!interrupt){
-          execute.arbitration.haltItself := True
-        }
-      }
 
       contextSwitching := jumpInterface.valid
 
@@ -664,13 +639,55 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         import execute._
 
         val illegalAccess =  arbitration.isValid && input(IS_CSR)
+        val illegalInstruction = False
         if(catchIllegalAccess) {
-          val illegalInstruction = arbitration.isValid && privilege === 0 && (input(ENV_CTRL) === EnvCtrlEnum.EBREAK || input(ENV_CTRL) === EnvCtrlEnum.MRET)
-
           selfException.valid := illegalAccess || illegalInstruction
           selfException.code := 2
           selfException.badAddr.assignDontCare()
         }
+
+        //TODO jump interface logic change to avoid combinatorial path on the valid ?
+
+        //Manage MRET / SRET instructions
+        when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.XRET) {
+          illegalInstruction setWhen(execute.input(INSTRUCTION)(29 downto 28).asUInt =/= privilege)
+          jumpInterface.payload := mepc
+          when(memory.arbitration.isValid || writeBack.arbitration.isValid){
+            execute.arbitration.haltItself := True
+          } elsewhen (execute.arbitration.isFiring) {
+            jumpInterface.valid := True
+            decode.arbitration.flushAll := True
+            switch(execute.input(INSTRUCTION)(29 downto 28)){
+              is(3){
+                mstatus.MIE := mstatus.MPIE
+                mstatus.MPP := U"00"
+                mstatus.MPIE := True
+                privilege := mstatus.MPP
+              }
+              is(1){
+                sstatus.SIE := sstatus.SPIE
+                sstatus.SPP := U"00"
+                sstatus.SPIE := True
+                privilege := sstatus.SPP
+              }
+            }
+          }
+        }
+
+        //Manage ECALL instructions
+        if(ecallGen) when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.ECALL){
+          pluginExceptionPort.valid := True
+          pluginExceptionPort.code := 11
+        }
+
+        //Manage WFI instructions
+        if(wfiGen) when(execute.arbitration.isValid && execute.input(ENV_CTRL) === EnvCtrlEnum.WFI){
+          when(!interrupt){
+            execute.arbitration.haltItself := True
+          }
+        }
+
+
 
         val imm = IMM(input(INSTRUCTION))
         val writeSrc = input(INSTRUCTION)(14) ? imm.z.asBits.resized | input(SRC1)
