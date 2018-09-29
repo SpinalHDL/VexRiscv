@@ -178,7 +178,7 @@ class BranchPlugin(earlyBranch : Boolean,
         stages(indexOf(branchStage) - 1).arbitration.flushAll := True
       }
 
-      if(catchAddressMisaligned) { //TODO conflict with instruction cache two stage
+      if(catchAddressMisaligned) {
         branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && (if(pipeline(RVC_GEN)) jumpInterface.payload(0 downto 0) =/= 0 else jumpInterface.payload(1 downto 0) =/= 0)
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := jumpInterface.payload

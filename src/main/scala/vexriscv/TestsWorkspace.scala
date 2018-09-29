@@ -129,7 +129,7 @@ object TestsWorkspace {
             divUnrollFactor = 1
           ),
 //          new DivPlugin,
-          new CsrPlugin(CsrPluginConfig.all(0x80000020l).copy(deterministicInteruptionEntry = false)),
+          new CsrPlugin(CsrPluginConfig.all2(0x80000020l).copy(deterministicInteruptionEntry = false)),
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = true,

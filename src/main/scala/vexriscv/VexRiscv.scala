@@ -44,6 +44,10 @@ case class VexRiscvConfig(){
   object SRC_USE_SUB_LESS extends Stageable(Bool)
   object SRC_LESS_UNSIGNED extends Stageable(Bool)
 
+
+  object DISRUPT_IN_MEMORY_STAGE extends Stageable(Bool)
+  object DISRUPT_IN_WRITEBACK_STAGE extends Stageable(Bool)
+
   //Formal verification purposes
   object FORMAL_HALT       extends Stageable(Bool)
   object FORMAL_PC_NEXT    extends Stageable(UInt(32 bits))
@@ -56,7 +60,7 @@ case class VexRiscvConfig(){
 
 
   object Src1CtrlEnum extends SpinalEnum(binarySequential){
-    val RS, IMU, PC_INCREMENT = newElement()   //IMU, IMZ IMJB
+    val RS, IMU, PC_INCREMENT, URS1 = newElement()   //IMU, IMZ IMJB
   }
 
   object Src2CtrlEnum extends SpinalEnum(binarySequential){
