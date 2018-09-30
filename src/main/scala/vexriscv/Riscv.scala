@@ -146,5 +146,6 @@ object Riscv{
 
 
     def UCYCLE    = 0xC00 // UR Machine ucycle counter.
+    def UCYCLEH   = 0xC80
   }
 }

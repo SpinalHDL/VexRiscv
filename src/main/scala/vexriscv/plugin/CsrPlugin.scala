@@ -60,8 +60,9 @@ case class CsrPluginConfig(
                             scycleAccess        : CsrAccess = CsrAccess.NONE,
                             sinstretAccess      : CsrAccess = CsrAccess.NONE,
                             satpAccess          : CsrAccess = CsrAccess.NONE,
+                            medelegAccess       : CsrAccess = CsrAccess.NONE,
+                            midelegAccess       : CsrAccess = CsrAccess.NONE,
                             deterministicInteruptionEntry : Boolean = false //Only used for simulatation purposes
-
                           ){
   assert(!ucycleAccess.canWrite)
 
@@ -121,7 +122,9 @@ object CsrPluginConfig{
     sbadaddrAccess = CsrAccess.READ_WRITE,
     scycleAccess   = CsrAccess.READ_WRITE,
     sinstretAccess = CsrAccess.READ_WRITE,
-    satpAccess     = CsrAccess.READ_WRITE
+    satpAccess     = CsrAccess.READ_WRITE,
+    medelegAccess = CsrAccess.READ_WRITE,
+    midelegAccess = CsrAccess.READ_WRITE
   )
 
   def small(mtvecInit : BigInt)  = CsrPluginConfig(
@@ -335,20 +338,20 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
     import pipeline.config._
     val fetcher = service(classOf[IBusFetcher])
 
-    pipeline plug new Area{
-      //Define CSR mapping utilities
-      implicit class CsrAccessPimper(csrAccess : CsrAccess){
-        def apply(csrAddress : Int, thats : (Int, Data)*) : Unit = {
-          if(csrAccess == `WRITE_ONLY` || csrAccess ==  `READ_WRITE`) for(that <- thats) csrMapping.w(csrAddress,that._1, that._2)
-          if(csrAccess == `READ_ONLY`  || csrAccess ==  `READ_WRITE`) for(that <- thats) csrMapping.r(csrAddress,that._1, that._2)
-        }
-        def apply(csrAddress : Int, that : Data) : Unit = {
-          if(csrAccess == `WRITE_ONLY` || csrAccess ==  `READ_WRITE`) csrMapping.w(csrAddress, 0, that)
-          if(csrAccess == `READ_ONLY`  || csrAccess ==  `READ_WRITE`) csrMapping.r(csrAddress, 0, that)
-        }
+    //Define CSR mapping utilities
+    implicit class CsrAccessPimper(csrAccess : CsrAccess){
+      def apply(csrAddress : Int, thats : (Int, Data)*) : Unit = {
+        if(csrAccess == `WRITE_ONLY` || csrAccess ==  `READ_WRITE`) for(that <- thats) csrMapping.w(csrAddress,that._1, that._2)
+        if(csrAccess == `READ_ONLY`  || csrAccess ==  `READ_WRITE`) for(that <- thats) csrMapping.r(csrAddress,that._1, that._2)
       }
+      def apply(csrAddress : Int, that : Data) : Unit = {
+        if(csrAccess == `WRITE_ONLY` || csrAccess ==  `READ_WRITE`) csrMapping.w(csrAddress, 0, that)
+        if(csrAccess == `READ_ONLY`  || csrAccess ==  `READ_WRITE`) csrMapping.r(csrAddress, 0, that)
+      }
+    }
 
 
+    val machineCsr = pipeline plug new Area{
       //Define CSR registers
       // Status => MXR, SUM, TVM, TW, TSE ?
       val misa = new Area{
@@ -384,35 +387,6 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       val medeleg = Reg(Bits(32 bits)) init(0)
       val mideleg = Reg(Bits(32 bits)) init(0)
 
-      val sstatus = new Area{
-        val SIE, SPIE = RegInit(False)
-        val SPP = RegInit(U"1")
-      }
-
-      val sip = new Area{
-        val SEIP = RegNext(externalInterruptS) init(False)
-        val STIP = RegNext(timerInterruptS) init(False)
-        val SSIP = RegInit(False)
-      }
-      val sie = new Area{
-        val SEIE, STIE, SSIE = RegInit(False)
-      }
-      val stvec = Reg(UInt(xlen bits)).allowUnsetRegToAvoidLatch
-      val sscratch = if(sscratchGen) Reg(Bits(xlen bits)) else null
-
-      val scause   = new Area{
-        val interrupt = Reg(Bool)
-        val exceptionCode = Reg(UInt(exceptionCodeWidth bits))
-      }
-      val stval = Reg(UInt(xlen bits))
-      val sepc = Reg(UInt(xlen bits))
-      val satp = new Area{
-        val PPN = Reg(Bits(22 bits))
-        val ASID = Reg(Bits(9 bits))
-        val MODE = Reg(Bits(1 bits))
-      }
-
-      //Define CSR registers accessibility
       if(mvendorid != null) READ_ONLY(CSR.MVENDORID, U(mvendorid))
       if(marchid   != null) READ_ONLY(CSR.MARCHID  , U(marchid  ))
       if(mimpid    != null) READ_ONLY(CSR.MIMPID   , U(mimpid   ))
@@ -435,26 +409,67 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       minstretAccess(CSR.MINSTRET, minstret(31 downto 0))
       minstretAccess(CSR.MINSTRETH, minstret(63 downto 32))
 
-      //Supervisor CSR
-      WRITE_ONLY(CSR.SSTATUS,8 -> sstatus.SPP, 5 -> sstatus.SPIE, 1 -> sstatus.SIE)
-      for(offset <- List(0, 0x200)) {
-        READ_ONLY(CSR.SSTATUS,8 -> sstatus.SPP, 5 -> sstatus.SPIE, 1 -> sstatus.SIE)
-      }
-      READ_ONLY(CSR.SIP, 9 -> sip.SEIP, 5 -> sip.STIP)
-      READ_WRITE(CSR.SIP, 1 -> sip.SSIP)
-      READ_WRITE(CSR.SIE, 9 -> sie.SEIE, 5 -> sie.STIE, 1 -> sie.SSIE)
-
-      stvecAccess(CSR.STVEC, stvec)
-      sepcAccess(CSR.SEPC, sepc)
-      if(sscratchGen) READ_WRITE(CSR.SSCRATCH, sscratch)
-      scauseAccess(CSR.SCAUSE, xlen-1 -> scause.interrupt, 0 -> scause.exceptionCode)
-      sbadaddrAccess(CSR.SBADADDR, stval)
-      satpAccess(CSR.SATP, 31 -> satp.MODE, 22 -> satp.ASID, 0 -> satp.PPN)
-
+      medelegAccess(CSR.MEDELEG, medeleg)
+      midelegAccess(CSR.MIDELEG, mideleg)
 
       //User CSR
       ucycleAccess(CSR.UCYCLE, mcycle(31 downto 0))
+      ucycleAccess(CSR.UCYCLEH, mcycle(31 downto 0))
+    }
 
+    val supervisorCsr = ifGen(supervisorGen) {
+      pipeline plug new Area {
+        val sstatus = new Area {
+          val SIE, SPIE = RegInit(False)
+          val SPP = RegInit(U"1")
+        }
+
+        val sip = new Area {
+          val SEIP = RegNext(externalInterruptS) init (False)
+          val STIP = RegNext(timerInterruptS) init (False)
+          val SSIP = RegInit(False)
+        }
+        val sie = new Area {
+          val SEIE, STIE, SSIE = RegInit(False)
+        }
+        val stvec = Reg(UInt(xlen bits)).allowUnsetRegToAvoidLatch
+        val sscratch = if (sscratchGen) Reg(Bits(xlen bits)) else null
+
+        val scause = new Area {
+          val interrupt = Reg(Bool)
+          val exceptionCode = Reg(UInt(exceptionCodeWidth bits))
+        }
+        val stval = Reg(UInt(xlen bits))
+        val sepc = Reg(UInt(xlen bits))
+        val satp = new Area {
+          val PPN = Reg(Bits(22 bits))
+          val ASID = Reg(Bits(9 bits))
+          val MODE = Reg(Bits(1 bits))
+        }
+
+        //Supervisor CSR
+        WRITE_ONLY(CSR.SSTATUS,8 -> sstatus.SPP, 5 -> sstatus.SPIE, 1 -> sstatus.SIE)
+        for(offset <- List(0, 0x200)) {
+          READ_ONLY(CSR.SSTATUS,8 -> sstatus.SPP, 5 -> sstatus.SPIE, 1 -> sstatus.SIE)
+        }
+        READ_ONLY(CSR.SIP, 9 -> sip.SEIP, 5 -> sip.STIP)
+        READ_WRITE(CSR.SIP, 1 -> sip.SSIP)
+        READ_WRITE(CSR.SIE, 9 -> sie.SEIE, 5 -> sie.STIE, 1 -> sie.SSIE)
+
+        stvecAccess(CSR.STVEC, stvec)
+        sepcAccess(CSR.SEPC, sepc)
+        if(sscratchGen) READ_WRITE(CSR.SSCRATCH, sscratch)
+        scauseAccess(CSR.SCAUSE, xlen-1 -> scause.interrupt, 0 -> scause.exceptionCode)
+        sbadaddrAccess(CSR.SBADADDR, stval)
+        satpAccess(CSR.SATP, 31 -> satp.MODE, 22 -> satp.ASID, 0 -> satp.PPN)
+      }
+    }
+
+
+
+    pipeline plug new Area{
+      import machineCsr._
+      import supervisorCsr._
 
 
       //Manage counters
@@ -466,7 +481,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       case class InterruptSource(cond : Bool, id : Int)
       case class InterruptModel(privilege : Int, privilegeCond : Bool, sources : ArrayBuffer[InterruptSource])
       val interruptModel = ArrayBuffer[InterruptModel]()
-      interruptModel += InterruptModel(1, sstatus.SIE && privilege <= "01", ArrayBuffer(
+      if(supervisorGen) interruptModel += InterruptModel(1, sstatus.SIE && privilege <= "01", ArrayBuffer(
         InterruptSource(sip.STIP && sie.STIE,  5),
         InterruptSource(sip.SSIP && sie.SSIE,  1),
         InterruptSource(sip.SEIP && sie.SEIE,  9)
@@ -491,6 +506,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       }
 
       def solveDelegators(delegators : Seq[DelegatorModel], id : UInt, lowerBound : UInt): UInt = {
+        if(delegators.isEmpty) return CombInit(lowerBound)
         val ret = U(delegators.last.target, 2 bits)
         for(d <- delegators){
           when(!d.value(id) || d.target < lowerBound){
@@ -501,10 +517,10 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       }
 
       val interruptDelegators = ArrayBuffer[DelegatorModel]()
-      interruptDelegators += DelegatorModel(mideleg,3, 1)
+      if(midelegAccess.canWrite) interruptDelegators += DelegatorModel(mideleg,3, 1)
 
       val exceptionDelegators = ArrayBuffer[DelegatorModel]()
-      exceptionDelegators += DelegatorModel(medeleg,3, 1)
+      if(medelegAccess.canWrite) exceptionDelegators += DelegatorModel(medeleg,3, 1)
 
 
       val mepcCaptureStage = if(exceptionPortsInfos.nonEmpty) writeBack else decode
@@ -632,17 +648,18 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValidsRegs.last := False
 
         switch(targetPrivilege){
-          is(1){
-            sstatus.SIE  := False
+          if(supervisorGen) is(1) {
+            sstatus.SIE := False
             sstatus.SPIE := sstatus.SIE
-            sstatus.SPP  := privilege(0 downto 0)
+            sstatus.SPP := privilege(0 downto 0)
             scause.interrupt := !hadException
             scause.exceptionCode := trapCause
             sepc := mepcCaptureStage.input(PC)
-            if(exceptionPortCtrl != null) {
+            if (exceptionPortCtrl != null) {
               stval := exceptionPortCtrl.exceptionContext.badAddr
             }
           }
+
           is(3){
             mstatus.MIE  := False
             mstatus.MPIE := mstatus.MIE
@@ -684,9 +701,12 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         }
       }
 
-      writeBack plug new Area {
-        import writeBack._
-        def previousStage = memory
+//      writeBack plug new Area {
+//        import writeBack._
+//        def previousStage = memory
+      execute plug new Area {
+        import execute._
+        def previousStage = decode
 
         val illegalAccess =  arbitration.isValid && input(IS_CSR)
         val illegalInstruction = False
@@ -711,7 +731,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
                 mstatus.MPIE := True
                 privilege := mstatus.MPP //TODO check MPP value
               }
-              is(1){
+              if(supervisorGen) is(1){
                 sstatus.SIE := sstatus.SPIE
                 sstatus.SPP := U"0"
                 sstatus.SPIE := True
