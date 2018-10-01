@@ -735,7 +735,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       execute plug new Area {
         import execute._
         def previousStage = decode
-        val blockedBySideEffects =  List(memory, writeBack).map(s => s.arbitration.isValid && s.input(HAS_SIDE_EFFECT)).orR
+        val blockedBySideEffects =  List(memory, writeBack).map(s => s.arbitration.isValid).orR // && s.input(HAS_SIDE_EFFECT)  to improve be less pessimistic
 
         val illegalAccess =  arbitration.isValid && input(IS_CSR)
         val illegalInstruction = False

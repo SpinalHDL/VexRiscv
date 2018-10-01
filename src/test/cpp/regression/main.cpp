@@ -718,6 +718,11 @@ public:
 		logTraces.open (name + ".logTrace");
 		fillSimELements();
 		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
+
+        //Sync register file initial content
+        for(int i = 1;i < 32;i++){
+            riscvRef.regs[i] = top->VexRiscv->RegFilePlugin_regFile[i];
+        }
 	}
 
 	virtual ~Workspace(){

@@ -33,7 +33,7 @@ object GenSmallestNoCsr extends App{
         ),
         new RegFilePlugin(
           regFileReadyKind = plugin.SYNC,
-          zeroBoot = true,
+          zeroBoot = false,
           writeRfInMemoryStage = false
         ),
         new IntAluPlugin,

@@ -182,7 +182,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
 }
 
 
-class DBusSimplePlugin(catchAddressMisaligned : Boolean = false, catchAccessFault : Boolean = false, earlyInjection : Boolean = false) extends Plugin[VexRiscv]{
+class DBusSimplePlugin(catchAddressMisaligned : Boolean = false, catchAccessFault : Boolean = false, earlyInjection : Boolean = false/*, idempotentRegions : (UInt) => Bool = (x) => False*/) extends Plugin[VexRiscv]{
 
   var dBus  : DBusSimpleBus = null
 
