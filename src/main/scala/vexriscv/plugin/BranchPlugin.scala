@@ -90,14 +90,16 @@ class BranchPlugin(earlyBranch : Boolean,
       SRC2_CTRL         -> Src2CtrlEnum.RS,
       SRC_USE_SUB_LESS  -> True,
       RS1_USE          -> True,
-      RS2_USE          -> True
+      RS2_USE          -> True,
+      HAS_SIDE_EFFECT -> True
     )
 
     val jActions = List[(Stageable[_ <: BaseType],Any)](
       SRC1_CTRL           -> Src1CtrlEnum.PC_INCREMENT,
       SRC2_CTRL           -> Src2CtrlEnum.PC,
       SRC_USE_SUB_LESS    -> False,
-      REGFILE_WRITE_VALID -> True
+      REGFILE_WRITE_VALID -> True,
+      HAS_SIDE_EFFECT -> True
     )
 
     import IntAluPlugin._

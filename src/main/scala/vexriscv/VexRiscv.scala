@@ -45,8 +45,7 @@ case class VexRiscvConfig(){
   object SRC_LESS_UNSIGNED extends Stageable(Bool)
 
 
-  object DISRUPT_IN_MEMORY_STAGE extends Stageable(Bool)
-  object DISRUPT_IN_WRITEBACK_STAGE extends Stageable(Bool)
+  object HAS_SIDE_EFFECT extends Stageable(Bool)
 
   //Formal verification purposes
   object FORMAL_HALT       extends Stageable(Bool)

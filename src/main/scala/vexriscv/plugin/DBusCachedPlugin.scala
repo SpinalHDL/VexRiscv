@@ -53,7 +53,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       BYPASSABLE_MEMORY_STAGE -> False,
       MEMORY_WR -> False,
       MEMORY_MANAGMENT -> False
-    )
+    ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
 
     val storeActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMS,

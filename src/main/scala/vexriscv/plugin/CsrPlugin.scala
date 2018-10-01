@@ -277,7 +277,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       REGFILE_WRITE_VALID      -> True,
       ALU_BITWISE_CTRL -> AluBitwiseCtrlEnum.SRC1,
       ALU_CTRL -> AluCtrlEnum.BITWISE
-    )
+    ) ++ (if(catchIllegalAccess) List(HAS_SIDE_EFFECT -> True) else Nil)
 
     val nonImmediatActions = defaultCsrActions ++ List(
       SRC1_CTRL                -> Src1CtrlEnum.RS,
@@ -299,11 +299,11 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       CSRRWI -> immediatActions,
       CSRRSI -> immediatActions,
       CSRRCI -> immediatActions,
-      MRET   -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.XRET)),
-      SRET   -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.XRET))
+      MRET   -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.XRET, HAS_SIDE_EFFECT -> True)),
+      SRET   -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.XRET, HAS_SIDE_EFFECT -> True))
     ))
     if(wfiGen)   decoderService.add(WFI,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.WFI))
-    if(ecallGen) decoderService.add(ECALL,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.ECALL))
+    if(ecallGen) decoderService.add(ECALL,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.ECALL, HAS_SIDE_EFFECT -> True))
 
     val  pcManagerService = pipeline.service(classOf[JumpService])
     jumpInterface = pcManagerService.createJumpInterface(pipeline.writeBack)
@@ -322,7 +322,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
     privilege = RegInit(U"11").setName("CsrPlugin_privilege")
 
     if(catchIllegalAccess || ecallGen)
-      selfException = newExceptionPort(pipeline.writeBack)
+      selfException = newExceptionPort(pipeline.execute)
 
     allowInterrupts = True
     allowException = True
@@ -555,31 +555,31 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         exceptionValids := exceptionValidsRegs
         for(portInfo <- sortedByStage; port = portInfo.port ; stage = portInfo.stage; stageId = indexOf(portInfo.stage)) {
           when(port.valid) {
-//            if(indexOf(stage) != 0) stages(indexOf(stage) - 1).arbitration.flushAll := True
+            if(indexOf(stage) != 0) stages(indexOf(stage) - 1).arbitration.flushAll := True
             stage.arbitration.removeIt := True
             exceptionValids(stageId) := True
-            when(!exceptionValidsRegs.takeRight(stages.length-stageId-1).fold(False)(_ || _)) {
-              exceptionContext := port.payload
-            }
+            exceptionContext := port.payload
           }
         }
 
         for(stageId <- firstStageIndexWithExceptionPort until stages.length; stage = stages(stageId) ){
-          when(stage.arbitration.isFlushed){
-            exceptionValids(stageId) := False
-          }
           val previousStage = if(stageId == firstStageIndexWithExceptionPort) stage else stages(stageId-1)
           when(!stage.arbitration.isStuck){
             exceptionValidsRegs(stageId) := (if(stageId != firstStageIndexWithExceptionPort) exceptionValids(stageId-1) && !previousStage.arbitration.isStuck else False)
           }otherwise{
-            exceptionValidsRegs(stageId) := exceptionValids(stageId)
+            if(stage != stages.last)
+              exceptionValidsRegs(stageId) := exceptionValids(stageId)
+            else
+              exceptionValidsRegs(stageId) := False
           }
+          if(stage != stages.last) when(stage.arbitration.isFlushed){
+            exceptionValids(stageId) := False
+          }
+        }
 
-          if(stageId != 0){
-            when(exceptionValidsRegs(stageId)){
-              stages(stageId-1).arbitration.haltByOther := True
-            }
-          }
+        when(exceptionValids.orR){
+          fetcher.haltIt()
+          fetcher.flushIt()
         }
       } else null
 
@@ -627,8 +627,6 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       interruptJump := interrupt && pipelineLiberator.done
 
       val hadException = RegNext(exception) init(False)
-      exception clearWhen(hadException)
-      writeBack.arbitration.haltItself setWhen(exception)
 
 
       val targetPrivilege = CombInit(interruptTargetPrivilege)
@@ -641,11 +639,21 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         trapCause := exceptionPortCtrl.exceptionContext.code
       }
 
+      when(exception || interruptJump){
+        switch(privilege){
+          if(supervisorGen) is(1) {
+            sepc := mepcCaptureStage.input(PC)
+          }
+          is(3){
+            mepc := mepcCaptureStage.input(PC)
+          }
+        }
+      }
+
       when(hadException || (interruptJump && !exception)){
         jumpInterface.valid := True
         jumpInterface.payload := mtvec
         memory.arbitration.flushAll := True
-        if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValidsRegs.last := False
 
         switch(targetPrivilege){
           if(supervisorGen) is(1) {
@@ -654,7 +662,6 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
             sstatus.SPP := privilege(0 downto 0)
             scause.interrupt := !hadException
             scause.exceptionCode := trapCause
-            sepc := mepcCaptureStage.input(PC)
             if (exceptionPortCtrl != null) {
               stval := exceptionPortCtrl.exceptionContext.badAddr
             }
@@ -666,13 +673,36 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
             mstatus.MPP  := privilege
             mcause.interrupt := !hadException
             mcause.exceptionCode := trapCause
-            mepc := mepcCaptureStage.input(PC)
             if(exceptionPortCtrl != null) {
               mtval := exceptionPortCtrl.exceptionContext.badAddr
             }
           }
         }
+      }
 
+      writeBack plug new Area{
+        import writeBack._
+        def previousStage = memory
+        //Manage MRET / SRET instructions
+        when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.XRET) {
+        jumpInterface.payload := mepc
+          jumpInterface.valid := True
+          previousStage.arbitration.flushAll := True
+          switch(input(INSTRUCTION)(29 downto 28)){
+            is(3){
+              mstatus.MIE := mstatus.MPIE
+              mstatus.MPP := U"00"
+              mstatus.MPIE := True
+              privilege := mstatus.MPP
+            }
+            if(supervisorGen) is(1){
+              sstatus.SIE := sstatus.SPIE
+              sstatus.SPP := U"0"
+              sstatus.SPIE := True
+              privilege := U"0" @@ sstatus.SPP
+            }
+          }
+        }
       }
 
 
@@ -701,12 +731,11 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         }
       }
 
-//      writeBack plug new Area {
-//        import writeBack._
-//        def previousStage = memory
+
       execute plug new Area {
         import execute._
         def previousStage = decode
+        val blockedBySideEffects =  List(memory, writeBack).map(s => s.arbitration.isValid && s.input(HAS_SIDE_EFFECT)).orR
 
         val illegalAccess =  arbitration.isValid && input(IS_CSR)
         val illegalInstruction = False
@@ -718,28 +747,12 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
         //Manage MRET / SRET instructions
         when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.XRET) {
-          jumpInterface.payload := mepc
+          //TODO check MPP value too
           when(input(INSTRUCTION)(29 downto 28).asUInt =/= privilege) {
             illegalInstruction := True
-          } otherwise{
-            jumpInterface.valid := True
-            previousStage.arbitration.flushAll := True
-            switch(input(INSTRUCTION)(29 downto 28)){
-              is(3){
-                mstatus.MIE := mstatus.MPIE
-                mstatus.MPP := U"00"
-                mstatus.MPIE := True
-                privilege := mstatus.MPP //TODO check MPP value
-              }
-              if(supervisorGen) is(1){
-                sstatus.SIE := sstatus.SPIE
-                sstatus.SPP := U"0"
-                sstatus.SPIE := True
-                privilege := U"0" @@ sstatus.SPP
-              }
-            }
           }
         }
+
 
         //Manage ECALL instructions
         if(ecallGen) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.ECALL){
@@ -762,11 +775,12 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         val readInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE)
 
 //        arbitration.haltItself setWhen(writeInstruction && !readDataRegValid)
-        val writeEnable = writeInstruction// &&  readDataRegValid
-        val readEnable  = readInstruction//  && !readDataRegValid
+        val writeEnable = writeInstruction && ! arbitration.isStuck// &&  readDataRegValid
+        val readEnable  = readInstruction && ! arbitration.isStuck//  && !readDataRegValid
 
         when(arbitration.isValid && input(IS_CSR)) {
           output(REGFILE_WRITE_DATA) := readData
+          arbitration.haltItself setWhen(blockedBySideEffects)
         }
 
         //Translation of the csrMapping into real logic

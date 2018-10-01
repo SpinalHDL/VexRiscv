@@ -197,11 +197,11 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
 
       decode.insert(DO_EBREAK) := !haltIt && (decode.input(IS_EBREAK) || hardwareBreakpoints.map(hb => hb.valid && hb.pc === (execute.input(PC) >> 1)).foldLeft(False)(_ || _))
       when(execute.arbitration.isValid && execute.input(DO_EBREAK)){
-        iBusFetcher.flushIt()
-        iBusFetcher.haltIt()
         execute.arbitration.haltByOther := True
         busReadDataReg := execute.input(PC).asBits
         when(List(memory, writeBack).map(_.arbitration.isValid).orR === False){
+          iBusFetcher.flushIt()
+          iBusFetcher.haltIt()
           execute.arbitration.flushAll := True
           haltIt := True
           haltedByBreak := True
