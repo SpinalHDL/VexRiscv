@@ -114,9 +114,21 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       //PC calculation without Jump
       val pcReg = Reg(UInt(32 bits)) init(if(resetVector != null) resetVector else externalResetVector) addAttribute(Verilator.public)
       val inc = RegInit(False)
+      val propagatePc = False
 
       val pc = pcReg + (inc ## B"00").asUInt
       val samplePcNext = False
+
+      if(compressedGen) {
+        when(inc) {
+          pc(1) := False
+        }
+      }
+
+      when(propagatePc){
+        samplePcNext := True
+        inc := False
+      }
 
       if(predictionPcLoad != null) {
         when(predictionPcLoad.valid) {
@@ -142,14 +154,6 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         pcReg := pc
       }
 
-      if(compressedGen) {
-        when(preOutput.fire) {
-          pcReg(1 downto 0) := 0
-          when(pc(1)){
-            inc := True
-          }
-        }
-      }
 
       preOutput.valid := RegNext(True) init (False)
       preOutput.payload := pc
@@ -217,7 +221,13 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       }
 
       for((s,sNext) <- (stages, stages.tail).zipped) {
-        sNext.input << s.output.m2sPipeWithFlush(flush, s != stages.head, collapsBubble = false)
+        if(s == stages.head) {
+          sNext.input.arbitrationFrom(s.output.toEvent().m2sPipeWithFlush(flush, s != stages.head, collapsBubble = false))
+          sNext.input.payload := fetchPc.pcReg
+          fetchPc.propagatePc setWhen(sNext.input.fire)
+        } else {
+          sNext.input << s.output.m2sPipeWithFlush(flush, s != stages.head, collapsBubble = false)
+        }
       }
 
 //
@@ -310,7 +320,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         }).tail
       }
 
-      val nextPcCalc = if (decodePcGen) {
+      val nextPcCalc = if (decodePcGen) new Area{
         val valids = pcUpdatedGen(True, False :: List(execute, memory, writeBack).map(_.arbitration.isStuck), true)
         pcValids := Vec(valids.takeRight(4))
       } else new Area{
