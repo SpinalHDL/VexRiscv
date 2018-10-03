@@ -498,6 +498,7 @@ object MuraxDhrystoneReadyMulDivStatic{
       config.cpuPlugins += new IBusSimplePlugin(
         resetVector = 0x80000000l,
         cmdForkOnSecondStage = true,
+        cmdForkPersistence = false,
         prediction = STATIC,
         catchAccessFault = false,
         compressedGen = false

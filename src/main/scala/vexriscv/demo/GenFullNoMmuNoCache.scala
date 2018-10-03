@@ -15,6 +15,7 @@ object GenFullNoMmuNoCache extends App{
         new IBusSimplePlugin(
           resetVector = 0x80000000l,
           cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
           prediction = STATIC,
           catchAccessFault = false,
           compressedGen = false

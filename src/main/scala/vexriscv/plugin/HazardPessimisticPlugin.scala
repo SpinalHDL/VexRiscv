@@ -7,6 +7,13 @@ import spinal.lib._
 
 class HazardPessimisticPlugin() extends Plugin[VexRiscv] {
   import Riscv._
+
+  override def setup(pipeline: VexRiscv): Unit = {
+    import pipeline.config._
+    val decoderService = pipeline.service(classOf[DecoderService])
+    decoderService.addDefault(HAS_SIDE_EFFECT, False)
+  }
+
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._

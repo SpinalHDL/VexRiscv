@@ -16,6 +16,7 @@ object FormalSimple extends App{
         new IBusSimplePlugin(
           resetVector = 0x00000000l,
           cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
           prediction = DYNAMIC_TARGET,
           catchAccessFault = false,
           compressedGen = true

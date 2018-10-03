@@ -15,6 +15,7 @@ object GenNoCacheNoMmuMaxPerf extends App{
         new IBusSimplePlugin(
           resetVector = 0x80000000l,
           cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
           prediction = DYNAMIC_TARGET,
           historyRamSizeLog2 = 8,
           catchAccessFault = true,

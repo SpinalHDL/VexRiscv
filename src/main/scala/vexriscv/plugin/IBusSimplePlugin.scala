@@ -143,16 +143,17 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
 
 class IBusSimplePlugin(resetVector : BigInt,
+                       cmdForkOnSecondStage : Boolean,
+                       cmdForkPersistence : Boolean,
                        catchAccessFault : Boolean = false,
-                       cmdForkOnSecondStage : Boolean = false,
-                       cmdForkPersistence : Boolean = false,
                        prediction : BranchPrediction = NONE,
                        historyRamSizeLog2 : Int = 10,
                        keepPcPlus4 : Boolean = false,
                        compressedGen : Boolean = false,
                        busLatencyMin : Int = 1,
                        pendingMax : Int = 7,
-                       injectorStage : Boolean = true
+                       injectorStage : Boolean = true,
+                       rspHoldValue : Boolean = false
                       ) extends IBusFetcherImpl(
     catchAccessFault = catchAccessFault,
     resetVector = resetVector,
@@ -168,6 +169,7 @@ class IBusSimplePlugin(resetVector : BigInt,
 
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
+  if(rspHoldValue) assert(busLatencyMin == 1)
 
   override def setup(pipeline: VexRiscv): Unit = {
     super.setup(pipeline)
@@ -221,22 +223,29 @@ class IBusSimplePlugin(resetVector : BigInt,
             discardCounter := (if(cmdForkOnSecondStage) pendingCmdNext else pendingCmd - iBus.rsp.fire.asUInt)
         }
 
-        val rspBuffer = StreamFifoLowLatency(IBusSimpleRsp(), busLatencyMin + (if(cmdForkOnSecondStage && cmdForkPersistence) 1 else 0))
-        rspBuffer.io.push << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
-        rspBuffer.io.flush := flush
+        val rspBufferOutput = Stream(IBusSimpleRsp())
+
+        val rspBuffer = if(!rspHoldValue) new Area{
+          val c = StreamFifoLowLatency(IBusSimpleRsp(), busLatencyMin + (if(cmdForkOnSecondStage && cmdForkPersistence) 1 else 0))
+          c.io.push << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
+          c.io.flush := flush
+          rspBufferOutput << c.io.pop
+        } else new Area{
+          rspBufferOutput << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
+        }
 
         val fetchRsp = FetchRsp()
         fetchRsp.pc := stages.last.output.payload
-        fetchRsp.rsp := rspBuffer.io.pop.payload
-        fetchRsp.rsp.error.clearWhen(!rspBuffer.io.pop.valid) //Avoid interference with instruction injection from the debug plugin
+        fetchRsp.rsp := rspBufferOutput.payload
+        fetchRsp.rsp.error.clearWhen(!rspBufferOutput.valid) //Avoid interference with instruction injection from the debug plugin
 
 
         var issueDetected = False
         val join = Stream(FetchRsp())
-        join.valid := stages.last.output.valid && rspBuffer.io.pop.valid
+        join.valid := stages.last.output.valid && rspBufferOutput.valid
         join.payload := fetchRsp
         stages.last.output.ready := stages.last.output.valid ? join.fire | join.ready
-        rspBuffer.io.pop.ready := join.fire
+        rspBufferOutput.ready := join.fire
         output << join.haltWhen(issueDetected)
 
         if(catchAccessFault){

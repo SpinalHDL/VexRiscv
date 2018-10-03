@@ -28,7 +28,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
   var dynamicTargetFailureCorrection : Flow[UInt] = null
   var externalResetVector : UInt = null
   assert(cmdToRspStageCount >= 1)
-  assert(!(cmdToRspStageCount == 1 && !injectorStage))
+//  assert(!(cmdToRspStageCount == 1 && !injectorStage))
   assert(!(compressedGen && !decodePcGen))
   var fetcherHalt : Bool = null
   var fetcherflushIt : Bool = null

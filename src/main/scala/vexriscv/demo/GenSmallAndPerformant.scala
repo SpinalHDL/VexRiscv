@@ -14,6 +14,7 @@ object GenSmallAndProductive extends App{
         new IBusSimplePlugin(
           resetVector = 0x80000000l,
           cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
           prediction = NONE,
           catchAccessFault = false,
           compressedGen = false

@@ -19,6 +19,7 @@ object GenCustomCsr extends App{
         new IBusSimplePlugin(
           resetVector = 0x00000000l,
           cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
           prediction = NONE,
           catchAccessFault = false,
           compressedGen = false
