@@ -179,7 +179,7 @@ object MuraxSynthesisBench {
 
     val rtls = List(murax, muraxFast)
 
-    val targets = IcestormStdTargets() ++ XilinxStdTargets(
+    val targets = IcestormStdTargets().take(1) ++ XilinxStdTargets(
       vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
     ) ++ AlteraStdTargets(
       quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin/",

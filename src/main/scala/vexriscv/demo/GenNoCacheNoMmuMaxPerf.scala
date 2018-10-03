@@ -14,7 +14,7 @@ object GenNoCacheNoMmuMaxPerf extends App{
       plugins = List(
         new IBusSimplePlugin(
           resetVector = 0x80000000l,
-          relaxedPcCalculation = false,
+          cmdForkOnSecondStage = false,
           prediction = DYNAMIC_TARGET,
           historyRamSizeLog2 = 8,
           catchAccessFault = true,

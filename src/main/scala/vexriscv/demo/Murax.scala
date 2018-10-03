@@ -69,7 +69,8 @@ object MuraxConfig{
     cpuPlugins = ArrayBuffer( //DebugPlugin added by the toplevel
       new IBusSimplePlugin(
         resetVector = if(withXip) 0xF001E000l else 0x80000000l,
-        relaxedPcCalculation = true,
+        cmdForkOnSecondStage = true,
+        cmdForkPersistence = withXip, //Required by the Xip controller
         prediction = NONE,
         catchAccessFault = false,
         compressedGen = false
@@ -227,7 +228,7 @@ case class Murax(config : MuraxConfig) extends Component{
     val externalInterrupt = False
     for(plugin <- cpu.plugins) plugin match{
       case plugin : IBusSimplePlugin =>
-        mainBusArbiter.io.iBus.cmd <> plugin.iBus.cmd.halfPipe() //TODO !!
+        mainBusArbiter.io.iBus.cmd <> plugin.iBus.cmd
         mainBusArbiter.io.iBus.rsp <> plugin.iBus.rsp
       case plugin : DBusSimplePlugin => {
         if(!pipelineDBus)
@@ -496,7 +497,7 @@ object MuraxDhrystoneReadyMulDivStatic{
       )
       config.cpuPlugins += new IBusSimplePlugin(
         resetVector = 0x80000000l,
-        relaxedPcCalculation = true,
+        cmdForkOnSecondStage = true,
         prediction = STATIC,
         catchAccessFault = false,
         compressedGen = false

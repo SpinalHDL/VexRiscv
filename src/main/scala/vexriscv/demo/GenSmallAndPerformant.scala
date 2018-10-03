@@ -13,7 +13,7 @@ object GenSmallAndProductive extends App{
       plugins = List(
         new IBusSimplePlugin(
           resetVector = 0x80000000l,
-          relaxedPcCalculation = false,
+          cmdForkOnSecondStage = false,
           prediction = NONE,
           catchAccessFault = false,
           compressedGen = false

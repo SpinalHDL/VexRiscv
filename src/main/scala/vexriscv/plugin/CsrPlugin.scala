@@ -731,6 +731,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         }
       }
 
+      decode.arbitration.haltByOther setWhen(List(execute,memory).map(s => s.arbitration.isValid && s.input(ENV_CTRL) === EnvCtrlEnum.XRET).orR)
 
       execute plug new Area {
         import execute._

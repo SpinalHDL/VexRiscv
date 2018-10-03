@@ -17,6 +17,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
                                val decodePcGen : Boolean,
                                val compressedGen : Boolean,
                                val cmdToRspStageCount : Int,
+                               val pcRegReusedForSecondStage : Boolean,
                                val injectorReadyCutGen : Boolean,
                                val prediction : BranchPrediction,
                                val historyRamSizeLog2 : Int,
@@ -221,7 +222,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       }
 
       for((s,sNext) <- (stages, stages.tail).zipped) {
-        if(s == stages.head) {
+        if(s == stages.head && pcRegReusedForSecondStage) {
           sNext.input.arbitrationFrom(s.output.toEvent().m2sPipeWithFlush(flush, s != stages.head, collapsBubble = false))
           sNext.input.payload := fetchPc.pcReg
           fetchPc.propagatePc setWhen(sNext.input.fire)

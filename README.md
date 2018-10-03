@@ -422,7 +422,8 @@ val cpu = new VexRiscv(
     plugins = List(
       new IBusSimplePlugin(
         resetVector = 0x00000000l,
-        relaxedPcCalculation = true
+        cmdForkOnSecondStage = true,
+        cmdForkPersistence  = true
       ),
       new DBusSimplePlugin(
         catchAddressMisaligned = false,
@@ -643,19 +644,6 @@ This chapter describes plugins currently implemented.
 - [DebugPlugin](#debugplugin)
 - [YamlPlugin](#yamlplugin)
 
-#### PcManagerSimplePlugin
-
-This plugin implements the program counter and a jump service to all plugins.
-
-
-| Parameters | type | description |
-| ------ | ----------- | ------ |
-| resetVector | BigInt | Address of the program counter after the reset |
-| relaxedPcCalculation | Boolean | By default jump have an asynchronous immediate effect on the program counter, which allow to reduce the branch penalties by one cycle but could reduce the FMax as it will combinatorialy drive the instruction bus address signal. To avoid this you can set this parameter to true, which will make the jump affecting the programm counter in a sequancial way, which will cut the combinatorial path but add one additional cycle of penalty when a jump occur. |
-
-
-
-This plugin operates on the prefetch stage.
 
 #### IBusSimplePlugin
 
@@ -665,8 +653,8 @@ This plugin implement the CPU frontend (instruction fetch) via a very simple and
 | ------ | ----------- | ------ | 
 | catchAccessFault | Boolean | If an the read response specify an read error and this parameter is true, it will generate an CPU exception trap |
 | resetVector | BigInt | Address of the program counter after the reset |
-| relaxedPcCalculation | Boolean | By default jump have an asynchronous immediate effect on the program counter, which allow to reduce the branch penalties by one cycle but could reduce the FMax as it will combinatorialy drive the instruction bus address signal. To avoid this you can set this parameter to true, which will make the jump affecting the programm counter in a sequancial way, which will cut the combinatorial path but add one additional cycle of penalty when a jump occur. |
-| relaxedBusCmdValid | Boolean | Same than relaxedPcCalculation, but for the iBus.cmd.valid pin. |
+| cmdForkOnSecondStage | Boolean | By default jump have an asynchronous immediate effect on the program counter, which allow to reduce the branch penalties by one cycle but could reduce the FMax as it will combinatorialy drive the instruction bus address signal. To avoid this you can set this parameter to true, which will make the jump affecting the programm counter in a sequancial way, which will cut the combinatorial path but add one additional cycle of penalty when a jump occur. |
+| cmdForkPersistence  | Boolean | If this parameter is false, then request on the iBus can disappear/change before their completion. Which reduce area but isn't safe/supported by many arbitration/slaves. If you set this parameter to true, then the iBus cmd will stay until they are completed.
 | compressedGen | Boolean | Enable RVC support |
 | busLatencyMin | Int | Specify the minimal latency between the iBus.cmd and iBus.rsp, which will add the corresponding number of stages into the frontend to keep the IPC to 1.|
 | injectorStage | Boolean | Add a stage between the frontend and the decode stage of the CPU to improve FMax. (busLatencyMin + injectorStage) should be at least two. | 
@@ -700,8 +688,9 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 }
 ```
 
-**Important** : There should be at least one cycle latency between que cmd and the rsp. The IBus.cmd can remove request when a CPU jump occure or when the CPU is halted by someting in the pipeline. As many arbitration aren't made for this behaviour, it is important to add a buffer to the iBus.cmd to avoid this. Ex : iBus.cmd.s2mPipe, which add a zero latency buffer and cut the iBus.cmd.ready path.
-You can also do iBus.cmd.s2mPipe.m2sPipe, which will cut all combinatorial path of the bus but then as a latency of 1 cycle. which mean you should probably set the busLatencyMin to 2.
+**Important** : Checkout the cmdForkPersistence parameter, because if it's not set, it can break the iBus compatibility with your memory system (unless you externaly add some buffers)
+
+Setting cmdForkPersistence and cmdForkOnSecondStage improves iBus cmd timings.
 
 Note that bridges are implemented to convert this interface into AXI4 and Avalon
 

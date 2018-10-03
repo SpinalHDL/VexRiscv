@@ -144,7 +144,8 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
 class IBusSimplePlugin(resetVector : BigInt,
                        catchAccessFault : Boolean = false,
-                       relaxedPcCalculation : Boolean = false,
+                       cmdForkOnSecondStage : Boolean = false,
+                       cmdForkPersistence : Boolean = false,
                        prediction : BranchPrediction = NONE,
                        historyRamSizeLog2 : Int = 10,
                        keepPcPlus4 : Boolean = false,
@@ -158,7 +159,8 @@ class IBusSimplePlugin(resetVector : BigInt,
     keepPcPlus4 = keepPcPlus4,
     decodePcGen = compressedGen,
     compressedGen = compressedGen,
-    cmdToRspStageCount = busLatencyMin + (if(relaxedPcCalculation) 1 else 0),
+    cmdToRspStageCount = busLatencyMin + (if(cmdForkOnSecondStage) 1 else 0),
+    pcRegReusedForSecondStage = !(cmdForkOnSecondStage && cmdForkPersistence),
     injectorReadyCutGen = false,
     prediction = prediction,
     historyRamSizeLog2 = historyRamSizeLog2,
@@ -182,40 +184,44 @@ class IBusSimplePlugin(resetVector : BigInt,
     import pipeline.config._
 
     pipeline plug new FetchArea(pipeline) {
+      var cmd = Stream(IBusSimpleCmd())
+      iBus.cmd << (if(cmdForkPersistence && !cmdForkOnSecondStage) cmd.s2mPipe() else cmd)
+
       //Avoid sending to many iBus cmd
       val pendingCmd = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
-      val pendingCmdNext = pendingCmd + iBus.cmd.fire.asUInt - iBus.rsp.fire.asUInt
+      val pendingCmdNext = pendingCmd + cmd.fire.asUInt - iBus.rsp.fire.asUInt
       pendingCmd := pendingCmdNext
 
-      val cmd = /*if(relaxedPcCalculation) new Area {
-        //This implementation keep the iBus.cmd on the bus until it's executed, even if the pipeline is flushed
+      val cmdFork = if(!cmdForkPersistence || !cmdForkOnSecondStage) new Area {
+        //This implementation keep the cmd on the bus until it's executed or the the pipeline is flushed
+        def stage = iBusRsp.stages(if(cmdForkOnSecondStage) 1 else 0)
+        stage.halt setWhen(stage.input.valid && (!cmd.valid || !cmd.ready))
+        cmd.valid := stage.input.valid && stage.output.ready && pendingCmd =/= pendingMax
+        cmd.pc := stage.input.payload(31 downto 2) @@ "00"
+      } else new Area{
+        //This implementation keep the cmd on the bus until it's executed, even if the pipeline is flushed
         def stage = iBusRsp.stages(1)
-        stage.halt setWhen(iBus.cmd.isStall)
-        val cmdKeep = RegInit(False) setWhen(iBus.cmd.valid) clearWhen(iBus.cmd.ready)
-        val cmdFired = RegInit(False) setWhen(iBus.cmd.fire) clearWhen(stage.input.ready)
-        iBus.cmd.valid := (stage.input.valid || cmdKeep) && pendingCmd =/= pendingMax && !cmdFired
-        iBus.cmd.pc := stage.input.payload(31 downto 2) @@ "00"
-      } else */new Area {
-        //This implementation keep the iBus.cmd on the bus until it's executed or the the pipeline is flushed (not "safe")
-        def stage = iBusRsp.stages(if(relaxedPcCalculation) 1 else 0)
-        stage.halt setWhen(stage.input.valid && (!iBus.cmd.valid || !iBus.cmd.ready))
-        iBus.cmd.valid := stage.input.valid && stage.output.ready && pendingCmd =/= pendingMax
-        iBus.cmd.pc := stage.input.payload(31 downto 2) @@ "00"
+        val pendingFull = pendingCmd === pendingMax
+        val cmdKeep = RegInit(False) setWhen(cmd.valid) clearWhen(cmd.ready)
+        val cmdFired = RegInit(False) setWhen(cmd.fire) clearWhen(stage.input.ready)
+        stage.halt setWhen(cmd.isStall || (pendingFull && !cmdFired))
+        cmd.valid := (stage.input.valid || cmdKeep) && !pendingFull && !cmdFired
+        cmd.pc := stage.input.payload(31 downto 2) @@ "00"
       }
 
-
-
-      val rsp = new Area {
+      val rspJoin = new Area {
         import iBusRsp._
         //Manage flush for iBus transactions in flight
         val discardCounter = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
         discardCounter := discardCounter - (iBus.rsp.fire && discardCounter =/= 0).asUInt
         when(flush) {
-//          discardCounter := (if(relaxedPcCalculation) pendingCmd + iBus.cmd.valid.asUInt - iBus.rsp.fire.asUInt else pendingCmd - iBus.rsp.fire.asUInt)
-          discardCounter := (if(relaxedPcCalculation) pendingCmdNext else pendingCmd - iBus.rsp.fire.asUInt)
+          if(cmdForkOnSecondStage && cmdForkPersistence)
+            discardCounter := pendingCmd + cmd.valid.asUInt - iBus.rsp.fire.asUInt
+          else
+            discardCounter := (if(cmdForkOnSecondStage) pendingCmdNext else pendingCmd - iBus.rsp.fire.asUInt)
         }
 
-        val rspBuffer = StreamFifoLowLatency(IBusSimpleRsp(), busLatencyMin)
+        val rspBuffer = StreamFifoLowLatency(IBusSimpleRsp(), busLatencyMin + (if(cmdForkOnSecondStage && cmdForkPersistence) 1 else 0))
         rspBuffer.io.push << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
         rspBuffer.io.flush := flush
 

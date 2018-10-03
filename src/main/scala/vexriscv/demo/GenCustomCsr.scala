@@ -18,7 +18,7 @@ object GenCustomCsr extends App{
         new CustomCsrDemoGpioPlugin,
         new IBusSimplePlugin(
           resetVector = 0x00000000l,
-          relaxedPcCalculation = false,
+          cmdForkOnSecondStage = false,
           prediction = NONE,
           catchAccessFault = false,
           compressedGen = false

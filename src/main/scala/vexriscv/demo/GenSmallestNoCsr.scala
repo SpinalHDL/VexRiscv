@@ -18,7 +18,7 @@ object GenSmallestNoCsr extends App{
 
         new IBusSimplePlugin(
           resetVector = 0x80000000l,
-          relaxedPcCalculation = false,
+          cmdForkOnSecondStage = false,
           prediction = NONE,
           catchAccessFault = false,
           compressedGen = false

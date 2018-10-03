@@ -28,7 +28,7 @@ object VexRiscvAvalonForSim{
         plugins = List(
           new IBusSimplePlugin(
             resetVector = 0x00000000l,
-            relaxedPcCalculation = false,
+            cmdForkOnSecondStage = false,
             prediction = STATIC,
             catchAccessFault = false,
             compressedGen = false
