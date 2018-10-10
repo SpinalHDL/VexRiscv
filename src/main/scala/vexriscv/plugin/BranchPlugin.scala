@@ -48,8 +48,11 @@ trait PredictionInterface{
   def askDecodePrediction() : DecodePredictionBus
 }
 
+
+
 class BranchPlugin(earlyBranch : Boolean,
-                   catchAddressMisaligned : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
+                   catchAddressMisaligned : Boolean = false,
+                   fenceiGenAsAJump              : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
 
 
   lazy val branchStage = if(earlyBranch) pipeline.execute else pipeline.memory
@@ -57,7 +60,7 @@ class BranchPlugin(earlyBranch : Boolean,
   object BRANCH_CALC extends Stageable(UInt(32 bits))
   object BRANCH_DO extends Stageable(Bool)
   object BRANCH_COND_RESULT extends Stageable(Bool)
-//  object PREDICTION_HAD_BRANCHED extends Stageable(Bool)
+  object IS_FENCEI extends Stageable(Bool)
 
   var jumpInterface : Flow[UInt] = null
   var predictionJumpInterface : Flow[UInt] = null
@@ -82,8 +85,7 @@ class BranchPlugin(earlyBranch : Boolean,
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
     import pipeline.config._
-
-    val decoderService = pipeline.service(classOf[DecoderService])
+    import IntAluPlugin._
 
     val bActions = List[(Stageable[_ <: BaseType],Any)](
       SRC1_CTRL         -> Src1CtrlEnum.RS,
@@ -102,7 +104,8 @@ class BranchPlugin(earlyBranch : Boolean,
       HAS_SIDE_EFFECT -> True
     )
 
-    import IntAluPlugin._
+    val decoderService = pipeline.service(classOf[DecoderService])
+
 
     decoderService.addDefault(BRANCH_CTRL, BranchCtrlEnum.INC)
     val rvc = pipeline(RVC_GEN)
@@ -117,6 +120,13 @@ class BranchPlugin(earlyBranch : Boolean,
       BGEU(rvc) -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> True))
     ))
 
+    if(fenceiGenAsAJump) {
+      decoderService.addDefault(IS_FENCEI, False)
+      decoderService.add(List(
+        FENCEI -> (List(IS_FENCEI -> True,HAS_SIDE_EFFECT -> True, BRANCH_CTRL -> BranchCtrlEnum.JAL))
+      ))
+    }
+
     val pcManagerService = pipeline.service(classOf[JumpService])
     jumpInterface = pcManagerService.createJumpInterface(branchStage)
 
@@ -127,12 +137,21 @@ class BranchPlugin(earlyBranch : Boolean,
     }
   }
 
-  override def build(pipeline: VexRiscv): Unit = (fetchPrediction,decodePrediction) match {
-    case (null, null) => buildWithoutPrediction(pipeline)
-    case (_   , null) => buildFetchPrediction(pipeline)
-    case (null, _) => buildDecodePrediction(pipeline)
-//    case `DYNAMIC` => buildWithPrediction(pipeline)
-//    case `DYNAMIC_TARGET` => buildDynamicTargetPrediction(pipeline)
+  override def build(pipeline: VexRiscv): Unit = {
+    (fetchPrediction,decodePrediction) match {
+      case (null, null) => buildWithoutPrediction(pipeline)
+      case (_   , null) => buildFetchPrediction(pipeline)
+      case (null, _) => buildDecodePrediction(pipeline)
+    }
+    if(fenceiGenAsAJump) {
+      import pipeline._
+      import pipeline.config._
+      when(decode.input(IS_FENCEI)) {
+        decode.output(INSTRUCTION)(12) := False
+        decode.output(INSTRUCTION)(22) := True
+      }
+      execute.arbitration.haltByOther setWhen(execute.arbitration.isValid && execute.input(IS_FENCEI) && List(memory,writeBack).map(_.arbitration.isValid).orR)
+    }
   }
 
   def buildWithoutPrediction(pipeline: VexRiscv): Unit = {
