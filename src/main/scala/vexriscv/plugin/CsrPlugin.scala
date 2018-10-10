@@ -51,6 +51,7 @@ case class CsrPluginConfig(
                             ucycleAccess        : CsrAccess,
                             wfiGen              : Boolean,
                             ecallGen            : Boolean,
+                            ebreakGen           : Boolean = false,
                             supervisorGen       : Boolean = false,
                             sscratchGen         : Boolean = false,
                             stvecAccess         : CsrAccess = CsrAccess.NONE,
@@ -66,7 +67,7 @@ case class CsrPluginConfig(
                           ){
   assert(!ucycleAccess.canWrite)
 
-  def noException = this.copy(ecallGen = false, catchIllegalAccess = false)
+  def noException = this.copy(ecallGen = false, ebreakGen = false, catchIllegalAccess = false)
 }
 
 object CsrPluginConfig{
@@ -248,6 +249,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
     val NONE, XRET = newElement()
     val WFI = if(wfiGen) newElement() else null
     val ECALL = if(ecallGen) newElement() else null
+    val EBREAK = if(ebreakGen) newElement() else null
   }
 
   object ENV_CTRL extends Stageable(EnvCtrlEnum())
@@ -304,6 +306,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
     ))
     if(wfiGen)   decoderService.add(WFI,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.WFI))
     if(ecallGen) decoderService.add(ECALL,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.ECALL, HAS_SIDE_EFFECT -> True))
+    if(ebreakGen) decoderService.add(EBREAK,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.EBREAK, HAS_SIDE_EFFECT -> True))
 
     val  pcManagerService = pipeline.service(classOf[JumpService])
     jumpInterface = pcManagerService.createJumpInterface(pipeline.writeBack)
@@ -321,7 +324,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
     privilege = RegInit(U"11").setName("CsrPlugin_privilege")
 
-    if(catchIllegalAccess || ecallGen)
+    if(catchIllegalAccess || ecallGen || ebreakGen)
       selfException = newExceptionPort(pipeline.execute)
 
     allowInterrupts = True
@@ -759,6 +762,12 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         if(ecallGen) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.ECALL){
           selfException.valid := True
           selfException.code := 11
+        }
+
+
+        if(ebreakGen) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.EBREAK){
+          selfException.valid := True
+          selfException.code := 3
         }
 
 
