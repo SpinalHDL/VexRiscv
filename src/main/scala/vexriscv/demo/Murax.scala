@@ -60,7 +60,7 @@ object MuraxConfig{
     pipelineApbBridge     = true,
     gpioWidth = 32,
     xipConfig = ifGen(withXip) (SpiDdrMasterCtrl.MemoryMappingParameters(
-      SpiDdrMasterCtrl.Parameters(8, 12, SpiDdrParameter(2, 1)).addAllMods(),
+      SpiDdrMasterCtrl.Parameters(8, 12, SpiDdrParameter(2, 2, 1)).addFullDuplex(0,1,false),
       cmdFifoDepth = 32,
       rspFifoDepth = 32,
       xip = SpiDdrMasterCtrl.XipBusParameters(addressWidth = 24, dataWidth = 32)

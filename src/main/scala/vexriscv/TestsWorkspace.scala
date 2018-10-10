@@ -40,7 +40,7 @@ object TestsWorkspace {
             catchAccessFault = true,
             compressedGen = false,
             busLatencyMin = 1,
-            injectorStage = false
+            injectorStage = true
           ),
 //          new IBusCachedPlugin(
 //            resetVector = 0x80000000l,
@@ -65,30 +65,30 @@ object TestsWorkspace {
 //              portTlbSize = 4
 //            )
 //          ),
-//          new DBusSimplePlugin(
-//            catchAddressMisaligned = true,
-//            catchAccessFault = true,
-//            earlyInjection = false
-//          ),
-          new DBusCachedPlugin(
-            config = new DataCacheConfig(
-              cacheSize         = 4096,
-              bytePerLine       = 32,
-              wayCount          = 1,
-              addressWidth      = 32,
-              cpuDataWidth      = 32,
-              memDataWidth      = 32,
-              catchAccessError  = true,
-              catchIllegal      = true,
-              catchUnaligned    = true,
-              catchMemoryTranslationMiss = true,
-              atomicEntriesCount = 2
-            ),
-//            memoryTranslatorPortConfig = null
-            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-              portTlbSize = 6
-            )
+          new DBusSimplePlugin(
+            catchAddressMisaligned = true,
+            catchAccessFault = true,
+            earlyInjection = false
           ),
+//          new DBusCachedPlugin(
+//            config = new DataCacheConfig(
+//              cacheSize         = 4096,
+//              bytePerLine       = 32,
+//              wayCount          = 1,
+//              addressWidth      = 32,
+//              cpuDataWidth      = 32,
+//              memDataWidth      = 32,
+//              catchAccessError  = true,
+//              catchIllegal      = true,
+//              catchUnaligned    = true,
+//              catchMemoryTranslationMiss = true,
+//              atomicEntriesCount = 2
+//            ),
+////            memoryTranslatorPortConfig = null
+//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//              portTlbSize = 6
+//            )
+//          ),
 //          new StaticMemoryTranslatorPlugin(
 //            ioRange      = _(31 downto 28) === 0xF
 //          ),
@@ -129,11 +129,12 @@ object TestsWorkspace {
             divUnrollFactor = 1
           ),
 //          new DivPlugin,
-          new CsrPlugin(CsrPluginConfig.all2(0x80000020l).copy(deterministicInteruptionEntry = false)),
-          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
+          new CsrPlugin(CsrPluginConfig.all2(0x80000020l).copy(deterministicInteruptionEntry = false, ebreakGen = true)),
+//          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = true,
-            catchAddressMisaligned = true
+            catchAddressMisaligned = true,
+            fenceiGenAsAJump = true
           ),
           new YamlPlugin("cpu0.yaml")
         )

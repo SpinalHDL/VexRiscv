@@ -379,7 +379,11 @@ public:
 			case 0x37:rfWrite(rd32, i & 0xFFFFF000);pcWrite(pc + 4);break; // LUI
 			case 0x17:rfWrite(rd32, (i & 0xFFFFF000) + pc);pcWrite(pc + 4);break; //AUIPC
 			case 0x6F:rfWrite(rd32, pc + 4);pcWrite(pc + (iBits(21, 10) << 1) + (iBits(20, 1) << 11) + (iBits(12, 8) << 12) + (iSign() << 20));break; //JAL
-			case 0x67:rfWrite(rd32, pc + 4);pcWrite((i32_rs1 + i32_i_imm) & ~1);break; //JALR
+			case 0x67:{
+				uint32_t target = (i32_rs1 + i32_i_imm) & ~1;
+				rfWrite(rd32, pc + 4);
+				pcWrite(target);
+			} break; //JALR
 			case 0x63:
 				switch ((i >> 12) & 0x7) {
 				case 0x0:if (i32_rs1 == i32_rs2)pcWrite(pc + i32_sb_imm);else pcWrite(pc + 4);break;
@@ -682,7 +686,9 @@ public:
 
         	switch(periphWrites.empty() + uint32_t(periphWritesGolden.empty())*2){
         	case 3: periphWriteTimer = 0; break;
-        	case 1: case 2: if(periphWriteTimer++ == 20){ cout << "periphWrite timout" << endl; fail();} break;
+        	case 1: case 2: if(periphWriteTimer++ == 20){
+        		cout << "periphWrite timout" << endl; fail();
+        	} break;
         	case 0:
     			MemWrite t = periphWrites.front();
     			MemWrite t2 = periphWritesGolden.front();
@@ -692,6 +698,7 @@ public:
     			}
     			periphWrites.pop();
     			periphWritesGolden.pop();
+    			periphWriteTimer = 0;
     			break;
         	}
 
@@ -2069,6 +2076,60 @@ public:
 	}
 };
 
+class Compliance : public Workspace{
+public:
+	string name;
+	ofstream out32;
+	int out32Counter = 0;
+	Compliance(string name) : Workspace(name) {
+		//withRiscvRef();
+		loadHex("../../resources/hex/" + name + ".elf.hex");
+		out32.open (name + ".out32");
+		this->name = name;
+		if(name == "I-FENCE.I-01") withInstructionReadCheck = false;
+	}
+
+
+    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+        Workspace::dBusAccess(addr,wr,size,mask,data,error);
+        if(wr && addr == 0xF00FFF2C){
+            out32 << hex << setw(8) << std::setfill('0') << *data;
+            if(++out32Counter % 4 == 0) out32 << "\r\n";
+            *error = 0;
+        }
+    }
+
+	virtual void checks(){
+
+	}
+
+
+
+	virtual void pass(){
+		FILE *refFile = fopen((string("../../resources/ref/") + name + ".reference_output").c_str(), "r");
+    	fseek(refFile, 0, SEEK_END);
+    	uint32_t refSize = ftell(refFile);
+    	fseek(refFile, 0, SEEK_SET);
+    	char* ref = new char[refSize];
+    	fread(ref, 1, refSize, refFile);
+
+
+    	out32.flush();
+		FILE *logFile = fopen((name + ".out32").c_str(), "r");
+    	fseek(logFile, 0, SEEK_END);
+    	uint32_t logSize = ftell(logFile);
+    	fseek(logFile, 0, SEEK_SET);
+    	char* log = new char[logSize];
+    	fread(log, 1, logSize, logFile);
+
+    	if(refSize > logSize || memcmp(log,ref,refSize))
+    		fail();
+		else
+			Workspace::pass();
+	}
+};
+
+
 #ifdef DEBUG_PLUGIN
 
 #include<pthread.h>
@@ -2331,6 +2392,66 @@ string freeRtosTests[] = {
 };
 
 
+
+string riscvComplianceMain[] = {
+    "I-LB-01",
+    "I-LBU-01",
+    "I-LH-01",
+    "I-LHU-01",
+    "I-LW-01",
+    "I-SB-01",
+    "I-SH-01",
+    "I-SW-01",
+    "I-NOP-01",
+    "I-LUI-01",
+    "I-ADD-01",
+    "I-ADDI-01",
+    "I-AND-01",
+    "I-ANDI-01",
+    "I-SUB-01",
+    "I-OR-01",
+    "I-ORI-01",
+    "I-XOR-01",
+    "I-XORI-01",
+    "I-SRA-01",
+    "I-SRAI-01",
+    "I-SRL-01",
+    "I-SRLI-01",
+    "I-SLL-01",
+    "I-SLLI-01",
+    "I-SLT-01",
+    "I-SLTI-01",
+    "I-SLTIU-01",
+    "I-SLTU-01",
+    "I-AUIPC-01",
+    "I-BEQ-01",
+    "I-BGE-01",
+    "I-BGEU-01",
+    "I-BLT-01",
+    "I-BLTU-01",
+    "I-BNE-01",
+    "I-JAL-01",
+    "I-JALR-01",
+    "I-CSRRC-01",
+    "I-CSRRCI-01",
+    "I-CSRRS-01",
+    "I-CSRRSI-01",
+    "I-CSRRW-01",
+    "I-CSRRWI-01",
+    "I-DELAY_SLOTS-01",
+    "I-EBREAK-01",
+    "I-ECALL-01",
+    "I-ENDIANESS-01",
+    "I-FENCE.I-01",
+    "I-IO",
+    "I-MISALIGN_JMP-01",
+    "I-MISALIGN_LDST-01",
+    "I-RF_size-01",
+    "I-RF_width-01",
+    "I-RF_x0-01",
+
+};
+
 struct timespec timer_start(){
     struct timespec start_time;
     clock_gettime(CLOCK_REALTIME, &start_time); //CLOCK_PROCESS_CPUTIME_ID
@@ -2420,7 +2541,9 @@ int main(int argc, char **argv, char **env) {
 		#ifdef ISA_TEST
 
 		//	redo(REDO,TestA().run();)
-
+			for(const string &name : riscvComplianceMain){
+				redo(REDO, Compliance(name).run();)
+			}
 
 
 			for(const string &name : riscvTestMain){

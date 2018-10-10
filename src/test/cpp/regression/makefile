@@ -1,4 +1,4 @@
-DEBUG=yes
+DEBUG?=no
 
 IBUS?=CACHED
 DBUS?=CACHED

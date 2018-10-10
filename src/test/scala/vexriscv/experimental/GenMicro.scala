@@ -14,10 +14,10 @@ object GenMicro extends App{
   def cpu() = {
     val removeOneFetchStage = true
     val writeBackOpt = true
-    val onlyLoadWords = true
+    val onlyLoadWords = false
     val rspHoldValue = true
     val earlyBranch = false
-    val noShifter = true
+    val noShifter = false
     val pessimisticHazard = true
     new VexRiscv(
       config = VexRiscvConfig(

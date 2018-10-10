@@ -1,0 +1,136 @@
+
+/home/spinalvm/hdl/riscv-compliance/work//I-DELAY_SLOTS-01.elf:     file format elf32-littleriscv
+
+
+Disassembly of section .text.init:
+
+80000000 <_start>:
+80000000:	00001097          	auipc	ra,0x1
+80000004:	00008093          	mv	ra,ra
+80000008:	11111137          	lui	sp,0x11111
+8000000c:	11110113          	addi	sp,sp,273 # 11111111 <_start-0x6eeeeeef>
+80000010:	0080006f          	j	80000018 <_start+0x18>
+80000014:	00000113          	li	sp,0
+80000018:	0020a023          	sw	sp,0(ra) # 80001000 <codasip_signature_start>
+8000001c:	00001097          	auipc	ra,0x1
+80000020:	fe808093          	addi	ra,ra,-24 # 80001004 <test_A2_res>
+80000024:	22222137          	lui	sp,0x22222
+80000028:	22210113          	addi	sp,sp,546 # 22222222 <_start-0x5dddddde>
+8000002c:	00000217          	auipc	tp,0x0
+80000030:	01020213          	addi	tp,tp,16 # 8000003c <_start+0x3c>
+80000034:	00020067          	jr	tp
+80000038:	00000113          	li	sp,0
+8000003c:	0020a023          	sw	sp,0(ra)
+80000040:	00001097          	auipc	ra,0x1
+80000044:	fc808093          	addi	ra,ra,-56 # 80001008 <test_B1_res>
+80000048:	00500293          	li	t0,5
+8000004c:	00600313          	li	t1,6
+80000050:	33333137          	lui	sp,0x33333
+80000054:	33310113          	addi	sp,sp,819 # 33333333 <_start-0x4ccccccd>
+80000058:	00528463          	beq	t0,t0,80000060 <_start+0x60>
+8000005c:	00000113          	li	sp,0
+80000060:	0020a023          	sw	sp,0(ra)
+80000064:	00001097          	auipc	ra,0x1
+80000068:	fa808093          	addi	ra,ra,-88 # 8000100c <test_B2_res>
+8000006c:	00500293          	li	t0,5
+80000070:	00600313          	li	t1,6
+80000074:	44444137          	lui	sp,0x44444
+80000078:	44410113          	addi	sp,sp,1092 # 44444444 <_start-0x3bbbbbbc>
+8000007c:	00629463          	bne	t0,t1,80000084 <_start+0x84>
+80000080:	00000113          	li	sp,0
+80000084:	0020a023          	sw	sp,0(ra)
+80000088:	00001097          	auipc	ra,0x1
+8000008c:	f8808093          	addi	ra,ra,-120 # 80001010 <test_B3_res>
+80000090:	00500293          	li	t0,5
+80000094:	00600313          	li	t1,6
+80000098:	55555137          	lui	sp,0x55555
+8000009c:	55510113          	addi	sp,sp,1365 # 55555555 <_start-0x2aaaaaab>
+800000a0:	0062c463          	blt	t0,t1,800000a8 <_start+0xa8>
+800000a4:	00000113          	li	sp,0
+800000a8:	0020a023          	sw	sp,0(ra)
+800000ac:	00001097          	auipc	ra,0x1
+800000b0:	f6808093          	addi	ra,ra,-152 # 80001014 <test_B4_res>
+800000b4:	00500293          	li	t0,5
+800000b8:	00600313          	li	t1,6
+800000bc:	66666137          	lui	sp,0x66666
+800000c0:	66610113          	addi	sp,sp,1638 # 66666666 <_start-0x1999999a>
+800000c4:	0062e463          	bltu	t0,t1,800000cc <_start+0xcc>
+800000c8:	00000113          	li	sp,0
+800000cc:	0020a023          	sw	sp,0(ra)
+800000d0:	00001097          	auipc	ra,0x1
+800000d4:	f4808093          	addi	ra,ra,-184 # 80001018 <test_B5_res>
+800000d8:	00500293          	li	t0,5
+800000dc:	00600313          	li	t1,6
+800000e0:	77777137          	lui	sp,0x77777
+800000e4:	77710113          	addi	sp,sp,1911 # 77777777 <_start-0x8888889>
+800000e8:	00535463          	ble	t0,t1,800000f0 <_start+0xf0>
+800000ec:	00000113          	li	sp,0
+800000f0:	0020a023          	sw	sp,0(ra)
+800000f4:	00001097          	auipc	ra,0x1
+800000f8:	f2808093          	addi	ra,ra,-216 # 8000101c <test_B6_res>
+800000fc:	00500293          	li	t0,5
+80000100:	00600313          	li	t1,6
+80000104:	88889137          	lui	sp,0x88889
+80000108:	88810113          	addi	sp,sp,-1912 # 88888888 <_end+0x8887868>
+8000010c:	00537463          	bleu	t0,t1,80000114 <_start+0x114>
+80000110:	00000113          	li	sp,0
+80000114:	0020a023          	sw	sp,0(ra)
+80000118:	00001517          	auipc	a0,0x1
+8000011c:	ee850513          	addi	a0,a0,-280 # 80001000 <codasip_signature_start>
+80000120:	00001597          	auipc	a1,0x1
+80000124:	f0058593          	addi	a1,a1,-256 # 80001020 <_end>
+80000128:	f0100637          	lui	a2,0xf0100
+8000012c:	f2c60613          	addi	a2,a2,-212 # f00fff2c <_end+0x700fef0c>
+
+80000130 <complience_halt_loop>:
+80000130:	02b50663          	beq	a0,a1,8000015c <complience_halt_break>
+80000134:	00c52683          	lw	a3,12(a0)
+80000138:	00d62023          	sw	a3,0(a2)
+8000013c:	00852683          	lw	a3,8(a0)
+80000140:	00d62023          	sw	a3,0(a2)
+80000144:	00452683          	lw	a3,4(a0)
+80000148:	00d62023          	sw	a3,0(a2)
+8000014c:	00052683          	lw	a3,0(a0)
+80000150:	00d62023          	sw	a3,0(a2)
+80000154:	01050513          	addi	a0,a0,16
+80000158:	fd9ff06f          	j	80000130 <complience_halt_loop>
+
+8000015c <complience_halt_break>:
+8000015c:	f0100537          	lui	a0,0xf0100
+80000160:	f2050513          	addi	a0,a0,-224 # f00fff20 <_end+0x700fef00>
+80000164:	00052023          	sw	zero,0(a0)
+	...
+
+Disassembly of section .data:
+
+80001000 <codasip_signature_start>:
+80001000:	ffff                	0xffff
+80001002:	ffff                	0xffff
+
+80001004 <test_A2_res>:
+80001004:	ffff                	0xffff
+80001006:	ffff                	0xffff
+
+80001008 <test_B1_res>:
+80001008:	ffff                	0xffff
+8000100a:	ffff                	0xffff
+
+8000100c <test_B2_res>:
+8000100c:	ffff                	0xffff
+8000100e:	ffff                	0xffff
+
+80001010 <test_B3_res>:
+80001010:	ffff                	0xffff
+80001012:	ffff                	0xffff
+
+80001014 <test_B4_res>:
+80001014:	ffff                	0xffff
+80001016:	ffff                	0xffff
+
+80001018 <test_B5_res>:
+80001018:	ffff                	0xffff
+8000101a:	ffff                	0xffff
+
+8000101c <test_B6_res>:
+8000101c:	ffff                	0xffff
+8000101e:	ffff                	0xffff
