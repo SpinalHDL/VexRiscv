@@ -9,6 +9,8 @@ ISA_TEST?=yes
 MUL?=yes
 DIV?=yes
 CSR?=yes
+EBREAK?=no
+FENCEI?=no
 MMU?=yes
 SEED?=no
 ATOMIC?=no
@@ -46,6 +48,15 @@ endif
 ifeq ($(COMPRESSED),yes)
 	ADDCFLAGS += -CFLAGS -DCOMPRESSED
 endif
+
+ifeq ($(FENCEI),yes)
+	ADDCFLAGS += -CFLAGS -DFENCEI
+endif
+
+ifeq ($(EBREAK),yes)
+	ADDCFLAGS += -CFLAGS -DEBREAK
+endif
+
 
 ifeq ($(DHRYSTONE),yes)
 	ADDCFLAGS += -CFLAGS -DDHRYSTONE

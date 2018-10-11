@@ -2094,7 +2094,7 @@ public:
         Workspace::dBusAccess(addr,wr,size,mask,data,error);
         if(wr && addr == 0xF00FFF2C){
             out32 << hex << setw(8) << std::setfill('0') << *data;
-            if(++out32Counter % 4 == 0) out32 << "\r\n";
+            if(++out32Counter % 4 == 0) out32 << "\n";
             *error = 0;
         }
     }
@@ -2394,14 +2394,7 @@ string freeRtosTests[] = {
 
 
 string riscvComplianceMain[] = {
-    "I-LB-01",
-    "I-LBU-01",
-    "I-LH-01",
-    "I-LHU-01",
-    "I-LW-01",
-    "I-SB-01",
-    "I-SH-01",
-    "I-SW-01",
+    "I-IO",
     "I-NOP-01",
     "I-LUI-01",
     "I-ADD-01",
@@ -2432,25 +2425,87 @@ string riscvComplianceMain[] = {
     "I-BNE-01",
     "I-JAL-01",
     "I-JALR-01",
+    "I-DELAY_SLOTS-01",
+    "I-ENDIANESS-01",
+    "I-RF_size-01",
+    "I-RF_width-01",
+    "I-RF_x0-01",
+};
+
+
+
+string complianceTestMemory[] = {
+    "I-LB-01",
+    "I-LBU-01",
+    "I-LH-01",
+    "I-LHU-01",
+    "I-LW-01",
+    "I-SB-01",
+    "I-SH-01",
+    "I-SW-01"
+};
+
+
+string complianceTestCsr[] = {
     "I-CSRRC-01",
     "I-CSRRCI-01",
     "I-CSRRS-01",
     "I-CSRRSI-01",
     "I-CSRRW-01",
     "I-CSRRWI-01",
-    "I-DELAY_SLOTS-01",
-    "I-EBREAK-01",
-    "I-ECALL-01",
-    "I-ENDIANESS-01",
-    "I-FENCE.I-01",
-    "I-IO",
-    "I-MISALIGN_JMP-01",
+    #ifndef COMPRESSED
+    "I-MISALIGN_JMP-01", //Only apply for non RVC cores
+    #endif
     "I-MISALIGN_LDST-01",
-    "I-RF_size-01",
-    "I-RF_width-01",
-    "I-RF_x0-01",
-
+    "I-ECALL-01",
 };
+
+
+string complianceTestMul[] = {
+    "MUL",
+    "MULH",
+    "MULHSU",
+    "MULHU",
+};
+
+string complianceTestDiv[] = {
+    "DIV",
+    "DIVU",
+    "REM",
+    "REMU",
+};
+
+
+string complianceTestC[] = {
+    "C.ADD",
+    "C.ADDI16SP",
+    "C.ADDI4SPN",
+    "C.ADDI",
+    "C.AND",
+    "C.ANDI",
+    "C.BEQZ",
+    "C.BNEZ",
+    "C.JAL",
+    "C.JALR",
+    "C.J",
+    "C.JR",
+    "C.LI",
+    "C.LUI",
+    "C.LW",
+    "C.LWSP",
+    "C.MV",
+    "C.OR",
+    "C.SLLI",
+    "C.SRAI",
+    "C.SRLI",
+    "C.SUB",
+    "C.SW",
+    "C.SWSP",
+    "C.XOR",
+};
+
+
+
 
 struct timespec timer_start(){
     struct timespec start_time;
@@ -2544,7 +2599,38 @@ int main(int argc, char **argv, char **env) {
 			for(const string &name : riscvComplianceMain){
 				redo(REDO, Compliance(name).run();)
 			}
+			for(const string &name : complianceTestMemory){
+				redo(REDO, Compliance(name).run();)
+			}
 
+			#ifdef COMPRESSED
+            for(const string &name : complianceTestC){
+                redo(REDO, Compliance(name).run();)
+            }
+			#endif
+
+			#ifdef MUL
+			for(const string &name : complianceTestMul){
+				redo(REDO, Compliance(name).run();)
+			}
+			#endif
+			#ifdef DIV
+			for(const string &name : complianceTestDiv){
+				redo(REDO, Compliance(name).run();)
+			}
+			#endif
+			#ifdef CSR
+			for(const string &name : complianceTestCsr){
+				redo(REDO, Compliance(name).run();)
+			}
+			#endif
+
+            #ifdef FENCEI
+            redo(REDO, Compliance("I-FENCE.I-01").run();)
+			#endif
+            #ifdef EBREAK
+            redo(REDO, Compliance("I-EBREAK-01").run();)
+			#endif
 
 			for(const string &name : riscvTestMain){
 				redo(REDO,RiscvTest(name).run();)

@@ -1,0 +1,276 @@
+
+/home/spinalvm/hdl/riscv-compliance/work//REMU.elf:     file format elf32-littleriscv
+
+
+Disassembly of section .text.init:
+
+80000000 <_start>:
+80000000:	00001117          	auipc	sp,0x1
+80000004:	00010113          	mv	sp,sp
+80000008:	00000913          	li	s2,0
+8000000c:	00000893          	li	a7,0
+80000010:	031978b3          	remu	a7,s2,a7
+80000014:	01112023          	sw	a7,0(sp) # 80001000 <codasip_signature_start>
+80000018:	00000a13          	li	s4,0
+8000001c:	00100993          	li	s3,1
+80000020:	033a79b3          	remu	s3,s4,s3
+80000024:	01312223          	sw	s3,4(sp)
+80000028:	00000b13          	li	s6,0
+8000002c:	fff00a93          	li	s5,-1
+80000030:	035b7ab3          	remu	s5,s6,s5
+80000034:	01512423          	sw	s5,8(sp)
+80000038:	00000c13          	li	s8,0
+8000003c:	80000bb7          	lui	s7,0x80000
+80000040:	fffb8b93          	addi	s7,s7,-1 # 7fffffff <_end+0xffffef2f>
+80000044:	037c7bb3          	remu	s7,s8,s7
+80000048:	01712623          	sw	s7,12(sp)
+8000004c:	00000d13          	li	s10,0
+80000050:	80000cb7          	lui	s9,0x80000
+80000054:	039d7cb3          	remu	s9,s10,s9
+80000058:	01912823          	sw	s9,16(sp)
+8000005c:	00001117          	auipc	sp,0x1
+80000060:	fb810113          	addi	sp,sp,-72 # 80001014 <test_2_res>
+80000064:	00100e13          	li	t3,1
+80000068:	00000d93          	li	s11,0
+8000006c:	03be7db3          	remu	s11,t3,s11
+80000070:	01b12023          	sw	s11,0(sp)
+80000074:	00100f13          	li	t5,1
+80000078:	00100e93          	li	t4,1
+8000007c:	03df7eb3          	remu	t4,t5,t4
+80000080:	01d12223          	sw	t4,4(sp)
+80000084:	00100193          	li	gp,1
+80000088:	fff00f93          	li	t6,-1
+8000008c:	03f1ffb3          	remu	t6,gp,t6
+80000090:	01f12423          	sw	t6,8(sp)
+80000094:	00100413          	li	s0,1
+80000098:	80000237          	lui	tp,0x80000
+8000009c:	fff20213          	addi	tp,tp,-1 # 7fffffff <_end+0xffffef2f>
+800000a0:	02447233          	remu	tp,s0,tp
+800000a4:	00412623          	sw	tp,12(sp)
+800000a8:	00100593          	li	a1,1
+800000ac:	800004b7          	lui	s1,0x80000
+800000b0:	0295f4b3          	remu	s1,a1,s1
+800000b4:	00912823          	sw	s1,16(sp)
+800000b8:	00001117          	auipc	sp,0x1
+800000bc:	f7010113          	addi	sp,sp,-144 # 80001028 <test_3_res>
+800000c0:	fff00693          	li	a3,-1
+800000c4:	00000613          	li	a2,0
+800000c8:	02c6f633          	remu	a2,a3,a2
+800000cc:	00c12023          	sw	a2,0(sp)
+800000d0:	fff00793          	li	a5,-1
+800000d4:	00100713          	li	a4,1
+800000d8:	02e7f733          	remu	a4,a5,a4
+800000dc:	00e12223          	sw	a4,4(sp)
+800000e0:	fff00893          	li	a7,-1
+800000e4:	fff00813          	li	a6,-1
+800000e8:	0308f833          	remu	a6,a7,a6
+800000ec:	01012423          	sw	a6,8(sp)
+800000f0:	fff00993          	li	s3,-1
+800000f4:	80000937          	lui	s2,0x80000
+800000f8:	fff90913          	addi	s2,s2,-1 # 7fffffff <_end+0xffffef2f>
+800000fc:	0329f933          	remu	s2,s3,s2
+80000100:	01212623          	sw	s2,12(sp)
+80000104:	fff00a93          	li	s5,-1
+80000108:	80000a37          	lui	s4,0x80000
+8000010c:	034afa33          	remu	s4,s5,s4
+80000110:	01412823          	sw	s4,16(sp)
+80000114:	00001117          	auipc	sp,0x1
+80000118:	f2810113          	addi	sp,sp,-216 # 8000103c <test_4_res>
+8000011c:	80000bb7          	lui	s7,0x80000
+80000120:	fffb8b93          	addi	s7,s7,-1 # 7fffffff <_end+0xffffef2f>
+80000124:	00000b13          	li	s6,0
+80000128:	036bfb33          	remu	s6,s7,s6
+8000012c:	01612023          	sw	s6,0(sp)
+80000130:	80000cb7          	lui	s9,0x80000
+80000134:	fffc8c93          	addi	s9,s9,-1 # 7fffffff <_end+0xffffef2f>
+80000138:	00100c13          	li	s8,1
+8000013c:	038cfc33          	remu	s8,s9,s8
+80000140:	01812223          	sw	s8,4(sp)
+80000144:	80000db7          	lui	s11,0x80000
+80000148:	fffd8d93          	addi	s11,s11,-1 # 7fffffff <_end+0xffffef2f>
+8000014c:	fff00d13          	li	s10,-1
+80000150:	03adfd33          	remu	s10,s11,s10
+80000154:	01a12423          	sw	s10,8(sp)
+80000158:	80000eb7          	lui	t4,0x80000
+8000015c:	fffe8e93          	addi	t4,t4,-1 # 7fffffff <_end+0xffffef2f>
+80000160:	80000e37          	lui	t3,0x80000
+80000164:	fffe0e13          	addi	t3,t3,-1 # 7fffffff <_end+0xffffef2f>
+80000168:	03cefe33          	remu	t3,t4,t3
+8000016c:	01c12623          	sw	t3,12(sp)
+80000170:	80000fb7          	lui	t6,0x80000
+80000174:	ffff8f93          	addi	t6,t6,-1 # 7fffffff <_end+0xffffef2f>
+80000178:	80000f37          	lui	t5,0x80000
+8000017c:	03efff33          	remu	t5,t6,t5
+80000180:	01e12823          	sw	t5,16(sp)
+80000184:	00001117          	auipc	sp,0x1
+80000188:	ecc10113          	addi	sp,sp,-308 # 80001050 <test_5_res>
+8000018c:	80000237          	lui	tp,0x80000
+80000190:	00000193          	li	gp,0
+80000194:	023271b3          	remu	gp,tp,gp
+80000198:	00312023          	sw	gp,0(sp)
+8000019c:	800004b7          	lui	s1,0x80000
+800001a0:	00100413          	li	s0,1
+800001a4:	0284f433          	remu	s0,s1,s0
+800001a8:	00812223          	sw	s0,4(sp)
+800001ac:	80000637          	lui	a2,0x80000
+800001b0:	fff00593          	li	a1,-1
+800001b4:	02b675b3          	remu	a1,a2,a1
+800001b8:	00b12423          	sw	a1,8(sp)
+800001bc:	80000737          	lui	a4,0x80000
+800001c0:	800006b7          	lui	a3,0x80000
+800001c4:	fff68693          	addi	a3,a3,-1 # 7fffffff <_end+0xffffef2f>
+800001c8:	02d776b3          	remu	a3,a4,a3
+800001cc:	00d12623          	sw	a3,12(sp)
+800001d0:	80000837          	lui	a6,0x80000
+800001d4:	800007b7          	lui	a5,0x80000
+800001d8:	02f877b3          	remu	a5,a6,a5
+800001dc:	00f12823          	sw	a5,16(sp)
+800001e0:	00001517          	auipc	a0,0x1
+800001e4:	e2050513          	addi	a0,a0,-480 # 80001000 <codasip_signature_start>
+800001e8:	00001597          	auipc	a1,0x1
+800001ec:	ee858593          	addi	a1,a1,-280 # 800010d0 <_end>
+800001f0:	f0100637          	lui	a2,0xf0100
+800001f4:	f2c60613          	addi	a2,a2,-212 # f00fff2c <_end+0x700fee5c>
+
+800001f8 <complience_halt_loop>:
+800001f8:	02b50663          	beq	a0,a1,80000224 <complience_halt_break>
+800001fc:	00c52683          	lw	a3,12(a0)
+80000200:	00d62023          	sw	a3,0(a2)
+80000204:	00852683          	lw	a3,8(a0)
+80000208:	00d62023          	sw	a3,0(a2)
+8000020c:	00452683          	lw	a3,4(a0)
+80000210:	00d62023          	sw	a3,0(a2)
+80000214:	00052683          	lw	a3,0(a0)
+80000218:	00d62023          	sw	a3,0(a2)
+8000021c:	01050513          	addi	a0,a0,16
+80000220:	fd9ff06f          	j	800001f8 <complience_halt_loop>
+
+80000224 <complience_halt_break>:
+80000224:	f0100537          	lui	a0,0xf0100
+80000228:	f2050513          	addi	a0,a0,-224 # f00fff20 <_end+0x700fee50>
+8000022c:	00052023          	sw	zero,0(a0)
+80000230:	0000                	unimp
+	...
+
+Disassembly of section .data:
+
+80001000 <codasip_signature_start>:
+80001000:	ffff                	0xffff
+80001002:	ffff                	0xffff
+80001004:	ffff                	0xffff
+80001006:	ffff                	0xffff
+80001008:	ffff                	0xffff
+8000100a:	ffff                	0xffff
+8000100c:	ffff                	0xffff
+8000100e:	ffff                	0xffff
+80001010:	ffff                	0xffff
+80001012:	ffff                	0xffff
+
+80001014 <test_2_res>:
+80001014:	ffff                	0xffff
+80001016:	ffff                	0xffff
+80001018:	ffff                	0xffff
+8000101a:	ffff                	0xffff
+8000101c:	ffff                	0xffff
+8000101e:	ffff                	0xffff
+80001020:	ffff                	0xffff
+80001022:	ffff                	0xffff
+80001024:	ffff                	0xffff
+80001026:	ffff                	0xffff
+
+80001028 <test_3_res>:
+80001028:	ffff                	0xffff
+8000102a:	ffff                	0xffff
+8000102c:	ffff                	0xffff
+8000102e:	ffff                	0xffff
+80001030:	ffff                	0xffff
+80001032:	ffff                	0xffff
+80001034:	ffff                	0xffff
+80001036:	ffff                	0xffff
+80001038:	ffff                	0xffff
+8000103a:	ffff                	0xffff
+
+8000103c <test_4_res>:
+8000103c:	ffff                	0xffff
+8000103e:	ffff                	0xffff
+80001040:	ffff                	0xffff
+80001042:	ffff                	0xffff
+80001044:	ffff                	0xffff
+80001046:	ffff                	0xffff
+80001048:	ffff                	0xffff
+8000104a:	ffff                	0xffff
+8000104c:	ffff                	0xffff
+8000104e:	ffff                	0xffff
+
+80001050 <test_5_res>:
+80001050:	ffff                	0xffff
+80001052:	ffff                	0xffff
+80001054:	ffff                	0xffff
+80001056:	ffff                	0xffff
+80001058:	ffff                	0xffff
+8000105a:	ffff                	0xffff
+8000105c:	ffff                	0xffff
+8000105e:	ffff                	0xffff
+80001060:	ffff                	0xffff
+80001062:	ffff                	0xffff
+
+80001064 <test_6_res>:
+80001064:	ffff                	0xffff
+80001066:	ffff                	0xffff
+80001068:	ffff                	0xffff
+8000106a:	ffff                	0xffff
+8000106c:	ffff                	0xffff
+8000106e:	ffff                	0xffff
+80001070:	ffff                	0xffff
+80001072:	ffff                	0xffff
+80001074:	ffff                	0xffff
+80001076:	ffff                	0xffff
+
+80001078 <test_7_res>:
+80001078:	ffff                	0xffff
+8000107a:	ffff                	0xffff
+8000107c:	ffff                	0xffff
+8000107e:	ffff                	0xffff
+80001080:	ffff                	0xffff
+80001082:	ffff                	0xffff
+80001084:	ffff                	0xffff
+80001086:	ffff                	0xffff
+80001088:	ffff                	0xffff
+8000108a:	ffff                	0xffff
+
+8000108c <test_8_res>:
+8000108c:	ffff                	0xffff
+8000108e:	ffff                	0xffff
+80001090:	ffff                	0xffff
+80001092:	ffff                	0xffff
+80001094:	ffff                	0xffff
+80001096:	ffff                	0xffff
+80001098:	ffff                	0xffff
+8000109a:	ffff                	0xffff
+8000109c:	ffff                	0xffff
+8000109e:	ffff                	0xffff
+
+800010a0 <test_9_res>:
+800010a0:	ffff                	0xffff
+800010a2:	ffff                	0xffff
+800010a4:	ffff                	0xffff
+800010a6:	ffff                	0xffff
+800010a8:	ffff                	0xffff
+800010aa:	ffff                	0xffff
+800010ac:	ffff                	0xffff
+800010ae:	ffff                	0xffff
+800010b0:	ffff                	0xffff
+800010b2:	ffff                	0xffff
+
+800010b4 <test_10_res>:
+800010b4:	ffff                	0xffff
+800010b6:	ffff                	0xffff
+800010b8:	ffff                	0xffff
+800010ba:	ffff                	0xffff
+800010bc:	ffff                	0xffff
+800010be:	ffff                	0xffff
+800010c0:	ffff                	0xffff
+800010c2:	ffff                	0xffff
+800010c4:	ffff                	0xffff
+800010c6:	ffff                	0xffff
+	...
