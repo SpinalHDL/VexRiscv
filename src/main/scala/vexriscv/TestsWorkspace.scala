@@ -35,7 +35,7 @@ object TestsWorkspace {
             resetVector = 0x80000000l,
             cmdForkOnSecondStage = false,
             cmdForkPersistence = false,
-            prediction = NONE,
+            prediction = STATIC,
             historyRamSizeLog2 = 10,
             catchAccessFault = true,
             compressedGen = false,
