@@ -155,9 +155,12 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         pcReg := pc
       }
 
+      pc(0) := False
+      if(!pipeline(RVC_GEN)) pc(1) := False
 
       preOutput.valid := RegNext(True) init (False)
       preOutput.payload := pc
+
     }
 
     val decodePc = ifGen(decodePcGen)(new Area {
