@@ -38,7 +38,7 @@ object TestsWorkspace {
             prediction = STATIC,
             historyRamSizeLog2 = 10,
             catchAccessFault = true,
-            compressedGen = false,
+            compressedGen = true,
             busLatencyMin = 1,
             injectorStage = true
           ),

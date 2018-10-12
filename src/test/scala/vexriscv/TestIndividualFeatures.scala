@@ -268,8 +268,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
       val cmdForkOnSecondStage = r.nextBoolean()
       val cmdForkPersistence = r.nextBoolean()
-      val relaxedBusCmdValid = false // r.nextBoolean() && relaxedPcCalculation && prediction != DYNAMIC_TARGET
-      new VexRiscvPosition("Simple" + latency + (if(cmdForkOnSecondStage) "S2" else "") + (if(cmdForkPersistence) "P" else "") + (if(relaxedBusCmdValid) "Valid" else "") + (if(injectorStage) "InjStage" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
+      new VexRiscvPosition("Simple" + latency + (if(cmdForkOnSecondStage) "S2" else "") + (if(cmdForkPersistence) "P" else "")  + (if(injectorStage) "InjStage" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
         override def testParam = "IBUS=SIMPLE" + (if(compressed) " COMPRESSED=yes" else "")
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
           resetVector = 0x80000000l,
@@ -523,9 +522,9 @@ class TestIndividualFeatures extends FunSuite {
 //  val seed = -2412372746600605141l
 
 
-//  val testId = Some(mutable.HashSet[Int](6,11,31,32,53,55,56,64,82))
-//  val testId = Some(mutable.HashSet[Int](31))
-//  val seed = 971825313472546699l
+//  val testId = Some(mutable.HashSet[Int](0,28,45,93))
+//  val testId = Some(mutable.HashSet[Int](0))
+//  val seed = 2094440864560126345l
 
 
 
