@@ -52,9 +52,9 @@ trait PredictionInterface{
 
 class BranchPlugin(earlyBranch : Boolean,
                    catchAddressMisaligned : Boolean = false,
-                   fenceiGenAsAJump              : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
+                   fenceiGenAsAJump : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
 
-
+  def catchAddressMisalignedForReal = catchAddressMisaligned && !pipeline(RVC_GEN)
   lazy val branchStage = if(earlyBranch) pipeline.execute else pipeline.memory
 
   object BRANCH_CALC extends Stageable(UInt(32 bits))
@@ -131,7 +131,7 @@ class BranchPlugin(earlyBranch : Boolean,
     jumpInterface = pcManagerService.createJumpInterface(branchStage)
 
 
-    if (catchAddressMisaligned) {
+    if (catchAddressMisalignedForReal) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       branchExceptionPort = exceptionService.newExceptionPort(branchStage)
     }
@@ -186,7 +186,7 @@ class BranchPlugin(earlyBranch : Boolean,
       ).asUInt
 
       val branchAdder = branch_src1 + branch_src2
-      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ ((input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? False | branchAdder(0))
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ "0"
     }
 
     //Apply branchs (JAL,JALR, Bxx)
@@ -199,8 +199,8 @@ class BranchPlugin(earlyBranch : Boolean,
         stages(indexOf(branchStage) - 1).arbitration.flushAll := True
       }
 
-      if(catchAddressMisaligned) {
-        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && (jumpInterface.payload((if(pipeline(RVC_GEN)) 0 else 1) downto 0) =/= 0)
+      if(catchAddressMisalignedForReal) {
+        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1)
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := jumpInterface.payload
       }
@@ -264,7 +264,7 @@ class BranchPlugin(earlyBranch : Boolean,
         }
       }
       val branchAdder = branch_src1 + branch_src2
-      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ ((input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? False | branchAdder(0))
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ "0"
     }
 
 
@@ -279,8 +279,8 @@ class BranchPlugin(earlyBranch : Boolean,
         stages(indexOf(branchStage) - 1).arbitration.flushAll := True
       }
 
-      if(catchAddressMisaligned) {
-        val unalignedJump = input(BRANCH_DO) && (input(BRANCH_CALC)((if(pipeline(RVC_GEN)) 0 else 1) downto 0) =/= 0)
+      if(catchAddressMisalignedForReal) {
+        val unalignedJump = input(BRANCH_DO) && input(BRANCH_CALC)(1)
         branchExceptionPort.valid := arbitration.isValid && unalignedJump
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := input(BRANCH_CALC) //pipeline.stages(pipeline.indexOf(branchStage)-1).input
@@ -328,7 +328,7 @@ class BranchPlugin(earlyBranch : Boolean,
       ).asUInt
 
       val branchAdder = branch_src1 + branch_src2
-      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ ((input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? False | branchAdder(0))
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ "0"
       insert(NEXT_PC) := input(PC) + (if(pipeline(RVC_GEN)) ((input(IS_RVC)) ? U(2) | U(4)) else 4)
     }
 
@@ -355,8 +355,8 @@ class BranchPlugin(earlyBranch : Boolean,
         stages(indexOf(branchStage) - 1).arbitration.flushAll := True
       }
 
-      if(catchAddressMisaligned) {
-        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && (if(pipeline(RVC_GEN)) input(BRANCH_CALC)(0 downto 0) =/= 0 else input(BRANCH_CALC)(1 downto 0) =/= 0)
+      if(catchAddressMisalignedForReal) {
+        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && input(BRANCH_CALC)(1)
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := input(BRANCH_CALC)
       }
