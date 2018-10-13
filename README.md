@@ -26,7 +26,7 @@
 
 This repository hosts a RISC-V implementation written in SpinalHDL. Here are some specs :
 
-- RV32I[M] instruction set
+- RV32I[M][C] instruction set
 - Pipelined with 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
 - 1.44 DMIPS/Mhz when all features are enabled
 - Optimized for FPGA, fully portable
