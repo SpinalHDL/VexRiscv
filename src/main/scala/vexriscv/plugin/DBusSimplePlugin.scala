@@ -182,7 +182,10 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
 }
 
 
-class DBusSimplePlugin(catchAddressMisaligned : Boolean = false, catchAccessFault : Boolean = false, earlyInjection : Boolean = false) extends Plugin[VexRiscv]{
+class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
+                       catchAccessFault : Boolean = false,
+                       earlyInjection : Boolean = false,/*, idempotentRegions : (UInt) => Bool = (x) => False*/
+                       onlyLoadWords : Boolean = false) extends Plugin[VexRiscv]{
 
   var dBus  : DBusSimpleBus = null
 
@@ -211,7 +214,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false, catchAccessFaul
       REGFILE_WRITE_VALID -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
       BYPASSABLE_MEMORY_STAGE  -> Bool(earlyInjection)
-    )
+    ) ++ (if(catchAccessFault || catchAddressMisaligned) List(HAS_SIDE_EFFECT -> True) else Nil)
 
     val storeActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMS,
@@ -220,7 +223,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false, catchAccessFaul
 
     decoderService.addDefault(MEMORY_ENABLE, False)
     decoderService.add(
-      List(LB, LH, LW, LBU, LHU, LWU).map(_ -> loadActions) ++
+      (if(onlyLoadWords) List(LW) else List(LB, LH, LW, LBU, LHU, LWU)).map(_ -> loadActions) ++
       List(SB, SH, SW).map(_ -> storeActions)
     )
 
@@ -329,7 +332,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false, catchAccessFaul
       )
 
       when(arbitration.isValid && input(MEMORY_ENABLE)) {
-        output(REGFILE_WRITE_DATA) := rspFormated
+        output(REGFILE_WRITE_DATA) := (if(!onlyLoadWords) rspFormated else input(MEMORY_READ_DATA))
       }
 
       if(!earlyInjection)

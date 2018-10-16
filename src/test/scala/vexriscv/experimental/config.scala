@@ -12,7 +12,7 @@ object Presentation extends App{
   val config = VexRiscvConfig()
 
   config.plugins ++= List(
-    new IBusSimplePlugin(resetVector = 0x80000000l),
+//    new IBusSimplePlugin(resetVector = 0x80000000l),
     new DBusSimplePlugin,
     new CsrPlugin(CsrPluginConfig.smallest),
     new DecoderSimplePlugin,

@@ -62,7 +62,7 @@ object IBusSimpleBus{
 }
 
 
-case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMasterSlave {
+case class IBusSimpleBus(interfaceKeepData : Boolean = false) extends Bundle with IMasterSlave {
   var cmd = Stream(IBusSimpleCmd())
   var rsp = Flow(IBusSimpleRsp())
 
@@ -143,8 +143,9 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
 
 class IBusSimplePlugin(resetVector : BigInt,
+                       cmdForkOnSecondStage : Boolean,
+                       cmdForkPersistence : Boolean,
                        catchAccessFault : Boolean = false,
-                       relaxedPcCalculation : Boolean = false,
                        prediction : BranchPrediction = NONE,
                        historyRamSizeLog2 : Int = 10,
                        keepPcPlus4 : Boolean = false,
@@ -152,23 +153,22 @@ class IBusSimplePlugin(resetVector : BigInt,
                        busLatencyMin : Int = 1,
                        pendingMax : Int = 7,
                        injectorStage : Boolean = true,
-                       relaxedBusCmdValid : Boolean = false
+                       rspHoldValue : Boolean = false
                       ) extends IBusFetcherImpl(
-    catchAccessFault = catchAccessFault,
     resetVector = resetVector,
     keepPcPlus4 = keepPcPlus4,
     decodePcGen = compressedGen,
     compressedGen = compressedGen,
-    cmdToRspStageCount = busLatencyMin + (if(relaxedPcCalculation) 1 else 0),
+    cmdToRspStageCount = busLatencyMin + (if(cmdForkOnSecondStage) 1 else 0),
+    pcRegReusedForSecondStage = !(cmdForkOnSecondStage && cmdForkPersistence),
     injectorReadyCutGen = false,
     prediction = prediction,
     historyRamSizeLog2 = historyRamSizeLog2,
     injectorStage = injectorStage){
-  assert(!(prediction == DYNAMIC_TARGET && relaxedBusCmdValid), "IBusSimplePlugin doesn't allow dynamic_target prediction and relaxedBusCmdValid together")
-  assert(!relaxedBusCmdValid)
 
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
+  if(rspHoldValue) assert(busLatencyMin == 1)
 
   override def setup(pipeline: VexRiscv): Unit = {
     super.setup(pipeline)
@@ -185,72 +185,66 @@ class IBusSimplePlugin(resetVector : BigInt,
     import pipeline.config._
 
     pipeline plug new FetchArea(pipeline) {
-
-
+      var cmd = Stream(IBusSimpleCmd())
+      iBus.cmd << (if(cmdForkPersistence && !cmdForkOnSecondStage) cmd.s2mPipe() else cmd)
 
       //Avoid sending to many iBus cmd
       val pendingCmd = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
-      val pendingCmdNext = pendingCmd + iBus.cmd.fire.asUInt - iBus.rsp.fire.asUInt
+      val pendingCmdNext = pendingCmd + cmd.fire.asUInt - iBus.rsp.fire.asUInt
       pendingCmd := pendingCmdNext
 
-      val cmd = if(relaxedBusCmdValid) new Area {
-        ???
-      /*  def inputStage = iBusRsp.stages(0)
-        val busFork = Stream(UInt(32 bits))
-        val busForkedReg = RegInit(False)
-        if(!relaxedPcCalculation) busForkedReg clearWhen(flush)
-        busForkedReg setWhen(iBus.cmd.fire)
-        busForkedReg clearWhen(inputStage.output.ready)
-        if(relaxedPcCalculation) busForkedReg clearWhen(flush)
-        val busForked = Bool
-        busForked := (if(!relaxedPcCalculation) (busForkedReg && !flush) else (busForkedReg))
-
-
-        busFork.valid := inputStage.input.valid && !busForkedReg
-        busFork.payload := inputStage.input.payload
-
-        inputStage.halt setWhen()
-        output.valid := (inputStage.input.valid && iBus.cmd.fire) || busForked
-        output.payload := input.payload
-        input.ready := output.fire
-
-
-        val okBus = pendingCmd =/= pendingMax
-        iBus.cmd.valid := busFork.valid && okBus
-        iBus.cmd.pc := busFork.payload(31 downto 2) @@ "00"
-        busFork.ready := iBus.cmd.ready && okBus*/
-      } else new Area {
-        def stage = iBusRsp.stages(if(relaxedPcCalculation) 1 else 0)
-        stage.halt setWhen(stage.input.valid && (!iBus.cmd.valid || !iBus.cmd.ready))
-
-        iBus.cmd.valid := stage.input.valid && stage.output.ready && pendingCmd =/= pendingMax
-        iBus.cmd.pc := stage.input.payload(31 downto 2) @@ "00"
+      val cmdFork = if(!cmdForkPersistence || !cmdForkOnSecondStage) new Area {
+        //This implementation keep the cmd on the bus until it's executed or the the pipeline is flushed
+        def stage = iBusRsp.stages(if(cmdForkOnSecondStage) 1 else 0)
+        stage.halt setWhen(stage.input.valid && (!cmd.valid || !cmd.ready))
+        cmd.valid := stage.input.valid && stage.output.ready && pendingCmd =/= pendingMax
+        cmd.pc := stage.input.payload(31 downto 2) @@ "00"
+      } else new Area{
+        //This implementation keep the cmd on the bus until it's executed, even if the pipeline is flushed
+        def stage = iBusRsp.stages(1)
+        val pendingFull = pendingCmd === pendingMax
+        val cmdKeep = RegInit(False) setWhen(cmd.valid) clearWhen(cmd.ready)
+        val cmdFired = RegInit(False) setWhen(cmd.fire) clearWhen(stage.input.ready)
+        stage.halt setWhen(cmd.isStall || (pendingFull && !cmdFired))
+        cmd.valid := (stage.input.valid || cmdKeep) && !pendingFull && !cmdFired
+        cmd.pc := stage.input.payload(31 downto 2) @@ "00"
       }
 
-
-
-      val rsp = new Area {
+      val rspJoin = new Area {
         import iBusRsp._
         //Manage flush for iBus transactions in flight
         val discardCounter = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
         discardCounter := discardCounter - (iBus.rsp.fire && discardCounter =/= 0).asUInt
         when(flush) {
-          discardCounter := (if(relaxedPcCalculation) pendingCmdNext else pendingCmd - iBus.rsp.fire.asUInt)
+          if(cmdForkOnSecondStage && cmdForkPersistence)
+            discardCounter := pendingCmd + cmd.valid.asUInt - iBus.rsp.fire.asUInt
+          else
+            discardCounter := (if(cmdForkOnSecondStage) pendingCmdNext else pendingCmd - iBus.rsp.fire.asUInt)
         }
 
-        val rspBuffer = StreamFifoLowLatency(IBusSimpleRsp(), cmdToRspStageCount - (if(relaxedPcCalculation) 0 else 0))
-        rspBuffer.io.push << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
-        rspBuffer.io.flush := flush
+        val rspBufferOutput = Stream(IBusSimpleRsp())
+
+        val rspBuffer = if(!rspHoldValue) new Area{
+          val c = StreamFifoLowLatency(IBusSimpleRsp(), busLatencyMin + (if(cmdForkOnSecondStage && cmdForkPersistence) 1 else 0))
+          c.io.push << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
+          c.io.flush := flush
+          rspBufferOutput << c.io.pop
+        } else new Area{
+          rspBufferOutput << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
+        }
 
         val fetchRsp = FetchRsp()
         fetchRsp.pc := stages.last.output.payload
-        fetchRsp.rsp := rspBuffer.io.pop.payload
-        fetchRsp.rsp.error.clearWhen(!rspBuffer.io.pop.valid) //Avoid interference with instruction injection from the debug plugin
+        fetchRsp.rsp := rspBufferOutput.payload
+        fetchRsp.rsp.error.clearWhen(!rspBufferOutput.valid) //Avoid interference with instruction injection from the debug plugin
 
 
         var issueDetected = False
-        val join = StreamJoin(Seq(stages.last.output, rspBuffer.io.pop), fetchRsp)
-        stages.last.output.ready setWhen(!stages.last.output.valid)
+        val join = Stream(FetchRsp())
+        join.valid := stages.last.output.valid && rspBufferOutput.valid
+        join.payload := fetchRsp
+        stages.last.output.ready := stages.last.output.valid ? join.fire | join.ready
+        rspBufferOutput.ready := join.fire
         output << join.haltWhen(issueDetected)
 
         if(catchAccessFault){

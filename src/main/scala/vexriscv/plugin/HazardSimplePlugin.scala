@@ -4,7 +4,6 @@ import vexriscv._
 import spinal.core._
 import spinal.lib._
 
-
 class HazardSimplePlugin(bypassExecute : Boolean = false,
                          bypassMemory: Boolean = false,
                          bypassWriteBack: Boolean = false,
@@ -13,6 +12,14 @@ class HazardSimplePlugin(bypassExecute : Boolean = false,
                          pessimisticWriteRegFile : Boolean = false,
                          pessimisticAddressMatch : Boolean = false) extends Plugin[VexRiscv] {
   import Riscv._
+
+
+  override def setup(pipeline: VexRiscv): Unit = {
+    import pipeline.config._
+    val decoderService = pipeline.service(classOf[DecoderService])
+    decoderService.addDefault(HAS_SIDE_EFFECT, False) //TODO implement it in each plugin
+  }
+
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._

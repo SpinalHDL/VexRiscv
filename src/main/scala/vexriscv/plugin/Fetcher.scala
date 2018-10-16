@@ -11,12 +11,12 @@ import scala.collection.mutable.ArrayBuffer
 //TODO val killLastStage = jump.pcLoad.valid || decode.arbitration.isRemoved
 // DBUSSimple check memory halt execute optimization
 
-abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
-                               val resetVector : BigInt,
+abstract class IBusFetcherImpl(val resetVector : BigInt,
                                val keepPcPlus4 : Boolean,
                                val decodePcGen : Boolean,
                                val compressedGen : Boolean,
                                val cmdToRspStageCount : Int,
+                               val pcRegReusedForSecondStage : Boolean,
                                val injectorReadyCutGen : Boolean,
                                val prediction : BranchPrediction,
                                val historyRamSizeLog2 : Int,
@@ -27,7 +27,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
   var dynamicTargetFailureCorrection : Flow[UInt] = null
   var externalResetVector : UInt = null
   assert(cmdToRspStageCount >= 1)
-  assert(!(cmdToRspStageCount == 1 && !injectorStage))
+//  assert(!(cmdToRspStageCount == 1 && !injectorStage))
   assert(!(compressedGen && !decodePcGen))
   var fetcherHalt : Bool = null
   var fetcherflushIt : Bool = null
@@ -61,9 +61,6 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
     fetcherHalt = False
     fetcherflushIt = False
     incomingInstruction = False
-    if(catchAccessFault) {
-      val exceptionService = pipeline.service(classOf[ExceptionService])
-    }
     if(resetVector == null) externalResetVector = in(UInt(32 bits).setName("externalResetVector"))
 
     pipeline(RVC_GEN) = compressedGen
@@ -114,9 +111,21 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       //PC calculation without Jump
       val pcReg = Reg(UInt(32 bits)) init(if(resetVector != null) resetVector else externalResetVector) addAttribute(Verilator.public)
       val inc = RegInit(False)
+      val propagatePc = False
 
       val pc = pcReg + (inc ## B"00").asUInt
       val samplePcNext = False
+
+      if(compressedGen) {
+        when(inc) {
+          pc(1) := False
+        }
+      }
+
+      when(propagatePc){
+        samplePcNext := True
+        inc := False
+      }
 
       if(predictionPcLoad != null) {
         when(predictionPcLoad.valid) {
@@ -142,17 +151,12 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         pcReg := pc
       }
 
-      if(compressedGen) {
-        when(preOutput.fire) {
-          pcReg(1 downto 0) := 0
-          when(pc(1)){
-            inc := True
-          }
-        }
-      }
+      pc(0) := False
+      if(!pipeline(RVC_GEN)) pc(1) := False
 
       preOutput.valid := RegNext(True) init (False)
       preOutput.payload := pc
+
     }
 
     val decodePc = ifGen(decodePcGen)(new Area {
@@ -217,7 +221,13 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
       }
 
       for((s,sNext) <- (stages, stages.tail).zipped) {
-        sNext.input << s.output.m2sPipeWithFlush(flush, s != stages.head, collapsBubble = false)
+        if(s == stages.head && pcRegReusedForSecondStage) {
+          sNext.input.arbitrationFrom(s.output.toEvent().m2sPipeWithFlush(flush, s != stages.head, collapsBubble = false))
+          sNext.input.payload := fetchPc.pcReg
+          fetchPc.propagatePc setWhen(sNext.input.fire)
+        } else {
+          sNext.input << s.output.m2sPipeWithFlush(flush, s != stages.head, collapsBubble = false)
+        }
       }
 
 //
@@ -310,7 +320,7 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
         }).tail
       }
 
-      val nextPcCalc = if (decodePcGen) {
+      val nextPcCalc = if (decodePcGen) new Area{
         val valids = pcUpdatedGen(True, False :: List(execute, memory, writeBack).map(_.arbitration.isStuck), true)
         pcValids := Vec(valids.takeRight(4))
       } else new Area{

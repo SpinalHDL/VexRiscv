@@ -11,10 +11,14 @@ trait RegFileReadKind
 object ASYNC extends RegFileReadKind
 object SYNC extends RegFileReadKind
 
-class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = false, writeRfInMemoryStage : Boolean = false) extends Plugin[VexRiscv]{
+class RegFilePlugin(regFileReadyKind : RegFileReadKind,
+                    zeroBoot : Boolean = false,
+                    writeRfInMemoryStage : Boolean = false,
+                    readInExecute : Boolean = false) extends Plugin[VexRiscv]{
   import Riscv._
 
-  assert(!writeRfInMemoryStage)
+//  assert(!writeRfInMemoryStage)
+
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -33,19 +37,21 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = fals
       if(zeroBoot) regFile.init(List.fill(32)(B(0, 32 bits)))
     }
 
-    //Read register file
-    decode plug new Area{
-      import decode._
+    //Disable rd0 write in decoding stage
+    when(decode.input(INSTRUCTION)(rdRange) === 0) {
+      decode.input(REGFILE_WRITE_VALID) := False
+    }
 
-      //Disable rd0 write in decoding stage
-      when(decode.input(INSTRUCTION)(rdRange) === 0) {
-        decode.input(REGFILE_WRITE_VALID) := False
-      }
+    //Read register file
+    val readStage = if(readInExecute) execute else decode
+    readStage plug new Area{
+      import readStage._
 
       //read register file
       val srcInstruction = regFileReadyKind match{
         case `ASYNC` => input(INSTRUCTION)
-        case `SYNC` =>  input(INSTRUCTION_ANTICIPATED)
+        case `SYNC` if !readInExecute =>  input(INSTRUCTION_ANTICIPATED)
+        case `SYNC` if readInExecute =>   Mux(execute.arbitration.isStuck, execute.input(INSTRUCTION), decode.input(INSTRUCTION))
       }
 
       val regFileReadAddress1 = srcInstruction(Riscv.rs1Range).asUInt
@@ -61,8 +67,9 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = fals
     }
 
     //Write register file
-    (if(writeRfInMemoryStage) memory else writeBack) plug new Area {
-      import writeBack._
+    val writeStage = if(writeRfInMemoryStage) memory else writeBack
+    writeStage plug new Area {
+      import writeStage._
 
       val regFileWrite = global.regFile.writePort.addAttribute(Verilator.public)
       regFileWrite.valid := output(REGFILE_WRITE_VALID) && arbitration.isFiring
@@ -74,5 +81,6 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,zeroBoot : Boolean = fals
       inputInit[Bits](REGFILE_WRITE_DATA, 0)
       inputInit[Bits](INSTRUCTION, 0)
     }
+
   }
 }

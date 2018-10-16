@@ -28,7 +28,8 @@ object VexRiscvAvalonForSim{
         plugins = List(
           new IBusSimplePlugin(
             resetVector = 0x00000000l,
-            relaxedPcCalculation = false,
+            cmdForkOnSecondStage = false,
+            cmdForkPersistence = false,
             prediction = STATIC,
             catchAccessFault = false,
             compressedGen = false
@@ -82,7 +83,7 @@ object VexRiscvAvalonForSim{
           ),
           new RegFilePlugin(
             regFileReadyKind = plugin.SYNC,
-            zeroBoot = true
+            zeroBoot = false
           ),
           new IntAluPlugin,
           new SrcPlugin(
@@ -124,7 +125,7 @@ object VexRiscvAvalonForSim{
               mcycleAccess   = CsrAccess.NONE,
               minstretAccess = CsrAccess.NONE,
               ecallGen       = false,
-              wfiGen         = false,
+              wfiGenAsWait         = false,
               ucycleAccess   = CsrAccess.NONE
             )
           ),

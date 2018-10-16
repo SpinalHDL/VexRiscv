@@ -80,7 +80,7 @@ object VexRiscvAvalonWithIntegratedJtag{
           ),
           new RegFilePlugin(
             regFileReadyKind = plugin.SYNC,
-            zeroBoot = true
+            zeroBoot = false
           ),
           new IntAluPlugin,
           new SrcPlugin(
@@ -122,7 +122,7 @@ object VexRiscvAvalonWithIntegratedJtag{
               mcycleAccess   = CsrAccess.NONE,
               minstretAccess = CsrAccess.NONE,
               ecallGen       = false,
-              wfiGen         = false,
+              wfiGenAsWait         = false,
               ucycleAccess   = CsrAccess.NONE
             )
           ),

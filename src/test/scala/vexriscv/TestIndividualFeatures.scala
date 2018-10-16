@@ -266,14 +266,14 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       val injectorStage = r.nextBoolean() || latency == 1
       val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
       val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-      val relaxedPcCalculation = r.nextBoolean()
-      val relaxedBusCmdValid =false // r.nextBoolean() && relaxedPcCalculation && prediction != DYNAMIC_TARGET
-      new VexRiscvPosition("Simple" + latency + (if(relaxedPcCalculation) "Relax" else "") + (if(relaxedBusCmdValid) "Valid" else "") + (if(injectorStage) "InjStage" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
+      val cmdForkOnSecondStage = r.nextBoolean()
+      val cmdForkPersistence = r.nextBoolean()
+      new VexRiscvPosition("Simple" + latency + (if(cmdForkOnSecondStage) "S2" else "") + (if(cmdForkPersistence) "P" else "")  + (if(injectorStage) "InjStage" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
         override def testParam = "IBUS=SIMPLE" + (if(compressed) " COMPRESSED=yes" else "")
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusSimplePlugin(
           resetVector = 0x80000000l,
-          relaxedPcCalculation = relaxedPcCalculation,
-          relaxedBusCmdValid = relaxedBusCmdValid,
+          cmdForkOnSecondStage = cmdForkOnSecondStage,
+          cmdForkPersistence = cmdForkPersistence,
           prediction = prediction,
           catchAccessFault = catchAll,
           compressedGen = compressed,
@@ -522,8 +522,10 @@ class TestIndividualFeatures extends FunSuite {
 //  val seed = -2412372746600605141l
 
 
-//  val testId = Some(mutable.HashSet[Int](1,6,11,17,23,24))
-//  val seed = -7309275932954927463l
+//  val testId = Some(mutable.HashSet[Int](0,28,45,93))
+//  val testId = Some(mutable.HashSet[Int](9))
+//  val seed = -8173808854505304814l
+
 
 
   val rand = new Random(seed)

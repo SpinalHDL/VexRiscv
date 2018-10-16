@@ -60,7 +60,7 @@ object MuraxConfig{
     pipelineApbBridge     = true,
     gpioWidth = 32,
     xipConfig = ifGen(withXip) (SpiDdrMasterCtrl.MemoryMappingParameters(
-      SpiDdrMasterCtrl.Parameters(8, 12, SpiDdrParameter(2, 1)).addAllMods(),
+      SpiDdrMasterCtrl.Parameters(8, 12, SpiDdrParameter(2, 2, 1)).addFullDuplex(0,1,false),
       cmdFifoDepth = 32,
       rspFifoDepth = 32,
       xip = SpiDdrMasterCtrl.XipBusParameters(addressWidth = 24, dataWidth = 32)
@@ -69,7 +69,8 @@ object MuraxConfig{
     cpuPlugins = ArrayBuffer( //DebugPlugin added by the toplevel
       new IBusSimplePlugin(
         resetVector = if(withXip) 0xF001E000l else 0x80000000l,
-        relaxedPcCalculation = true,
+        cmdForkOnSecondStage = true,
+        cmdForkPersistence = withXip, //Required by the Xip controller
         prediction = NONE,
         catchAccessFault = false,
         compressedGen = false
@@ -79,7 +80,7 @@ object MuraxConfig{
         catchAccessFault = false,
         earlyInjection = false
       ),
-      new CsrPlugin(CsrPluginConfig.smallest(mtvecInit = if(withXip) 0xE0040020l else 0x80000000l)),
+      new CsrPlugin(CsrPluginConfig.smallest(mtvecInit = if(withXip) 0xE0040020l else 0x80000020l)),
       new DecoderSimplePlugin(
         catchIllegalInstruction = false
       ),
@@ -227,7 +228,7 @@ case class Murax(config : MuraxConfig) extends Component{
     val externalInterrupt = False
     for(plugin <- cpu.plugins) plugin match{
       case plugin : IBusSimplePlugin =>
-        mainBusArbiter.io.iBus.cmd <> plugin.iBus.cmd.halfPipe() //TODO !!
+        mainBusArbiter.io.iBus.cmd <> plugin.iBus.cmd
         mainBusArbiter.io.iBus.rsp <> plugin.iBus.rsp
       case plugin : DBusSimplePlugin => {
         if(!pipelineDBus)
@@ -496,7 +497,8 @@ object MuraxDhrystoneReadyMulDivStatic{
       )
       config.cpuPlugins += new IBusSimplePlugin(
         resetVector = 0x80000000l,
-        relaxedPcCalculation = true,
+        cmdForkOnSecondStage = true,
+        cmdForkPersistence = false,
         prediction = STATIC,
         catchAccessFault = false,
         compressedGen = false

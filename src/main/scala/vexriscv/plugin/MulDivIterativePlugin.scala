@@ -140,7 +140,7 @@ class MulDivIterativePlugin(genMul : Boolean = true, genDiv : Boolean = true, mu
         rs1 := twoComplement(rs1Extended, rs1NeedRevert).resized
         rs2 := twoComplement(execute.input(RS2), rs2NeedRevert)
         if(genMul) mul.counter.clear()
-        if(genDiv) div.needRevert := rs1NeedRevert ^ (rs2NeedRevert && !execute.input(INSTRUCTION)(13))
+        if(genDiv) div.needRevert := (rs1NeedRevert ^ (rs2NeedRevert && !execute.input(INSTRUCTION)(13))) && !(execute.input(RS2) === 0 && execute.input(IS_RS2_SIGNED) && !execute.input(INSTRUCTION)(13))
         if(genDiv) div.counter.clear()
       }
     }

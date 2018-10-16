@@ -31,6 +31,11 @@ case class SimpleBus(config : SimpleBusConfig) extends Bundle with IMasterSlave 
     master(cmd)
     slave(rsp)
   }
+
+  def resizableAddress() : this.type = {
+    cmd.address.addTag(tagAutoResize)
+    this
+  }
 }
 
 class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
