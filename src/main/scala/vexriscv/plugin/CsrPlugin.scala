@@ -51,6 +51,7 @@ case class CsrPluginConfig(
                             ucycleAccess        : CsrAccess,
                             wfiGenAsWait        : Boolean,
                             ecallGen            : Boolean,
+                            mtvecModeGen        : Boolean = false,
                             noCsrAlu            : Boolean = false,
                             wfiGenAsNop         : Boolean = false,
                             ebreakGen           : Boolean = false,
@@ -224,7 +225,7 @@ trait IContextSwitching{
   def isContextSwitching : Bool
 }
 
-class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface{
+class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface{
   import config._
   import CsrAccess._
 
@@ -366,8 +367,15 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         val base = Reg(UInt(2 bits)) init(U"01") allowUnsetRegToAvoidLatch
         val extensions = Reg(Bits(26 bits)) init(misaExtensionsInit) allowUnsetRegToAvoidLatch
       }
-      val mtvec = Reg(UInt(xlen bits)).allowUnsetRegToAvoidLatch
-      if(mtvecInit != null) mtvec init(mtvecInit)
+
+
+      val mtvec = new Area{
+        val mode = Reg(Bits(2 bits)).allowUnsetRegToAvoidLatch
+        val base = Reg(UInt(xlen-2 bits)).allowUnsetRegToAvoidLatch
+      }
+
+      if(mtvecInit != null) mtvec.mode init(mtvecInit & 0x3)
+      if(mtvecInit != null) mtvec.base init(mtvecInit / 4)
       val mepc = Reg(UInt(xlen bits))
       val mstatus = new Area{
         val MIE, MPIE = RegInit(False)
@@ -407,7 +415,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       READ_WRITE(CSR.MIP, 3 -> mip.MSIP)
       READ_WRITE(CSR.MIE, 11 -> mie.MEIE, 7 -> mie.MTIE, 3 -> mie.MSIE)
 
-      mtvecAccess(CSR.MTVEC, mtvec)
+      mtvecAccess(CSR.MTVEC, 2 -> mtvec.base, 0 -> mtvec.mode)
       mepcAccess(CSR.MEPC, mepc)
       if(mscratchGen) READ_WRITE(CSR.MSCRATCH, mscratch)
       mcauseAccess(CSR.MCAUSE, xlen-1 -> mcause.interrupt, 0 -> mcause.exceptionCode)
@@ -659,8 +667,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       }
 
       when(hadException || (interruptJump && !exception)){
-        jumpInterface.valid := True
-        jumpInterface.payload := mtvec
+        jumpInterface.valid         := True
+        jumpInterface.payload       := (if(!mtvecModeGen) mtvec.base @@ "00" else (mtvec.mode === 0 || hadException) ? (mtvec.base @@ "00") | ((mtvec.base + trapCause) @@ "00") )
         memory.arbitration.flushAll := True
 
         switch(targetPrivilege){
