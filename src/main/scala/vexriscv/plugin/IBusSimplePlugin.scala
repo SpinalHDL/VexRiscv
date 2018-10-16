@@ -62,7 +62,7 @@ object IBusSimpleBus{
 }
 
 
-case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMasterSlave {
+case class IBusSimpleBus(interfaceKeepData : Boolean = false) extends Bundle with IMasterSlave {
   var cmd = Stream(IBusSimpleCmd())
   var rsp = Flow(IBusSimpleRsp())
 
@@ -155,7 +155,6 @@ class IBusSimplePlugin(resetVector : BigInt,
                        injectorStage : Boolean = true,
                        rspHoldValue : Boolean = false
                       ) extends IBusFetcherImpl(
-    catchAccessFault = catchAccessFault,
     resetVector = resetVector,
     keepPcPlus4 = keepPcPlus4,
     decodePcGen = compressedGen,

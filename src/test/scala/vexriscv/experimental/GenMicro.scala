@@ -13,12 +13,14 @@ import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
 object GenMicro extends App{
   def cpu() = {
     val removeOneFetchStage = true
+    val pessimisticHazard = true
     val writeBackOpt = true
-    val onlyLoadWords = false
     val rspHoldValue = true
+    val withCompliantCsr = true
+    val withCompliantCsrPlusEmulation = true
     val earlyBranch = false
     val noShifter = false
-    val pessimisticHazard = true
+    val onlyLoadWords = false
     new VexRiscv(
       config = VexRiscvConfig(
         plugins = List(
@@ -38,13 +40,13 @@ object GenMicro extends App{
             rspHoldValue = rspHoldValue
           ),
           new DBusSimplePlugin(
-            catchAddressMisaligned = false,
+            catchAddressMisaligned = withCompliantCsr,
             catchAccessFault = false,
             earlyInjection = writeBackOpt,
             onlyLoadWords = onlyLoadWords
           ),
           new DecoderSimplePlugin(
-            catchIllegalInstruction = false
+            catchIllegalInstruction = withCompliantCsrPlusEmulation
           ),
           new RegFilePlugin(
             regFileReadyKind = plugin.SYNC,
@@ -71,10 +73,57 @@ object GenMicro extends App{
             new HazardPessimisticPlugin(),
           new BranchPlugin(
             earlyBranch = earlyBranch,
-            catchAddressMisaligned = false
+            catchAddressMisaligned = withCompliantCsr,
+            fenceiGenAsAJump = withCompliantCsr
           ),
           new YamlPlugin("cpu0.yaml")
         ) ++ (if(noShifter) Nil else List(new LightShifterPlugin))
+         ++ (if(!withCompliantCsr) Nil else List(new CsrPlugin(
+          config = if(withCompliantCsrPlusEmulation)CsrPluginConfig(
+            catchIllegalAccess = true,
+            mvendorid      = null,
+            marchid        = null,
+            mimpid         = null,
+            mhartid        = null,
+            misaExtensionsInit = 0,
+            misaAccess     = CsrAccess.NONE,
+            mtvecAccess    = CsrAccess.NONE,
+            mtvecInit      = 0x80000020l,
+            mepcAccess     = CsrAccess.NONE,
+            mscratchGen    = false,
+            mcauseAccess   = CsrAccess.READ_ONLY,
+            mbadaddrAccess = CsrAccess.NONE,
+            mcycleAccess   = CsrAccess.NONE,
+            minstretAccess = CsrAccess.NONE,
+            ecallGen       = false,
+            ebreakGen      = false,
+            wfiGenAsWait         = false,
+            wfiGenAsNop    = false,
+            ucycleAccess   = CsrAccess.NONE,
+            noCsrAlu       = true
+          ) else CsrPluginConfig(
+            catchIllegalAccess = false,
+            mvendorid      = null,
+            marchid        = null,
+            mimpid         = null,
+            mhartid        = null,
+            misaExtensionsInit = 0,
+            misaAccess     = CsrAccess.READ_ONLY,
+            mtvecAccess    = CsrAccess.WRITE_ONLY,
+            mtvecInit      = 0x80000020l,
+            mepcAccess     = CsrAccess.READ_WRITE,
+            mscratchGen    = true,
+            mcauseAccess   = CsrAccess.READ_ONLY,
+            mbadaddrAccess = CsrAccess.READ_ONLY,
+            mcycleAccess   = CsrAccess.NONE,
+            minstretAccess = CsrAccess.NONE,
+            ecallGen       = true,
+            ebreakGen      = true,
+            wfiGenAsWait   = false,
+            wfiGenAsNop    = true,
+            ucycleAccess   = CsrAccess.NONE
+          )
+        )))
       )
     )
   }

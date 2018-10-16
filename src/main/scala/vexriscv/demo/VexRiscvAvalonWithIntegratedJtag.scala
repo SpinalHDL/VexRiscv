@@ -122,7 +122,7 @@ object VexRiscvAvalonWithIntegratedJtag{
               mcycleAccess   = CsrAccess.NONE,
               minstretAccess = CsrAccess.NONE,
               ecallGen       = false,
-              wfiGen         = false,
+              wfiGenAsWait         = false,
               ucycleAccess   = CsrAccess.NONE
             )
           ),

@@ -35,10 +35,10 @@ object TestsWorkspace {
             resetVector = 0x80000000l,
             cmdForkOnSecondStage = false,
             cmdForkPersistence = false,
-            prediction = STATIC,
+            prediction = NONE,
             historyRamSizeLog2 = 10,
-            catchAccessFault = true,
-            compressedGen = true,
+            catchAccessFault = false,
+            compressedGen = false,
             busLatencyMin = 1,
             injectorStage = true
           ),
@@ -67,7 +67,7 @@ object TestsWorkspace {
 //          ),
           new DBusSimplePlugin(
             catchAddressMisaligned = true,
-            catchAccessFault = true,
+            catchAccessFault = false,
             earlyInjection = false
           ),
 //          new DBusCachedPlugin(
@@ -98,7 +98,7 @@ object TestsWorkspace {
             ioRange      = _(31 downto 28) === 0xF
           ),
           new DecoderSimplePlugin(
-            catchIllegalInstruction = true
+            catchIllegalInstruction = false
           ),
           new RegFilePlugin(
             regFileReadyKind = plugin.ASYNC,
@@ -129,7 +129,29 @@ object TestsWorkspace {
             divUnrollFactor = 1
           ),
 //          new DivPlugin,
-          new CsrPlugin(CsrPluginConfig.all2(0x80000020l).copy(deterministicInteruptionEntry = false, ebreakGen = true)),
+          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
+             CsrPluginConfig(
+            catchIllegalAccess = false,
+            mvendorid      = null,
+            marchid        = null,
+            mimpid         = null,
+            mhartid        = null,
+            misaExtensionsInit = 0,
+            misaAccess     = CsrAccess.READ_ONLY,
+            mtvecAccess    = CsrAccess.WRITE_ONLY,
+            mtvecInit      = 0x80000020l,
+            mepcAccess     = CsrAccess.READ_WRITE,
+            mscratchGen    = true,
+            mcauseAccess   = CsrAccess.READ_ONLY,
+            mbadaddrAccess = CsrAccess.READ_ONLY,
+            mcycleAccess   = CsrAccess.NONE,
+            minstretAccess = CsrAccess.NONE,
+            ecallGen       = true,
+            ebreakGen      = true,
+            wfiGenAsWait   = false,
+            wfiGenAsNop    = true,
+            ucycleAccess   = CsrAccess.NONE
+          )),
 //          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = true,

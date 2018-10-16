@@ -12,10 +12,6 @@ object GenFull extends App{
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       plugins = List(
-        new PcManagerSimplePlugin(
-          resetVector = 0x80000000l,
-          relaxedPcCalculation = false
-        ),
         new IBusCachedPlugin(
           prediction = DYNAMIC,
           config = InstructionCacheConfig(

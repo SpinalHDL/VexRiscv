@@ -49,8 +49,10 @@ case class CsrPluginConfig(
                             mcycleAccess        : CsrAccess,
                             minstretAccess      : CsrAccess,
                             ucycleAccess        : CsrAccess,
-                            wfiGen              : Boolean,
+                            wfiGenAsWait        : Boolean,
                             ecallGen            : Boolean,
+                            noCsrAlu            : Boolean = false,
+                            wfiGenAsNop         : Boolean = false,
                             ebreakGen           : Boolean = false,
                             supervisorGen       : Boolean = false,
                             sscratchGen         : Boolean = false,
@@ -92,7 +94,7 @@ object CsrPluginConfig{
     mcycleAccess   = CsrAccess.READ_WRITE,
     minstretAccess = CsrAccess.READ_WRITE,
     ecallGen       = true,
-    wfiGen         = true,
+    wfiGenAsWait         = true,
     ucycleAccess   = CsrAccess.READ_ONLY
   )
 
@@ -113,7 +115,7 @@ object CsrPluginConfig{
     mcycleAccess   = CsrAccess.READ_WRITE,
     minstretAccess = CsrAccess.READ_WRITE,
     ecallGen       = true,
-    wfiGen         = true,
+    wfiGenAsWait         = true,
     ucycleAccess   = CsrAccess.READ_ONLY,
     supervisorGen  = true,
     sscratchGen    = true,
@@ -145,7 +147,7 @@ object CsrPluginConfig{
     mcycleAccess   = CsrAccess.NONE,
     minstretAccess = CsrAccess.NONE,
     ecallGen       = false,
-    wfiGen         = false,
+    wfiGenAsWait         = false,
     ucycleAccess   = CsrAccess.NONE
   )
 
@@ -166,7 +168,7 @@ object CsrPluginConfig{
     mcycleAccess   = CsrAccess.NONE,
     minstretAccess = CsrAccess.NONE,
     ecallGen       = false,
-    wfiGen         = false,
+    wfiGenAsWait         = false,
     ucycleAccess   = CsrAccess.NONE
   )
 
@@ -226,6 +228,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
   import config._
   import CsrAccess._
 
+  assert(!(wfiGenAsNop && wfiGenAsWait))
+
   def xlen = 32
 
   //Mannage ExceptionService calls
@@ -247,7 +251,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
     val NONE, XRET = newElement()
-    val WFI = if(wfiGen) newElement() else null
+    val WFI = if(wfiGenAsWait) newElement() else null
     val ECALL = if(ecallGen) newElement() else null
     val EBREAK = if(ebreakGen) newElement() else null
   }
@@ -304,7 +308,8 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       MRET   -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.XRET, HAS_SIDE_EFFECT -> True)),
       SRET   -> (defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.XRET, HAS_SIDE_EFFECT -> True))
     ))
-    if(wfiGen)   decoderService.add(WFI,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.WFI))
+    if(wfiGenAsWait)   decoderService.add(WFI,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.WFI))
+    if(wfiGenAsNop)   decoderService.add(WFI, Nil)
     if(ecallGen) decoderService.add(ECALL,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.ECALL, HAS_SIDE_EFFECT -> True))
     if(ebreakGen) decoderService.add(EBREAK,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.EBREAK, HAS_SIDE_EFFECT -> True))
 
@@ -611,7 +616,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       interrupt.clearWhen(!allowInterrupts)
 
       val exception = if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValids.last && allowException else False
-      val writeBackWasWfi = if(wfiGen) RegNext(writeBack.arbitration.isFiring && writeBack.input(ENV_CTRL) === EnvCtrlEnum.WFI) init(False) else False
+      val writeBackWasWfi = if(wfiGenAsWait) RegNext(writeBack.arbitration.isFiring && writeBack.input(ENV_CTRL) === EnvCtrlEnum.WFI) init(False) else False
 
 
 
@@ -727,7 +732,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
       execute plug new Area{
         import execute._
         //Manage WFI instructions
-        if(wfiGen) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.WFI){
+        if(wfiGenAsWait) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.WFI){
           when(!interrupt){
             arbitration.haltItself := True
           }
@@ -776,7 +781,7 @@ class CsrPlugin(config : CsrPluginConfig) extends Plugin[VexRiscv] with Exceptio
         val readData = B(0, 32 bits)
 //        def readDataReg = memory.input(REGFILE_WRITE_DATA)  //PIPE OPT
 //        val readDataRegValid = Reg(Bool) setWhen(arbitration.isValid) clearWhen(!arbitration.isStuck)
-        val writeData = input(INSTRUCTION)(13).mux(
+        val writeData = if(noCsrAlu) writeSrc else input(INSTRUCTION)(13).mux(
           False -> writeSrc,
           True -> Mux(input(INSTRUCTION)(12), readData & ~writeSrc, readData | writeSrc)
         )

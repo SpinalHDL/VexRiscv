@@ -11,8 +11,7 @@ import scala.collection.mutable.ArrayBuffer
 //TODO val killLastStage = jump.pcLoad.valid || decode.arbitration.isRemoved
 // DBUSSimple check memory halt execute optimization
 
-abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
-                               val resetVector : BigInt,
+abstract class IBusFetcherImpl(val resetVector : BigInt,
                                val keepPcPlus4 : Boolean,
                                val decodePcGen : Boolean,
                                val compressedGen : Boolean,
@@ -62,9 +61,6 @@ abstract class IBusFetcherImpl(val catchAccessFault : Boolean,
     fetcherHalt = False
     fetcherflushIt = False
     incomingInstruction = False
-    if(catchAccessFault) {
-      val exceptionService = pipeline.service(classOf[ExceptionService])
-    }
     if(resetVector == null) externalResetVector = in(UInt(32 bits).setName("externalResetVector"))
 
     pipeline(RVC_GEN) = compressedGen

@@ -18,7 +18,6 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
                        config : InstructionCacheConfig,
                        memoryTranslatorPortConfig : Any = null,
                        injectorStage : Boolean = false)  extends IBusFetcherImpl(
-  catchAccessFault = config.catchAccessFault,
   resetVector = resetVector,
   keepPcPlus4 = keepPcPlus4,
   decodePcGen = compressedGen,

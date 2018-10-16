@@ -301,6 +301,7 @@ public:
         status.mpie = status.mie;
         mepc = pc;
 		pcWrite(mtvec.base << 2);
+		if(interrupt) livenessInterrupt = 0;
 
         //status.MPP  := privilege
 	}
@@ -333,7 +334,35 @@ public:
 		*csrPtr(csr) = value;
 	}
 
+    
+    int livenessStep = 0;
+    int livenessInterrupt = 0;
+    virtual void liveness(bool mIntTimer, bool mIntExt){
+        livenessStep++;
+        bool interruptRequest = (mie.mtie && mIntTimer);
+        if(interruptRequest){
+            if(status.mie){
+                livenessInterrupt++;
+            }
+        } else {
+             livenessInterrupt = 0;
+        }
+
+        if(livenessStep > 1000){
+            cout << "Liveness step failure" << endl;
+            fail();
+        }
+        
+        if(livenessInterrupt > 1000){
+            cout << "Liveness interrupt failure" << endl;
+            fail();
+        }
+        
+    }
+
+
 	virtual void step() {
+	    livenessStep = 0;
 		#define rd32 ((i >> 7) & 0x1F)
 		#define iBits(lo,  len) ((i >> lo) & ((1 << len)-1))
 		#define iBitsSigned(lo, len) int32_t(i) << (32-lo-len) >> (32-len)
@@ -970,7 +999,7 @@ public:
 				mTime += top->VexRiscv->writeBack_arbitration_isFiring*MTIME_INSTR_FACTOR;
                 #endif
 				#endif
-				#ifdef CSR
+				#ifdef TIMER_INTERRUPT
 				top->timerInterrupt = mTime >= mTimeCmp ? 1 : 0;
 				//if(mTime == mTimeCmp) printf("SIM timer tick\n");
 				#endif
@@ -998,7 +1027,21 @@ public:
 						fail();
 					}
 
-                   	if(riscvRefEnable) riscvRef.step();
+                   	if(riscvRefEnable) {
+                   	    riscvRef.step();
+                   	    bool mIntTimer = false;
+                   	    bool mIntExt = false;
+
+#ifdef TIMER_INTERRUPT
+                   	    mIntTimer = top->timerInterrupt;
+#endif
+#ifdef EXTERNAL_INTERRUPT
+                   	    mIntExt = top->externalInterrupt;
+#endif
+
+
+                   	    riscvRef.liveness(mIntTimer, mIntExt);
+                   	}
 
 
 
@@ -2576,10 +2619,13 @@ int main(int argc, char **argv, char **env) {
 
 	for(int idx = 0;idx < 1;idx++){
 
-		#ifdef DEBUG_PLUGIN_EXTERNAL
+		#if defined(DEBUG_PLUGIN_EXTERNAL) || defined(RUN_HEX)
 		{
-			Workspace w("debugPluginExternal");
-			w.loadHex("../../resources/hex/debugPluginExternal.hex");
+			Workspace w("run");
+			#ifdef RUN_HEX
+			//w.loadHex("/home/spinalvm/hdl/zephyr/zephyrSpinalHdl/samples/synchronization/build/zephyr/zephyr.hex");
+			w.loadHex(RUN_HEX);
+			#endif
 			w.noInstructionReadCheck();
 			//w.setIStall(false);
 			//w.setDStall(false);

@@ -81,5 +81,6 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
       inputInit[Bits](REGFILE_WRITE_DATA, 0)
       inputInit[Bits](INSTRUCTION, 0)
     }
+
   }
 }

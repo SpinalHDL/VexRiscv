@@ -80,7 +80,7 @@ object MuraxConfig{
         catchAccessFault = false,
         earlyInjection = false
       ),
-      new CsrPlugin(CsrPluginConfig.smallest(mtvecInit = if(withXip) 0xE0040020l else 0x80000000l)),
+      new CsrPlugin(CsrPluginConfig.smallest(mtvecInit = if(withXip) 0xE0040020l else 0x80000020l)),
       new DecoderSimplePlugin(
         catchIllegalInstruction = false
       ),
