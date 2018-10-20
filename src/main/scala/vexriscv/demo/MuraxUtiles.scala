@@ -22,7 +22,9 @@ case class SimpleBusRsp(config : SimpleBusConfig) extends Bundle{
   val data = Bits(config.dataWidth bits)
 }
 
-
+object SimpleBus{
+  def apply(addressWidth : Int, dataWidth : Int) = new SimpleBus(SimpleBusConfig(addressWidth, dataWidth))
+}
 case class SimpleBus(config : SimpleBusConfig) extends Bundle with IMasterSlave {
   val cmd = Stream(SimpleBusCmd(config))
   val rsp = Flow(SimpleBusRsp(config))
