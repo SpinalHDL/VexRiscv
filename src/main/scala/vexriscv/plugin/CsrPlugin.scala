@@ -643,6 +643,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       interruptJump := interrupt && pipelineLiberator.done
 
       val hadException = RegNext(exception) init(False)
+      pipelineLiberator.done.clearWhen(hadException)
 
 
       val targetPrivilege = CombInit(interruptTargetPrivilege)
@@ -666,7 +667,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         }
       }
 
-      when(hadException || (interruptJump && !exception)){
+      when(hadException || interruptJump){
         jumpInterface.valid         := True
         jumpInterface.payload       := (if(!mtvecModeGen) mtvec.base @@ "00" else (mtvec.mode === 0 || hadException) ? (mtvec.base @@ "00") | ((mtvec.base + trapCause) @@ "00") )
         memory.arbitration.flushAll := True
