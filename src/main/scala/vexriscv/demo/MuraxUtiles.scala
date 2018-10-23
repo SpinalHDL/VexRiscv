@@ -34,9 +34,40 @@ case class SimpleBus(config : SimpleBusConfig) extends Bundle with IMasterSlave 
     slave(rsp)
   }
 
-  def resizableAddress() : this.type = {
-    cmd.address.addTag(tagAutoResize)
-    this
+  def <<(m : SimpleBus) : Unit = {
+    val s = this
+    assert(m.config.addressWidth >= s.config.addressWidth)
+    assert(m.config.dataWidth == s.config.dataWidth)
+    s.cmd.valid := m.cmd.valid
+    s.cmd.wr := m.cmd.wr
+    s.cmd.address := m.cmd.address.resized
+    s.cmd.data := m.cmd.data
+    s.cmd.mask := m.cmd.mask
+    m.cmd.ready := s.cmd.ready
+    m.rsp.valid := s.rsp.valid
+    m.rsp.data := s.rsp.data
+  }
+  def >>(s : SimpleBus) : Unit = s << this
+
+  def cmdM2sPipe(): SimpleBus = {
+    val ret = cloneOf(this)
+    this.cmd.m2sPipe() >> ret.cmd
+    this.rsp           << ret.rsp
+    ret
+  }
+
+  def cmdS2mPipe(): SimpleBus = {
+    val ret = cloneOf(this)
+    this.cmd.s2mPipe() >> ret.cmd
+    this.rsp << ret.rsp
+    ret
+  }
+
+  def rspPipe(): SimpleBus = {
+    val ret = cloneOf(this)
+    this.cmd >> ret.cmd
+    this.rsp << ret.rsp.stage()
+    ret
   }
 }
 
