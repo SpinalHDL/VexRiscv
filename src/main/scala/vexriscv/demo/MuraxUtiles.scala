@@ -9,68 +9,6 @@ import spinal.lib.misc.{HexTools, InterruptCtrl, Prescaler, Timer}
 import spinal.lib._
 import vexriscv.plugin.{DBusSimpleBus, IBusSimpleBus}
 
-case class SimpleBusConfig(addressWidth : Int, dataWidth : Int)
-
-case class SimpleBusCmd(config : SimpleBusConfig) extends Bundle{
-  val wr = Bool
-  val address = UInt(config.addressWidth bits)
-  val data = Bits(config.dataWidth bits)
-  val mask = Bits(4 bit)
-}
-
-case class SimpleBusRsp(config : SimpleBusConfig) extends Bundle{
-  val data = Bits(config.dataWidth bits)
-}
-
-object SimpleBus{
-  def apply(addressWidth : Int, dataWidth : Int) = new SimpleBus(SimpleBusConfig(addressWidth, dataWidth))
-}
-case class SimpleBus(config : SimpleBusConfig) extends Bundle with IMasterSlave {
-  val cmd = Stream(SimpleBusCmd(config))
-  val rsp = Flow(SimpleBusRsp(config))
-
-  override def asMaster(): Unit = {
-    master(cmd)
-    slave(rsp)
-  }
-
-  def <<(m : SimpleBus) : Unit = {
-    val s = this
-    assert(m.config.addressWidth >= s.config.addressWidth)
-    assert(m.config.dataWidth == s.config.dataWidth)
-    s.cmd.valid := m.cmd.valid
-    s.cmd.wr := m.cmd.wr
-    s.cmd.address := m.cmd.address.resized
-    s.cmd.data := m.cmd.data
-    s.cmd.mask := m.cmd.mask
-    m.cmd.ready := s.cmd.ready
-    m.rsp.valid := s.rsp.valid
-    m.rsp.data := s.rsp.data
-  }
-  def >>(s : SimpleBus) : Unit = s << this
-
-  def cmdM2sPipe(): SimpleBus = {
-    val ret = cloneOf(this)
-    this.cmd.m2sPipe() >> ret.cmd
-    this.rsp           << ret.rsp
-    ret
-  }
-
-  def cmdS2mPipe(): SimpleBus = {
-    val ret = cloneOf(this)
-    this.cmd.s2mPipe() >> ret.cmd
-    this.rsp << ret.rsp
-    ret
-  }
-
-  def rspPipe(): SimpleBus = {
-    val ret = cloneOf(this)
-    this.cmd >> ret.cmd
-    this.rsp << ret.rsp.stage()
-    ret
-  }
-}
-
 class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
   val io = new Bundle{
     val iBus = slave(IBusSimpleBus(false))
