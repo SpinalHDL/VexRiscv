@@ -593,9 +593,9 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
           }
         }
 
-        when(exceptionValids.orR){
+        when(exceptionValidsRegs.orR){
           fetcher.haltIt()
-          fetcher.flushIt()
+//          fetcher.flushIt()
         }
       } else null
 
