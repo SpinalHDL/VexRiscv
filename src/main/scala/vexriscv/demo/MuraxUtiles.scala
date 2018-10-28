@@ -52,7 +52,7 @@ class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
 }
 
 
-class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpleBusConfig : SimpleBusConfig) extends Component{
+case class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpleBusConfig : SimpleBusConfig) extends Component{
   val io = new Bundle{
     val bus = slave(SimpleBus(simpleBusConfig))
   }

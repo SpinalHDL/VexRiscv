@@ -271,7 +271,15 @@ case class SimpleBusInterconnect(){
     }
 
     for(connection <- connections){
-      connection.connector(connectionsInput(connection), connectionsOutput(connection))
+      val m = connectionsInput(connection)
+      val s = connectionsOutput(connection)
+      if(m.config == s.config) {
+        connection.connector(m, s)
+      }else{
+        val tmp = cloneOf(s)
+        m >> tmp //Adapte the bus kind.
+        connection.connector(tmp,s)
+      }
     }
   }
 
