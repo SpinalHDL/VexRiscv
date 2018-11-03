@@ -95,7 +95,7 @@ class MulDivIterativePlugin(genMul : Boolean = true, genDiv : Boolean = true, mu
 
         val needRevert = Reg(Bool)
         val counter = Counter(32 / divUnrollFactor + 2)
-        val done = counter.willOverflowIfInc
+        val done = Reg(Bool) setWhen(counter === counter.end-1) clearWhen(!arbitration.isStuck)
         val result = Reg(Bits(32 bits))
         when(arbitration.isValid && input(IS_DIV)){
           when(!done){
