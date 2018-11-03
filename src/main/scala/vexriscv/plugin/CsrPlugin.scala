@@ -282,8 +282,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
     val defaultCsrActions = List[(Stageable[_ <: BaseType],Any)](
       IS_CSR                   -> True,
       REGFILE_WRITE_VALID      -> True,
-      ALU_BITWISE_CTRL -> AluBitwiseCtrlEnum.SRC1,
-      ALU_CTRL -> AluCtrlEnum.BITWISE
+      BYPASSABLE_MEMORY_STAGE -> True
     ) ++ (if(catchIllegalAccess) List(HAS_SIDE_EFFECT -> True) else Nil)
 
     val nonImmediatActions = defaultCsrActions ++ List(
@@ -786,7 +785,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
 
         val imm = IMM(input(INSTRUCTION))
-        val writeSrc = input(REGFILE_WRITE_DATA)
+        val writeSrc = input(SRC1)
         val readData = B(0, 32 bits)
 //        def readDataReg = memory.input(REGFILE_WRITE_DATA)  //PIPE OPT
 //        val readDataRegValid = Reg(Bool) setWhen(arbitration.isValid) clearWhen(!arbitration.isStuck)
