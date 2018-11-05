@@ -161,11 +161,12 @@ class SimpleBusSlaveFactory(bus: SimpleBus) extends BusSlaveFactoryDelayed{
   override def wordAddressInc: Int = busDataWidth / 8
 }
 
-case class SimpleBusDecoder(busConfig : SimpleBusConfig, mappings : Seq[AddressMapping], pendingMax : Int = 7) extends Component{
+case class SimpleBusDecoder(busConfig : SimpleBusConfig, mappings : Seq[AddressMapping], pendingMax : Int = 3) extends Component{
   val io = new Bundle {
     val input = slave(SimpleBus(busConfig))
     val outputs = Vec(master(SimpleBus(busConfig)), mappings.size)
   }
+  val hasDefault = mappings.contains(DefaultMapping)
   val hits = Vec(Bool, mappings.size)
   for((slaveBus, memorySpace, hit) <- (io.outputs, mappings, hits).zipped) yield {
     hit := (memorySpace match {
@@ -175,14 +176,14 @@ case class SimpleBusDecoder(busConfig : SimpleBusConfig, mappings : Seq[AddressM
     slaveBus.cmd.valid   := io.input.cmd.valid && hit
     slaveBus.cmd.payload := io.input.cmd.payload.resized
   }
-  val noHit = !hits.orR
+  val noHit = if(!hasDefault) !hits.orR else False
   io.input.cmd.ready := (hits,io.outputs).zipped.map(_ && _.cmd.ready).orR || noHit
 
   val rspPendingCounter = Reg(UInt(log2Up(pendingMax + 1) bits)) init(0)
   rspPendingCounter := rspPendingCounter + U(io.input.cmd.fire && !io.input.cmd.wr) - U(io.input.rsp.valid)
   val rspHits = RegNextWhen(hits, io.input.cmd.fire)
   val rspPending  = rspPendingCounter =/= 0
-  val rspNoHit    = !rspHits.orR
+  val rspNoHit    = if(!hasDefault) !rspHits.orR else False
   io.input.rsp.valid   := io.outputs.map(_.rsp.valid).orR || (rspPending && rspNoHit)
   io.input.rsp.payload := io.outputs.map(_.rsp.payload).read(OHToUInt(rspHits))
 

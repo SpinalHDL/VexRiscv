@@ -66,6 +66,7 @@ case class CsrPluginConfig(
                             satpAccess          : CsrAccess = CsrAccess.NONE,
                             medelegAccess       : CsrAccess = CsrAccess.NONE,
                             midelegAccess       : CsrAccess = CsrAccess.NONE,
+                            pipelineCsrRead     : Boolean = false,
                             deterministicInteruptionEntry : Boolean = false //Only used for simulatation purposes
                           ){
   assert(!ucycleAccess.canWrite)
@@ -261,6 +262,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
   object IS_CSR extends Stageable(Bool)
   object CSR_WRITE_OPCODE extends Stageable(Bool)
   object CSR_READ_OPCODE extends Stageable(Bool)
+  object PIPELINED_CSR_READ extends Stageable(Bits(32 bits))
 
   var allowInterrupts : Bool = null
   var allowException  : Bool = null
@@ -282,7 +284,8 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
     val defaultCsrActions = List[(Stageable[_ <: BaseType],Any)](
       IS_CSR                   -> True,
       REGFILE_WRITE_VALID      -> True,
-      BYPASSABLE_MEMORY_STAGE -> True
+      BYPASSABLE_EXECUTE_STAGE -> False,
+      BYPASSABLE_MEMORY_STAGE  -> True
     ) ++ (if(catchIllegalAccess) List(HAS_SIDE_EFFECT -> True) else Nil)
 
     val nonImmediatActions = defaultCsrActions ++ List(
@@ -785,26 +788,49 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
 
         val imm = IMM(input(INSTRUCTION))
-        val writeSrc = input(SRC1)
+        def writeSrc = input(SRC1)
+      //  val readDataValid = True
         val readData = B(0, 32 bits)
+        val writeInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE)
+        val readInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE)
+        val writeEnable = writeInstruction && ! arbitration.isStuck // &&  readDataRegValid
+        val readEnable  = readInstruction && ! arbitration.isStuck  //  && !readDataRegValid
+
+
+
 //        def readDataReg = memory.input(REGFILE_WRITE_DATA)  //PIPE OPT
 //        val readDataRegValid = Reg(Bool) setWhen(arbitration.isValid) clearWhen(!arbitration.isStuck)
+//        val writeDataEnable = input(INSTRUCTION)(13) ? writeSrc | B"xFFFFFFFF"
+//        val writeData = if(noCsrAlu) writeSrc else input(INSTRUCTION)(13).mux(
+//          False -> writeSrc,
+//          True -> Mux(input(INSTRUCTION)(12), ~writeSrc,  writeSrc)
+//        )
         val writeData = if(noCsrAlu) writeSrc else input(INSTRUCTION)(13).mux(
           False -> writeSrc,
           True -> Mux(input(INSTRUCTION)(12), readData & ~writeSrc, readData | writeSrc)
         )
 
-        val writeInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE)
-        val readInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE)
+
 
 //        arbitration.haltItself setWhen(writeInstruction && !readDataRegValid)
-        val writeEnable = writeInstruction && ! arbitration.isStuck// &&  readDataRegValid
-        val readEnable  = readInstruction && ! arbitration.isStuck//  && !readDataRegValid
+
 
         when(arbitration.isValid && input(IS_CSR)) {
-          output(REGFILE_WRITE_DATA) := readData
+          if(!pipelineCsrRead) output(REGFILE_WRITE_DATA) := readData
           arbitration.haltItself setWhen(blockedBySideEffects)
         }
+        if(pipelineCsrRead){
+          insert(PIPELINED_CSR_READ) := readData
+          when(memory.arbitration.isValid && memory.input(IS_CSR)) {
+            memory.output(REGFILE_WRITE_DATA) := memory.input(PIPELINED_CSR_READ)
+          }
+        }
+//
+//        Component.current.rework{
+//          when(arbitration.isFiring && input(IS_CSR)) {
+//            memory.input(REGFILE_WRITE_DATA).getDrivingReg := readData
+//          }
+//        }
 
         //Translation of the csrMapping into real logic
         val csrAddress = input(INSTRUCTION)(csrRange)
