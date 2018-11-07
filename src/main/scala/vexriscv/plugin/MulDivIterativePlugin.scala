@@ -4,12 +4,15 @@ import spinal.core._
 import spinal.lib._
 import vexriscv.{VexRiscv, _}
 
-class MulDivIterativePlugin(genMul : Boolean = true, genDiv : Boolean = true, mulUnrollFactor : Int = 1, divUnrollFactor : Int = 1) extends Plugin[VexRiscv]{
+object MulDivIterativePlugin{
   object IS_MUL extends Stageable(Bool)
   object IS_DIV extends Stageable(Bool)
   object IS_REM extends Stageable(Bool)
   object IS_RS1_SIGNED extends Stageable(Bool)
   object IS_RS2_SIGNED extends Stageable(Bool)
+}
+class MulDivIterativePlugin(genMul : Boolean = true, genDiv : Boolean = true, mulUnrollFactor : Int = 1, divUnrollFactor : Int = 1, customMul : (UInt, UInt, Stage, VexRiscv) => Area = null) extends Plugin[VexRiscv]{
+  import MulDivIterativePlugin._
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -67,7 +70,7 @@ class MulDivIterativePlugin(genMul : Boolean = true, genDiv : Boolean = true, mu
       val accumulator = Reg(UInt(65 bits))
 
 
-      val mul = ifGen(genMul) (new Area{
+      val mul = ifGen(genMul) (if(customMul != null) customMul(rs1,rs2,memory,pipeline) else new Area{
         assert(isPow2(mulUnrollFactor))
         val counter = Counter(32 / mulUnrollFactor + 1)
         val done = counter.willOverflowIfInc
@@ -81,6 +84,9 @@ class MulDivIterativePlugin(genMul : Boolean = true, genDiv : Boolean = true, mu
             accumulator := (sumResult @@ accumulator(31 downto 0)) >> mulUnrollFactor
           }
           output(REGFILE_WRITE_DATA) := ((input(INSTRUCTION)(13 downto 12) === B"00") ? accumulator(31 downto 0) | accumulator(63 downto 32)).asBits
+        }
+        when(!arbitration.isStuck) {
+          counter.clear()
         }
       })
 
@@ -139,7 +145,6 @@ class MulDivIterativePlugin(genMul : Boolean = true, genDiv : Boolean = true, mu
 
         rs1 := twoComplement(rs1Extended, rs1NeedRevert).resized
         rs2 := twoComplement(execute.input(RS2), rs2NeedRevert)
-        if(genMul) mul.counter.clear()
         if(genDiv) div.needRevert := (rs1NeedRevert ^ (rs2NeedRevert && !execute.input(INSTRUCTION)(13))) && !(execute.input(RS2) === 0 && execute.input(IS_RS2_SIGNED) && !execute.input(INSTRUCTION)(13))
         if(genDiv) div.counter.clear()
       }

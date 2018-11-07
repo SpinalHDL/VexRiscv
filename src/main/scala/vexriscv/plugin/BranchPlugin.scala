@@ -301,6 +301,7 @@ class BranchPlugin(earlyBranch : Boolean,
 
     //Do branch calculations (conditions + target PC)
     object NEXT_PC extends Stageable(UInt(32 bits))
+    object TARGET_MISSMATCH extends Stageable(Bool)
     execute plug new Area {
       import execute._
 
@@ -330,6 +331,7 @@ class BranchPlugin(earlyBranch : Boolean,
       val branchAdder = branch_src1 + branch_src2
       insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ "0"
       insert(NEXT_PC) := input(PC) + (if(pipeline(RVC_GEN)) ((input(IS_RVC)) ? U(2) | U(4)) else 4)
+      insert(TARGET_MISSMATCH) := decode.input(PC) =/= input(BRANCH_CALC)
     }
 
     //Apply branchs (JAL,JALR, Bxx)
@@ -337,7 +339,7 @@ class BranchPlugin(earlyBranch : Boolean,
     branchStage plug new Area {
       import branchStage._
 
-      val predictionMissmatch = fetchPrediction.cmd.hadBranch =/= input(BRANCH_DO) || (input(BRANCH_DO) && fetchPrediction.cmd.targetPc =/= input(BRANCH_CALC))
+      val predictionMissmatch = fetchPrediction.cmd.hadBranch =/= input(BRANCH_DO) || (input(BRANCH_DO) && input(TARGET_MISSMATCH))
       fetchPrediction.rsp.wasRight := ! predictionMissmatch
       fetchPrediction.rsp.finalPc := input(BRANCH_CALC)
       fetchPrediction.rsp.sourceLastWord := {

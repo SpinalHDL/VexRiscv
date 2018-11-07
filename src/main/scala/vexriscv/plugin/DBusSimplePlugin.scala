@@ -184,11 +184,12 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
 
 class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
                        catchAccessFault : Boolean = false,
-                       earlyInjection : Boolean = false,/*, idempotentRegions : (UInt) => Bool = (x) => False*/
+                       earlyInjection : Boolean = false, /*, idempotentRegions : (UInt) => Bool = (x) => False*/
+                       emitCmdInMemoryStage : Boolean = false,
                        onlyLoadWords : Boolean = false) extends Plugin[VexRiscv]{
 
   var dBus  : DBusSimpleBus = null
-
+  assert(!(emitCmdInMemoryStage && earlyInjection))
 
   object MEMORY_ENABLE extends Stageable(Bool)
   object MEMORY_READ_DATA extends Stageable(Bits(32 bits))
@@ -228,9 +229,11 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     )
 
 
+
+    val rspStage = if(emitCmdInMemoryStage) pipeline.writeBack else pipeline.memory
     if(catchAccessFault || catchAddressMisaligned) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
-      memoryExceptionPort = exceptionService.newExceptionPort(pipeline.memory)
+      memoryExceptionPort = exceptionService.newExceptionPort(rspStage)
     }
   }
 
@@ -241,8 +244,9 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     dBus = master(DBusSimpleBus()).setName("dBus")
 
     //Emit dBus.cmd request
-    execute plug new Area{
-      import execute._
+    val cmdStage = if(emitCmdInMemoryStage) memory else execute
+    cmdStage plug new Area{
+      import cmdStage._
 
       insert(ALIGNEMENT_FAULT) := {
         if (catchAddressMisaligned)
@@ -251,7 +255,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
           False
       }
 
-      dBus.cmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers && !arbitration.removeIt && !input(ALIGNEMENT_FAULT)
+      dBus.cmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers && !arbitration.isFlushed && !input(ALIGNEMENT_FAULT)
       dBus.cmd.wr := input(INSTRUCTION)(5)
       dBus.cmd.address := input(SRC_ADD).asUInt
       dBus.cmd.size := input(INSTRUCTION)(13 downto 12).asUInt
@@ -279,8 +283,9 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     }
 
     //Collect dBus.rsp read responses
-    memory plug new Area {
-      import memory._
+    val rspStage = if(emitCmdInMemoryStage) writeBack else memory
+    rspStage plug new Area {
+      import rspStage._
 
 
       insert(MEMORY_READ_DATA) := dBus.rsp.data
@@ -335,7 +340,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         output(REGFILE_WRITE_DATA) := (if(!onlyLoadWords) rspFormated else input(MEMORY_READ_DATA))
       }
 
-      if(!earlyInjection)
+      if(!earlyInjection && !emitCmdInMemoryStage)
         assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow writeback stage stall when read happend")
 
       //formal

@@ -75,14 +75,14 @@ case class SimpleBus(config : SimpleBusConfig) extends Bundle with IMasterSlave 
 
 
 object SimpleBusArbiter{
-  def apply(inputs : Seq[SimpleBus], pendingRspMax : Int): SimpleBus = {
-    val c = SimpleBusArbiter(inputs.head.config, inputs.size, pendingRspMax)
+  def apply(inputs : Seq[SimpleBus], pendingRspMax : Int, rspRouteQueue : Boolean, transactionLock : Boolean): SimpleBus = {
+    val c = SimpleBusArbiter(inputs.head.config, inputs.size, pendingRspMax, rspRouteQueue, transactionLock)
     (inputs, c.io.inputs).zipped.foreach(_ <> _)
     c.io.output
   }
 }
 
-case class SimpleBusArbiter(simpleBusConfig : SimpleBusConfig, portCount : Int, pendingRspMax : Int) extends Component{
+case class SimpleBusArbiter(simpleBusConfig : SimpleBusConfig, portCount : Int, pendingRspMax : Int, rspRouteQueue : Boolean, transactionLock : Boolean = true) extends Component{
   val io = new Bundle{
     val inputs = Vec(slave(SimpleBus(simpleBusConfig)), portCount)
     val output = master(SimpleBus(simpleBusConfig))
@@ -90,17 +90,34 @@ case class SimpleBusArbiter(simpleBusConfig : SimpleBusConfig, portCount : Int, 
   val logic = if(portCount == 1) new Area{
     io.output << io.inputs(0)
   } else new Area {
-    val arbiter = StreamArbiterFactory.lowerFirst.transactionLock.build(SimpleBusCmd(simpleBusConfig), portCount)
+    val arbiterFactory = StreamArbiterFactory.lowerFirst
+    if(transactionLock) arbiterFactory.transactionLock else arbiterFactory.noLock
+    val arbiter = arbiterFactory.build(SimpleBusCmd(simpleBusConfig), portCount)
     (arbiter.io.inputs, io.inputs).zipped.foreach(_ <> _.cmd)
 
-    val (outputCmdFork, routeCmdFork) = StreamFork2(arbiter.io.output)
-    io.output.cmd << outputCmdFork
+    val rspRouteOh = Bits(portCount bits)
 
-    val rspRoute = routeCmdFork.translateWith(arbiter.io.chosen).throwWhen(routeCmdFork.wr).queueLowLatency(size = pendingRspMax, latency = 1)
-    rspRoute.ready := io.output.rsp.valid
+    val rsp = if(!rspRouteQueue) new Area{
+      assert(pendingRspMax == 1)
+      val pending = RegInit(False) clearWhen(io.output.rsp.valid)
+      val target = Reg(Bits(portCount bits))
+      rspRouteOh := target
+      when(io.output.cmd.fire && !io.output.cmd.wr){
+        target  := arbiter.io.chosenOH
+        pending := True
+      }
+      io.output.cmd << arbiter.io.output.haltWhen(pending && !io.output.rsp.valid)
+    } else new Area{
+      val (outputCmdFork, routeCmdFork) = StreamFork2(arbiter.io.output)
+      io.output.cmd << outputCmdFork
+
+      val rspRoute = routeCmdFork.translateWith(arbiter.io.chosenOH).throwWhen(routeCmdFork.wr).queueLowLatency(size = pendingRspMax, latency = 1)
+      rspRoute.ready := io.output.rsp.valid
+      rspRouteOh := rspRoute.payload
+    }
 
     for ((input, id) <- io.inputs.zipWithIndex) {
-      input.rsp.valid := io.output.rsp.valid && rspRoute.payload === id
+      input.rsp.valid := io.output.rsp.valid && rspRouteOh(id)
       input.rsp.payload := io.output.rsp.payload
     }
   }
@@ -167,30 +184,34 @@ case class SimpleBusDecoder(busConfig : SimpleBusConfig, mappings : Seq[AddressM
     val outputs = Vec(master(SimpleBus(busConfig)), mappings.size)
   }
   val hasDefault = mappings.contains(DefaultMapping)
-  val hits = Vec(Bool, mappings.size)
-  for((slaveBus, memorySpace, hit) <- (io.outputs, mappings, hits).zipped) yield {
-    hit := (memorySpace match {
-      case DefaultMapping => !hits.filterNot(_ == hit).orR
-      case _ => memorySpace.hit(io.input.cmd.address)
-    })
-    slaveBus.cmd.valid   := io.input.cmd.valid && hit
-    slaveBus.cmd.payload := io.input.cmd.payload.resized
-  }
-  val noHit = if(!hasDefault) !hits.orR else False
-  io.input.cmd.ready := (hits,io.outputs).zipped.map(_ && _.cmd.ready).orR || noHit
+  val logic = if(hasDefault && mappings.size == 1){
+    io.outputs(0) <> io.input
+  } else new Area {
+    val hits = Vec(Bool, mappings.size)
+    for ((slaveBus, memorySpace, hit) <- (io.outputs, mappings, hits).zipped) yield {
+      hit := (memorySpace match {
+        case DefaultMapping => !hits.filterNot(_ == hit).orR
+        case _ => memorySpace.hit(io.input.cmd.address)
+      })
+      slaveBus.cmd.valid := io.input.cmd.valid && hit
+      slaveBus.cmd.payload := io.input.cmd.payload.resized
+    }
+    val noHit = if (!hasDefault) !hits.orR else False
+    io.input.cmd.ready := (hits, io.outputs).zipped.map(_ && _.cmd.ready).orR || noHit
 
-  val rspPendingCounter = Reg(UInt(log2Up(pendingMax + 1) bits)) init(0)
-  rspPendingCounter := rspPendingCounter + U(io.input.cmd.fire && !io.input.cmd.wr) - U(io.input.rsp.valid)
-  val rspHits = RegNextWhen(hits, io.input.cmd.fire)
-  val rspPending  = rspPendingCounter =/= 0
-  val rspNoHit    = if(!hasDefault) !rspHits.orR else False
-  io.input.rsp.valid   := io.outputs.map(_.rsp.valid).orR || (rspPending && rspNoHit)
-  io.input.rsp.payload := io.outputs.map(_.rsp.payload).read(OHToUInt(rspHits))
+    val rspPendingCounter = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
+    rspPendingCounter := rspPendingCounter + U(io.input.cmd.fire && !io.input.cmd.wr) - U(io.input.rsp.valid)
+    val rspHits = RegNextWhen(hits, io.input.cmd.fire)
+    val rspPending = rspPendingCounter =/= 0
+    val rspNoHit = if (!hasDefault) !rspHits.orR else False
+    io.input.rsp.valid := io.outputs.map(_.rsp.valid).orR || (rspPending && rspNoHit)
+    io.input.rsp.payload := io.outputs.map(_.rsp.payload).read(OHToUInt(rspHits))
 
-  val cmdWait = (io.input.cmd.valid && rspPending && hits =/= rspHits) || rspPendingCounter === pendingMax
-  when(cmdWait){
-    io.input.cmd.ready := False
-    io.outputs.foreach(_.cmd.valid := False)
+    val cmdWait = (io.input.cmd.valid && rspPending && hits =/= rspHits) || rspPendingCounter === pendingMax
+    when(cmdWait) {
+      io.input.cmd.ready := False
+      io.outputs.foreach(_.cmd.valid := False)
+    }
   }
 }
 
@@ -200,13 +221,14 @@ object SimpleBusConnectors{
 
 case class SimpleBusInterconnect(){
   case class MasterModel(var connector : (SimpleBus,SimpleBus) => Unit = SimpleBusConnectors.direct)
-  case class SlaveModel(mapping : AddressMapping, var connector : (SimpleBus,SimpleBus) => Unit = SimpleBusConnectors.direct)
+  case class SlaveModel(mapping : AddressMapping, var connector : (SimpleBus,SimpleBus) => Unit = SimpleBusConnectors.direct, var transactionLock : Boolean = true)
   case class ConnectionModel(m : SimpleBus, s : SimpleBus, var connector : (SimpleBus,SimpleBus) => Unit = SimpleBusConnectors.direct)
 
   val masters = mutable.LinkedHashMap[SimpleBus, MasterModel]()
   val slaves = mutable.LinkedHashMap[SimpleBus, SlaveModel]()
   val connections = ArrayBuffer[ConnectionModel]()
-  var pendingRspMax = 2
+  var arbitrationPendingRspMaxDefault = 1
+  val arbitrationRspRouteQueueDefault = false
 
 
   def setConnector(bus : SimpleBus)( connector : (SimpleBus,SimpleBus) => Unit): Unit = (masters.get(bus), slaves.get(bus)) match {
@@ -227,6 +249,10 @@ case class SimpleBusInterconnect(){
     orders.foreach(order => addSlave(order._1,order._2))
     this
   }
+
+  def noTransactionLockOn(slave : SimpleBus) : Unit = slaves(slave).transactionLock = false
+  def noTransactionLockOn(slaves : Seq[SimpleBus]) : Unit = slaves.foreach(noTransactionLockOn(_))
+
 
   def addMaster(bus : SimpleBus, accesses : Seq[SimpleBus]) : this.type = {
     masters(bus) = MasterModel()
@@ -263,7 +289,7 @@ case class SimpleBusInterconnect(){
     for((bus, model) <- slaves){
       val busConnections = connections.filter(_.s == bus)
       val busMasters = busConnections.map(c => masters(c.m))
-      val arbiter = new SimpleBusArbiter(bus.config, busMasters.size, pendingRspMax)
+      val arbiter = new SimpleBusArbiter(bus.config, busMasters.size, arbitrationPendingRspMaxDefault, arbitrationRspRouteQueueDefault, model.transactionLock)
       applyName(bus,"arbiter",arbiter)
       model.connector(arbiter.io.output, bus)
       for((connection, arbiterInput) <- (busConnections, arbiter.io.inputs).zipped) {

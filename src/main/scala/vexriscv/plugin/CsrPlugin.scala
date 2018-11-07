@@ -793,8 +793,8 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         val readData = B(0, 32 bits)
         val writeInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE)
         val readInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE)
-        val writeEnable = writeInstruction && ! arbitration.isStuck // &&  readDataRegValid
-        val readEnable  = readInstruction && ! arbitration.isStuck  //  && !readDataRegValid
+        val writeEnable = writeInstruction && ! blockedBySideEffects // &&  readDataRegValid
+        val readEnable  = readInstruction  && ! blockedBySideEffects // && !readDataRegValid
 
 
 
