@@ -150,7 +150,7 @@ class BranchPlugin(earlyBranch : Boolean,
         decode.output(INSTRUCTION)(12) := False
         decode.output(INSTRUCTION)(22) := True
       }
-      execute.arbitration.haltByOther setWhen(execute.arbitration.isValid && execute.input(IS_FENCEI) && List(memory,writeBack).map(_.arbitration.isValid).orR)
+      execute.arbitration.haltByOther setWhen(execute.arbitration.isValid && execute.input(IS_FENCEI) && stagesFromExecute.tail.map(_.arbitration.isValid).asBits.orR)
     }
   }
 

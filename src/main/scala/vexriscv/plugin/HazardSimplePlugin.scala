@@ -59,9 +59,9 @@ class HazardSimplePlugin(bypassExecute : Boolean = false,
       val address = Bits(5 bits)
       val data = Bits(32 bits)
     }))
-    writeBackWrites.valid := writeBack.output(REGFILE_WRITE_VALID) && writeBack.arbitration.isFiring
-    writeBackWrites.address := writeBack.output(INSTRUCTION)(rdRange)
-    writeBackWrites.data := writeBack.output(REGFILE_WRITE_DATA)
+    writeBackWrites.valid := stages.last.output(REGFILE_WRITE_VALID) && stages.last.arbitration.isFiring
+    writeBackWrites.address := stages.last.output(INSTRUCTION)(rdRange)
+    writeBackWrites.data := stages.last.output(REGFILE_WRITE_DATA)
     val writeBackBuffer = writeBackWrites.stage()
 
     val addr0Match = if(pessimisticAddressMatch) True else writeBackBuffer.address === decode.input(INSTRUCTION)(rs1Range)
@@ -84,9 +84,9 @@ class HazardSimplePlugin(bypassExecute : Boolean = false,
       }
     }
 
-    trackHazardWithStage(writeBack,bypassWriteBack,null)
-    trackHazardWithStage(memory   ,bypassMemory   ,BYPASSABLE_MEMORY_STAGE)
-    trackHazardWithStage(execute  ,bypassExecute  ,BYPASSABLE_EXECUTE_STAGE)
+    if(withWriteBackStage) trackHazardWithStage(writeBack,bypassWriteBack,null)
+    if(withMemoryStage)    trackHazardWithStage(memory   ,bypassMemory   ,BYPASSABLE_MEMORY_STAGE)
+    trackHazardWithStage(execute  ,bypassExecute , if(stages.last == execute) null else BYPASSABLE_EXECUTE_STAGE)
 
 
     if(!pessimisticUseSrc) {

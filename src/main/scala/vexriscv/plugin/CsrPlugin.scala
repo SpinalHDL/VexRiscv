@@ -317,7 +317,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
     if(ebreakGen) decoderService.add(EBREAK,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.EBREAK, HAS_SIDE_EFFECT -> True))
 
     val  pcManagerService = pipeline.service(classOf[JumpService])
-    jumpInterface = pcManagerService.createJumpInterface(pipeline.writeBack)
+    jumpInterface = pcManagerService.createJumpInterface(pipeline.stages.last)
     jumpInterface.valid := False
     jumpInterface.payload.assignDontCare()
 
@@ -489,10 +489,13 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       import machineCsr._
       import supervisorCsr._
 
+      val lastStage = pipeline.stages.last
+      val beforeLastStage = pipeline.stages(pipeline.stages.size-2)
+      val stagesFromExecute = pipeline.stages.dropWhile(_ != execute)
 
       //Manage counters
       mcycle := mcycle + 1
-      when(writeBack.arbitration.isFiring) {
+      when(lastStage.arbitration.isFiring) {
         minstret := minstret + 1
       }
 
@@ -541,7 +544,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       if(medelegAccess.canWrite) exceptionDelegators += DelegatorModel(medeleg,3, 1)
 
 
-      val mepcCaptureStage = if(exceptionPortsInfos.nonEmpty) writeBack else decode
+      val mepcCaptureStage = if(exceptionPortsInfos.nonEmpty) lastStage else decode
 
 
       //Aggregate all exception port and remove required instructions
@@ -626,7 +629,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       interrupt.clearWhen(!allowInterrupts)
 
       val exception = if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValids.last && allowException else False
-      val writeBackWasWfi = if(wfiGenAsWait) RegNext(writeBack.arbitration.isFiring && writeBack.input(ENV_CTRL) === EnvCtrlEnum.WFI) init(False) else False
+      val lastStageWasWfi = if(wfiGenAsWait) RegNext(lastStage.arbitration.isFiring && lastStage.input(ENV_CTRL) === EnvCtrlEnum.WFI) init(False) else False
 
 
 
@@ -636,7 +639,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
           decode.arbitration.haltByOther := True
         }
 
-        val done = !List(execute, memory, writeBack).map(_.arbitration.isValid).orR && fetcher.pcValid(mepcCaptureStage)
+        val done = !stagesFromExecute.map(_.arbitration.isValid).orR && fetcher.pcValid(mepcCaptureStage)
         if(exceptionPortCtrl != null) done.clearWhen(exceptionPortCtrl.exceptionValidsRegs.tail.orR)
       }
 
@@ -672,7 +675,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       when(hadException || interruptJump){
         jumpInterface.valid         := True
         jumpInterface.payload       := (if(!mtvecModeGen) mtvec.base @@ "00" else (mtvec.mode === 0 || hadException) ? (mtvec.base @@ "00") | ((mtvec.base + trapCause) @@ "00") )
-        memory.arbitration.flushAll := True
+        beforeLastStage.arbitration.flushAll := True
 
         switch(targetPrivilege){
           if(supervisorGen) is(1) {
@@ -699,14 +702,14 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         }
       }
 
-      writeBack plug new Area{
-        import writeBack._
-        def previousStage = memory
+      lastStage plug new Area{
+        import lastStage._
+
         //Manage MRET / SRET instructions
         when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.XRET) {
         jumpInterface.payload := mepc
           jumpInterface.valid := True
-          previousStage.arbitration.flushAll := True
+          beforeLastStage.arbitration.flushAll := True
           switch(input(INSTRUCTION)(29 downto 28)){
             is(3){
               mstatus.MIE := mstatus.MPIE
@@ -750,12 +753,12 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         }
       }
 
-      decode.arbitration.haltByOther setWhen(List(execute,memory).map(s => s.arbitration.isValid && s.input(ENV_CTRL) === EnvCtrlEnum.XRET).orR)
+      decode.arbitration.haltByOther setWhen(stagesFromExecute.dropRight(1).map(s => s.arbitration.isValid && s.input(ENV_CTRL) === EnvCtrlEnum.XRET).asBits.orR)
 
       execute plug new Area {
         import execute._
         def previousStage = decode
-        val blockedBySideEffects =  List(memory, writeBack).map(s => s.arbitration.isValid).orR // && s.input(HAS_SIDE_EFFECT)  to improve be less pessimistic
+        val blockedBySideEffects =  stagesFromExecute.tail.map(s => s.arbitration.isValid).asBits().orR // && s.input(HAS_SIDE_EFFECT)  to improve be less pessimistic
 
         val illegalAccess =  arbitration.isValid && input(IS_CSR)
         val illegalInstruction = False

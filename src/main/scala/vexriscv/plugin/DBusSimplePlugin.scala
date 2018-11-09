@@ -317,7 +317,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     }
 
     //Reformat read responses, REGFILE_WRITE_DATA overriding
-    val injectionStage = if(earlyInjection) memory else writeBack
+    val injectionStage = if(earlyInjection) memory else stages.last
     injectionStage plug new Area {
       import injectionStage._
 
@@ -340,7 +340,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         output(REGFILE_WRITE_DATA) := (if(!onlyLoadWords) rspFormated else input(MEMORY_READ_DATA))
       }
 
-      if(!earlyInjection && !emitCmdInMemoryStage)
+      if(!earlyInjection && !emitCmdInMemoryStage && config.withWriteBackStage)
         assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow writeback stage stall when read happend")
 
       //formal

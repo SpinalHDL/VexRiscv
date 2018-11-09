@@ -6,14 +6,20 @@ import spinal.core._
 import scala.collection.mutable.ArrayBuffer
 
 object VexRiscvConfig{
-  def apply(plugins : Seq[Plugin[VexRiscv]] = ArrayBuffer()) : VexRiscvConfig = {
+  def apply(withMemoryStage : Boolean, withWriteBackStage : Boolean, plugins : Seq[Plugin[VexRiscv]]): VexRiscvConfig = {
     val config = VexRiscvConfig()
     config.plugins ++= plugins
+    config.withMemoryStage = withMemoryStage
+    config.withWriteBackStage = withWriteBackStage
     config
   }
+
+  def apply(plugins : Seq[Plugin[VexRiscv]] = ArrayBuffer()) : VexRiscvConfig = apply(true,true,plugins)
 }
 
 case class VexRiscvConfig(){
+  var withMemoryStage = true
+  var withWriteBackStage = true
   val plugins = ArrayBuffer[Plugin[VexRiscv]]()
 
   //Default Stageables
@@ -76,8 +82,14 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   type  T = VexRiscv
   import config._
 
-  stages ++= List.fill(4)(new Stage())
-  val /*prefetch :: fetch :: */decode :: execute :: memory :: writeBack :: Nil = stages.toList
+  stages ++= List.fill(2 + (if(withMemoryStage) 1 else 0) + (if(withWriteBackStage) 1 else 0))(new Stage())
+  val decode    = stages(0)
+  val execute   = stages(1)
+  val memory    = ifGen(withMemoryStage)    (stages(2))
+  val writeBack = ifGen(withWriteBackStage) (stages(3))
+
+  def stagesFromExecute = stages.dropWhile(_ != execute)
+
   plugins ++= config.plugins
 
   //regression usage
@@ -86,12 +98,16 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   decode.arbitration.isValid.addAttribute(Verilator.public)
   decode.arbitration.flushAll.addAttribute(Verilator.public)
   decode.arbitration.haltItself.addAttribute(Verilator.public)
-  writeBack.input(config.INSTRUCTION) keep() addAttribute(Verilator.public)
-  writeBack.input(config.PC) keep() addAttribute(Verilator.public)
-  writeBack.arbitration.isValid keep() addAttribute(Verilator.public)
-  writeBack.arbitration.isFiring keep() addAttribute(Verilator.public)
+  if(withWriteBackStage) {
+    writeBack.input(config.INSTRUCTION) keep() addAttribute (Verilator.public)
+    writeBack.input(config.PC) keep() addAttribute (Verilator.public)
+    writeBack.arbitration.isValid keep() addAttribute (Verilator.public)
+    writeBack.arbitration.isFiring keep() addAttribute (Verilator.public)
+  }
   decode.arbitration.removeIt.noBackendCombMerge //Verilator perf
-  memory.arbitration.removeIt.noBackendCombMerge
+  if(withMemoryStage){
+    memory.arbitration.removeIt.noBackendCombMerge
+  }
   execute.arbitration.flushAll.noBackendCombMerge
 
   this(RVC_GEN) = false

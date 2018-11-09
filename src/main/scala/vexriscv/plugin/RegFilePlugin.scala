@@ -67,7 +67,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
     }
 
     //Write register file
-    val writeStage = if(writeRfInMemoryStage) memory else writeBack
+    val writeStage = if(writeRfInMemoryStage) memory else stages.last
     writeStage plug new Area {
       import writeStage._
 

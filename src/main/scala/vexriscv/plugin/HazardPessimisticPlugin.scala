@@ -18,7 +18,7 @@ class HazardPessimisticPlugin() extends Plugin[VexRiscv] {
     import pipeline._
     import pipeline.config._
 
-    val writesInPipeline = List(execute,memory,writeBack).map(s => s.arbitration.isValid && s.input(REGFILE_WRITE_VALID)) :+ RegNext(writeBack.arbitration.isValid && writeBack.input(REGFILE_WRITE_VALID))
+    val writesInPipeline = stages.dropWhile(_ != execute).map(s => s.arbitration.isValid && s.input(REGFILE_WRITE_VALID)) :+ RegNext(stages.last.arbitration.isValid && stages.last.input(REGFILE_WRITE_VALID))
     decode.arbitration.haltItself.setWhen(decode.arbitration.isValid && writesInPipeline.orR)
   }
 }

@@ -31,7 +31,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
   assert(!(compressedGen && !decodePcGen))
   var fetcherHalt : Bool = null
   var fetcherflushIt : Bool = null
-  lazy val pcValids = Vec(Bool, 4)
+  var pcValids : Vec[Bool] = null
   def pcValid(stage : Stage) = pcValids(pipeline.indexOf(stage))
   var incomingInstruction : Bool = null
   override def incoming() = incomingInstruction
@@ -50,6 +50,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
   case class JumpInfo(interface :  Flow[UInt], stage: Stage, priority : Int)
   val jumpInfos = ArrayBuffer[JumpInfo]()
   override def createJumpInterface(stage: Stage, priority : Int = 0): Flow[UInt] = {
+    assert(stage != null)
     val interface = Flow(UInt(32 bits))
     jumpInfos += JumpInfo(interface,stage, priority)
     interface
@@ -78,6 +79,8 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         }
       }
     }
+
+    pcValids = Vec(Bool, pipeline.stages.size)
   }
 
 
@@ -320,12 +323,13 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         }).tail
       }
 
+      val stagesFromExecute = stages.dropWhile(_ != execute).toList
       val nextPcCalc = if (decodePcGen) new Area{
-        val valids = pcUpdatedGen(True, False :: List(execute, memory, writeBack).map(_.arbitration.isStuck), true)
-        pcValids := Vec(valids.takeRight(4))
+        val valids = pcUpdatedGen(True, False :: stagesFromExecute.map(_.arbitration.isStuck), true)
+        pcValids := Vec(valids.takeRight(stages.size))
       } else new Area{
-        val valids = pcUpdatedGen(True, iBusRsp.stages.tail.map(!_.input.ready) ++ (if (injectorStage) List(!decodeInput.ready) else Nil) ++ List(execute, memory, writeBack).map(_.arbitration.isStuck), false)
-        pcValids := Vec(valids.takeRight(4))
+        val valids = pcUpdatedGen(True, iBusRsp.stages.tail.map(!_.input.ready) ++ (if (injectorStage) List(!decodeInput.ready) else Nil) ++ stagesFromExecute.map(_.arbitration.isStuck), false)
+        pcValids := Vec(valids.takeRight(stages.size))
       }
 
       val decodeRemoved = RegInit(False) setWhen(decode.arbitration.isRemoved) clearWhen(flush) //!decode.arbitration.isStuck || decode.arbitration.isFlushed
