@@ -1,12 +1,11 @@
 package vexriscv.plugin
 
-import vexriscv._
 import spinal.core._
 import spinal.lib._
+import vexriscv._
 
 
-class HazardPessimisticPlugin() extends Plugin[VexRiscv] {
-  import Riscv._
+class NoPipeliningPlugin() extends Plugin[VexRiscv] {
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -19,6 +18,6 @@ class HazardPessimisticPlugin() extends Plugin[VexRiscv] {
     import pipeline.config._
 
     val writesInPipeline = stages.dropWhile(_ != execute).map(s => s.arbitration.isValid && s.input(REGFILE_WRITE_VALID)) :+ RegNext(stages.last.arbitration.isValid && stages.last.input(REGFILE_WRITE_VALID))
-    decode.arbitration.haltByOther.setWhen(decode.arbitration.isValid && writesInPipeline.orR)
+    decode.arbitration.haltByOther.setWhen(stagesFromExecute.map(_.arbitration.isValid).orR)
   }
 }

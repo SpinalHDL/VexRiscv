@@ -153,7 +153,8 @@ class IBusSimplePlugin(resetVector : BigInt,
                        busLatencyMin : Int = 1,
                        pendingMax : Int = 7,
                        injectorStage : Boolean = true,
-                       rspHoldValue : Boolean = false
+                       rspHoldValue : Boolean = false,
+                       singleInstructionPipeline : Boolean = false
                       ) extends IBusFetcherImpl(
     resetVector = resetVector,
     keepPcPlus4 = keepPcPlus4,
@@ -168,7 +169,7 @@ class IBusSimplePlugin(resetVector : BigInt,
 
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
-  if(rspHoldValue) assert(busLatencyMin == 1)
+  if(rspHoldValue) assert(busLatencyMin <= 1)
 
   override def setup(pipeline: VexRiscv): Unit = {
     super.setup(pipeline)
@@ -197,7 +198,12 @@ class IBusSimplePlugin(resetVector : BigInt,
         //This implementation keep the cmd on the bus until it's executed or the the pipeline is flushed
         def stage = iBusRsp.stages(if(cmdForkOnSecondStage) 1 else 0)
         stage.halt setWhen(stage.input.valid && (!cmd.valid || !cmd.ready))
-        cmd.valid := stage.input.valid && stage.output.ready && pendingCmd =/= pendingMax
+        if(singleInstructionPipeline) {
+          cmd.valid := stage.input.valid && pendingCmd =/= pendingMax && !stages.map(_.arbitration.isValid).orR
+          assert(injectorStage == false)
+          assert(iBusRsp.stages.dropWhile(_ != stage).length <= 2)
+        }else
+          cmd.valid := stage.input.valid && stage.output.ready && pendingCmd =/= pendingMax
         cmd.pc := stage.input.payload(31 downto 2) @@ "00"
       } else new Area{
         //This implementation keep the cmd on the bus until it's executed, even if the pipeline is flushed
@@ -230,7 +236,10 @@ class IBusSimplePlugin(resetVector : BigInt,
           c.io.flush := flush
           rspBufferOutput << c.io.pop
         } else new Area{
-          rspBufferOutput << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
+          val rspStream = iBus.rsp.throwWhen(discardCounter =/= 0).toStream
+          val validReg = RegInit(False) setWhen(rspStream.valid) clearWhen(rspBufferOutput.ready)
+          rspBufferOutput << rspStream
+          rspBufferOutput.valid setWhen(validReg)
         }
 
         val fetchRsp = FetchRsp()

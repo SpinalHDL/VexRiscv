@@ -47,6 +47,11 @@ trait ExceptionInhibitor{
   def inhibateException() : Unit
 }
 
+trait RegFileService{
+  def readStage() : Stage
+}
+
+
 case class MemoryTranslatorCmd() extends Bundle{
   val isValid = Bool
   val virtualAddress  = UInt(32 bits)

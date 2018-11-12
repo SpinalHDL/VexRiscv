@@ -763,9 +763,13 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         val illegalAccess =  arbitration.isValid && input(IS_CSR)
         val illegalInstruction = False
         if(selfException != null) {
-          selfException.valid := illegalAccess || illegalInstruction
-          selfException.code := 2
+          selfException.valid := False
+          selfException.code.assignDontCare()
           selfException.badAddr.assignDontCare()
+          if(catchIllegalAccess) when(illegalAccess || illegalInstruction){
+            selfException.valid := True
+            selfException.code := 2
+          }
         }
 
         //Manage MRET / SRET instructions
@@ -796,9 +800,9 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         val readData = B(0, 32 bits)
         val writeInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE)
         val readInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE)
-        val writeEnable = writeInstruction && ! blockedBySideEffects // &&  readDataRegValid
-        val readEnable  = readInstruction  && ! blockedBySideEffects // && !readDataRegValid
-
+        val writeEnable = writeInstruction && ! blockedBySideEffects && !arbitration.isStuckByOthers// &&  readDataRegValid
+        val readEnable  = readInstruction  && ! blockedBySideEffects && !arbitration.isStuckByOthers// && !readDataRegValid
+        //arbitration.isStuckByOthers, in case of the hazardPlugin is in the executeStage
 
 
 //        def readDataReg = memory.input(REGFILE_WRITE_DATA)  //PIPE OPT

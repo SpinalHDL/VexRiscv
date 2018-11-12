@@ -10,7 +10,7 @@ cd VexRiscv
 sudo git init
 sudo git add *
 sudo git commit -m miaou
-export VEXRISCV_REGRESSION_CONFIG_COUNT=16
+export VEXRISCV_REGRESSION_CONFIG_COUNT=64
 export VEXRISCV_REGRESSION_FREERTOS_COUNT=yes
 sbt test
 cd ..

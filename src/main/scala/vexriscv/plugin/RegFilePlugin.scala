@@ -13,12 +13,16 @@ object SYNC extends RegFileReadKind
 
 class RegFilePlugin(regFileReadyKind : RegFileReadKind,
                     zeroBoot : Boolean = false,
+                    x0Init : Boolean = true,
                     writeRfInMemoryStage : Boolean = false,
-                    readInExecute : Boolean = false) extends Plugin[VexRiscv]{
+                    readInExecute : Boolean = false,
+                    syncUpdateOnStall : Boolean = true) extends Plugin[VexRiscv] with RegFileService{
   import Riscv._
 
 //  assert(!writeRfInMemoryStage)
 
+
+  override def readStage(): Stage = if(readInExecute) pipeline.execute else pipeline.decode
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -51,7 +55,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
       val srcInstruction = regFileReadyKind match{
         case `ASYNC` => input(INSTRUCTION)
         case `SYNC` if !readInExecute =>  input(INSTRUCTION_ANTICIPATED)
-        case `SYNC` if readInExecute =>   Mux(execute.arbitration.isStuck, execute.input(INSTRUCTION), decode.input(INSTRUCTION))
+        case `SYNC` if readInExecute =>   if(syncUpdateOnStall) Mux(execute.arbitration.isStuck, execute.input(INSTRUCTION), decode.input(INSTRUCTION)) else  decode.input(INSTRUCTION)
       }
 
       val regFileReadAddress1 = srcInstruction(Riscv.rs1Range).asUInt
@@ -59,7 +63,9 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
 
       val (rs1Data,rs2Data) = regFileReadyKind match{
         case `ASYNC` => (global.regFile.readAsync(regFileReadAddress1),global.regFile.readAsync(regFileReadAddress2))
-        case `SYNC` =>  (global.regFile.readSync(regFileReadAddress1),global.regFile.readSync(regFileReadAddress2))
+        case `SYNC` =>
+          val enable = if(!syncUpdateOnStall) !readStage.arbitration.isStuck else null
+          (global.regFile.readSync(regFileReadAddress1, enable),global.regFile.readSync(regFileReadAddress2, enable))
       }
 
       insert(RS1) := rs1Data
@@ -77,10 +83,19 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
       regFileWrite.data := output(REGFILE_WRITE_DATA)
 
       //CPU will initialise constant register zero in the first cycle
-      regFileWrite.valid setWhen(RegNext(False) init(True))
-      inputInit[Bits](REGFILE_WRITE_DATA, 0)
-      inputInit[Bits](INSTRUCTION, 0)
+      if(x0Init) {
+        val boot = RegNext(False) init (True)
+        regFileWrite.valid setWhen (boot)
+        if (writeStage != execute) {
+          inputInit[Bits](REGFILE_WRITE_DATA, 0)
+          inputInit[Bits](INSTRUCTION, 0)
+        } else {
+          when(boot) {
+            regFileWrite.address := 0
+            regFileWrite.data := 0
+          }
+        }
+      }
     }
-
   }
 }

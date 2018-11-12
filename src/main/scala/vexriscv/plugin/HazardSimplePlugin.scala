@@ -26,18 +26,20 @@ class HazardSimplePlugin(bypassExecute : Boolean = false,
     val src0Hazard = False
     val src1Hazard = False
 
+    val readStage = service(classOf[RegFileService]).readStage()
+
     def trackHazardWithStage(stage : Stage,bypassable : Boolean, runtimeBypassable : Stageable[Bool]): Unit ={
       val runtimeBypassableValue = if(runtimeBypassable != null) stage.input(runtimeBypassable) else True
-      val addr0Match = if(pessimisticAddressMatch) True else stage.input(INSTRUCTION)(rdRange) === decode.input(INSTRUCTION)(rs1Range)
-      val addr1Match = if(pessimisticAddressMatch) True else stage.input(INSTRUCTION)(rdRange) === decode.input(INSTRUCTION)(rs2Range)
+      val addr0Match = if(pessimisticAddressMatch) True else stage.input(INSTRUCTION)(rdRange) === readStage.input(INSTRUCTION)(rs1Range)
+      val addr1Match = if(pessimisticAddressMatch) True else stage.input(INSTRUCTION)(rdRange) === readStage.input(INSTRUCTION)(rs2Range)
       when(stage.arbitration.isValid && stage.input(REGFILE_WRITE_VALID)) {
         if (bypassable) {
           when(runtimeBypassableValue) {
             when(addr0Match) {
-              decode.input(RS1) := stage.output(REGFILE_WRITE_DATA)
+              readStage.input(RS1) := stage.output(REGFILE_WRITE_DATA)
             }
             when(addr1Match) {
-              decode.input(RS2) := stage.output(REGFILE_WRITE_DATA)
+              readStage.input(RS2) := stage.output(REGFILE_WRITE_DATA)
             }
           }
         }
@@ -64,15 +66,15 @@ class HazardSimplePlugin(bypassExecute : Boolean = false,
     writeBackWrites.data := stages.last.output(REGFILE_WRITE_DATA)
     val writeBackBuffer = writeBackWrites.stage()
 
-    val addr0Match = if(pessimisticAddressMatch) True else writeBackBuffer.address === decode.input(INSTRUCTION)(rs1Range)
-    val addr1Match = if(pessimisticAddressMatch) True else writeBackBuffer.address === decode.input(INSTRUCTION)(rs2Range)
+    val addr0Match = if(pessimisticAddressMatch) True else writeBackBuffer.address === readStage.input(INSTRUCTION)(rs1Range)
+    val addr1Match = if(pessimisticAddressMatch) True else writeBackBuffer.address === readStage.input(INSTRUCTION)(rs2Range)
     when(writeBackBuffer.valid) {
       if (bypassWriteBackBuffer) {
         when(addr0Match) {
-          decode.input(RS1) := writeBackBuffer.data
+          readStage.input(RS1) := writeBackBuffer.data
         }
         when(addr1Match) {
-          decode.input(RS2) := writeBackBuffer.data
+          readStage.input(RS2) := writeBackBuffer.data
         }
       } else {
         when(addr0Match) {
@@ -86,20 +88,20 @@ class HazardSimplePlugin(bypassExecute : Boolean = false,
 
     if(withWriteBackStage) trackHazardWithStage(writeBack,bypassWriteBack,null)
     if(withMemoryStage)    trackHazardWithStage(memory   ,bypassMemory   ,BYPASSABLE_MEMORY_STAGE)
-    trackHazardWithStage(execute  ,bypassExecute , if(stages.last == execute) null else BYPASSABLE_EXECUTE_STAGE)
+    if(readStage != execute) trackHazardWithStage(execute  ,bypassExecute , if(stages.last == execute) null else BYPASSABLE_EXECUTE_STAGE)
 
 
     if(!pessimisticUseSrc) {
-      when(!decode.input(RS1_USE)) {
+      when(!readStage.input(RS1_USE)) {
         src0Hazard := False
       }
-      when(!decode.input(RS2_USE)) {
+      when(!readStage.input(RS2_USE)) {
         src1Hazard := False
       }
     }
 
-    when(decode.arbitration.isValid && (src0Hazard || src1Hazard)){
-      decode.arbitration.haltItself := True
+    when(readStage.arbitration.isValid && (src0Hazard || src1Hazard)){
+      readStage.arbitration.haltByOther := True
     }
   }
 }

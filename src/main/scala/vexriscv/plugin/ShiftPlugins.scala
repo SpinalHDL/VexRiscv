@@ -152,7 +152,8 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
       val isShift = input(SHIFT_CTRL) =/= ShiftCtrlEnum.DISABLE
       val amplitudeReg = Reg(UInt(5 bits))
       val amplitude = isActive ? amplitudeReg | input(SRC2)(4 downto 0).asUInt
-      val shiftInput = isActive ? memory.input(REGFILE_WRITE_DATA) | input(SRC1)
+      val shiftReg = ifGen(!withMemoryStage) (RegNextWhen(execute.output(REGFILE_WRITE_DATA), !arbitration.isStuckByOthers))
+      val shiftInput = isActive ? (if(withMemoryStage) memory.input(REGFILE_WRITE_DATA) else shiftReg) | input(SRC1)
       val done = amplitude(4 downto 1) === 0
 
 

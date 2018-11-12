@@ -192,7 +192,7 @@ class BranchPlugin(earlyBranch : Boolean,
     //Apply branchs (JAL,JALR, Bxx)
     branchStage plug new Area {
       import branchStage._
-      jumpInterface.valid := arbitration.isFiring && input(BRANCH_DO)
+      jumpInterface.valid := arbitration.isValid && !arbitration.isStuckByOthers && input(BRANCH_DO)
       jumpInterface.payload := input(BRANCH_CALC)
 
       when(jumpInterface.valid) {
@@ -272,7 +272,7 @@ class BranchPlugin(earlyBranch : Boolean,
     val branchStage = if(earlyBranch) execute else memory
     branchStage plug new Area {
       import branchStage._
-      jumpInterface.valid := input(BRANCH_DO) && arbitration.isFiring
+      jumpInterface.valid := arbitration.isValid && !arbitration.isStuckByOthers && input(BRANCH_DO)
       jumpInterface.payload := input(BRANCH_CALC)
 
       when(jumpInterface.valid) {
@@ -349,7 +349,7 @@ class BranchPlugin(earlyBranch : Boolean,
           input(PC)
       }
 
-      jumpInterface.valid := arbitration.isFiring && predictionMissmatch //Probably just isValid instead of isFiring is better
+      jumpInterface.valid := arbitration.isValid && !arbitration.isStuckByOthers && predictionMissmatch //Probably just isValid instead of isFiring is better
       jumpInterface.payload := (input(BRANCH_DO) ? input(BRANCH_CALC) | input(NEXT_PC))
 
 
