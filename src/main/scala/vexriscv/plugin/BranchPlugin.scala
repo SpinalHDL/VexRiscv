@@ -52,7 +52,8 @@ trait PredictionInterface{
 
 class BranchPlugin(earlyBranch : Boolean,
                    catchAddressMisaligned : Boolean = false,
-                   fenceiGenAsAJump : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
+                   fenceiGenAsAJump : Boolean = false,
+                   fenceiGenAsANop : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
 
   def catchAddressMisalignedForReal = catchAddressMisaligned && !pipeline(RVC_GEN)
   lazy val branchStage = if(earlyBranch) pipeline.execute else pipeline.memory
@@ -125,6 +126,10 @@ class BranchPlugin(earlyBranch : Boolean,
       decoderService.add(List(
         FENCEI -> (List(IS_FENCEI -> True,HAS_SIDE_EFFECT -> True, BRANCH_CTRL -> BranchCtrlEnum.JAL))
       ))
+    }
+
+    if(fenceiGenAsANop){
+      decoderService.add(List(FENCEI -> List()))
     }
 
     val pcManagerService = pipeline.service(classOf[JumpService])
