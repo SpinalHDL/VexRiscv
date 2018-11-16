@@ -6,6 +6,7 @@ import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4ReadOnly}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
+import vexriscv.demo.{SimpleBus, SimpleBusConfig}
 
 
 case class InstructionCacheConfig( cacheSize : Int,
@@ -43,6 +44,11 @@ case class InstructionCacheConfig( cacheSize : Int,
     burstCountWidth = log2Up(burstSize + 1)).getReadOnlyConfig.copy(
     useResponse = true,
     constantBurstBehavior = true
+  )
+
+  def getSimpleBusConfig() = SimpleBusConfig(
+    addressWidth = 32,
+    dataWidth = 32
   )
 
   def getWishboneConfig() = WishboneConfig(
@@ -177,6 +183,24 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
     rsp.error := mm.response =/= AvalonMM.Response.OKAY
     mm
   }
+
+
+  def toSimpleBus(): SimpleBus = {
+    val simpleBusConfig = p.getSimpleBusConfig()
+    val bus = SimpleBus(simpleBusConfig)
+    val counter = Counter(p.burstSize, bus.cmd.fire)
+    bus.cmd.valid := cmd.valid
+    bus.cmd.address := cmd.address(31 downto widthOf(counter.value) + 2) @@ counter @@ U"00"
+    bus.cmd.wr := False
+    bus.cmd.mask.assignDontCare()
+    bus.cmd.data.assignDontCare()
+    cmd.ready := counter.willOverflow
+    rsp.valid := bus.rsp.valid
+    rsp.data := bus.rsp.payload.data
+    rsp.error := False
+    bus
+  }
+
 
   def toWishbone(): Wishbone = {
     val wishboneConfig = p.getWishboneConfig()

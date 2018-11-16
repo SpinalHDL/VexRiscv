@@ -6,6 +6,7 @@ import spinal.lib._
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
+import vexriscv.demo.SimpleBus
 
 
 
@@ -135,6 +136,18 @@ case class IBusSimpleBus(interfaceKeepData : Boolean = false) extends Bundle wit
     bus
   }
 
+  def toSimpleBus(): SimpleBus = {
+    val bus = SimpleBus(32,32)
+    bus.cmd.arbitrationFrom(cmd)
+    bus.cmd.address := cmd.pc.resized
+    bus.cmd.wr := False
+    bus.cmd.mask.assignDontCare()
+    bus.cmd.data.assignDontCare()
+    rsp.valid := bus.rsp.valid
+    rsp.inst := bus.rsp.payload.data
+    rsp.error := False
+    bus
+  }
 }
 
 
@@ -202,8 +215,9 @@ class IBusSimplePlugin(resetVector : BigInt,
           cmd.valid := stage.input.valid && pendingCmd =/= pendingMax && !stages.map(_.arbitration.isValid).orR
           assert(injectorStage == false)
           assert(iBusRsp.stages.dropWhile(_ != stage).length <= 2)
-        }else
+        }else {
           cmd.valid := stage.input.valid && stage.output.ready && pendingCmd =/= pendingMax
+        }
         cmd.pc := stage.input.payload(31 downto 2) @@ "00"
       } else new Area{
         //This implementation keep the cmd on the bus until it's executed, even if the pipeline is flushed

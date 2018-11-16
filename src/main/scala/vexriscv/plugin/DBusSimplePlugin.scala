@@ -6,6 +6,7 @@ import spinal.lib._
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
+import vexriscv.demo.SimpleBus
 import vexriscv.ip.DataCacheMemCmd
 
 
@@ -131,11 +132,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     mm.read := cmdStage.valid && !cmdStage.wr
     mm.write := cmdStage.valid && cmdStage.wr
     mm.address := (cmdStage.address >> 2) @@ U"00"
-    mm.writeData := cmdStage.size.mux (
-      U(0) -> cmdStage.data(7 downto 0) ## cmdStage.data(7 downto 0) ## cmdStage.data(7 downto 0) ## cmdStage.data(7 downto 0),
-      U(1) -> cmdStage.data(15 downto 0) ## cmdStage.data(15 downto 0),
-      default -> cmdStage.data(31 downto 0)
-    )
+    mm.writeData := cmdStage.data(31 downto 0)
     mm.byteEnable := (cmdStage.size.mux (
       U(0) -> B"0001",
       U(1) -> B"0011",
@@ -177,6 +174,25 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     rsp.ready := cmdStage.valid && !bus.WE && bus.ACK
     rsp.data  := bus.DAT_MISO
     rsp.error := False //TODO
+    bus
+  }
+  
+  def toSimpleBus() : SimpleBus = {
+    val bus = SimpleBus(32,32)
+    bus.cmd.valid := cmd.valid
+    bus.cmd.wr := cmd.wr
+    bus.cmd.address := cmd.address.resized
+    bus.cmd.data := cmd.data
+    bus.cmd.mask := cmd.size.mux(
+      0 -> B"0001",
+      1 -> B"0011",
+      default -> B"1111"
+    ) |<< cmd.address(1 downto 0)
+    cmd.ready := bus.cmd.ready
+
+    rsp.ready := bus.rsp.valid
+    rsp.data := bus.rsp.data
+
     bus
   }
 }
@@ -311,9 +327,10 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
             memoryExceptionPort.valid := True
           }
         }
-        when(!(arbitration.isValid && input(MEMORY_ENABLE))){
+        when(!(arbitration.isValid && input(MEMORY_ENABLE) && (if(cmdStage == rspStage) !arbitration.isStuckByOthers else True))){
           memoryExceptionPort.valid := False
         }
+
         memoryExceptionPort.badAddr := input(REGFILE_WRITE_DATA).asUInt  //Drived by IntAluPlugin
       }
 

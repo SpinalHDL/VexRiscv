@@ -26,7 +26,7 @@ class FullBarrelShifterPlugin(earlyInjection : Boolean = false) extends Plugin[V
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> Bool(earlyInjection),
       BYPASSABLE_MEMORY_STAGE  -> True,
-      RS1_USE                 -> True
+      RS1_USE                  -> True
     )
 
     val nonImmediateActions = List[(Stageable[_ <: BaseType],Any)](
@@ -35,8 +35,8 @@ class FullBarrelShifterPlugin(earlyInjection : Boolean = false) extends Plugin[V
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> Bool(earlyInjection),
       BYPASSABLE_MEMORY_STAGE  -> True,
-      RS1_USE                 -> True,
-      RS2_USE                 -> True
+      RS1_USE                  -> True,
+      RS2_USE                  -> True
     )
 
     val decoderService = pipeline.service(classOf[DecoderService])

@@ -11,16 +11,16 @@ trait RegFileReadKind
 object ASYNC extends RegFileReadKind
 object SYNC extends RegFileReadKind
 
+
 class RegFilePlugin(regFileReadyKind : RegFileReadKind,
                     zeroBoot : Boolean = false,
                     x0Init : Boolean = true,
                     writeRfInMemoryStage : Boolean = false,
                     readInExecute : Boolean = false,
-                    syncUpdateOnStall : Boolean = true) extends Plugin[VexRiscv] with RegFileService{
+                    syncUpdateOnStall : Boolean = true,
+                    withShadow : Boolean = false //shadow registers aren't transition hazard free
+                   ) extends Plugin[VexRiscv] with RegFileService{
   import Riscv._
-
-//  assert(!writeRfInMemoryStage)
-
 
   override def readStage(): Stage = if(readInExecute) pipeline.execute else pipeline.decode
 
@@ -36,9 +36,23 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
     import pipeline._
     import pipeline.config._
 
+    val readStage = if(readInExecute) execute else decode
+    val writeStage = if(writeRfInMemoryStage) memory else stages.last
+
     val global = pipeline plug new Area{
-      val regFile = Mem(Bits(32 bits),32) addAttribute(Verilator.public)
-      if(zeroBoot) regFile.init(List.fill(32)(B(0, 32 bits)))
+      val regFileSize = if(withShadow) 64 else 32
+      val regFile = Mem(Bits(32 bits),regFileSize) addAttribute(Verilator.public)
+      if(zeroBoot) regFile.init(List.fill(regFileSize)(B(0, 32 bits)))
+
+      val shadow = ifGen(withShadow)(new Area{
+        val write, read, clear = RegInit(False)
+
+        read  clearWhen(clear && !readStage.arbitration.isStuck)
+        write clearWhen(clear && !writeStage.arbitration.isStuck)
+
+        val csrService = pipeline.service(classOf[CsrInterface])
+        csrService.w(0x7C0,2 -> clear, 1 -> read, 0 -> write)
+      })
     }
 
     //Disable rd0 write in decoding stage
@@ -47,7 +61,6 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
     }
 
     //Read register file
-    val readStage = if(readInExecute) execute else decode
     readStage plug new Area{
       import readStage._
 
@@ -58,8 +71,9 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
         case `SYNC` if readInExecute =>   if(syncUpdateOnStall) Mux(execute.arbitration.isStuck, execute.input(INSTRUCTION), decode.input(INSTRUCTION)) else  decode.input(INSTRUCTION)
       }
 
-      val regFileReadAddress1 = srcInstruction(Riscv.rs1Range).asUInt
-      val regFileReadAddress2 = srcInstruction(Riscv.rs2Range).asUInt
+      def shadowPrefix(that : Bits) = if(withShadow) global.shadow.read ## that else that
+      val regFileReadAddress1 = U(shadowPrefix(srcInstruction(Riscv.rs1Range)))
+      val regFileReadAddress2 = U(shadowPrefix(srcInstruction(Riscv.rs2Range)))
 
       val (rs1Data,rs2Data) = regFileReadyKind match{
         case `ASYNC` => (global.regFile.readAsync(regFileReadAddress1),global.regFile.readAsync(regFileReadAddress2))
@@ -73,13 +87,13 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
     }
 
     //Write register file
-    val writeStage = if(writeRfInMemoryStage) memory else stages.last
     writeStage plug new Area {
       import writeStage._
 
+      def shadowPrefix(that : Bits) = if(withShadow) global.shadow.write ## that else that
       val regFileWrite = global.regFile.writePort.addAttribute(Verilator.public)
       regFileWrite.valid := output(REGFILE_WRITE_VALID) && arbitration.isFiring
-      regFileWrite.address := output(INSTRUCTION)(rdRange).asUInt
+      regFileWrite.address := U(shadowPrefix(output(INSTRUCTION)(rdRange)))
       regFileWrite.data := output(REGFILE_WRITE_DATA)
 
       //CPU will initialise constant register zero in the first cycle

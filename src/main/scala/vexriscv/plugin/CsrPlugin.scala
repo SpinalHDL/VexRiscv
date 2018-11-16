@@ -200,7 +200,8 @@ trait CsrInterface{
   }
 
   def rw(csrAddress : Int, thats : (Int, Data)*) : Unit = for(that <- thats) rw(csrAddress,that._1, that._2)
-  def r [T <: Data](csrAddress : Int, thats : (Int, Data)*) : Unit = for(that <- thats) r(csrAddress,that._1, that._2)
+  def w(csrAddress : Int, thats : (Int, Data)*) : Unit = for(that <- thats) w(csrAddress,that._1, that._2)
+  def r(csrAddress : Int, thats : (Int, Data)*) : Unit = for(that <- thats) r(csrAddress,that._1, that._2)
   def rw[T <: Data](csrAddress : Int, that : T): Unit = rw(csrAddress,0,that)
   def w[T <: Data](csrAddress : Int, that : T): Unit = w(csrAddress,0,that)
   def r [T <: Data](csrAddress : Int, that : T): Unit = r(csrAddress,0,that)
