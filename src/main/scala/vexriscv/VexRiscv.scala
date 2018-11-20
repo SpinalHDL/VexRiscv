@@ -82,11 +82,12 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   type  T = VexRiscv
   import config._
 
-  stages ++= List.fill(2 + (if(withMemoryStage) 1 else 0) + (if(withWriteBackStage) 1 else 0))(new Stage())
-  val decode    = stages(0)
-  val execute   = stages(1)
-  val memory    = ifGen(withMemoryStage)    (stages(2))
-  val writeBack = ifGen(withWriteBackStage) (stages(3))
+  //Define stages
+  def newStage(): Stage = { val s = new Stage; stages += s; s }
+  val decode    = newStage()
+  val execute   = newStage()
+  val memory    = ifGen(config.withMemoryStage)    (newStage())
+  val writeBack = ifGen(config.withWriteBackStage) (newStage())
 
   def stagesFromExecute = stages.dropWhile(_ != execute)
 

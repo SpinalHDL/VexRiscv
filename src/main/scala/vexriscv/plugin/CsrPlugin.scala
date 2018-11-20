@@ -761,7 +761,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         def previousStage = decode
         val blockedBySideEffects =  stagesFromExecute.tail.map(s => s.arbitration.isValid).asBits().orR // && s.input(HAS_SIDE_EFFECT)  to improve be less pessimistic
 
-        val illegalAccess =  arbitration.isValid && input(IS_CSR)
+        val illegalAccess = True
         val illegalInstruction = False
         if(selfException != null) {
           selfException.valid := False
@@ -879,7 +879,9 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
               }
             }
           }
+
           illegalAccess setWhen(privilege < csrAddress(9 downto 8).asUInt)
+          illegalAccess clearWhen(!arbitration.isValid || !input(IS_CSR))
         })
       }
     }

@@ -52,7 +52,7 @@ object GenNoCacheNoMmuMaxPerf extends App{
           pessimisticAddressMatch = false
         ),
         new MulPlugin,
-        new DivPlugin,
+        new MulDivIterativePlugin(genMul = false, genDiv = true, mulUnrollFactor = 1, divUnrollFactor = 1,dhrystoneOpt = false),
         new CsrPlugin(CsrPluginConfig.small),
         new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
