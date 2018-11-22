@@ -120,6 +120,8 @@ The following configuration results in 1.44 DMIPS/MHz:
 - single cycle multiplication with bypassing in the WB stage (late result)
 - dynamic branch prediction done in the F stage with a direct mapped target buffer cache (no penalties on correct predictions)
 
+Note that recently, the capability to remove the Fetch/Memory/WriteBack stage was added to reduce the area of the CPU, which end up with a smaller CPU and a better DMIPS/Mhz for the small configurations.
+
 ## Dependencies
 
 On Ubuntu 14 :
