@@ -205,9 +205,11 @@ class BranchPlugin(earlyBranch : Boolean,
       }
 
       if(catchAddressMisalignedForReal) {
-        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && jumpInterface.payload(1)
+        branchExceptionPort.valid := arbitration.isValid  && input(BRANCH_DO) && jumpInterface.payload(1)
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := jumpInterface.payload
+
+        if(branchStage == execute) branchExceptionPort.valid clearWhen(service(classOf[HazardService]).hazardOnExecuteRS)
       }
     }
   }
@@ -289,6 +291,8 @@ class BranchPlugin(earlyBranch : Boolean,
         branchExceptionPort.valid := arbitration.isValid && unalignedJump
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := input(BRANCH_CALC) //pipeline.stages(pipeline.indexOf(branchStage)-1).input
+
+        if(branchStage == execute) branchExceptionPort.valid clearWhen(service(classOf[HazardService]).hazardOnExecuteRS)
       }
     }
 
@@ -366,6 +370,8 @@ class BranchPlugin(earlyBranch : Boolean,
         branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && input(BRANCH_CALC)(1)
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := input(BRANCH_CALC)
+
+        if(branchStage == execute) branchExceptionPort.valid clearWhen(service(classOf[HazardService]).hazardOnExecuteRS)
       }
     }
   }

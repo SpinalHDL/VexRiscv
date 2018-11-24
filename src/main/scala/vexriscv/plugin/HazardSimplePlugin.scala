@@ -4,15 +4,23 @@ import vexriscv._
 import spinal.core._
 import spinal.lib._
 
+trait HazardService{
+  def hazardOnExecuteRS : Bool
+}
+
 class HazardSimplePlugin(bypassExecute : Boolean = false,
                          bypassMemory: Boolean = false,
                          bypassWriteBack: Boolean = false,
                          bypassWriteBackBuffer : Boolean = false,
                          pessimisticUseSrc : Boolean = false,
                          pessimisticWriteRegFile : Boolean = false,
-                         pessimisticAddressMatch : Boolean = false) extends Plugin[VexRiscv] {
+                         pessimisticAddressMatch : Boolean = false) extends Plugin[VexRiscv] with HazardService{
   import Riscv._
 
+
+  def hazardOnExecuteRS = {
+    if(pipeline.service(classOf[RegFileService]).readStage() == pipeline.execute) pipeline.execute.arbitration.isStuckByOthers else False
+  }
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -104,4 +112,11 @@ class HazardSimplePlugin(bypassExecute : Boolean = false,
       readStage.arbitration.haltByOther := True
     }
   }
+}
+
+
+class NoHazardPlugin extends Plugin[VexRiscv] with HazardService {
+  override def build(pipeline: VexRiscv): Unit = {}
+
+  def hazardOnExecuteRS = False
 }
