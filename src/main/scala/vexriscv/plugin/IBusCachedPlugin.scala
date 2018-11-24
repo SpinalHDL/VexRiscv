@@ -182,15 +182,13 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
       iBusRsp.output.pc := cacheRspArbitration.output.payload
 
 
-
-      memory plug new Area {
-
-        import memory._
+      val flushStage = if(memory != null) memory else execute
+      flushStage plug new Area {
+        import flushStage._
 
         cache.io.flush.cmd.valid := False
         when(arbitration.isValid && input(FLUSH_ALL)) {
           cache.io.flush.cmd.valid := True
-          decode.arbitration.flushAll := True
 
           when(!cache.io.flush.cmd.ready) {
             arbitration.haltItself := True
