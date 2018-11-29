@@ -685,6 +685,7 @@ public:
     		ws->iBusAccessPatch(address,data,&error);
         }
         virtual bool dRead(int32_t address, int32_t size, uint32_t *data){
+            if(address & (size-1) != 0) cout << "Ref did a unaligned read" << endl;
     		if((address & 0xF0000000) == 0xF0000000){
 				MemRead t = periphRead.front();
 				if(t.address != address || t.size != size){
@@ -697,6 +698,7 @@ public:
     		}
         }
         virtual void dWrite(int32_t address, int32_t size, uint32_t data){
+            if(address & (size-1) != 0) cout << "Ref did a unaligned write" << endl;
     		if((address & 0xF0000000) == 0xF0000000){
 				MemWrite w;
 				w.address = address;
@@ -1023,7 +1025,7 @@ public:
 				#endif
                 if(top->VexRiscv->writeBack_arbitration_isFiring){
                    	if(riscvRefEnable && top->VexRiscv->writeBack_PC != riscvRef.pc){
-						cout << "pc missmatch" << endl;
+						cout << " pc missmatch " << top->VexRiscv->writeBack_PC << " should be " << riscvRef.pc << endl;
 						fail();
 					}
 

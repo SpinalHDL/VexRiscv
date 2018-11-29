@@ -523,8 +523,8 @@ class TestIndividualFeatures extends FunSuite {
 
 
 //  val testId = Some(mutable.HashSet[Int](0,28,45,93))
-//  val testId = Some(mutable.HashSet[Int](9))
-//  val seed = -8173808854505304814l
+//  val testId = Some(mutable.HashSet[Int](5))
+//  val seed = -2089952013329208578l
 
 
 

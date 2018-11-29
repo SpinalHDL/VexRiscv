@@ -228,8 +228,17 @@ case class SimpleBusInterconnect(){
   val slaves = mutable.LinkedHashMap[SimpleBus, SlaveModel]()
   val connections = ArrayBuffer[ConnectionModel]()
   var arbitrationPendingRspMaxDefault = 1
-  val arbitrationRspRouteQueueDefault = false
+  var arbitrationRspRouteQueueDefault = false
 
+  def perfConfig(): Unit ={
+    arbitrationPendingRspMaxDefault = 7
+    arbitrationRspRouteQueueDefault = true
+  }
+
+  def areaConfig(): Unit ={
+    arbitrationPendingRspMaxDefault = 1
+    arbitrationRspRouteQueueDefault = false
+  }
 
   def setConnector(bus : SimpleBus)( connector : (SimpleBus,SimpleBus) => Unit): Unit = (masters.get(bus), slaves.get(bus)) match {
     case (Some(m), _) =>    m.connector = connector
