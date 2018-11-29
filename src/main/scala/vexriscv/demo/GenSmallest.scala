@@ -13,7 +13,8 @@ object GenSmallest extends App{
       plugins = List(
         new IBusSimplePlugin(
           resetVector = 0x80000000l,
-          relaxedPcCalculation = false,
+          cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
           prediction = NONE,
           catchAccessFault = false,
           compressedGen = false
@@ -28,7 +29,7 @@ object GenSmallest extends App{
         ),
         new RegFilePlugin(
           regFileReadyKind = plugin.SYNC,
-          zeroBoot = true
+          zeroBoot = false
         ),
         new IntAluPlugin,
         new SrcPlugin(

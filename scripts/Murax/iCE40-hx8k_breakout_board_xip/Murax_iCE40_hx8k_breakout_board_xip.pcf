@@ -1,0 +1,23 @@
+## iCE40-hx8k breakout board
+
+set_io io_J3  J3
+set_io io_H16 H16
+set_io io_G15 G15
+set_io io_G16 G16
+set_io io_F15 F15
+set_io io_B12 B12
+set_io io_B10 B10
+set_io io_led[0] B5
+set_io io_led[1] B4
+set_io io_led[2] A2
+set_io io_led[3] A1
+set_io io_led[4] C5
+set_io io_led[5] C4
+set_io io_led[6] B3
+set_io io_led[7] C3
+
+#XIP
+set_io io_P12 P12
+set_io io_P11 P11
+set_io io_R11 R11
+set_io io_R12 R12

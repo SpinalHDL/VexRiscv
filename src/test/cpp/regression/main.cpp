@@ -301,6 +301,7 @@ public:
         status.mpie = status.mie;
         mepc = pc;
 		pcWrite(mtvec.base << 2);
+		if(interrupt) livenessInterrupt = 0;
 
         //status.MPP  := privilege
 	}
@@ -333,7 +334,35 @@ public:
 		*csrPtr(csr) = value;
 	}
 
+    
+    int livenessStep = 0;
+    int livenessInterrupt = 0;
+    virtual void liveness(bool mIntTimer, bool mIntExt){
+        livenessStep++;
+        bool interruptRequest = (mie.mtie && mIntTimer);
+        if(interruptRequest){
+            if(status.mie){
+                livenessInterrupt++;
+            }
+        } else {
+             livenessInterrupt = 0;
+        }
+
+        if(livenessStep > 1000){
+            cout << "Liveness step failure" << endl;
+            fail();
+        }
+        
+        if(livenessInterrupt > 1000){
+            cout << "Liveness interrupt failure" << endl;
+            fail();
+        }
+        
+    }
+
+
 	virtual void step() {
+	    livenessStep = 0;
 		#define rd32 ((i >> 7) & 0x1F)
 		#define iBits(lo,  len) ((i >> lo) & ((1 << len)-1))
 		#define iBitsSigned(lo, len) int32_t(i) << (32-lo-len) >> (32-len)
@@ -379,7 +408,11 @@ public:
 			case 0x37:rfWrite(rd32, i & 0xFFFFF000);pcWrite(pc + 4);break; // LUI
 			case 0x17:rfWrite(rd32, (i & 0xFFFFF000) + pc);pcWrite(pc + 4);break; //AUIPC
 			case 0x6F:rfWrite(rd32, pc + 4);pcWrite(pc + (iBits(21, 10) << 1) + (iBits(20, 1) << 11) + (iBits(12, 8) << 12) + (iSign() << 20));break; //JAL
-			case 0x67:rfWrite(rd32, pc + 4);pcWrite((i32_rs1 + i32_i_imm) & ~1);break; //JALR
+			case 0x67:{
+				uint32_t target = (i32_rs1 + i32_i_imm) & ~1;
+				rfWrite(rd32, pc + 4);
+				pcWrite(target);
+			} break; //JALR
 			case 0x63:
 				switch ((i >> 12) & 0x7) {
 				case 0x0:if (i32_rs1 == i32_rs2)pcWrite(pc + i32_sb_imm);else pcWrite(pc + 4);break;
@@ -652,6 +685,7 @@ public:
     		ws->iBusAccessPatch(address,data,&error);
         }
         virtual bool dRead(int32_t address, int32_t size, uint32_t *data){
+            if(address & (size-1) != 0) cout << "Ref did a unaligned read" << endl;
     		if((address & 0xF0000000) == 0xF0000000){
 				MemRead t = periphRead.front();
 				if(t.address != address || t.size != size){
@@ -664,6 +698,7 @@ public:
     		}
         }
         virtual void dWrite(int32_t address, int32_t size, uint32_t data){
+            if(address & (size-1) != 0) cout << "Ref did a unaligned write" << endl;
     		if((address & 0xF0000000) == 0xF0000000){
 				MemWrite w;
 				w.address = address;
@@ -682,7 +717,9 @@ public:
 
         	switch(periphWrites.empty() + uint32_t(periphWritesGolden.empty())*2){
         	case 3: periphWriteTimer = 0; break;
-        	case 1: case 2: if(periphWriteTimer++ == 20){ cout << "periphWrite timout" << endl; fail();} break;
+        	case 1: case 2: if(periphWriteTimer++ == 20){
+        		cout << "periphWrite timout" << endl; fail();
+        	} break;
         	case 0:
     			MemWrite t = periphWrites.front();
     			MemWrite t2 = periphWritesGolden.front();
@@ -692,6 +729,7 @@ public:
     			}
     			periphWrites.pop();
     			periphWritesGolden.pop();
+    			periphWriteTimer = 0;
     			break;
         	}
 
@@ -916,6 +954,10 @@ public:
 
 		postReset();
 
+        //Sync register file initial content
+        for(int i = 1;i < 32;i++){
+            riscvRef.regs[i] = top->VexRiscv->RegFilePlugin_regFile[i];
+        }
 		resetDone = true;
 
 		#ifdef  REF
@@ -959,7 +1001,7 @@ public:
 				mTime += top->VexRiscv->writeBack_arbitration_isFiring*MTIME_INSTR_FACTOR;
                 #endif
 				#endif
-				#ifdef CSR
+				#ifdef TIMER_INTERRUPT
 				top->timerInterrupt = mTime >= mTimeCmp ? 1 : 0;
 				//if(mTime == mTimeCmp) printf("SIM timer tick\n");
 				#endif
@@ -983,11 +1025,25 @@ public:
 				#endif
                 if(top->VexRiscv->writeBack_arbitration_isFiring){
                    	if(riscvRefEnable && top->VexRiscv->writeBack_PC != riscvRef.pc){
-						cout << "pc missmatch" << endl;
+						cout << " pc missmatch " << top->VexRiscv->writeBack_PC << " should be " << riscvRef.pc << endl;
 						fail();
 					}
 
-                   	if(riscvRefEnable) riscvRef.step();
+                   	if(riscvRefEnable) {
+                   	    riscvRef.step();
+                   	    bool mIntTimer = false;
+                   	    bool mIntExt = false;
+
+#ifdef TIMER_INTERRUPT
+                   	    mIntTimer = top->timerInterrupt;
+#endif
+#ifdef EXTERNAL_INTERRUPT
+                   	    mIntExt = top->externalInterrupt;
+#endif
+
+
+                   	    riscvRef.liveness(mIntTimer, mIntExt);
+                   	}
 
 
 
@@ -2065,6 +2121,60 @@ public:
 	}
 };
 
+class Compliance : public Workspace{
+public:
+	string name;
+	ofstream out32;
+	int out32Counter = 0;
+	Compliance(string name) : Workspace(name) {
+		//withRiscvRef();
+		loadHex("../../resources/hex/" + name + ".elf.hex");
+		out32.open (name + ".out32");
+		this->name = name;
+		if(name == "I-FENCE.I-01") withInstructionReadCheck = false;
+	}
+
+
+    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+        Workspace::dBusAccess(addr,wr,size,mask,data,error);
+        if(wr && addr == 0xF00FFF2C){
+            out32 << hex << setw(8) << std::setfill('0') << *data;
+            if(++out32Counter % 4 == 0) out32 << "\n";
+            *error = 0;
+        }
+    }
+
+	virtual void checks(){
+
+	}
+
+
+
+	virtual void pass(){
+		FILE *refFile = fopen((string("../../resources/ref/") + name + ".reference_output").c_str(), "r");
+    	fseek(refFile, 0, SEEK_END);
+    	uint32_t refSize = ftell(refFile);
+    	fseek(refFile, 0, SEEK_SET);
+    	char* ref = new char[refSize];
+    	fread(ref, 1, refSize, refFile);
+
+
+    	out32.flush();
+		FILE *logFile = fopen((name + ".out32").c_str(), "r");
+    	fseek(logFile, 0, SEEK_END);
+    	uint32_t logSize = ftell(logFile);
+    	fseek(logFile, 0, SEEK_SET);
+    	char* log = new char[logSize];
+    	fread(log, 1, logSize, logFile);
+
+    	if(refSize > logSize || memcmp(log,ref,refSize))
+    		fail();
+		else
+			Workspace::pass();
+	}
+};
+
+
 #ifdef DEBUG_PLUGIN
 
 #include<pthread.h>
@@ -2327,6 +2437,121 @@ string freeRtosTests[] = {
 };
 
 
+
+string riscvComplianceMain[] = {
+    "I-IO",
+    "I-NOP-01",
+    "I-LUI-01",
+    "I-ADD-01",
+    "I-ADDI-01",
+    "I-AND-01",
+    "I-ANDI-01",
+    "I-SUB-01",
+    "I-OR-01",
+    "I-ORI-01",
+    "I-XOR-01",
+    "I-XORI-01",
+    "I-SRA-01",
+    "I-SRAI-01",
+    "I-SRL-01",
+    "I-SRLI-01",
+    "I-SLL-01",
+    "I-SLLI-01",
+    "I-SLT-01",
+    "I-SLTI-01",
+    "I-SLTIU-01",
+    "I-SLTU-01",
+    "I-AUIPC-01",
+    "I-BEQ-01",
+    "I-BGE-01",
+    "I-BGEU-01",
+    "I-BLT-01",
+    "I-BLTU-01",
+    "I-BNE-01",
+    "I-JAL-01",
+    "I-JALR-01",
+    "I-DELAY_SLOTS-01",
+    "I-ENDIANESS-01",
+    "I-RF_size-01",
+    "I-RF_width-01",
+    "I-RF_x0-01",
+};
+
+
+
+string complianceTestMemory[] = {
+    "I-LB-01",
+    "I-LBU-01",
+    "I-LH-01",
+    "I-LHU-01",
+    "I-LW-01",
+    "I-SB-01",
+    "I-SH-01",
+    "I-SW-01"
+};
+
+
+string complianceTestCsr[] = {
+    "I-CSRRC-01",
+    "I-CSRRCI-01",
+    "I-CSRRS-01",
+    "I-CSRRSI-01",
+    "I-CSRRW-01",
+    "I-CSRRWI-01",
+    #ifndef COMPRESSED
+    "I-MISALIGN_JMP-01", //Only apply for non RVC cores
+    #endif
+    "I-MISALIGN_LDST-01",
+    "I-ECALL-01",
+};
+
+
+string complianceTestMul[] = {
+    "MUL",
+    "MULH",
+    "MULHSU",
+    "MULHU",
+};
+
+string complianceTestDiv[] = {
+    "DIV",
+    "DIVU",
+    "REM",
+    "REMU",
+};
+
+
+string complianceTestC[] = {
+    "C.ADD",
+    "C.ADDI16SP",
+    "C.ADDI4SPN",
+    "C.ADDI",
+    "C.AND",
+    "C.ANDI",
+    "C.BEQZ",
+    "C.BNEZ",
+    "C.JAL",
+    "C.JALR",
+    "C.J",
+    "C.JR",
+    "C.LI",
+    "C.LUI",
+    "C.LW",
+    "C.LWSP",
+    "C.MV",
+    "C.OR",
+    "C.SLLI",
+    "C.SRAI",
+    "C.SRLI",
+    "C.SUB",
+    "C.SW",
+    "C.SWSP",
+    "C.XOR",
+};
+
+
+
+
 struct timespec timer_start(){
     struct timespec start_time;
     clock_gettime(CLOCK_REALTIME, &start_time); //CLOCK_PROCESS_CPUTIME_ID
@@ -2396,10 +2621,13 @@ int main(int argc, char **argv, char **env) {
 
 	for(int idx = 0;idx < 1;idx++){
 
-		#ifdef DEBUG_PLUGIN_EXTERNAL
+		#if defined(DEBUG_PLUGIN_EXTERNAL) || defined(RUN_HEX)
 		{
-			Workspace w("debugPluginExternal");
-			w.loadHex("../../resources/hex/debugPluginExternal.hex");
+			Workspace w("run");
+			#ifdef RUN_HEX
+			//w.loadHex("/home/spinalvm/hdl/zephyr/zephyrSpinalHdl/samples/synchronization/build/zephyr/zephyr.hex");
+			w.loadHex(RUN_HEX);
+			#endif
 			w.noInstructionReadCheck();
 			//w.setIStall(false);
 			//w.setDStall(false);
@@ -2416,8 +2644,41 @@ int main(int argc, char **argv, char **env) {
 		#ifdef ISA_TEST
 
 		//	redo(REDO,TestA().run();)
+			for(const string &name : riscvComplianceMain){
+				redo(REDO, Compliance(name).run();)
+			}
+			for(const string &name : complianceTestMemory){
+				redo(REDO, Compliance(name).run();)
+			}
 
+			#ifdef COMPRESSED
+            for(const string &name : complianceTestC){
+                redo(REDO, Compliance(name).run();)
+            }
+			#endif
 
+			#ifdef MUL
+			for(const string &name : complianceTestMul){
+				redo(REDO, Compliance(name).run();)
+			}
+			#endif
+			#ifdef DIV
+			for(const string &name : complianceTestDiv){
+				redo(REDO, Compliance(name).run();)
+			}
+			#endif
+			#ifdef CSR
+			for(const string &name : complianceTestCsr){
+				redo(REDO, Compliance(name).run();)
+			}
+			#endif
+
+            #ifdef FENCEI
+            redo(REDO, Compliance("I-FENCE.I-01").run();)
+			#endif
+            #ifdef EBREAK
+            redo(REDO, Compliance("I-EBREAK-01").run();)
+			#endif
 
 			for(const string &name : riscvTestMain){
 				redo(REDO,RiscvTest(name).run();)
@@ -2444,7 +2705,7 @@ int main(int argc, char **argv, char **env) {
 			#ifdef CSR
 			    #ifndef COMPRESSED
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
-				    8,6,9,6,10,4,11,4,    12,13,2,   14,2,     15,5,16,17,1 };
+				    8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
 				    redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
                 #else
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,

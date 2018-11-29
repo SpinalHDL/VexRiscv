@@ -79,7 +79,7 @@ object VexRiscvCachedWishboneForSim{
           ),
           new RegFilePlugin(
             regFileReadyKind = plugin.SYNC,
-            zeroBoot = true
+            zeroBoot = false
           ),
           new IntAluPlugin,
           new SrcPlugin(
@@ -118,19 +118,19 @@ object VexRiscvCachedWishboneForSim{
       cpu.rework {
         for (plugin <- cpuConfig.plugins) plugin match {
           case plugin: IBusSimplePlugin => {
-            plugin.iBus.asDirectionLess() //Unset IO properties of iBus
+            plugin.iBus.setAsDirectionLess() //Unset IO properties of iBus
             master(plugin.iBus.toWishbone()).setName("iBusWishbone")
           }
           case plugin: IBusCachedPlugin => {
-            plugin.iBus.asDirectionLess()
+            plugin.iBus.setAsDirectionLess()
             master(plugin.iBus.toWishbone()).setName("iBusWishbone")
           }
           case plugin: DBusSimplePlugin => {
-            plugin.dBus.asDirectionLess()
+            plugin.dBus.setAsDirectionLess()
             master(plugin.dBus.toWishbone()).setName("dBusWishbone")
           }
           case plugin: DBusCachedPlugin => {
-            plugin.dBus.asDirectionLess()
+            plugin.dBus.setAsDirectionLess()
             master(plugin.dBus.toWishbone()).setName("dBusWishbone")
           }
           case _ =>

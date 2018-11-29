@@ -48,16 +48,20 @@ trait PredictionInterface{
   def askDecodePrediction() : DecodePredictionBus
 }
 
+
+
 class BranchPlugin(earlyBranch : Boolean,
-                   catchAddressMisaligned : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
+                   catchAddressMisaligned : Boolean = false,
+                   fenceiGenAsAJump : Boolean = false,
+                   fenceiGenAsANop : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
 
-
+  def catchAddressMisalignedForReal = catchAddressMisaligned && !pipeline(RVC_GEN)
   lazy val branchStage = if(earlyBranch) pipeline.execute else pipeline.memory
 
   object BRANCH_CALC extends Stageable(UInt(32 bits))
   object BRANCH_DO extends Stageable(Bool)
   object BRANCH_COND_RESULT extends Stageable(Bool)
-//  object PREDICTION_HAD_BRANCHED extends Stageable(Bool)
+  object IS_FENCEI extends Stageable(Bool)
 
   var jumpInterface : Flow[UInt] = null
   var predictionJumpInterface : Flow[UInt] = null
@@ -82,55 +86,77 @@ class BranchPlugin(earlyBranch : Boolean,
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
     import pipeline.config._
-
-    val decoderService = pipeline.service(classOf[DecoderService])
+    import IntAluPlugin._
 
     val bActions = List[(Stageable[_ <: BaseType],Any)](
       SRC1_CTRL         -> Src1CtrlEnum.RS,
       SRC2_CTRL         -> Src2CtrlEnum.RS,
       SRC_USE_SUB_LESS  -> True,
       RS1_USE          -> True,
-      RS2_USE          -> True
+      RS2_USE          -> True,
+      HAS_SIDE_EFFECT -> True
     )
 
     val jActions = List[(Stageable[_ <: BaseType],Any)](
       SRC1_CTRL           -> Src1CtrlEnum.PC_INCREMENT,
       SRC2_CTRL           -> Src2CtrlEnum.PC,
       SRC_USE_SUB_LESS    -> False,
-      REGFILE_WRITE_VALID -> True
+      REGFILE_WRITE_VALID -> True,
+      HAS_SIDE_EFFECT -> True
     )
 
-    import IntAluPlugin._
+    val decoderService = pipeline.service(classOf[DecoderService])
+
 
     decoderService.addDefault(BRANCH_CTRL, BranchCtrlEnum.INC)
     val rvc = pipeline(RVC_GEN)
     decoderService.add(List(
-      JAL(rvc) -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JAL, ALU_CTRL -> AluCtrlEnum.ADD_SUB)),
-      JALR     -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JALR, ALU_CTRL -> AluCtrlEnum.ADD_SUB, RS1_USE -> True)),
-      BEQ(rvc) -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
-      BNE(rvc) -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
-      BLT(rvc) -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
-      BGE(rvc) -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
-      BLTU(rvc) -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> True)),
-      BGEU(rvc) -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> True))
+      JAL(true)  -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JAL, ALU_CTRL -> AluCtrlEnum.ADD_SUB)),
+      JALR       -> (jActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.JALR, ALU_CTRL -> AluCtrlEnum.ADD_SUB, RS1_USE -> True)),
+      BEQ(true)  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
+      BNE(true)  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B)),
+      BLT(true)  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
+      BGE(true)  -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> False)),
+      BLTU(true) -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> True)),
+      BGEU(true) -> (bActions ++ List(BRANCH_CTRL -> BranchCtrlEnum.B, SRC_LESS_UNSIGNED -> True))
     ))
+
+    if(fenceiGenAsAJump) {
+      decoderService.addDefault(IS_FENCEI, False)
+      decoderService.add(List(
+        FENCEI -> (List(IS_FENCEI -> True,HAS_SIDE_EFFECT -> True, BRANCH_CTRL -> BranchCtrlEnum.JAL))
+      ))
+    }
+
+    if(fenceiGenAsANop){
+      decoderService.add(List(FENCEI -> List()))
+    }
 
     val pcManagerService = pipeline.service(classOf[JumpService])
     jumpInterface = pcManagerService.createJumpInterface(branchStage)
 
 
-    if (catchAddressMisaligned) {
+    if (catchAddressMisalignedForReal) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       branchExceptionPort = exceptionService.newExceptionPort(branchStage)
     }
   }
 
-  override def build(pipeline: VexRiscv): Unit = (fetchPrediction,decodePrediction) match {
-    case (null, null) => buildWithoutPrediction(pipeline)
-    case (_   , null) => buildFetchPrediction(pipeline)
-    case (null, _) => buildDecodePrediction(pipeline)
-//    case `DYNAMIC` => buildWithPrediction(pipeline)
-//    case `DYNAMIC_TARGET` => buildDynamicTargetPrediction(pipeline)
+  override def build(pipeline: VexRiscv): Unit = {
+    (fetchPrediction,decodePrediction) match {
+      case (null, null) => buildWithoutPrediction(pipeline)
+      case (_   , null) => buildFetchPrediction(pipeline)
+      case (null, _) => buildDecodePrediction(pipeline)
+    }
+    if(fenceiGenAsAJump) {
+      import pipeline._
+      import pipeline.config._
+      when(decode.input(IS_FENCEI)) {
+        decode.output(INSTRUCTION)(12) := False
+        decode.output(INSTRUCTION)(22) := True
+      }
+      execute.arbitration.haltByOther setWhen(execute.arbitration.isValid && execute.input(IS_FENCEI) && stagesFromExecute.tail.map(_.arbitration.isValid).asBits.orR)
+    }
   }
 
   def buildWithoutPrediction(pipeline: VexRiscv): Unit = {
@@ -165,23 +191,25 @@ class BranchPlugin(earlyBranch : Boolean,
       ).asUInt
 
       val branchAdder = branch_src1 + branch_src2
-      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ ((input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? False | branchAdder(0))
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ "0"
     }
 
     //Apply branchs (JAL,JALR, Bxx)
     branchStage plug new Area {
       import branchStage._
-      jumpInterface.valid := arbitration.isFiring && input(BRANCH_DO)
+      jumpInterface.valid := arbitration.isValid && !arbitration.isStuckByOthers && input(BRANCH_DO)
       jumpInterface.payload := input(BRANCH_CALC)
 
       when(jumpInterface.valid) {
         stages(indexOf(branchStage) - 1).arbitration.flushAll := True
       }
 
-      if(catchAddressMisaligned) { //TODO conflict with instruction cache two stage
-        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && (if(pipeline(RVC_GEN)) jumpInterface.payload(0 downto 0) =/= 0 else jumpInterface.payload(1 downto 0) =/= 0)
+      if(catchAddressMisalignedForReal) {
+        branchExceptionPort.valid := arbitration.isValid  && input(BRANCH_DO) && jumpInterface.payload(1)
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := jumpInterface.payload
+
+        if(branchStage == execute) branchExceptionPort.valid clearWhen(service(classOf[HazardService]).hazardOnExecuteRS)
       }
     }
   }
@@ -196,7 +224,7 @@ class BranchPlugin(earlyBranch : Boolean,
 
     decode plug new Area {
       import decode._
-      insert(PREDICTION_HAD_BRANCHED) := decodePrediction.cmd.hadBranch
+      insert(PREDICTION_HAD_BRANCHED) := (if(fenceiGenAsAJump) decodePrediction.cmd.hadBranch && !decode.input(IS_FENCEI) else decodePrediction.cmd.hadBranch)
     }
 
     //Do real branch calculation
@@ -218,10 +246,16 @@ class BranchPlugin(earlyBranch : Boolean,
         )
       )
 
-      insert(BRANCH_DO) := input(PREDICTION_HAD_BRANCHED) =/= input(BRANCH_COND_RESULT)
+      val imm = IMM(input(INSTRUCTION))
+      val missAlignedTarget = if(pipeline(RVC_GEN)) False else (input(BRANCH_COND_RESULT) && input(BRANCH_CTRL).mux(
+        BranchCtrlEnum.JALR -> (imm.i_sext(1) ^ input(RS1)(1)),
+        BranchCtrlEnum.JAL  ->  imm.j_sext(1),
+        default             ->  imm.b_sext(1)
+      ))
+
+      insert(BRANCH_DO) := input(PREDICTION_HAD_BRANCHED) =/= input(BRANCH_COND_RESULT) || missAlignedTarget
 
       //Calculation of the branch target / correction
-      val imm = IMM(input(INSTRUCTION))
       val branch_src1,branch_src2 = UInt(32 bits)
       switch(input(BRANCH_CTRL)){
         is(BranchCtrlEnum.JALR){
@@ -230,11 +264,14 @@ class BranchPlugin(earlyBranch : Boolean,
         }
         default{
           branch_src1 := input(PC)
-          branch_src2 := (input(PREDICTION_HAD_BRANCHED) ? (if(pipeline(RVC_GEN)) Mux(input(IS_RVC), B(2), B(4)) else B(4)).resized | imm.b_sext).asUInt
+          branch_src2 := ((input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
+          when(input(PREDICTION_HAD_BRANCHED) && ! missAlignedTarget){
+            branch_src2 := (if(pipeline(RVC_GEN)) Mux(input(IS_RVC), B(2), B(4)) else B(4)).asUInt.resized
+          }
         }
       }
       val branchAdder = branch_src1 + branch_src2
-      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ ((input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? False | branchAdder(0))
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ "0"
     }
 
 
@@ -242,18 +279,20 @@ class BranchPlugin(earlyBranch : Boolean,
     val branchStage = if(earlyBranch) execute else memory
     branchStage plug new Area {
       import branchStage._
-      jumpInterface.valid := input(BRANCH_DO) && arbitration.isFiring
+      jumpInterface.valid := arbitration.isValid && !arbitration.isStuckByOthers && input(BRANCH_DO)
       jumpInterface.payload := input(BRANCH_CALC)
 
       when(jumpInterface.valid) {
         stages(indexOf(branchStage) - 1).arbitration.flushAll := True
       }
 
-      if(catchAddressMisaligned) {
-        val unalignedJump = input(BRANCH_DO) && (if(pipeline(RVC_GEN)) input(BRANCH_CALC)(0 downto 0) =/= 0 else input(BRANCH_CALC)(1 downto 0) =/= 0)
+      if(catchAddressMisalignedForReal) {
+        val unalignedJump = input(BRANCH_DO) && input(BRANCH_CALC)(1)
         branchExceptionPort.valid := arbitration.isValid && unalignedJump
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := input(BRANCH_CALC) //pipeline.stages(pipeline.indexOf(branchStage)-1).input
+
+        if(branchStage == execute) branchExceptionPort.valid clearWhen(service(classOf[HazardService]).hazardOnExecuteRS)
       }
     }
 
@@ -271,6 +310,7 @@ class BranchPlugin(earlyBranch : Boolean,
 
     //Do branch calculations (conditions + target PC)
     object NEXT_PC extends Stageable(UInt(32 bits))
+    object TARGET_MISSMATCH extends Stageable(Bool)
     execute plug new Area {
       import execute._
 
@@ -298,8 +338,9 @@ class BranchPlugin(earlyBranch : Boolean,
       ).asUInt
 
       val branchAdder = branch_src1 + branch_src2
-      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ ((input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? False | branchAdder(0))
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ "0"
       insert(NEXT_PC) := input(PC) + (if(pipeline(RVC_GEN)) ((input(IS_RVC)) ? U(2) | U(4)) else 4)
+      insert(TARGET_MISSMATCH) := decode.input(PC) =/= input(BRANCH_CALC)
     }
 
     //Apply branchs (JAL,JALR, Bxx)
@@ -307,7 +348,7 @@ class BranchPlugin(earlyBranch : Boolean,
     branchStage plug new Area {
       import branchStage._
 
-      val predictionMissmatch = fetchPrediction.cmd.hadBranch =/= input(BRANCH_DO) || (input(BRANCH_DO) && fetchPrediction.cmd.targetPc =/= input(BRANCH_CALC))
+      val predictionMissmatch = fetchPrediction.cmd.hadBranch =/= input(BRANCH_DO) || (input(BRANCH_DO) && input(TARGET_MISSMATCH))
       fetchPrediction.rsp.wasRight := ! predictionMissmatch
       fetchPrediction.rsp.finalPc := input(BRANCH_CALC)
       fetchPrediction.rsp.sourceLastWord := {
@@ -317,7 +358,7 @@ class BranchPlugin(earlyBranch : Boolean,
           input(PC)
       }
 
-      jumpInterface.valid := arbitration.isFiring && predictionMissmatch //Probably just isValid instead of isFiring is better
+      jumpInterface.valid := arbitration.isValid && !arbitration.isStuckByOthers && predictionMissmatch //Probably just isValid instead of isFiring is better
       jumpInterface.payload := (input(BRANCH_DO) ? input(BRANCH_CALC) | input(NEXT_PC))
 
 
@@ -325,10 +366,12 @@ class BranchPlugin(earlyBranch : Boolean,
         stages(indexOf(branchStage) - 1).arbitration.flushAll := True
       }
 
-      if(catchAddressMisaligned) {
-        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && (if(pipeline(RVC_GEN)) input(BRANCH_CALC)(0 downto 0) =/= 0 else input(BRANCH_CALC)(1 downto 0) =/= 0)
+      if(catchAddressMisalignedForReal) {
+        branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && input(BRANCH_CALC)(1)
         branchExceptionPort.code := 0
         branchExceptionPort.badAddr := input(BRANCH_CALC)
+
+        if(branchStage == execute) branchExceptionPort.valid clearWhen(service(classOf[HazardService]).hazardOnExecuteRS)
       }
     }
   }

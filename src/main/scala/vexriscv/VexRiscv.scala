@@ -6,14 +6,20 @@ import spinal.core._
 import scala.collection.mutable.ArrayBuffer
 
 object VexRiscvConfig{
-  def apply(plugins : Seq[Plugin[VexRiscv]] = ArrayBuffer()) : VexRiscvConfig = {
+  def apply(withMemoryStage : Boolean, withWriteBackStage : Boolean, plugins : Seq[Plugin[VexRiscv]]): VexRiscvConfig = {
     val config = VexRiscvConfig()
     config.plugins ++= plugins
+    config.withMemoryStage = withMemoryStage
+    config.withWriteBackStage = withWriteBackStage
     config
   }
+
+  def apply(plugins : Seq[Plugin[VexRiscv]] = ArrayBuffer()) : VexRiscvConfig = apply(true,true,plugins)
 }
 
 case class VexRiscvConfig(){
+  var withMemoryStage = true
+  var withWriteBackStage = true
   val plugins = ArrayBuffer[Plugin[VexRiscv]]()
 
   //Default Stageables
@@ -44,6 +50,9 @@ case class VexRiscvConfig(){
   object SRC_USE_SUB_LESS extends Stageable(Bool)
   object SRC_LESS_UNSIGNED extends Stageable(Bool)
 
+
+  object HAS_SIDE_EFFECT extends Stageable(Bool)
+
   //Formal verification purposes
   object FORMAL_HALT       extends Stageable(Bool)
   object FORMAL_PC_NEXT    extends Stageable(UInt(32 bits))
@@ -56,7 +65,7 @@ case class VexRiscvConfig(){
 
 
   object Src1CtrlEnum extends SpinalEnum(binarySequential){
-    val RS, IMU, PC_INCREMENT = newElement()   //IMU, IMZ IMJB
+    val RS, IMU, PC_INCREMENT, URS1 = newElement()   //IMU, IMZ IMJB
   }
 
   object Src2CtrlEnum extends SpinalEnum(binarySequential){
@@ -73,8 +82,15 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   type  T = VexRiscv
   import config._
 
-  stages ++= List.fill(4)(new Stage())
-  val /*prefetch :: fetch :: */decode :: execute :: memory :: writeBack :: Nil = stages.toList
+  //Define stages
+  def newStage(): Stage = { val s = new Stage; stages += s; s }
+  val decode    = newStage()
+  val execute   = newStage()
+  val memory    = ifGen(config.withMemoryStage)    (newStage())
+  val writeBack = ifGen(config.withWriteBackStage) (newStage())
+
+  def stagesFromExecute = stages.dropWhile(_ != execute)
+
   plugins ++= config.plugins
 
   //regression usage
@@ -83,12 +99,16 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   decode.arbitration.isValid.addAttribute(Verilator.public)
   decode.arbitration.flushAll.addAttribute(Verilator.public)
   decode.arbitration.haltItself.addAttribute(Verilator.public)
-  writeBack.input(config.INSTRUCTION) keep() addAttribute(Verilator.public)
-  writeBack.input(config.PC) keep() addAttribute(Verilator.public)
-  writeBack.arbitration.isValid keep() addAttribute(Verilator.public)
-  writeBack.arbitration.isFiring keep() addAttribute(Verilator.public)
+  if(withWriteBackStage) {
+    writeBack.input(config.INSTRUCTION) keep() addAttribute (Verilator.public)
+    writeBack.input(config.PC) keep() addAttribute (Verilator.public)
+    writeBack.arbitration.isValid keep() addAttribute (Verilator.public)
+    writeBack.arbitration.isFiring keep() addAttribute (Verilator.public)
+  }
   decode.arbitration.removeIt.noBackendCombMerge //Verilator perf
-  memory.arbitration.removeIt.noBackendCombMerge
+  if(withMemoryStage){
+    memory.arbitration.removeIt.noBackendCombMerge
+  }
   execute.arbitration.flushAll.noBackendCombMerge
 
   this(RVC_GEN) = false

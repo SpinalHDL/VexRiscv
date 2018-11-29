@@ -13,7 +13,8 @@ object GenDeterministicVex extends App{
       plugins = List(
         new IBusSimplePlugin(
           resetVector = 0x80000000l,
-          relaxedPcCalculation = false,
+          cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
           prediction = STATIC,
           catchAccessFault = true,
           compressedGen = false

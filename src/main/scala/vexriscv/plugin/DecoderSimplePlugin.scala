@@ -151,7 +151,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false, forceLegalI
       import toplevel.config._
       toplevel.getAllIo.foreach{io =>
         if(io.isInput) io.assignDontCare()
-        io.asDirectionLess()
+        io.setAsDirectionLess()
       }
       toplevel.decode.input(INSTRUCTION).removeAssignments()
       toplevel.decode.input(INSTRUCTION) := Delay((in Bits(32 bits)).setName("instruction"),2)

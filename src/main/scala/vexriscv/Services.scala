@@ -47,6 +47,11 @@ trait ExceptionInhibitor{
   def inhibateException() : Unit
 }
 
+trait RegFileService{
+  def readStage() : Stage
+}
+
+
 case class MemoryTranslatorCmd() extends Bundle{
   val isValid = Bool
   val virtualAddress  = UInt(32 bits)
@@ -88,4 +93,8 @@ class BusReport{
 class CacheReport {
   @BeanProperty var size = 0
   @BeanProperty var bytePerLine = 0
+}
+
+class DebugReport {
+  @BeanProperty var hardwareBreakpointCount = 0
 }

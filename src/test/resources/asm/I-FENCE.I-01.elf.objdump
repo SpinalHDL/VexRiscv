@@ -1,0 +1,76 @@
+
+/home/spinalvm/hdl/riscv-compliance/work//I-FENCE.I-01.elf:     file format elf32-littleriscv
+
+
+Disassembly of section .text.init:
+
+80000000 <_start>:
+80000000:	00001817          	auipc	a6,0x1
+80000004:	00480813          	addi	a6,a6,4 # 80001004 <test_A_data>
+80000008:	00001897          	auipc	a7,0x1
+8000000c:	00888893          	addi	a7,a7,8 # 80001010 <codasip_signature_start>
+80000010:	00000193          	li	gp,0
+80000014:	00082083          	lw	ra,0(a6)
+80000018:	00482103          	lw	sp,4(a6)
+8000001c:	00001a17          	auipc	s4,0x1
+80000020:	fe4a0a13          	addi	s4,s4,-28 # 80001000 <instr_A_src>
+80000024:	00000a97          	auipc	s5,0x0
+80000028:	014a8a93          	addi	s5,s5,20 # 80000038 <instr_A_dst>
+8000002c:	000a2783          	lw	a5,0(s4)
+80000030:	00faa023          	sw	a5,0(s5)
+80000034:	0000100f          	fence.i
+
+80000038 <instr_A_dst>:
+80000038:	00000137          	lui	sp,0x0
+8000003c:	0018a023          	sw	ra,0(a7)
+80000040:	0028a223          	sw	sp,4(a7)
+80000044:	0038a423          	sw	gp,8(a7)
+80000048:	00f8a623          	sw	a5,12(a7)
+8000004c:	00001517          	auipc	a0,0x1
+80000050:	fc450513          	addi	a0,a0,-60 # 80001010 <codasip_signature_start>
+80000054:	00001597          	auipc	a1,0x1
+80000058:	fcc58593          	addi	a1,a1,-52 # 80001020 <_end>
+8000005c:	f0100637          	lui	a2,0xf0100
+80000060:	f2c60613          	addi	a2,a2,-212 # f00fff2c <_end+0x700fef0c>
+
+80000064 <complience_halt_loop>:
+80000064:	02b50663          	beq	a0,a1,80000090 <complience_halt_break>
+80000068:	00c52683          	lw	a3,12(a0)
+8000006c:	00d62023          	sw	a3,0(a2)
+80000070:	00852683          	lw	a3,8(a0)
+80000074:	00d62023          	sw	a3,0(a2)
+80000078:	00452683          	lw	a3,4(a0)
+8000007c:	00d62023          	sw	a3,0(a2)
+80000080:	00052683          	lw	a3,0(a0)
+80000084:	00d62023          	sw	a3,0(a2)
+80000088:	01050513          	addi	a0,a0,16
+8000008c:	fd9ff06f          	j	80000064 <complience_halt_loop>
+
+80000090 <complience_halt_break>:
+80000090:	f0100537          	lui	a0,0xf0100
+80000094:	f2050513          	addi	a0,a0,-224 # f00fff20 <_end+0x700fef00>
+80000098:	00052023          	sw	zero,0(a0)
+	...
+
+Disassembly of section .data:
+
+80001000 <instr_A_src>:
+80001000:	001101b3          	add	gp,sp,ra
+
+80001004 <test_A_data>:
+80001004:	0030                	addi	a2,sp,8
+80001006:	0000                	unimp
+80001008:	0012                	c.slli	zero,0x4
+8000100a:	0000                	unimp
+8000100c:	0000                	unimp
+	...
+
+80001010 <codasip_signature_start>:
+80001010:	ffff                	0xffff
+80001012:	ffff                	0xffff
+80001014:	ffff                	0xffff
+80001016:	ffff                	0xffff
+80001018:	ffff                	0xffff
+8000101a:	ffff                	0xffff
+8000101c:	ffff                	0xffff
+8000101e:	ffff                	0xffff

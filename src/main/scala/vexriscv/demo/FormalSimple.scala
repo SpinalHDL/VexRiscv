@@ -15,7 +15,8 @@ object FormalSimple extends App{
         new HaltOnExceptionPlugin,
         new IBusSimplePlugin(
           resetVector = 0x00000000l,
-          relaxedPcCalculation = false,
+          cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
           prediction = DYNAMIC_TARGET,
           catchAccessFault = false,
           compressedGen = true

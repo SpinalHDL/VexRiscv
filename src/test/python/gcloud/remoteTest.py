@@ -14,6 +14,8 @@ gci.stopScript("src/test/python/gcloud/stopScript.sh")
 
 gci.local("rm -rf archive.tar.gz; git ls-files -z | xargs -0 tar -czf archive.tar.gz")
 gci.localToRemote("archive.tar.gz", "")
+gci.local("cd ../SpinalHDL; rm -rf spinal.tar.gz; git ls-files -z | xargs -0 tar -czf spinal.tar.gz")
+gci.localToRemote("../SpinalHDL/spinal.tar.gz", "")
 gci.localToRemote("src/test/python/gcloud/run.sh", "")
 gci.remote("rm -rf run.txt; setsid nohup sh run.sh &> run.txt")
 

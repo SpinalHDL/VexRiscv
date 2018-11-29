@@ -1,35 +1,13 @@
 package vexriscv.demo
 
+import java.nio.{ByteBuffer, ByteOrder}
+
 import spinal.core._
 import spinal.lib.bus.amba3.apb.{Apb3, Apb3Config, Apb3SlaveFactory}
 import spinal.lib.bus.misc.SizeMapping
 import spinal.lib.misc.{HexTools, InterruptCtrl, Prescaler, Timer}
 import spinal.lib._
 import vexriscv.plugin.{DBusSimpleBus, IBusSimpleBus}
-
-case class SimpleBusConfig(addressWidth : Int, dataWidth : Int)
-
-case class SimpleBusCmd(config : SimpleBusConfig) extends Bundle{
-  val wr = Bool
-  val address = UInt(config.addressWidth bits)
-  val data = Bits(config.dataWidth bits)
-  val mask = Bits(4 bit)
-}
-
-case class SimpleBusRsp(config : SimpleBusConfig) extends Bundle{
-  val data = Bits(config.dataWidth bits)
-}
-
-
-case class SimpleBus(config : SimpleBusConfig) extends Bundle with IMasterSlave {
-  val cmd = Stream(SimpleBusCmd(config))
-  val rsp = Flow(SimpleBusRsp(config))
-
-  override def asMaster(): Unit = {
-    master(cmd)
-    slave(rsp)
-  }
-}
 
 class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
   val io = new Bundle{
@@ -74,7 +52,7 @@ class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
 }
 
 
-class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpleBusConfig : SimpleBusConfig) extends Component{
+case class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpleBusConfig : SimpleBusConfig) extends Component{
   val io = new Bundle{
     val bus = slave(SimpleBus(simpleBusConfig))
   }
@@ -95,6 +73,27 @@ class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpl
   }
 }
 
+
+
+case class Apb3Rom(onChipRamBinFile : String) extends Component{
+  import java.nio.file.{Files, Paths}
+  val byteArray = Files.readAllBytes(Paths.get(onChipRamBinFile))
+  val wordCount = (byteArray.length+3)/4
+  val buffer = ByteBuffer.wrap(Files.readAllBytes(Paths.get(onChipRamBinFile))).order(ByteOrder.LITTLE_ENDIAN);
+  val wordArray = (0 until wordCount).map(i => {
+    val v = buffer.getInt
+    if(v < 0)  BigInt(v.toLong & 0xFFFFFFFFl) else  BigInt(v)
+  })
+
+  val io = new Bundle{
+    val apb = slave(Apb3(log2Up(wordCount*4),32))
+  }
+
+  val rom = Mem(Bits(32 bits), wordCount) initBigInt(wordArray)
+//  io.apb.PRDATA := rom.readSync(io.apb.PADDR >> 2)
+  io.apb.PRDATA := rom.readAsync(RegNext(io.apb.PADDR >> 2))
+  io.apb.PREADY := True
+}
 
 class MuraxSimpleBusToApbBridge(apb3Config: Apb3Config, pipelineBridge : Boolean, simpleBusConfig : SimpleBusConfig) extends Component{
   assert(apb3Config.dataWidth == simpleBusConfig.dataWidth)
@@ -130,7 +129,7 @@ class MuraxSimpleBusToApbBridge(apb3Config: Apb3Config, pipelineBridge : Boolean
   }
 }
 
-class MuraxSimpleBusDecoder(master : SimpleBus, val specification : List[(SimpleBus,SizeMapping)], pipelineMaster : Boolean) extends Area{
+class MuraxSimpleBusDecoder(master : SimpleBus, val specification : Seq[(SimpleBus,SizeMapping)], pipelineMaster : Boolean) extends Area{
   val masterPipelined = SimpleBus(master.config)
   if(!pipelineMaster) {
     masterPipelined.cmd << master.cmd
@@ -146,7 +145,7 @@ class MuraxSimpleBusDecoder(master : SimpleBus, val specification : List[(Simple
   val hits = for((slaveBus, memorySpace) <- specification) yield {
     val hit = memorySpace.hit(masterPipelined.cmd.address)
     slaveBus.cmd.valid   := masterPipelined.cmd.valid && hit
-    slaveBus.cmd.payload := masterPipelined.cmd.payload
+    slaveBus.cmd.payload := masterPipelined.cmd.payload.resized
     hit
   }
   val noHit = !hits.orR

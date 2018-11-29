@@ -22,10 +22,13 @@ class DhrystoneBench extends FunSuite{
   }
   val report = new StringBuilder()
   def getDmips(name : String, gen : => Unit, testCmd : String): Unit = {
+    var genPassed = false
     test(name + "_gen") {
       gen
+      genPassed = true
     }
     test(name + "_test"){
+      assert(genPassed)
       val str = doCmd(testCmd)
       assert(!str.contains("FAIL"))
       val intFind = "(\\d+\\.?)+".r
@@ -89,7 +92,7 @@ class DhrystoneBench extends FunSuite{
   getDmips(
     name = "GenFull",
     gen = GenFull.main(null),
-    testCmd = "make clean run REDO=10 CSR=no MMU=no"
+    testCmd = "make clean run REDO=10 CSR=no"
   )
 
   test("final_report") {

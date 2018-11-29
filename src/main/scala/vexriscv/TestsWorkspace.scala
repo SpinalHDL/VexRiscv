@@ -28,51 +28,51 @@ import spinal.lib.eda.altera.{InterruptReceiverTag, ResetEmitterTag}
 
 object TestsWorkspace {
   def main(args: Array[String]) {
-    SpinalConfig(mergeAsyncProcess = false).generateVerilog {
+    SpinalConfig(mergeAsyncProcess = false, anonymSignalPrefix = "zz_").generateVerilog {
       val configFull = VexRiscvConfig(
         plugins = List(
-          new IBusSimplePlugin(
-            resetVector = 0x80000000l,
-            relaxedPcCalculation = false,
-            relaxedBusCmdValid = false,
-            prediction = NONE,
-            historyRamSizeLog2 = 10,
-            catchAccessFault = true,
-            compressedGen = true,
-            busLatencyMin = 1,
-            injectorStage = true
-          ),
-//          new IBusCachedPlugin(
+//          new IBusSimplePlugin(
 //            resetVector = 0x80000000l,
-//            compressedGen = true,
-//            prediction = DYNAMIC_TARGET,
-//            injectorStage = true,
-//            config = InstructionCacheConfig(
-//              cacheSize = 1024*16,
-//              bytePerLine = 32,
-//              wayCount = 1,
-//              addressWidth = 32,
-//              cpuDataWidth = 32,
-//              memDataWidth = 32,
-//              catchIllegalAccess = true,
-//              catchAccessFault = true,
-//              catchMemoryTranslationMiss = true,
-//              asyncTagMemory = false,
-//              twoCycleRam = false,
-//              twoCycleCache = true
-//            ),
-//            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-//              portTlbSize = 4
-//            )
+//            cmdForkOnSecondStage = false,
+//            cmdForkPersistence = false,
+//            prediction = NONE,
+//            historyRamSizeLog2 = 10,
+//            catchAccessFault = false,
+//            compressedGen = false,
+//            busLatencyMin = 1,
+//            injectorStage = true
 //          ),
+          new IBusCachedPlugin(
+            resetVector = 0x80000000l,
+            compressedGen = false,
+            prediction = NONE,
+            injectorStage = true,
+            config = InstructionCacheConfig(
+              cacheSize = 4096,
+              bytePerLine = 32,
+              wayCount = 1,
+              addressWidth = 32,
+              cpuDataWidth = 32,
+              memDataWidth = 32,
+              catchIllegalAccess = true,
+              catchAccessFault = true,
+              catchMemoryTranslationMiss = true,
+              asyncTagMemory = false,
+              twoCycleRam = false,
+              twoCycleCache = true
+            ),
+            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+              portTlbSize = 4
+            )
+          ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = true,
-//            catchAccessFault = true,
+//            catchAccessFault = false,
 //            earlyInjection = false
 //          ),
           new DBusCachedPlugin(
             config = new DataCacheConfig(
-              cacheSize         = 4096*4,
+              cacheSize         = 4096,
               bytePerLine       = 32,
               wayCount          = 1,
               addressWidth      = 32,
@@ -98,7 +98,7 @@ object TestsWorkspace {
             ioRange      = _(31 downto 28) === 0xF
           ),
           new DecoderSimplePlugin(
-            catchIllegalInstruction = true
+            catchIllegalInstruction = false
           ),
           new RegFilePlugin(
             regFileReadyKind = plugin.ASYNC,
@@ -108,7 +108,7 @@ object TestsWorkspace {
           new SrcPlugin(
             separatedAddSub = false
           ),
-          new FullBarrelShifterPlugin(earlyInjection = false),
+          new FullBarrelShifterPlugin(earlyInjection = true),
   //        new LightShifterPlugin,
           new HazardSimplePlugin(
             bypassExecute           = true,
@@ -129,11 +129,35 @@ object TestsWorkspace {
             divUnrollFactor = 1
           ),
 //          new DivPlugin,
-          new CsrPlugin(CsrPluginConfig.all(0x80000020l).copy(deterministicInteruptionEntry = false)),
-          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
+          new CsrPlugin(CsrPluginConfig.all(0x80000020l)),
+//          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
+//             CsrPluginConfig(
+//            catchIllegalAccess = false,
+//            mvendorid      = null,
+//            marchid        = null,
+//            mimpid         = null,
+//            mhartid        = null,
+//            misaExtensionsInit = 0,
+//            misaAccess     = CsrAccess.READ_ONLY,
+//            mtvecAccess    = CsrAccess.WRITE_ONLY,
+//            mtvecInit      = 0x80000020l,
+//            mepcAccess     = CsrAccess.READ_WRITE,
+//            mscratchGen    = true,
+//            mcauseAccess   = CsrAccess.READ_ONLY,
+//            mbadaddrAccess = CsrAccess.READ_ONLY,
+//            mcycleAccess   = CsrAccess.NONE,
+//            minstretAccess = CsrAccess.NONE,
+//            ecallGen       = true,
+//            ebreakGen      = true,
+//            wfiGenAsWait   = false,
+//            wfiGenAsNop    = true,
+//            ucycleAccess   = CsrAccess.NONE
+//          )),
+//          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
-            earlyBranch = false,
-            catchAddressMisaligned = true
+            earlyBranch = true,
+            catchAddressMisaligned = true,
+            fenceiGenAsAJump = true
           ),
           new YamlPlugin("cpu0.yaml")
         )

@@ -20,8 +20,8 @@ import scala.collection.mutable
 object MuraxSim {
   def main(args: Array[String]): Unit = {
 //    def config = MuraxConfig.default.copy(onChipRamSize = 256 kB)
-    def config = MuraxConfig.default.copy(onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")
-
+    def config = MuraxConfig.default(withXip = true).copy(onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")
+    val simSlowDown = true
     SimConfig.allOptimisation.withWave.compile(new Murax(config)).doSimUntilVoid{dut =>
       val mainClkPeriod = (1e12/dut.config.coreFrequency.toDouble).toLong
       val jtagClkPeriod = mainClkPeriod*4
@@ -47,6 +47,7 @@ object MuraxSim {
         baudPeriod = uartBaudPeriod
       )
 
+      if(config.xipConfig != null)dut.io.xip.data(1).read #= 0
 
       val guiThread = fork{
         val guiToSim = mutable.Queue[Any]()
@@ -101,6 +102,7 @@ object MuraxSim {
           dut.io.gpioA.read #= (dut.io.gpioA.write.toLong & dut.io.gpioA.writeEnable.toLong) | (switchValue() << 8)
           ledsValue = dut.io.gpioA.write.toLong
           ledsFrame.repaint()
+          if(simSlowDown) Thread.sleep(400)
         }
       }
     }

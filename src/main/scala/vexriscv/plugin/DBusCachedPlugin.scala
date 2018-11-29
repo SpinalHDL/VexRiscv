@@ -12,7 +12,7 @@ class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
 
   override def build(pipeline: VexRiscv): Unit = {
     super.build(pipeline)
-    dBus.asDirectionLess()
+    dBus.setAsDirectionLess()
     dAxi = master(dBus.toAxi4Shared().toAxi4()).setName("dAxi")
     dBus = null //For safety, as nobody should use it anymore :)
   }
@@ -53,7 +53,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       BYPASSABLE_MEMORY_STAGE -> False,
       MEMORY_WR -> False,
       MEMORY_MANAGMENT -> False
-    )
+    ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
 
     val storeActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMS,

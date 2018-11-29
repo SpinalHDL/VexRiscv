@@ -84,10 +84,10 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       import execute._
 
       val bitwise = input(ALU_BITWISE_CTRL).mux(
-        AluBitwiseCtrlEnum.AND      -> (input(SRC1) & input(SRC2)),
-        AluBitwiseCtrlEnum.OR       -> (input(SRC1) | input(SRC2)),
-        AluBitwiseCtrlEnum.XOR      -> (input(SRC1) ^ input(SRC2)),
-        AluBitwiseCtrlEnum.SRC1     -> input(SRC1)
+        AluBitwiseCtrlEnum.AND  -> (input(SRC1) & input(SRC2)),
+        AluBitwiseCtrlEnum.OR   -> (input(SRC1) | input(SRC2)),
+        AluBitwiseCtrlEnum.XOR  -> (input(SRC1) ^ input(SRC2)),
+        AluBitwiseCtrlEnum.SRC1 ->  input(SRC1)
       )
 
       // mux results

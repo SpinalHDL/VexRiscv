@@ -1,4 +1,4 @@
-DEBUG=yes
+DEBUG?=no
 
 IBUS?=CACHED
 DBUS?=CACHED
@@ -9,12 +9,15 @@ ISA_TEST?=yes
 MUL?=yes
 DIV?=yes
 CSR?=yes
+EBREAK?=no
+FENCEI?=no
 MMU?=yes
 SEED?=no
 ATOMIC?=no
 NO_STALL?=no
 DEBUG_PLUGIN?=STD
 DEBUG_PLUGIN_EXTERNAL?=no
+RUN_HEX=no
 CUSTOM_SIMD_ADD?=no
 CUSTOM_CSR?=no
 DHRYSTONE=yes
@@ -39,13 +42,34 @@ ADDCFLAGS += -CFLAGS -DTHREAD_COUNT=${THREAD_COUNT}
 ifeq ($(DEBUG),yes)
 	ADDCFLAGS += -CFLAGS -O0 -CFLAGS -g
 else
-	ADDCFLAGS += -CFLAGS -O3 
+	ADDCFLAGS += -CFLAGS -O3
+endif
 
+
+ifneq ($(shell dplus -VV | grep timerInterrupt ../../../../VexRiscv.v -w),)
+    ADDCFLAGS += -CFLAGS -DTIMER_INTERRUPT
+endif
+
+ifneq ($(shell dplus -VV | grep externalInterrupt ../../../../VexRiscv.v -w),)
+    ADDCFLAGS += -CFLAGS -DEXTERNAL_INTERRUPT
+endif
+
+ifneq ($(RUN_HEX),no)
+	ADDCFLAGS += -CFLAGS -DRUN_HEX='\"$(RUN_HEX)\"'
 endif
 
 ifeq ($(COMPRESSED),yes)
 	ADDCFLAGS += -CFLAGS -DCOMPRESSED
 endif
+
+ifeq ($(FENCEI),yes)
+	ADDCFLAGS += -CFLAGS -DFENCEI
+endif
+
+ifeq ($(EBREAK),yes)
+	ADDCFLAGS += -CFLAGS -DEBREAK
+endif
+
 
 ifeq ($(DHRYSTONE),yes)
 	ADDCFLAGS += -CFLAGS -DDHRYSTONE

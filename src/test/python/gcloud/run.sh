@@ -1,11 +1,17 @@
 rm -rf sbtTest.txt
 rm -rf VexRiscv
+rm -rf SpinalHDL
+#git clone https://github.com/SpinalHDL/SpinalHDL.git -b dev
+mkdir SpinalHDL
+tar -xzf spinal.tar.gz -C SpinalHDL
 mkdir VexRiscv
 tar -xzf archive.tar.gz -C VexRiscv
 cd VexRiscv
-
-export VEXRISCV_REGRESSION_CONFIG_COUNT=16
-export VEXRISCV_REGRESSION_FREERTOS_COUNT=yes
+sudo git init
+sudo git add *
+sudo git commit -m miaou
+export VEXRISCV_REGRESSION_CONFIG_COUNT=128
+export VEXRISCV_REGRESSION_FREERTOS_COUNT=30
 sbt test
 cd ..
 
