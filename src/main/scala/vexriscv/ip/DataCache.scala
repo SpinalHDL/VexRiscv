@@ -6,7 +6,7 @@ import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4Shared}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
-import vexriscv.demo.SimpleBus
+import spinal.lib.bus.simple._
 
 case class DataCacheConfig( cacheSize : Int,
                             bytePerLine : Int,
@@ -346,8 +346,8 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
 
 
-  def toSimpleBus(): SimpleBus = {
-    val bus = SimpleBus(32,32)
+  def toPipelinedMemoryBus(): PipelinedMemoryBus = {
+    val bus = PipelinedMemoryBus(32,32)
 
     val counter = Reg(UInt(log2Up(p.burstSize) bits)) init(0)
     when(bus.cmd.fire){ counter := counter + 1 }
@@ -355,7 +355,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
     bus.cmd.valid := cmd.valid
     bus.cmd.address := (cmd.address(31 downto 2) | counter.resized) @@ U"00"
-    bus.cmd.wr := cmd.wr
+    bus.cmd.write := cmd.wr
     bus.cmd.mask := cmd.mask
     bus.cmd.data := cmd.data
     cmd.ready := bus.cmd.ready && (cmd.wr || counter === cmd.length)

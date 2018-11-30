@@ -7,17 +7,18 @@ import spinal.lib.bus.amba3.apb.{Apb3, Apb3Config, Apb3SlaveFactory}
 import spinal.lib.bus.misc.SizeMapping
 import spinal.lib.misc.{HexTools, InterruptCtrl, Prescaler, Timer}
 import spinal.lib._
+import spinal.lib.bus.simple._
 import vexriscv.plugin.{DBusSimpleBus, IBusSimpleBus}
 
-class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
+class MuraxMasterArbiter(pipelinedMemoryBusConfig : PipelinedMemoryBusConfig) extends Component{
   val io = new Bundle{
     val iBus = slave(IBusSimpleBus(false))
     val dBus = slave(DBusSimpleBus())
-    val masterBus = master(SimpleBus(simpleBusConfig))
+    val masterBus = master(PipelinedMemoryBus(pipelinedMemoryBusConfig))
   }
 
   io.masterBus.cmd.valid   := io.iBus.cmd.valid || io.dBus.cmd.valid
-  io.masterBus.cmd.wr      := io.dBus.cmd.valid && io.dBus.cmd.wr
+  io.masterBus.cmd.write      := io.dBus.cmd.valid && io.dBus.cmd.wr
   io.masterBus.cmd.address := io.dBus.cmd.valid ? io.dBus.cmd.address | io.iBus.cmd.pc
   io.masterBus.cmd.data    := io.dBus.cmd.data
   io.masterBus.cmd.mask    := io.dBus.cmd.size.mux(
@@ -31,7 +32,7 @@ class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
 
   val rspPending = RegInit(False) clearWhen(io.masterBus.rsp.valid)
   val rspTarget = RegInit(False)
-  when(io.masterBus.cmd.fire && !io.masterBus.cmd.wr){
+  when(io.masterBus.cmd.fire && !io.masterBus.cmd.write){
     rspTarget  := io.dBus.cmd.valid
     rspPending := True
   }
@@ -52,18 +53,18 @@ class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
 }
 
 
-case class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpleBusConfig : SimpleBusConfig) extends Component{
+case class MuraxPipelinedMemoryBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, pipelinedMemoryBusConfig : PipelinedMemoryBusConfig) extends Component{
   val io = new Bundle{
-    val bus = slave(SimpleBus(simpleBusConfig))
+    val bus = slave(PipelinedMemoryBus(pipelinedMemoryBusConfig))
   }
 
   val ram = Mem(Bits(32 bits), onChipRamSize / 4)
-  io.bus.rsp.valid := RegNext(io.bus.cmd.fire && !io.bus.cmd.wr) init(False)
+  io.bus.rsp.valid := RegNext(io.bus.cmd.fire && !io.bus.cmd.write) init(False)
   io.bus.rsp.data := ram.readWriteSync(
     address = (io.bus.cmd.address >> 2).resized,
     data  = io.bus.cmd.data,
     enable  = io.bus.cmd.valid,
-    write  = io.bus.cmd.wr,
+    write  = io.bus.cmd.write,
     mask  = io.bus.cmd.mask
   )
   io.bus.cmd.ready := True
@@ -95,42 +96,42 @@ case class Apb3Rom(onChipRamBinFile : String) extends Component{
   io.apb.PREADY := True
 }
 
-class MuraxSimpleBusToApbBridge(apb3Config: Apb3Config, pipelineBridge : Boolean, simpleBusConfig : SimpleBusConfig) extends Component{
-  assert(apb3Config.dataWidth == simpleBusConfig.dataWidth)
+class MuraxPipelinedMemoryBusToApbBridge(apb3Config: Apb3Config, pipelineBridge : Boolean, pipelinedMemoryBusConfig : PipelinedMemoryBusConfig) extends Component{
+  assert(apb3Config.dataWidth == pipelinedMemoryBusConfig.dataWidth)
 
   val io = new Bundle {
-    val simpleBus = slave(SimpleBus(simpleBusConfig))
+    val pipelinedMemoryBus = slave(PipelinedMemoryBus(pipelinedMemoryBusConfig))
     val apb = master(Apb3(apb3Config))
   }
 
-  val simpleBusStage = SimpleBus(simpleBusConfig)
-  simpleBusStage.cmd << (if(pipelineBridge) io.simpleBus.cmd.halfPipe() else io.simpleBus.cmd)
-  simpleBusStage.rsp >-> io.simpleBus.rsp
+  val pipelinedMemoryBusStage = PipelinedMemoryBus(pipelinedMemoryBusConfig)
+  pipelinedMemoryBusStage.cmd << (if(pipelineBridge) io.pipelinedMemoryBus.cmd.halfPipe() else io.pipelinedMemoryBus.cmd)
+  pipelinedMemoryBusStage.rsp >-> io.pipelinedMemoryBus.rsp
 
   val state = RegInit(False)
-  simpleBusStage.cmd.ready := False
+  pipelinedMemoryBusStage.cmd.ready := False
 
-  io.apb.PSEL(0) := simpleBusStage.cmd.valid
+  io.apb.PSEL(0) := pipelinedMemoryBusStage.cmd.valid
   io.apb.PENABLE := state
-  io.apb.PWRITE  := simpleBusStage.cmd.wr
-  io.apb.PADDR   := simpleBusStage.cmd.address.resized
-  io.apb.PWDATA  := simpleBusStage.cmd.data
+  io.apb.PWRITE  := pipelinedMemoryBusStage.cmd.write
+  io.apb.PADDR   := pipelinedMemoryBusStage.cmd.address.resized
+  io.apb.PWDATA  := pipelinedMemoryBusStage.cmd.data
 
-  simpleBusStage.rsp.valid := False
-  simpleBusStage.rsp.data  := io.apb.PRDATA
+  pipelinedMemoryBusStage.rsp.valid := False
+  pipelinedMemoryBusStage.rsp.data  := io.apb.PRDATA
   when(!state) {
-    state := simpleBusStage.cmd.valid
+    state := pipelinedMemoryBusStage.cmd.valid
   } otherwise {
     when(io.apb.PREADY){
       state := False
-      simpleBusStage.rsp.valid := !simpleBusStage.cmd.wr
-      simpleBusStage.cmd.ready := True
+      pipelinedMemoryBusStage.rsp.valid := !pipelinedMemoryBusStage.cmd.write
+      pipelinedMemoryBusStage.cmd.ready := True
     }
   }
 }
 
-class MuraxSimpleBusDecoder(master : SimpleBus, val specification : Seq[(SimpleBus,SizeMapping)], pipelineMaster : Boolean) extends Area{
-  val masterPipelined = SimpleBus(master.config)
+class MuraxPipelinedMemoryBusDecoder(master : PipelinedMemoryBus, val specification : Seq[(PipelinedMemoryBus,SizeMapping)], pipelineMaster : Boolean) extends Area{
+  val masterPipelined = PipelinedMemoryBus(master.config)
   if(!pipelineMaster) {
     masterPipelined.cmd << master.cmd
     masterPipelined.rsp >> master.rsp
@@ -151,7 +152,7 @@ class MuraxSimpleBusDecoder(master : SimpleBus, val specification : Seq[(SimpleB
   val noHit = !hits.orR
   masterPipelined.cmd.ready := (hits,slaveBuses).zipped.map(_ && _.cmd.ready).orR || noHit
 
-  val rspPending  = RegInit(False) clearWhen(masterPipelined.rsp.valid) setWhen(masterPipelined.cmd.fire && !masterPipelined.cmd.wr)
+  val rspPending  = RegInit(False) clearWhen(masterPipelined.rsp.valid) setWhen(masterPipelined.cmd.fire && !masterPipelined.cmd.write)
   val rspNoHit    = RegNext(False) init(False) setWhen(noHit)
   val rspSourceId = RegNextWhen(OHToUInt(hits), masterPipelined.cmd.fire)
   masterPipelined.rsp.valid   := slaveBuses.map(_.rsp.valid).orR || (rspPending && rspNoHit)

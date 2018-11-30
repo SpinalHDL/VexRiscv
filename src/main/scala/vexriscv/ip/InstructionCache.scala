@@ -6,7 +6,7 @@ import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4ReadOnly}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
-import vexriscv.demo.{SimpleBus, SimpleBusConfig}
+import spinal.lib.bus.simple._
 
 
 case class InstructionCacheConfig( cacheSize : Int,
@@ -46,7 +46,7 @@ case class InstructionCacheConfig( cacheSize : Int,
     constantBurstBehavior = true
   )
 
-  def getSimpleBusConfig() = SimpleBusConfig(
+  def getPipelinedMemoryBusConfig() = PipelinedMemoryBusConfig(
     addressWidth = 32,
     dataWidth = 32
   )
@@ -185,13 +185,13 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
   }
 
 
-  def toSimpleBus(): SimpleBus = {
-    val simpleBusConfig = p.getSimpleBusConfig()
-    val bus = SimpleBus(simpleBusConfig)
+  def toPipelinedMemoryBus(): PipelinedMemoryBus = {
+    val pipelinedMemoryBusConfig = p.getPipelinedMemoryBusConfig()
+    val bus = PipelinedMemoryBus(pipelinedMemoryBusConfig)
     val counter = Counter(p.burstSize, bus.cmd.fire)
     bus.cmd.valid := cmd.valid
     bus.cmd.address := cmd.address(31 downto widthOf(counter.value) + 2) @@ counter @@ U"00"
-    bus.cmd.wr := False
+    bus.cmd.write := False
     bus.cmd.mask.assignDontCare()
     bus.cmd.data.assignDontCare()
     cmd.ready := counter.willOverflow

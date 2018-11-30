@@ -6,7 +6,7 @@ import spinal.lib._
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
-import vexriscv.demo.SimpleBus
+import spinal.lib.bus.simple._
 import vexriscv.ip.DataCacheMemCmd
 
 
@@ -176,11 +176,11 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     rsp.error := False //TODO
     bus
   }
-  
-  def toSimpleBus() : SimpleBus = {
-    val bus = SimpleBus(32,32)
+
+  def toPipelinedMemoryBus() : PipelinedMemoryBus = {
+    val bus = PipelinedMemoryBus(32,32)
     bus.cmd.valid := cmd.valid
-    bus.cmd.wr := cmd.wr
+    bus.cmd.write := cmd.wr
     bus.cmd.address := cmd.address.resized
     bus.cmd.data := cmd.data
     bus.cmd.mask := cmd.size.mux(
