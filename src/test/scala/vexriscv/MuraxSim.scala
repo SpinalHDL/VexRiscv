@@ -20,9 +20,9 @@ import scala.collection.mutable
 object MuraxSim {
   def main(args: Array[String]): Unit = {
 //    def config = MuraxConfig.default.copy(onChipRamSize = 256 kB)
-    def config = MuraxConfig.default(withXip = true).copy(onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")
-    val simSlowDown = true
-    SimConfig.allOptimisation.withWave.compile(new Murax(config)).doSimUntilVoid{dut =>
+    def config = MuraxConfig.default(withXip = false).copy(onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")
+    val simSlowDown = false
+    SimConfig.allOptimisation.compile(new Murax(config)).doSimUntilVoid{dut =>
       val mainClkPeriod = (1e12/dut.config.coreFrequency.toDouble).toLong
       val jtagClkPeriod = mainClkPeriod*4
       val uartBaudRate = 115200

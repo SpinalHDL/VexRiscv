@@ -22,6 +22,8 @@ case class VexRiscvConfig(){
   var withWriteBackStage = true
   val plugins = ArrayBuffer[Plugin[VexRiscv]]()
 
+  def add(that : Plugin[VexRiscv]) : this.type = {plugins += that;this}
+
   //Default Stageables
   object IS_RVC extends Stageable(Bool)
   object BYPASSABLE_EXECUTE_STAGE   extends Stageable(Bool)

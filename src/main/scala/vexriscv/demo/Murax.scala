@@ -262,7 +262,7 @@ case class Murax(config : MuraxConfig) extends Component{
     )
     mainBusMapping += ram.io.bus -> (0x80000000l, onChipRamSize)
 
-    val apbBridge = new MuraxPipelinedMemoryBusToApbBridge(
+    val apbBridge = new PipelinedMemoryBusToApbBridge(
       apb3Config = Apb3Config(
         addressWidth = 20,
         dataWidth = 32
