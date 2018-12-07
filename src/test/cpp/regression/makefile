@@ -46,11 +46,11 @@ else
 endif
 
 
-ifneq ($(shell dplus -VV | grep timerInterrupt ../../../../VexRiscv.v -w),)
+ifneq (grep timerInterrupt ../../../../VexRiscv.v -w),)
     ADDCFLAGS += -CFLAGS -DTIMER_INTERRUPT
 endif
 
-ifneq ($(shell dplus -VV | grep externalInterrupt ../../../../VexRiscv.v -w),)
+ifneq (grep externalInterrupt ../../../../VexRiscv.v -w),)
     ADDCFLAGS += -CFLAGS -DEXTERNAL_INTERRUPT
 endif
 
