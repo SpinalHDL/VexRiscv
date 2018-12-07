@@ -106,6 +106,7 @@ void loadHexImpl(string path,Memory* mem) {
 	fseek(fp, 0, SEEK_SET);
 	char* content = new char[size];
 	fread(content, 1, size, fp);
+	fclose(fp);
 
 	int offset = 0;
 	char* line = content;
@@ -2104,15 +2105,19 @@ public:
     	fseek(refFile, 0, SEEK_SET);
     	char* ref = new char[refSize];
     	fread(ref, 1, refSize, refFile);
+    	fclose(refFile);
     	
 
     	logTraces.flush();
+    	logTraces.close();
+
 		FILE *logFile = fopen((name + ".logTrace").c_str(), "r");
     	fseek(logFile, 0, SEEK_END);
     	uint32_t logSize = ftell(logFile);
     	fseek(logFile, 0, SEEK_SET);
     	char* log = new char[logSize];
     	fread(log, 1, logSize, logFile);
+    	fclose(logFile);
     	
     	if(refSize > logSize || memcmp(log,ref,refSize))
     		fail();
@@ -2157,15 +2162,19 @@ public:
     	fseek(refFile, 0, SEEK_SET);
     	char* ref = new char[refSize];
     	fread(ref, 1, refSize, refFile);
+    	fclose(refFile);
 
 
     	out32.flush();
+    	out32.close();
+
 		FILE *logFile = fopen((name + ".out32").c_str(), "r");
     	fseek(logFile, 0, SEEK_END);
     	uint32_t logSize = ftell(logFile);
     	fseek(logFile, 0, SEEK_SET);
     	char* log = new char[logSize];
     	fread(log, 1, logSize, logFile);
+    	fclose(logFile);
 
     	if(refSize > logSize || memcmp(log,ref,refSize))
     		fail();
