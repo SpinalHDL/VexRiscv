@@ -686,6 +686,10 @@ public:
     		ws->iBusAccessPatch(address,data,&error);
         }
         virtual bool dRead(int32_t address, int32_t size, uint32_t *data){
+            if(size < 1 || size > 4){
+                cout << "dRead size=" << size << endl;
+                fail();
+            }
             if(address & (size-1) != 0) cout << "Ref did a unaligned read" << endl;
     		if((address & 0xF0000000) == 0xF0000000){
 				MemRead t = periphRead.front();
