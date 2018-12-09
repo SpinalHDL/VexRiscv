@@ -35,7 +35,7 @@ public:
 		for(uint32_t i = 0;i < (1 << 12);i++) mem[i] = NULL;
 	}
 	~Memory(){
-		for(uint32_t i = 0;i < (1 << 12);i++) if(mem[i]) delete mem[i];
+		for(uint32_t i = 0;i < (1 << 12);i++) if(mem[i]) delete [] mem[i];
 	}
 
 	uint8_t* get(uint32_t address){
@@ -147,7 +147,7 @@ void loadHexImpl(string path,Memory* mem) {
 		size--;
 	}
 
-	delete content;
+	delete [] content;
 }
 
 
