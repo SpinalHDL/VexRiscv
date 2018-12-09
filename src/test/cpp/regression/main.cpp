@@ -1064,13 +1064,13 @@ public:
                             #ifdef TRACE_WITH_TIME
                             currentTime <<
                              #endif
-                             " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
+                             " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data <<  dec << endl;
                     } else {
                         regTraces <<
                                 #ifdef TRACE_WITH_TIME
                                 currentTime <<
                                  #endif
-                                 " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << endl;
+                                 " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << dec << endl;
                     }
 					if(riscvRefEnable) if(rfWriteValid != riscvRef.rfWriteValid ||
 						(rfWriteValid && (rfWriteAddress!= riscvRef.rfWriteAddress || rfWriteData!= riscvRef.rfWriteData))){
@@ -1118,7 +1118,7 @@ public:
 			staticMutex.unlock();
 		} catch (const std::exception& e) {
 			staticMutex.lock();
-			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->writeBack_PC << endl; //<<  " seed : " << seed <<
+			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->writeBack_PC << dec << endl; //<<  " seed : " << seed <<
 			cycles += instanceCycles;
 			staticMutex.unlock();
 			failed = true;
@@ -2147,7 +2147,7 @@ public:
     virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
         Workspace::dBusAccess(addr,wr,size,mask,data,error);
         if(wr && addr == 0xF00FFF2C){
-            out32 << hex << setw(8) << std::setfill('0') << *data;
+            out32 << hex << setw(8) << std::setfill('0') << *data << dec;
             if(++out32Counter % 4 == 0) out32 << "\n";
             *error = 0;
         }
