@@ -323,7 +323,7 @@ public:
 		case MCAUSE: return &mcause.raw; break;
 		case MBADADDR: return &mbadaddr; break;
 		case MEPC: return &mepc; break;
-		default: fail(); break;
+		default: fail(); return NULL; break;
 		}
 	}
 
@@ -684,7 +684,9 @@ public:
         	mem.read(address, 4, (uint8_t*)data);
         	bool error;
     		ws->iBusAccessPatch(address,data,&error);
+    		return error;
         }
+
         virtual bool dRead(int32_t address, int32_t size, uint32_t *data){
             if(size < 1 || size > 4){
                 cout << "dRead size=" << size << endl;
@@ -701,6 +703,7 @@ public:
     		}else {
             	mem.read(address, size, (uint8_t*)data);
     		}
+    		return false;
         }
         virtual void dWrite(int32_t address, int32_t size, uint32_t data){
             if(address & (size-1) != 0) cout << "Ref did a unaligned write" << endl;
