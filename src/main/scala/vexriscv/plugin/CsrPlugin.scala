@@ -501,34 +501,34 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       }
 
       case class InterruptSource(cond : Bool, id : Int)
-      case class InterruptModel(privilege : Int, privilegeCond : Bool, sources : ArrayBuffer[InterruptSource])
-      val interruptModel = ArrayBuffer[InterruptModel]()
-      if(supervisorGen) interruptModel += InterruptModel(1, sstatus.SIE && privilege <= "01", ArrayBuffer(
+      case class InterruptPrivilege(privilege : Int, privilegeCond : Bool, sources : ArrayBuffer[InterruptSource])
+      val interruptModel = ArrayBuffer[InterruptPrivilege]()
+      if(supervisorGen) interruptModel += InterruptPrivilege(1, sstatus.SIE && privilege <= "01", ArrayBuffer(
         InterruptSource(sip.STIP && sie.STIE,  5),
         InterruptSource(sip.SSIP && sie.SSIE,  1),
         InterruptSource(sip.SEIP && sie.SEIE,  9)
       ))
 
-      interruptModel += InterruptModel(3, mstatus.MIE , ArrayBuffer(
+      interruptModel += InterruptPrivilege(3, mstatus.MIE , ArrayBuffer(
         InterruptSource(mip.MTIP && mie.MTIE,  7),
         InterruptSource(mip.MSIP && mie.MSIE,  3),
         InterruptSource(mip.MEIP && mie.MEIE, 11)
       ))
 
       case class DelegatorModel(value : Bits, source : Int, target : Int)
-      def solveDelegators(delegators : Seq[DelegatorModel], id : Int, lowerBound : Int): UInt = {
-        val filtredDelegators = delegators.filter(_.target >= lowerBound)
-        val ret = U(lowerBound, 2 bits)
-        for(d <- filtredDelegators){
-          when(!d.value(id)){
-            ret := d.source
-          }
-        }
-        ret
-      }
+//      def solveDelegators(delegators : Seq[DelegatorModel], id : Int, lowerBound : Int): UInt = {
+//        val filtredDelegators = delegators.filter(_.target >= lowerBound)
+//        val ret = U(lowerBound, 2 bits)
+//        for(d <- filtredDelegators){
+//          when(!d.value(id)){
+//            ret := d.source
+//          }
+//        }
+//        ret
+//      }
 
       def solveDelegators(delegators : Seq[DelegatorModel], id : UInt, lowerBound : UInt): UInt = {
-        if(delegators.isEmpty) return CombInit(lowerBound)
+        if(delegators.isEmpty) return U"11"
         val ret = U(delegators.last.target, 2 bits)
         for(d <- delegators){
           when(!d.value(id) || d.target < lowerBound){
@@ -536,6 +536,15 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
           }
         }
         ret
+//        val ret = U"11"
+//        var continue = True
+//        for(d <- delegators){
+//          continue = continue && d.value(id)
+//          when(continue){
+//            ret := d.source
+//          }
+//        }
+//        ret.max(lowerBound)
       }
 
       val interruptDelegators = ArrayBuffer[DelegatorModel]()
@@ -601,7 +610,6 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
         when(exceptionValidsRegs.orR){
           fetcher.haltIt()
-//          fetcher.flushIt()
         }
       } else null
 
@@ -609,11 +617,10 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
 
 
+      //Process interrupt request, code and privilege
       val interrupt = False
       val interruptCode = UInt(4 bits).assignDontCare().addTag(Verilator.public)
-      val interruptTargetPrivilege = UInt(2 bits).assignDontCare()
-
-
+      val interruptDelegatorHit = interruptDelegators.map(d => (d -> False)).toMap
       for(model <- interruptModel){
         when(model.privilegeCond){
           when(model.sources.map(_.cond).orR){
@@ -622,11 +629,25 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
           for(source <- model.sources){
             when(source.cond){
               interruptCode := source.id
-              interruptTargetPrivilege := solveDelegators(interruptDelegators, source.id, model.privilege)
+              for(interruptDelegator <- interruptDelegators){
+                interruptDelegatorHit(interruptDelegator) := (if(interruptDelegator.target < model.privilege){
+                  False
+                } else {
+                  interruptDelegator.value(source.id)
+                })
+              }
             }
           }
         }
       }
+
+      val interruptTargetPrivilege = U(if(interruptDelegators.isEmpty) 3 else interruptDelegators.last.target, 2 bits)
+      for(interruptDelegator <- interruptDelegators){
+        when(!interruptDelegatorHit(interruptDelegator)){
+          interruptTargetPrivilege := interruptDelegator.source
+        }
+      }
+
       interrupt.clearWhen(!allowInterrupts)
 
       val exception = if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValids.last && allowException else False
@@ -678,6 +699,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         jumpInterface.payload       := (if(!mtvecModeGen) mtvec.base @@ "00" else (mtvec.mode === 0 || hadException) ? (mtvec.base @@ "00") | ((mtvec.base + trapCause) @@ "00") )
         beforeLastStage.arbitration.flushAll := True
 
+        privilege := targetPrivilege
         switch(targetPrivilege){
           if(supervisorGen) is(1) {
             sstatus.SIE := False
