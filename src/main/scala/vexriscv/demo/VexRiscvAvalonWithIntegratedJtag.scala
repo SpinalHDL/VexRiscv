@@ -162,7 +162,7 @@ object VexRiscvAvalonWithIntegratedJtag{
               .setName("dBusAvalon")
               .addTag(ClockDomainTag(ClockDomain.current))
           }
-          case plugin: DebugPlugin => {
+          case plugin: DebugPlugin => plugin.debugClockDomain {
             plugin.io.bus.setAsDirectionLess()
             val jtag = slave(new Jtag())
               .setName("jtag")
