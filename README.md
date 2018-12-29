@@ -26,7 +26,7 @@
 
 This repository hosts a RISC-V implementation written in SpinalHDL. Here are some specs :
 
-- RV32I[M] instruction set
+- RV32I[M][C] instruction set
 - Pipelined with 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
 - 1.44 DMIPS/Mhz --no-inline when nearly all features are enabled (1.57 DMIPS/Mhz when the divider lookup table is enabled)
 - Optimized for FPGA, fully portable
@@ -159,7 +159,7 @@ You can find two example CPU instances in:
 - src/main/scala/vexriscv/GenFull.scala
 - src/main/scala/vexriscv/GenSmallest.scala
 
-To generate the corresponding RTL as a VexRiscv.v file, run:
+To generate the corresponding RTL as a VexRiscv.v file, run the following commands in the root directory of this repository:
 
 ```sh
 sbt "run-main vexriscv.demo.GenFull"
