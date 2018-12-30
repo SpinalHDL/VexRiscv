@@ -141,7 +141,7 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
       val haltIt = RegInit(False)
       val stepIt = RegInit(False)
 
-      val isPipActive = RegNext(List(decode,execute, memory, writeBack).map(_.arbitration.isValid).orR)
+      val isPipActive = RegNext(stages.map(_.arbitration.isValid).orR)
       val isPipBusy = isPipActive || RegNext(isPipActive)
       val haltedByBreak = RegInit(False)
 
@@ -152,8 +152,8 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
       hardwareBreakpoints.foreach(_.valid init(False))
 
       val busReadDataReg = Reg(Bits(32 bit))
-      when(writeBack.arbitration.isValid) {
-        busReadDataReg := writeBack.output(REGFILE_WRITE_DATA)
+      when(stages.last.arbitration.isValid) {
+        busReadDataReg := stages.last.output(REGFILE_WRITE_DATA)
       }
       io.bus.cmd.ready := True
       io.bus.rsp.data := busReadDataReg
@@ -195,11 +195,11 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
       }
 
 
-      decode.insert(DO_EBREAK) := !haltIt && (decode.input(IS_EBREAK) || hardwareBreakpoints.map(hb => hb.valid && hb.pc === (execute.input(PC) >> 1)).foldLeft(False)(_ || _))
+      decode.insert(DO_EBREAK) := !haltIt && (decode.input(IS_EBREAK) || hardwareBreakpoints.map(hb => hb.valid && hb.pc === (decode.input(PC) >> 1)).foldLeft(False)(_ || _))
       when(execute.arbitration.isValid && execute.input(DO_EBREAK)){
         execute.arbitration.haltByOther := True
         busReadDataReg := execute.input(PC).asBits
-        when(List(memory, writeBack).map(_.arbitration.isValid).orR === False){
+        when(stagesFromExecute.tail.map(_.arbitration.isValid).orR === False){
           iBusFetcher.flushIt()
           iBusFetcher.haltIt()
           execute.arbitration.flushAll := True

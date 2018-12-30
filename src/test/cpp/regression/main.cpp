@@ -35,7 +35,7 @@ public:
 		for(uint32_t i = 0;i < (1 << 12);i++) mem[i] = NULL;
 	}
 	~Memory(){
-		for(uint32_t i = 0;i < (1 << 12);i++) if(mem[i]) delete mem[i];
+		for(uint32_t i = 0;i < (1 << 12);i++) if(mem[i]) delete [] mem[i];
 	}
 
 	uint8_t* get(uint32_t address){
@@ -106,6 +106,7 @@ void loadHexImpl(string path,Memory* mem) {
 	fseek(fp, 0, SEEK_SET);
 	char* content = new char[size];
 	fread(content, 1, size, fp);
+	fclose(fp);
 
 	int offset = 0;
 	char* line = content;
@@ -146,7 +147,7 @@ void loadHexImpl(string path,Memory* mem) {
 		size--;
 	}
 
-	delete content;
+	delete [] content;
 }
 
 
@@ -322,7 +323,7 @@ public:
 		case MCAUSE: return &mcause.raw; break;
 		case MBADADDR: return &mbadaddr; break;
 		case MEPC: return &mepc; break;
-		default: fail(); break;
+		default: fail(); return NULL; break;
 		}
 	}
 
@@ -683,8 +684,14 @@ public:
         	mem.read(address, 4, (uint8_t*)data);
         	bool error;
     		ws->iBusAccessPatch(address,data,&error);
+    		return error;
         }
+
         virtual bool dRead(int32_t address, int32_t size, uint32_t *data){
+            if(size < 1 || size > 4){
+                cout << "dRead size=" << size << endl;
+                fail();
+            }
             if(address & (size-1) != 0) cout << "Ref did a unaligned read" << endl;
     		if((address & 0xF0000000) == 0xF0000000){
 				MemRead t = periphRead.front();
@@ -696,6 +703,7 @@ public:
     		}else {
             	mem.read(address, size, (uint8_t*)data);
     		}
+    		return false;
         }
         virtual void dWrite(int32_t address, int32_t size, uint32_t data){
             if(address & (size-1) != 0) cout << "Ref did a unaligned write" << endl;
@@ -1059,13 +1067,13 @@ public:
                             #ifdef TRACE_WITH_TIME
                             currentTime <<
                              #endif
-                             " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
+                             " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data <<  dec << endl;
                     } else {
                         regTraces <<
                                 #ifdef TRACE_WITH_TIME
                                 currentTime <<
                                  #endif
-                                 " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << endl;
+                                 " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << dec << endl;
                     }
 					if(riscvRefEnable) if(rfWriteValid != riscvRef.rfWriteValid ||
 						(rfWriteValid && (rfWriteAddress!= riscvRef.rfWriteAddress || rfWriteData!= riscvRef.rfWriteData))){
@@ -1113,7 +1121,7 @@ public:
 			staticMutex.unlock();
 		} catch (const std::exception& e) {
 			staticMutex.lock();
-			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->writeBack_PC << endl; //<<  " seed : " << seed <<
+			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->writeBack_PC << dec << endl; //<<  " seed : " << seed <<
 			cycles += instanceCycles;
 			staticMutex.unlock();
 			failed = true;
@@ -2104,15 +2112,19 @@ public:
     	fseek(refFile, 0, SEEK_SET);
     	char* ref = new char[refSize];
     	fread(ref, 1, refSize, refFile);
+    	fclose(refFile);
     	
 
     	logTraces.flush();
+    	logTraces.close();
+
 		FILE *logFile = fopen((name + ".logTrace").c_str(), "r");
     	fseek(logFile, 0, SEEK_END);
     	uint32_t logSize = ftell(logFile);
     	fseek(logFile, 0, SEEK_SET);
     	char* log = new char[logSize];
     	fread(log, 1, logSize, logFile);
+    	fclose(logFile);
     	
     	if(refSize > logSize || memcmp(log,ref,refSize))
     		fail();
@@ -2138,7 +2150,7 @@ public:
     virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
         Workspace::dBusAccess(addr,wr,size,mask,data,error);
         if(wr && addr == 0xF00FFF2C){
-            out32 << hex << setw(8) << std::setfill('0') << *data;
+            out32 << hex << setw(8) << std::setfill('0') << *data << dec;
             if(++out32Counter % 4 == 0) out32 << "\n";
             *error = 0;
         }
@@ -2157,15 +2169,19 @@ public:
     	fseek(refFile, 0, SEEK_SET);
     	char* ref = new char[refSize];
     	fread(ref, 1, refSize, refFile);
+    	fclose(refFile);
 
 
     	out32.flush();
+    	out32.close();
+
 		FILE *logFile = fopen((name + ".out32").c_str(), "r");
     	fseek(logFile, 0, SEEK_END);
     	uint32_t logSize = ftell(logFile);
     	fseek(logFile, 0, SEEK_SET);
     	char* log = new char[logSize];
     	fread(log, 1, logSize, logFile);
+    	fclose(logFile);
 
     	if(refSize > logSize || memcmp(log,ref,refSize))
     		fail();

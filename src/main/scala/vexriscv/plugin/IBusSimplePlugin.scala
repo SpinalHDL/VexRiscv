@@ -6,8 +6,7 @@ import spinal.lib._
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
-import vexriscv.demo.SimpleBus
-
+import spinal.lib.bus.simple._
 
 
 case class IBusSimpleCmd() extends Bundle{
@@ -136,11 +135,11 @@ case class IBusSimpleBus(interfaceKeepData : Boolean = false) extends Bundle wit
     bus
   }
 
-  def toSimpleBus(): SimpleBus = {
-    val bus = SimpleBus(32,32)
+  def toPipelinedMemoryBus(): PipelinedMemoryBus = {
+    val bus = PipelinedMemoryBus(32,32)
     bus.cmd.arbitrationFrom(cmd)
     bus.cmd.address := cmd.pc.resized
-    bus.cmd.wr := False
+    bus.cmd.write := False
     bus.cmd.mask.assignDontCare()
     bus.cmd.data.assignDontCare()
     rsp.valid := bus.rsp.valid
