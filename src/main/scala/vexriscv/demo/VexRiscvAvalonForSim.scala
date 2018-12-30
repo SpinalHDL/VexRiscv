@@ -26,7 +26,7 @@ object VexRiscvAvalonForSim{
       //CPU configuration
       val cpuConfig = VexRiscvConfig(
         plugins = List(
-          new IBusSimplePlugin(
+         /* new IBusSimplePlugin(
             resetVector = 0x00000000l,
             cmdForkOnSecondStage = false,
             cmdForkPersistence = false,
@@ -37,44 +37,44 @@ object VexRiscvAvalonForSim{
           new DBusSimplePlugin(
             catchAddressMisaligned = false,
             catchAccessFault = false
+          ),*/
+          new IBusCachedPlugin(
+            config = InstructionCacheConfig(
+              cacheSize = 4096,
+              bytePerLine =32,
+              wayCount = 1,
+              addressWidth = 32,
+              cpuDataWidth = 32,
+              memDataWidth = 32,
+              catchIllegalAccess = true,
+              catchAccessFault = true,
+              catchMemoryTranslationMiss = true,
+              asyncTagMemory = false,
+              twoCycleRam = true
+            )
+            //            askMemoryTranslation = true,
+            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+            //              portTlbSize = 4
+            //            )
           ),
-//          new IBusCachedPlugin(
-//            config = InstructionCacheConfig(
-//              cacheSize = 4096,
-//              bytePerLine =32,
-//              wayCount = 1,
-//              addressWidth = 32,
-//              cpuDataWidth = 32,
-//              memDataWidth = 32,
-//              catchIllegalAccess = true,
-//              catchAccessFault = true,
-//              catchMemoryTranslationMiss = true,
-//              asyncTagMemory = false,
-//              twoCycleRam = true
-//            )
-//            //            askMemoryTranslation = true,
-//            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-//            //              portTlbSize = 4
-//            //            )
-//          ),
-//          new DBusCachedPlugin(
-//            config = new DataCacheConfig(
-//              cacheSize         = 4096,
-//              bytePerLine       = 32,
-//              wayCount          = 1,
-//              addressWidth      = 32,
-//              cpuDataWidth      = 32,
-//              memDataWidth      = 32,
-//              catchAccessError  = true,
-//              catchIllegal      = true,
-//              catchUnaligned    = true,
-//              catchMemoryTranslationMiss = true
-//            ),
-//            memoryTranslatorPortConfig = null
-//            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-//            //              portTlbSize = 6
-//            //            )
-//          ),
+          new DBusCachedPlugin(
+            config = new DataCacheConfig(
+              cacheSize         = 4096,
+              bytePerLine       = 32,
+              wayCount          = 1,
+              addressWidth      = 32,
+              cpuDataWidth      = 32,
+              memDataWidth      = 32,
+              catchAccessError  = true,
+              catchIllegal      = true,
+              catchUnaligned    = true,
+              catchMemoryTranslationMiss = true
+            ),
+            memoryTranslatorPortConfig = null
+            //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+            //              portTlbSize = 6
+            //            )
+          ),
           new StaticMemoryTranslatorPlugin(
             ioRange      = _(31 downto 28) === 0xF
           ),
@@ -165,7 +165,7 @@ object VexRiscvAvalonForSim{
               .setName("dBusAvalon")
               .addTag(ClockDomainTag(ClockDomain.current))
           }
-          case plugin: DebugPlugin => {
+          case plugin: DebugPlugin =>  plugin.debugClockDomain {
             plugin.io.bus.setAsDirectionLess()
             slave(plugin.io.bus.fromAvalon())
               .setName("debugBusAvalon")
@@ -194,3 +194,4 @@ object VexRiscvAvalonForSim{
     QSysify(report.toplevel)
   }
 }
+
