@@ -3,10 +3,10 @@
 VERILOG = ../../../Murax_iCE40_hx8k_breakout_board_xip.v
 
 generate :
-	#(cd ../../..; sbt "run-main vexriscv.demo.Murax_iCE40_hx8k_breakout_board_xip")
+	#(cd ../../..; sbt "runMain vexriscv.demo.Murax_iCE40_hx8k_breakout_board_xip")
 
 ../../../Murax_iCE40_hx8k_breakout_board_xip.v :
-	#(cd ../../..; sbt "run-main vexriscv.demo.Murax_iCE40_hx8k_breakout_board_xip")
+	#(cd ../../..; sbt "runMain vexriscv.demo.Murax_iCE40_hx8k_breakout_board_xip")
 
 ../../../Murax_iCE40_hx8k_breakout_board_xip.v*.bin:
 

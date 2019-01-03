@@ -162,13 +162,13 @@ You can find two example CPU instances in:
 To generate the corresponding RTL as a VexRiscv.v file, run the following commands in the root directory of this repository:
 
 ```sh
-sbt "run-main vexriscv.demo.GenFull"
+sbt "runMain vexriscv.demo.GenFull"
 ```
 
 or
 
 ```sh
-sbt "run-main vexriscv.demo.GenSmallest"
+sbt "runMain vexriscv.demo.GenSmallest"
 ```
 
 NOTES:
@@ -204,7 +204,7 @@ Then you can use the https://github.com/SpinalHDL/openocd_riscv tool to create a
 
 ```sh
 #in the VexRiscv repository, to run the simulation on which one OpenOCD can connect itself =>
-sbt "run-main vexriscv.demo.GenFull"
+sbt "runMain vexriscv.demo.GenFull"
 cd src/test/cpp/regression
 make run DEBUG_PLUGIN_EXTERNAL=yes
 
@@ -254,7 +254,7 @@ the [Pinsec SOC](https://spinalhdl.github.io/SpinalDoc/spinal/lib/pinsec/hardwar
 To generate the Briey SoC Hardware:
 
 ```sh
-sbt "run-main vexriscv.demo.Briey"
+sbt "runMain vexriscv.demo.Briey"
 ```
 
 To run the verilator simulation of the Briey SoC which can then be connected to OpenOCD/GDB, first get those dependencies:
@@ -309,10 +309,10 @@ To generate the Murax SoC Hardware :
 
 ```sh
 # To generate the SoC without any content in the ram
-sbt "run-main vexriscv.demo.Murax"
+sbt "runMain vexriscv.demo.Murax"
 
 # To generate the SoC with a demo program already in ram
-sbt "run-main vexriscv.demo.MuraxWithRamInit"
+sbt "runMain vexriscv.demo.MuraxWithRamInit"
 ```
 
 The demo program included by default with `MuraxWithRamInit` will blink the
@@ -560,7 +560,7 @@ and is self-tested by the `src/test/cpp/custom/simd_add` application by running 
 
 ```sh
 # Generate the CPU
-sbt "run-main vexriscv.demo.GenCustomSimdAdd"
+sbt "runMain vexriscv.demo.GenCustomSimdAdd"
 
 cd src/test/cpp/regression/
 
