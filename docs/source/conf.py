@@ -20,8 +20,8 @@
 # -- Project information -----------------------------------------------------
 
 project = 'VexRiscv'
-copyright = '2019, Penis'
-author = 'Penis'
+copyright = '2019, Dolu1990'
+author = 'Dolu1990'
 
 # The short X.Y version
 version = ''
