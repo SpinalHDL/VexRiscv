@@ -1,10 +1,13 @@
+notifications:
+  email:
+    on_success: never
+
+env:
+  - secure: "v7FHP8yK/zixpv1ML05qcRhZfDVDFdTmTPjfMZHL7gmrJveVDgze22x4tY4tB1+JEXhKuVTYvimOrX/Ok+rOOT5gVKLowv4PUQwCR+HgWVIbqjcfZNLsa369v03/p4K/zbjJSiXFahZYOXa0ApED2KWHcVfCrNsPv0UF7YZGiIa1Q/lPBwfmpN1rLih2Mpgn4KVaJky22t7JXJyVrNdGVmIA51slVbyFwFAE8Ww/0tkC+i2PUcWWRMIxtXP4iyq/9Npcq5VdqOatKfWHqAElLfKSPNMYLMlcyxyNpNx4paq8cL6fQxFcBLi9M2msz2i/qpKv30a0tzNo5bQQgucAXOQJB2Buks728upLuqsr+k25hwcqrtjyMOr9UQkt7qXAJH/0kimW7aW1yoMxbm/6mNG98X9D1EzNRewHAKatwJeFy1bw5qIuSQxPBwQMGloManrHOHGotmHKk7Y+dgM/z1UlaAdxSQuKWGXBc8QlQvif8puPYEdJMoInJNRxiWfYu06XnmzTXgMketK7RdULM9DVYzw8hzS2EIWKu8Oa0zn0PTevD2YeJNd4G8mDqO0vz5hloIc7pFsq/exQUB/kFozfCsnvhW8P+MPN0LpuSpptBQTsLWbM5BH0hd46HoWcneDdlMvVrUcgsTPmmSroIkLIEUo+Y2iN5eQHPPp85Cw="
+
+
 _vexriscv: &_vexriscv
   language: scala
-
-  notifications:
-    email:
-      on_success: never
-
   # See 'project/Version.scala'
   scala:
     - 2.11.6
@@ -21,9 +24,6 @@ _vexriscv: &_vexriscv
     - oraclejdk8
   #  - oraclejdk7
   #  - openjdk7
-
-  env:
-    - secure: "v7FHP8yK/zixpv1ML05qcRhZfDVDFdTmTPjfMZHL7gmrJveVDgze22x4tY4tB1+JEXhKuVTYvimOrX/Ok+rOOT5gVKLowv4PUQwCR+HgWVIbqjcfZNLsa369v03/p4K/zbjJSiXFahZYOXa0ApED2KWHcVfCrNsPv0UF7YZGiIa1Q/lPBwfmpN1rLih2Mpgn4KVaJky22t7JXJyVrNdGVmIA51slVbyFwFAE8Ww/0tkC+i2PUcWWRMIxtXP4iyq/9Npcq5VdqOatKfWHqAElLfKSPNMYLMlcyxyNpNx4paq8cL6fQxFcBLi9M2msz2i/qpKv30a0tzNo5bQQgucAXOQJB2Buks728upLuqsr+k25hwcqrtjyMOr9UQkt7qXAJH/0kimW7aW1yoMxbm/6mNG98X9D1EzNRewHAKatwJeFy1bw5qIuSQxPBwQMGloManrHOHGotmHKk7Y+dgM/z1UlaAdxSQuKWGXBc8QlQvif8puPYEdJMoInJNRxiWfYu06XnmzTXgMketK7RdULM9DVYzw8hzS2EIWKu8Oa0zn0PTevD2YeJNd4G8mDqO0vz5hloIc7pFsq/exQUB/kFozfCsnvhW8P+MPN0LpuSpptBQTsLWbM5BH0hd46HoWcneDdlMvVrUcgsTPmmSroIkLIEUo+Y2iN5eQHPPp85Cw="
 
   before_install:
     # JDK fix
@@ -114,7 +114,7 @@ jobs:
         - provider: pages
           skip-cleanup: true
           github-token: $GITHUB_TOKEN  # Set in the settings page of your repository, as a secure variable
-          keep-history: true
+          keep-history: false
           local-dir: docs/build/html
           on:
             branch: master  # You can't be safe enough <insert double condom joke here>
