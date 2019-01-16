@@ -153,7 +153,7 @@ object TestsWorkspace {
 //            wfiGenAsNop    = true,
 //            ucycleAccess   = CsrAccess.NONE
 //          )),
-//          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
+          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = true,
             catchAddressMisaligned = true,
