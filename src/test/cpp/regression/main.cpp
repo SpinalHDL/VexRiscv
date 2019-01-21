@@ -1192,6 +1192,43 @@ public:
 };
 #endif
 
+
+#ifdef IBUS_TC
+
+class IBusTc : public SimElement{
+public:
+
+    uint32_t nextData;
+
+	Workspace *ws;
+	VVexRiscv* top;
+	IBusTc(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+	}
+
+	virtual void preCycle(){
+		if (top->iBusTc_enable) {
+		    if((top->iBusTc_address & 0x70000000) != 0 || (top->iBusTc_address & 0x20) == 0){
+		        printf("IBusTc access out of range\n");
+		        ws->fail();
+		    }
+	        bool error_next;
+		    ws->iBusAccess(top->iBusTc_address, &nextData,&error_next);
+		}
+	}
+
+	virtual void postCycle(){
+		top->iBusTc_data = nextData;
+	}
+};
+
+#endif
+
+
 #ifdef IBUS_SIMPLE_AVALON
 
 struct IBusSimpleAvalonRsp{
@@ -1274,6 +1311,12 @@ public:
 		bool error;
 		top->iBus_rsp_valid = 0;
 		if(pendingCount != 0 && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+		    #ifdef IBUS_TC
+            if((address & 0x70000000) == 0 && (address & 0x20) != 0){
+                printf("IBUS_CACHED access out of range\n");
+                ws->fail();
+            }
+            #endif
 			ws->iBusAccess(address,&top->iBus_rsp_payload_data,&error);
 			top->iBus_rsp_payload_error = error;
 			pendingCount--;
@@ -1960,6 +2003,11 @@ void Workspace::fillSimELements(){
 	#if defined(IBUS_CACHED_WISHBONE) || defined(IBUS_SIMPLE_WISHBONE)
 		simElements.push_back(new IBusCachedWishbone(this));
 	#endif
+
+	#ifdef IBUS_TC
+		simElements.push_back(new IBusTc(this));
+	#endif
+
 	#ifdef DBUS_SIMPLE
 		simElements.push_back(new DBusSimple(this));
 	#endif

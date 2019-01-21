@@ -284,6 +284,8 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       }
     } else {
       val compressed = r.nextBoolean()
+      val tighlyCoupled = r.nextBoolean()
+//      val tighlyCoupled = false
       val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
       val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
       val relaxedPcCalculation, twoCycleCache, injectorStage = r.nextBoolean()
@@ -295,29 +297,33 @@ class IBusDimension extends VexRiscvDimension("IBus") {
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512)
 
-      new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")) with InstructionAnticipatedPosition{
-        override def testParam = "IBUS=CACHED" + (if(compressed) " COMPRESSED=yes" else "")
-        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new IBusCachedPlugin(
-          resetVector = 0x80000000l,
-          compressedGen = compressed,
-          prediction = prediction,
-          relaxedPcCalculation = relaxedPcCalculation,
-          injectorStage = injectorStage,
-          config = InstructionCacheConfig(
-            cacheSize = cacheSize,
-            bytePerLine = 32,
-            wayCount = wayCount,
-            addressWidth = 32,
-            cpuDataWidth = 32,
-            memDataWidth = 32,
-            catchIllegalAccess = catchAll,
-            catchAccessFault = catchAll,
-            catchMemoryTranslationMiss = catchAll,
-            asyncTagMemory = false,
-            twoCycleRam = twoCycleRam,
-            twoCycleCache = twoCycleCache
+      new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")+ (if(tighlyCoupled)"Tc" else "")) with InstructionAnticipatedPosition{
+        override def testParam = "IBUS=CACHED" + (if(compressed) " COMPRESSED=yes" else "") + (if(tighlyCoupled)" IBUS_TC=yes" else "")
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          val p = new IBusCachedPlugin(
+            resetVector = 0x80000000l,
+            compressedGen = compressed,
+            prediction = prediction,
+            relaxedPcCalculation = relaxedPcCalculation,
+            injectorStage = injectorStage,
+            config = InstructionCacheConfig(
+              cacheSize = cacheSize,
+              bytePerLine = 32,
+              wayCount = wayCount,
+              addressWidth = 32,
+              cpuDataWidth = 32,
+              memDataWidth = 32,
+              catchIllegalAccess = catchAll,
+              catchAccessFault = catchAll,
+              catchMemoryTranslationMiss = catchAll,
+              asyncTagMemory = false,
+              twoCycleRam = twoCycleRam,
+              twoCycleCache = twoCycleCache
+            )
           )
-        )
+          if(tighlyCoupled) p.newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5)))
+          config.plugins += p
+        }
         override def instructionAnticipatedOk() = !twoCycleCache || ((!twoCycleRam || wayCount == 1) && !compressed)
       }
     }
@@ -523,8 +529,8 @@ class TestIndividualFeatures extends FunSuite {
 
 
 //  val testId = Some(mutable.HashSet[Int](0,28,45,93))
-//  val testId = Some(mutable.HashSet[Int](5))
-//  val seed = -2089952013329208578l
+//  val testId = Some(mutable.HashSet[Int](31))
+//  val seed = -7716775349351274630l
 
 
 

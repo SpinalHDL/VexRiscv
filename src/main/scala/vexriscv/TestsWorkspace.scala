@@ -28,20 +28,20 @@ import spinal.lib.eda.altera.{InterruptReceiverTag, ResetEmitterTag}
 
 object TestsWorkspace {
   def main(args: Array[String]) {
-    SpinalConfig(mergeAsyncProcess = false, anonymSignalPrefix = "zz_").generateVerilog {
-      val configFull = VexRiscvConfig(
+    def configFull = {
+      val config = VexRiscvConfig(
         plugins = List(
-//          new IBusSimplePlugin(
-//            resetVector = 0x80000000l,
-//            cmdForkOnSecondStage = false,
-//            cmdForkPersistence = false,
-//            prediction = NONE,
-//            historyRamSizeLog2 = 10,
-//            catchAccessFault = false,
-//            compressedGen = false,
-//            busLatencyMin = 1,
-//            injectorStage = true
-//          ),
+          //          new IBusSimplePlugin(
+          //            resetVector = 0x80000000l,
+          //            cmdForkOnSecondStage = false,
+          //            cmdForkPersistence = false,
+          //            prediction = NONE,
+          //            historyRamSizeLog2 = 10,
+          //            catchAccessFault = false,
+          //            compressedGen = false,
+          //            busLatencyMin = 1,
+          //            injectorStage = true
+          //          ),
           new IBusCachedPlugin(
             resetVector = 0x80000000l,
             compressedGen = false,
@@ -65,11 +65,12 @@ object TestsWorkspace {
               portTlbSize = 4
             )
           ),
-//          new DBusSimplePlugin(
-//            catchAddressMisaligned = true,
-//            catchAccessFault = false,
-//            earlyInjection = false
-//          ),
+//          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
+          //          new DBusSimplePlugin(
+          //            catchAddressMisaligned = true,
+          //            catchAccessFault = false,
+          //            earlyInjection = false
+          //          ),
           new DBusCachedPlugin(
             config = new DataCacheConfig(
               cacheSize         = 4096,
@@ -84,21 +85,21 @@ object TestsWorkspace {
               catchMemoryTranslationMiss = true,
               atomicEntriesCount = 2
             ),
-//            memoryTranslatorPortConfig = null
+            //            memoryTranslatorPortConfig = null
             memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
               portTlbSize = 6
             )
           ),
-//          new StaticMemoryTranslatorPlugin(
-//            ioRange      = _(31 downto 28) === 0xF
-//          ),
+          //          new StaticMemoryTranslatorPlugin(
+          //            ioRange      = _(31 downto 28) === 0xF
+          //          ),
           new MemoryTranslatorPlugin(
             tlbSize = 32,
             virtualRange = _(31 downto 28) === 0xC,
             ioRange      = _(31 downto 28) === 0xF
           ),
           new DecoderSimplePlugin(
-            catchIllegalInstruction = false
+            catchIllegalInstruction = true
           ),
           new RegFilePlugin(
             regFileReadyKind = plugin.ASYNC,
@@ -109,7 +110,7 @@ object TestsWorkspace {
             separatedAddSub = false
           ),
           new FullBarrelShifterPlugin(earlyInjection = true),
-  //        new LightShifterPlugin,
+          //        new LightShifterPlugin,
           new HazardSimplePlugin(
             bypassExecute           = true,
             bypassMemory            = true,
@@ -119,8 +120,8 @@ object TestsWorkspace {
             pessimisticWriteRegFile = false,
             pessimisticAddressMatch = false
           ),
-  //        new HazardSimplePlugin(false, true, false, true),
-  //        new HazardSimplePlugin(false, false, false, false),
+          //        new HazardSimplePlugin(false, true, false, true),
+          //        new HazardSimplePlugin(false, false, false, false),
           new MulPlugin,
           new MulDivIterativePlugin(
             genMul = false,
@@ -128,31 +129,31 @@ object TestsWorkspace {
             mulUnrollFactor = 32,
             divUnrollFactor = 1
           ),
-//          new DivPlugin,
+          //          new DivPlugin,
           new CsrPlugin(CsrPluginConfig.all(0x80000020l)),
-//          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
-//             CsrPluginConfig(
-//            catchIllegalAccess = false,
-//            mvendorid      = null,
-//            marchid        = null,
-//            mimpid         = null,
-//            mhartid        = null,
-//            misaExtensionsInit = 0,
-//            misaAccess     = CsrAccess.READ_ONLY,
-//            mtvecAccess    = CsrAccess.WRITE_ONLY,
-//            mtvecInit      = 0x80000020l,
-//            mepcAccess     = CsrAccess.READ_WRITE,
-//            mscratchGen    = true,
-//            mcauseAccess   = CsrAccess.READ_ONLY,
-//            mbadaddrAccess = CsrAccess.READ_ONLY,
-//            mcycleAccess   = CsrAccess.NONE,
-//            minstretAccess = CsrAccess.NONE,
-//            ecallGen       = true,
-//            ebreakGen      = true,
-//            wfiGenAsWait   = false,
-//            wfiGenAsNop    = true,
-//            ucycleAccess   = CsrAccess.NONE
-//          )),
+          //          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
+          //             CsrPluginConfig(
+          //            catchIllegalAccess = false,
+          //            mvendorid      = null,
+          //            marchid        = null,
+          //            mimpid         = null,
+          //            mhartid        = null,
+          //            misaExtensionsInit = 0,
+          //            misaAccess     = CsrAccess.READ_ONLY,
+          //            mtvecAccess    = CsrAccess.WRITE_ONLY,
+          //            mtvecInit      = 0x80000020l,
+          //            mepcAccess     = CsrAccess.READ_WRITE,
+          //            mscratchGen    = true,
+          //            mcauseAccess   = CsrAccess.READ_ONLY,
+          //            mbadaddrAccess = CsrAccess.READ_ONLY,
+          //            mcycleAccess   = CsrAccess.NONE,
+          //            minstretAccess = CsrAccess.NONE,
+          //            ecallGen       = true,
+          //            ebreakGen      = true,
+          //            wfiGenAsWait   = false,
+          //            wfiGenAsNop    = true,
+          //            ucycleAccess   = CsrAccess.NONE
+          //          )),
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = true,
@@ -162,7 +163,27 @@ object TestsWorkspace {
           new YamlPlugin("cpu0.yaml")
         )
       )
+      config
+    }
 
+
+//    import spinal.core.sim._
+//    SimConfig.withConfig(SpinalConfig(mergeAsyncProcess = false, anonymSignalPrefix = "zz_")).allOptimisation.compile(new VexRiscv(configFull)).doSimUntilVoid{ dut =>
+//      dut.clockDomain.forkStimulus(10)
+//      dut.clockDomain.forkSimSpeedPrinter(4)
+//      var iBus : InstructionCacheMemBus = null
+//
+//      dut.plugins.foreach{
+//        case plugin: IBusCachedPlugin => iBus = plugin.iBus
+//        case _ =>
+//      }
+//      dut.clockDomain.onSamplings{
+////        iBus.cmd.ready.randomize()
+//        iBus.rsp.data #= 0x13
+//      }
+//    }
+
+    SpinalConfig(mergeAsyncProcess = false, anonymSignalPrefix = "zz_").generateVerilog {
 
 
       val toplevel = new VexRiscv(configFull)

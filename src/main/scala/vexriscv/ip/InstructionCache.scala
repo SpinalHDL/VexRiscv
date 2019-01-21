@@ -86,15 +86,17 @@ trait InstructionCacheCommons{
   val pc : UInt
   val physicalAddress : UInt
   val data   : Bits
-  val cacheMiss, error, mmuMiss, illegalAccess,isUser : Bool
+  val cacheMiss, error, mmuMiss, illegalAccess, isUser : Bool
 }
 
 case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle with IMasterSlave with InstructionCacheCommons {
-  val isValid = Bool
-  val isStuck = Bool
-  val isRemoved = Bool
+  val isValid = Bool()
+  val isStuck = Bool()
+  val isRemoved = Bool()
   val pc = UInt(p.addressWidth bits)
-  val data    =  Bits(p.cpuDataWidth bits)
+  val data = Bits(p.cpuDataWidth bits)
+  val dataBypassValid = Bool()
+  val dataBypass = Bits(p.cpuDataWidth bits)
   val mmuBus  = MemoryTranslatorBus()
   val physicalAddress = UInt(p.addressWidth bits)
   val cacheMiss, error, mmuMiss, illegalAccess,isUser  = ifGen(!p.twoCycleCache)(Bool)
@@ -102,7 +104,7 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved, pc)
     inWithNull(error,mmuMiss,illegalAccess,data, cacheMiss,physicalAddress)
-    outWithNull(isUser)
+    outWithNull(isUser, dataBypass, dataBypassValid)
     slaveWithNull(mmuBus)
   }
 }
@@ -381,21 +383,21 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }
 
 
-    val hit = if(!twoCycleRam) new Area{
+    val hit = (!twoCycleRam) generate new Area{
       val hits = read.waysValues.map(way => way.tag.valid && way.tag.address === io.cpu.fetch.mmuBus.rsp.physicalAddress(tagRange))
       val valid = Cat(hits).orR
       val id = OHToUInt(hits)
       val error = read.waysValues.map(_.tag.error).read(id)
       val data = read.waysValues.map(_.data).read(id)
       val word = data.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(memWordToCpuWordRange))
-      io.cpu.fetch.data := word
+      io.cpu.fetch.data := (io.cpu.fetch.dataBypassValid ? io.cpu.fetch.dataBypass | word)
       if(twoCycleCache){
         io.cpu.decode.data := RegNextWhen(io.cpu.fetch.data,!io.cpu.decode.isStuck)
       }
-    } else null
+    }
 
     if(twoCycleRam && wayCount == 1){
-      io.cpu.fetch.data := read.waysValues.head.data.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(memWordToCpuWordRange))
+      io.cpu.fetch.data := (io.cpu.fetch.dataBypassValid ? io.cpu.fetch.dataBypass | read.waysValues.head.data.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(memWordToCpuWordRange)))
     }
 
     io.cpu.fetch.mmuBus.cmd.isValid := io.cpu.fetch.isValid
@@ -405,7 +407,6 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     io.cpu.fetch.physicalAddress := io.cpu.fetch.mmuBus.rsp.physicalAddress
 
     val resolution = ifGen(!twoCycleCache)( new Area{
-//      def stage[T <: Data](that : T) = RegNextWhen(that,!io.cpu.decode.isStuck)
       val mmuRsp = io.cpu.fetch.mmuBus.rsp
 
       io.cpu.fetch.cacheMiss := !hit.valid
@@ -432,17 +433,13 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       val error = tags(id).error
       val data = fetchStage.read.waysValues.map(way => stage(way.data)).read(id)
       val word = data.subdivideIn(cpuDataWidth bits).read(io.cpu.decode.pc(memWordToCpuWordRange))
+      when(stage(io.cpu.fetch.dataBypassValid)){
+        word := stage(io.cpu.fetch.dataBypass)
+      }
       io.cpu.decode.data := word
     }
 
     io.cpu.decode.cacheMiss := !hit.valid
-//    when( io.cpu.decode.isValid && io.cpu.decode.cacheMiss){
-//      io.cpu.prefetch.haltIt := True
-//      lineLoader.valid := True
-//      lineLoader.address := mmuRsp.physicalAddress //Could be optimise if mmu not used
-//    }
-//    when(io.cpu)
-
     io.cpu.decode.error := hit.error
     io.cpu.decode.mmuMiss := mmuRsp.miss
     io.cpu.decode.illegalAccess := !mmuRsp.allowExecute || (io.cpu.decode.isUser && !mmuRsp.allowUser)

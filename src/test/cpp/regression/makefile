@@ -1,6 +1,7 @@
 DEBUG?=no
 
 IBUS?=CACHED
+IBUS_TC?=no
 DBUS?=CACHED
 TRACE?=no
 TRACE_ACCESS?=no
@@ -42,7 +43,7 @@ ADDCFLAGS += -CFLAGS -DTHREAD_COUNT=${THREAD_COUNT}
 ifeq ($(DEBUG),yes)
 	ADDCFLAGS += -CFLAGS -O0 -CFLAGS -g
 else
-	ADDCFLAGS += -CFLAGS -O3
+	ADDCFLAGS += -CFLAGS -O3  -O3
 endif
 
 
@@ -56,6 +57,11 @@ endif
 
 ifneq ($(RUN_HEX),no)
 	ADDCFLAGS += -CFLAGS -DRUN_HEX='\"$(RUN_HEX)\"'
+endif
+
+
+ifeq ($(IBUS_TC),yes)
+	ADDCFLAGS += -CFLAGS -DIBUS_TC=yes
 endif
 
 ifeq ($(COMPRESSED),yes)
