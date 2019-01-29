@@ -127,7 +127,7 @@ Note that recently, the capability to remove the Fetch/Memory/WriteBack stage wa
 On Ubuntu 14 :
 
 ```sh
-# JAVA JDK 8. Do not try with JDK >= 9
+# JAVA JDK 8
 sudo add-apt-repository -y ppa:openjdk-r/ppa
 sudo apt-get update
 sudo apt-get install openjdk-8-jdk -y
