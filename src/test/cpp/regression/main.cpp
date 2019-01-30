@@ -1121,7 +1121,7 @@ public:
 			staticMutex.unlock();
 		} catch (const std::exception& e) {
 			staticMutex.lock();
-			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->writeBack_PC << dec << endl; //<<  " seed : " << seed <<
+			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->writeBack_PC << dec << " T=" << i << endl; //<<  " seed : " << seed <<
 			cycles += instanceCycles;
 			staticMutex.unlock();
 			failed = true;
@@ -2443,13 +2443,20 @@ string freeRtosTests[] = {
 //    "test1","test1","test1","test1","test1","test1","test1","test1",
 //    "test1","test1","test1","test1","test1","test1","test1","test1"
 
-		"AltQTest", "AltBlock",  "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
-		"QueueSet", "recmutex", "semtest", "TaskNotify", "BlockQ", "crhook", "dynamic",
-		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
+//		"AltQTest", "AltBlock",  "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
+//		"QueueSet", "recmutex", "semtest", "TaskNotify", "BlockQ", "crhook", "dynamic",
+//		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
 		//"BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ"
 //		"flop"
 //		 "flop", "sp_flop" // <- Simple test
 		 // "AltBlckQ" ???
+
+		"TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify",
+		"TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify",
+		"TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify",
+		"TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify",
+		"TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify",
+		"TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify"
 };
 
 
@@ -2788,17 +2795,17 @@ int main(int argc, char **argv, char **env) {
 
             /*for(int redo = 0;redo < 4;redo++)*/{
                 for(const string &name : freeRtosTests){
-                    tasks.push_back([=]() { Workspace(name + "_rv32i_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
-                    tasks.push_back([=]() { Workspace(name + "_rv32i_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                    tasks.push_back([=]() { Workspace(name + "_rv32i_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                    tasks.push_back([=]() { Workspace(name + "_rv32i_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #ifdef COMPRESSED
-                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
-                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
+//                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #endif
                     #if defined(MUL) && defined(DIV)
                         #ifdef COMPRESSED
                             tasks.push_back([=]() { Workspace(name + "_rv32imac_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                         #else
-                            tasks.push_back([=]() { Workspace(name + "_rv32im_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                            tasks.push_back([=]() { Workspace(name + "_rv32im_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                         #endif
                     #endif
                 }
