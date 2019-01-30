@@ -33,7 +33,8 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
                        keepPcPlus4 : Boolean = false,
                        config : InstructionCacheConfig,
                        memoryTranslatorPortConfig : Any = null,
-                       injectorStage : Boolean = false)  extends IBusFetcherImpl(
+                       injectorStage : Boolean = false,
+                       withoutInjectorStage : Boolean = false)  extends IBusFetcherImpl(
   resetVector = resetVector,
   keepPcPlus4 = keepPcPlus4,
   decodePcGen = compressedGen,
@@ -43,9 +44,10 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
   injectorReadyCutGen = false,
   prediction = prediction,
   historyRamSizeLog2 = historyRamSizeLog2,
-  injectorStage = !config.twoCycleCache || injectorStage){
+  injectorStage = (!config.twoCycleCache && !withoutInjectorStage) || injectorStage){
   import config._
 
+  assert(!(withoutInjectorStage && injectorStage))
 
   var iBus  : InstructionCacheMemBus = null
   var mmuBus : MemoryTranslatorBus = null
