@@ -258,10 +258,12 @@ class Briey(config: BrieyConfig) extends Component{
     )
 
     val gpioACtrl = Apb3Gpio(
-      gpioWidth = 32
+      gpioWidth = 32,
+      withReadSync = true
     )
     val gpioBCtrl = Apb3Gpio(
-      gpioWidth = 32
+      gpioWidth = 32,
+      withReadSync = true
     )
     val timerCtrl = PinsecTimerCtrl()
 

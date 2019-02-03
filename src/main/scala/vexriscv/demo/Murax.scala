@@ -276,7 +276,7 @@ case class Murax(config : MuraxConfig) extends Component{
 
     //******** APB peripherals *********
     val apbMapping = ArrayBuffer[(Apb3, SizeMapping)]()
-    val gpioACtrl = Apb3Gpio(gpioWidth = gpioWidth)
+    val gpioACtrl = Apb3Gpio(gpioWidth = gpioWidth, withReadSync = true)
     io.gpioA <> gpioACtrl.io.gpio
     apbMapping += gpioACtrl.io.apb -> (0x00000, 4 kB)
 
