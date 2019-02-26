@@ -156,8 +156,8 @@ sudo make install
 
 ## CPU generation
 You can find two example CPU instances in:
-- src/main/scala/vexriscv/GenFull.scala
-- src/main/scala/vexriscv/GenSmallest.scala
+- src/main/scala/vexriscv/demo/GenFull.scala
+- src/main/scala/vexriscv/demo/GenSmallest.scala
 
 To generate the corresponding RTL as a VexRiscv.v file, run the following commands in the root directory of this repository:
 
