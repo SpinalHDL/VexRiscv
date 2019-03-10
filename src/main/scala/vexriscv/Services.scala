@@ -39,6 +39,10 @@ trait PrivilegeService{
   def isUser(stage : Stage) : Bool
 }
 
+case class PrivilegeServiceDefault() extends PrivilegeService{
+  override def isUser(stage: Stage): Bool = False
+}
+
 trait InterruptionInhibitor{
   def inhibateInterrupts() : Unit
 }

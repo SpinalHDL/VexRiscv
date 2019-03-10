@@ -30,6 +30,13 @@ trait Pipeline {
      filtered.length != 0
   }
 
+  def serviceElse[T](clazz : Class[T], default : => T) : T = {
+    if(!serviceExist(clazz)) return default
+    val filtered = plugins.filter(o => clazz.isAssignableFrom(o.getClass))
+    assert(filtered.length == 1)
+    filtered.head.asInstanceOf[T]
+  }
+
   def update[T](that : PipelineConfig[T], value : T) : Unit = configs(that) = value
   def apply[T](that : PipelineConfig[T]) : T = configs(that).asInstanceOf[T]
 
