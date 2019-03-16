@@ -13,10 +13,12 @@ object GenFullNoMmuMaxPerf extends App{
     config = VexRiscvConfig(
       plugins = List(
         new PcManagerSimplePlugin(
-          resetVector = 0x00000000l,
+          resetVector = 0x80000000l,
           relaxedPcCalculation = false
         ),
         new IBusCachedPlugin(
+          prediction = DYNAMIC_TARGET,
+          historyRamSizeLog2 = 8,
           config = InstructionCacheConfig(
             cacheSize = 4096*4,
             bytePerLine =32,
@@ -28,7 +30,8 @@ object GenFullNoMmuMaxPerf extends App{
             catchAccessFault = true,
             catchMemoryTranslationMiss = false,
             asyncTagMemory = false,
-            twoCycleRam = true
+            twoCycleRam = true,
+            twoCycleCache = true
           )
         ),
         new DBusCachedPlugin(
@@ -76,9 +79,7 @@ object GenFullNoMmuMaxPerf extends App{
         new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
           earlyBranch = true,
-          catchAddressMisaligned = true,
-          prediction = DYNAMIC_TARGET,
-          historyRamSizeLog2 = 8
+          catchAddressMisaligned = true
         ),
         new YamlPlugin("cpu0.yaml")
       )

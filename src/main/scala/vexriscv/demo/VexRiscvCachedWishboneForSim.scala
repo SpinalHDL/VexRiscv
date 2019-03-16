@@ -24,16 +24,17 @@ object VexRiscvCachedWishboneForSim{
       //CPU configuration
       val cpuConfig = VexRiscvConfig(
         plugins = List(
-          new PcManagerSimplePlugin(0x00000000l, false),
 //          new IBusSimplePlugin(
-//            interfaceKeepData = false,
-//            catchAccessFault = false
+//            resetVector = 0x80000000l,
+//            prediction = STATIC
 //          ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = false,
 //            catchAccessFault = false
 //          ),
           new IBusCachedPlugin(
+            resetVector = 0x80000000l,
+            prediction = STATIC,
             config = InstructionCacheConfig(
               cacheSize = 4096,
               bytePerLine =32,
@@ -100,8 +101,7 @@ object VexRiscvCachedWishboneForSim{
 //          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = false,
-            catchAddressMisaligned = true,
-            prediction = STATIC
+            catchAddressMisaligned = true
           ),
           new CsrPlugin(
             config = CsrPluginConfig.small(mtvecInit = 0x80000020l)
@@ -117,36 +117,22 @@ object VexRiscvCachedWishboneForSim{
       //cpu.setDefinitionName("VexRiscvAvalon")
       cpu.rework {
         for (plugin <- cpuConfig.plugins) plugin match {
-//          case plugin: IBusSimplePlugin => {
-//            plugin.iBus.asDirectionLess() //Unset IO properties of iBus
-//            iBus = master(plugin.iBus.toAvalon())
-//              .setName("iBusAvalon")
-//              .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
-//          }
-          case plugin: IBusCachedPlugin => {
-            plugin.iBus.asDirectionLess() //Unset IO properties of iBus
+          case plugin: IBusSimplePlugin => {
+            plugin.iBus.setAsDirectionLess() //Unset IO properties of iBus
             master(plugin.iBus.toWishbone()).setName("iBusWishbone")
           }
-//          case plugin: DBusSimplePlugin => {
-//            plugin.dBus.asDirectionLess()
-//            master(plugin.dBus.toAvalon())
-//              .setName("dBusAvalon")
-//              .addTag(ClockDomainTag(ClockDomain.current))
-//          }
-          case plugin: DBusCachedPlugin => {
-            plugin.dBus.asDirectionLess()
+          case plugin: IBusCachedPlugin => {
+            plugin.iBus.setAsDirectionLess()
+            master(plugin.iBus.toWishbone()).setName("iBusWishbone")
+          }
+          case plugin: DBusSimplePlugin => {
+            plugin.dBus.setAsDirectionLess()
             master(plugin.dBus.toWishbone()).setName("dBusWishbone")
           }
-//          case plugin: DebugPlugin => {
-//            plugin.io.bus.asDirectionLess()
-//            slave(plugin.io.bus.fromAvalon())
-//              .setName("debugBusAvalon")
-//              .addTag(ClockDomainTag(plugin.debugClockDomain))
-//              .parent = null  //Avoid the io bundle to be interpreted as a QSys conduit
-//            plugin.io.resetOut
-//              .addTag(ResetEmitterTag(plugin.debugClockDomain))
-//              .parent = null //Avoid the io bundle to be interpreted as a QSys conduit
-//          }
+          case plugin: DBusCachedPlugin => {
+            plugin.dBus.setAsDirectionLess()
+            master(plugin.dBus.toWishbone()).setName("dBusWishbone")
+          }
           case _ =>
         }
       }

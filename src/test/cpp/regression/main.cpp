@@ -16,7 +16,7 @@
 #include <vector>
 #include <mutex>
 #include <iomanip>
-
+#include <queue>
 #include <time.h>
 
 using namespace std;
@@ -35,7 +35,7 @@ public:
 		for(uint32_t i = 0;i < (1 << 12);i++) mem[i] = NULL;
 	}
 	~Memory(){
-		for(uint32_t i = 0;i < (1 << 12);i++) if(mem[i]) delete mem[i];
+		for(uint32_t i = 0;i < (1 << 12);i++) if(mem[i]) delete [] mem[i];
 	}
 
 	uint8_t* get(uint32_t address){
@@ -50,6 +50,18 @@ public:
 			mem[address >> 20] = ptr;
 		}
 		return &mem[address >> 20][address & 0xFFFFF];
+	}
+
+	void read(uint32_t address,uint32_t length, uint8_t *data){
+		for(int i = 0;i < length;i++){
+			data[i] = (*this)[address + i];
+		}
+	}
+
+	void write(uint32_t address,uint32_t length, uint8_t *data){
+		for(int i = 0;i < length;i++){
+			(*this)[address + i] = data[i];
+		}
 	}
 
 	uint8_t& operator [](uint32_t address) {
@@ -94,6 +106,7 @@ void loadHexImpl(string path,Memory* mem) {
 	fseek(fp, 0, SEEK_SET);
 	char* content = new char[size];
 	fread(content, 1, size, fp);
+	fclose(fp);
 
 	int offset = 0;
 	char* line = content;
@@ -134,7 +147,7 @@ void loadHexImpl(string path,Memory* mem) {
 		size--;
 	}
 
-	delete content;
+	delete [] content;
 }
 
 
@@ -151,6 +164,433 @@ class success : public std::exception { };
 
 
 
+#define MVENDORID  0xF11 // MRO Vendor ID.
+#define MARCHID    0xF12 // MRO Architecture ID.
+#define MIMPID     0xF13 // MRO Implementation ID.
+#define MHARTID    0xF14 // MRO Hardware thread ID.Machine Trap Setup
+#define MSTATUS    0x300 // MRW Machine status register.
+#define MISA       0x301 // MRW ISA and extensions
+#define MEDELEG    0x302 // MRW Machine exception delegation register.
+#define MIDELEG    0x303 // MRW Machine interrupt delegation register.
+#define MIE        0x304 // MRW Machine interrupt-enable register.
+#define MTVEC      0x305 // MRW Machine trap-handler base address. Machine Trap Handling
+#define MSCRATCH   0x340 // MRW Scratch register for machine trap handlers.
+#define MEPC       0x341 // MRW Machine exception program counter.
+#define MCAUSE     0x342 // MRW Machine trap cause.
+#define MBADADDR   0x343 // MRW Machine bad address.
+#define MIP        0x344 // MRW Machine interrupt pending.
+#define MBASE      0x380 // MRW Base register.
+#define MBOUND     0x381 // MRW Bound register.
+#define MIBASE     0x382 // MRW Instruction base register.
+#define MIBOUND    0x383 // MRW Instruction bound register.
+#define MDBASE     0x384 // MRW Data base register.
+#define MDBOUND    0x385 // MRW Data bound register.
+#define MCYCLE     0xB00 // MRW Machine cycle counter.
+#define MINSTRET   0xB02 // MRW Machine instructions-retired counter.
+#define MCYCLEH    0xB80 // MRW Upper 32 bits of mcycle, RV32I only.
+#define MINSTRETH  0xB82 // MRW Upper 32 bits of minstret, RV32I only.
+
+class RiscvGolden {
+public:
+	int32_t pc;
+	int32_t regs[32];
+
+	union status {
+		uint32_t raw;
+		struct {
+			uint32_t _1 : 3;
+			uint32_t mie : 1;
+			uint32_t _2 : 3;
+			uint32_t mpie : 1;
+			uint32_t _3 : 3;
+			uint32_t mpp : 2;
+		};
+	}__attribute__((packed)) status;
+
+
+	union mip {
+		uint32_t raw;
+		struct {
+			uint32_t _1 : 3;
+			uint32_t msip : 1;
+			uint32_t _2 : 3;
+			uint32_t mtip : 1;
+			uint32_t _3 : 3;
+			uint32_t meip : 2;
+		};
+	}__attribute__((packed)) mip;
+
+
+	union mie {
+		uint32_t raw;
+		struct {
+			uint32_t _1 : 3;
+			uint32_t msie : 1;
+			uint32_t _2 : 3;
+			uint32_t mtie : 1;
+			uint32_t _3 : 3;
+			uint32_t meie : 2;
+		};
+	}__attribute__((packed)) mie;
+
+	union mtvec {
+		uint32_t raw;
+		struct {
+			uint32_t _1 : 2;
+			uint32_t base : 30;
+		};
+	}__attribute__((packed)) mtvec;
+
+
+	union mcause {
+		uint32_t raw;
+		struct {
+			uint32_t exceptionCode : 31;
+			uint32_t interrupt : 1;
+		};
+	}__attribute__((packed)) mcause;
+
+
+    //Machine CSR
+//    misaAccess(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
+//    READ_ONLY(CSR.MIP, 11 -> mip.MEIP, 7 -> mip.MTIP)
+//    READ_WRITE(CSR.MIP, 3 -> mip.MSIP)
+//    READ_WRITE(CSR.MIE, 11 -> mie.MEIE, 7 -> mie.MTIE, 3 -> mie.MSIE)
+//
+//    mtvecAccess(CSR.MTVEC, mtvec)
+//    mepcAccess(CSR.MEPC, mepc)
+//    READ_WRITE(CSR.MSTATUS,11 -> mstatus.MPP, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
+//    if(mscratchGen) READ_WRITE(CSR.MSCRATCH, mscratch)
+//    mcauseAccess(CSR.MCAUSE, xlen-1 -> mcause.interrupt, 0 -> mcause.exceptionCode)
+//    mbadaddrAccess(CSR.MBADADDR, mbadaddr)
+    //READ_WRITE(CSR.MSTATUS,11 -> mstatus.MPP, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
+	RiscvGolden() {
+		pc = 0x80000000;
+		regs[0] = 0;
+		for (int i = 0; i < 32; i++)
+			regs[i] = 0;
+
+		status.raw = 0;
+		mip.raw = 0;
+		mie.raw = 0;
+		mtvec.raw = 0;
+		mcause.raw = 0;
+		mbadaddr = 0;
+		mepc = 0;
+		status.mpp = 3;
+	}
+
+	virtual void rfWrite(int32_t address, int32_t data) {
+		if (address != 0)
+			regs[address] = data;
+	}
+
+	virtual void pcWrite(int32_t target) {
+		pc = target;
+	}
+	uint32_t mbadaddr;
+	uint32_t mepc;
+
+	virtual bool iRead(int32_t address, uint32_t *data) = 0;
+	virtual bool dRead(int32_t address, int32_t size, uint32_t *data) = 0;
+	virtual void dWrite(int32_t address, int32_t size, uint32_t data) = 0;
+
+	void exception(bool interrupt,int32_t cause) {
+		mcause.interrupt = interrupt;
+		mcause.exceptionCode = cause;
+        status.mie  = false;
+        status.mpie = status.mie;
+        mepc = pc;
+		pcWrite(mtvec.base << 2);
+		if(interrupt) livenessInterrupt = 0;
+
+        //status.MPP  := privilege
+	}
+
+	virtual void fail() {
+	}
+	virtual void decodingError() {
+		cout << "decoding error" << endl;
+		fail();
+	}
+
+	uint32_t* csrPtr(int32_t csr){
+		switch(csr){
+		case MSTATUS: return &status.raw; break;
+		case MIP: return &mip.raw; break;
+		case MIE: return &mie.raw; break;
+		case MTVEC: return &mtvec.raw; break;
+		case MCAUSE: return &mcause.raw; break;
+		case MBADADDR: return &mbadaddr; break;
+		case MEPC: return &mepc; break;
+		default: fail(); return NULL; break;
+		}
+	}
+
+	virtual uint32_t csrRead(int32_t csr){
+		return *csrPtr(csr);
+	}
+
+	virtual void csrWrite(int32_t csr, uint32_t value){
+		*csrPtr(csr) = value;
+	}
+
+    
+    int livenessStep = 0;
+    int livenessInterrupt = 0;
+    virtual void liveness(bool mIntTimer, bool mIntExt){
+        livenessStep++;
+        bool interruptRequest = (mie.mtie && mIntTimer);
+        if(interruptRequest){
+            if(status.mie){
+                livenessInterrupt++;
+            }
+        } else {
+             livenessInterrupt = 0;
+        }
+
+        if(livenessStep > 1000){
+            cout << "Liveness step failure" << endl;
+            fail();
+        }
+        
+        if(livenessInterrupt > 1000){
+            cout << "Liveness interrupt failure" << endl;
+            fail();
+        }
+        
+    }
+
+
+	virtual void step() {
+	    livenessStep = 0;
+		#define rd32 ((i >> 7) & 0x1F)
+		#define iBits(lo,  len) ((i >> lo) & ((1 << len)-1))
+		#define iBitsSigned(lo, len) int32_t(i) << (32-lo-len) >> (32-len)
+		#define iSign() iBitsSigned(31, 1)
+		#define i32_rs1 regs[(i >> 15) & 0x1F]
+		#define i32_rs2 regs[(i >> 20) & 0x1F]
+		#define i32_i_imm (int32_t(i) >> 20)
+		#define i32_s_imm  (iBits(7, 5) + (iBitsSigned(25, 7) << 5))
+		#define i32_shamt ((i >> 20) & 0x1F)
+		#define i32_sb_imm ((iBits(8, 4) << 1) + (iBits(25,6) << 5) + (iBits(7,1) << 11) + (iSign() << 12))
+		#define i32_csr iBits(20, 12)
+		#define i32_func3 iBits(12, 3)
+		#define i16_addi4spn_imm ((iBits(6, 1) << 2) + (iBits(5, 1) << 3) + (iBits(11, 2) << 4) + (iBits(7, 4) << 6))
+		#define i16_lw_imm ((iBits(6, 1) << 2) + (iBits(10, 3) << 3) + (iBits(5, 1) << 6))
+		#define i16_addr2 (iBits(2,3) + 8)
+		#define i16_addr1 (iBits(7,3) + 8)
+		#define i16_rf1 regs[i16_addr1]
+		#define i16_rf2 regs[i16_addr2]
+		#define rf_sp regs[2]
+		#define i16_imm (iBits(2, 5) + (iBitsSigned(12, 1) << 5))
+		#define i16_j_imm ((iBits(3, 3) << 1) + (iBits(11, 1) << 4) + (iBits(2, 1) << 5) + (iBits(7, 1) << 6) + (iBits(6, 1) << 7) + (iBits(9, 2) << 8) + (iBits(8, 1) << 10) + (iBitsSigned(12, 1) << 11))
+		#define i16_addi16sp_imm ((iBits(6, 1) << 4) + (iBits(2, 1) << 5) + (iBits(5, 1) << 6) + (iBits(3, 2) << 7) + (iBitsSigned(12, 1) << 9))
+		#define i16_zimm (iBits(2, 5))
+		#define i16_b_imm ((iBits(3, 2) << 1) + (iBits(10, 2) << 3) + (iBits(2, 1) << 5) + (iBits(5, 2) << 6) + (iBitsSigned(12, 1) << 8))
+		#define i16_lwsp_imm ((iBits(4, 3) << 2) + (iBits(12, 1) << 5) + (iBits(2, 2) << 6))
+		#define i16_swsp_imm ((iBits(9, 4) << 2) + (iBits(7, 2) << 6))
+		uint32_t i;
+		uint32_t u32Buf;
+		if (pc & 2) {
+			iRead(pc - 2, &i);
+			i >>= 16;
+			if (i & 3 == 3) {
+				uint32_t u32Buf;
+				iRead(pc + 2, &u32Buf);
+				i |= u32Buf << 16;
+			}
+		} else {
+			iRead(pc, &i);
+		}
+		if ((i & 0x3) == 0x3) {
+			//32 bit
+			switch (i & 0x7F) {
+			case 0x37:rfWrite(rd32, i & 0xFFFFF000);pcWrite(pc + 4);break; // LUI
+			case 0x17:rfWrite(rd32, (i & 0xFFFFF000) + pc);pcWrite(pc + 4);break; //AUIPC
+			case 0x6F:rfWrite(rd32, pc + 4);pcWrite(pc + (iBits(21, 10) << 1) + (iBits(20, 1) << 11) + (iBits(12, 8) << 12) + (iSign() << 20));break; //JAL
+			case 0x67:{
+				uint32_t target = (i32_rs1 + i32_i_imm) & ~1;
+				rfWrite(rd32, pc + 4);
+				pcWrite(target);
+			} break; //JALR
+			case 0x63:
+				switch ((i >> 12) & 0x7) {
+				case 0x0:if (i32_rs1 == i32_rs2)pcWrite(pc + i32_sb_imm);else pcWrite(pc + 4);break;
+				case 0x1:if (i32_rs1 != i32_rs2)pcWrite(pc + i32_sb_imm);else pcWrite(pc + 4);break;
+				case 0x4:if (i32_rs1 < i32_rs2)pcWrite(pc + i32_sb_imm); else pcWrite(pc + 4);break;
+				case 0x5:if (i32_rs1 >= i32_rs2)pcWrite(pc + i32_sb_imm);else pcWrite(pc + 4);break;
+				case 0x6:if (uint32_t(i32_rs1) < uint32_t(i32_rs2)) pcWrite(pc + i32_sb_imm); else pcWrite(pc + 4);break;
+				case 0x7:if (uint32_t(i32_rs1) >= uint32_t(i32_rs2))pcWrite(pc + i32_sb_imm); else pcWrite(pc + 4);break;
+				}
+				break;
+			case 0x03: //LOADS
+				uint32_t data;
+				dRead(i32_rs1 + i32_i_imm, 1 << ((i >> 12) & 0x3), &data);
+				switch ((i >> 12) & 0x7) {
+				case 0x0:rfWrite(rd32, int8_t(data));pcWrite(pc + 4);break;
+				case 0x1:rfWrite(rd32, int16_t(data));pcWrite(pc + 4);break;
+				case 0x2:rfWrite(rd32, int32_t(data));pcWrite(pc + 4);break;
+				case 0x4:rfWrite(rd32, uint8_t(data));pcWrite(pc + 4);break;
+				case 0x5:rfWrite(rd32, uint16_t(data));pcWrite(pc + 4);break;
+				}
+				break;
+			case 0x23: //STORE
+				switch ((i >> 12) & 0x7) {
+				case 0x0:dWrite(i32_rs1 + i32_s_imm, 1, i32_rs2);pcWrite(pc + 4);break;
+				case 0x1:dWrite(i32_rs1 + i32_s_imm, 2, i32_rs2);pcWrite(pc + 4);break;
+				case 0x2:dWrite(i32_rs1 + i32_s_imm, 4, i32_rs2);pcWrite(pc + 4);break;
+				}
+				break;
+			case 0x13: //ALUi
+				switch ((i >> 12) & 0x7) {
+				case 0x0:rfWrite(rd32, i32_rs1 + i32_i_imm);pcWrite(pc + 4);break;
+				case 0x1:
+					switch ((i >> 25) & 0x7F) {
+					case 0x00:rfWrite(rd32, i32_rs1 << i32_shamt);pcWrite(pc + 4);break;
+					}
+					break;
+				case 0x2:rfWrite(rd32, i32_rs1 < i32_i_imm);pcWrite(pc + 4);break;
+				case 0x3:rfWrite(rd32, uint32_t(i32_rs1) < uint32_t(i32_i_imm));pcWrite(pc + 4);break;
+				case 0x4:rfWrite(rd32, i32_rs1 ^ i32_i_imm);pcWrite(pc + 4);break;
+				case 0x5:
+					switch ((i >> 25) & 0x7F) {
+					case 0x00:rfWrite(rd32, uint32_t(i32_rs1) >> i32_shamt);pcWrite(pc + 4);break;
+					case 0x20:rfWrite(rd32, i32_rs1 >> i32_shamt);pcWrite(pc + 4);break;
+					}
+					break;
+				case 0x6:rfWrite(rd32, i32_rs1 | i32_i_imm);pcWrite(pc + 4);break;
+				case 0x7:	rfWrite(rd32, i32_rs1 & i32_i_imm);pcWrite(pc + 4);break;
+				}
+				break;
+			case 0x33: //ALU
+				if (((i >> 25) & 0x7F) == 0x01) {
+					switch ((i >> 12) & 0x7) {
+					case 0x0:rfWrite(rd32, int32_t(i32_rs1) * int32_t(i32_rs2));pcWrite(pc + 4);break;
+					case 0x1:rfWrite(rd32,(int64_t(i32_rs1) * int64_t(i32_rs2)) >> 32);pcWrite(pc + 4);break;
+					case 0x2:rfWrite(rd32,(int64_t(i32_rs1) * uint64_t(uint32_t(i32_rs2)))>> 32);pcWrite(pc + 4);break;
+					case 0x3:rfWrite(rd32,(uint64_t(uint32_t(i32_rs1)) * uint64_t(uint32_t(i32_rs2))) >> 32);pcWrite(pc + 4);break;
+					case 0x4:rfWrite(rd32,i32_rs2 == 0 ? -1 : int32_t(i32_rs1) / int32_t(i32_rs2));pcWrite(pc + 4);break;
+					case 0x5:rfWrite(rd32,i32_rs2 == 0 ? -1 : uint32_t(i32_rs1) / uint32_t(i32_rs2));pcWrite(pc + 4);break;
+					case 0x6:rfWrite(rd32,i32_rs2 == 0 ? i32_rs1 : int32_t(i32_rs1)% int32_t(i32_rs2));pcWrite(pc + 4);break;
+					case 0x7:rfWrite(rd32,i32_rs2 == 0 ? i32_rs1 : uint32_t(i32_rs1) % uint32_t(i32_rs2));pcWrite(pc + 4);break;
+					}
+				} else {
+					switch ((i >> 12) & 0x7) {
+					case 0x0:
+						switch ((i >> 25) & 0x7F) {
+						case 0x00:rfWrite(rd32, i32_rs1 + i32_rs2);pcWrite(pc + 4);break;
+						case 0x20:rfWrite(rd32, i32_rs1 - i32_rs2);pcWrite(pc + 4);break;
+						}
+						break;
+					case 0x1:rfWrite(rd32, i32_rs1 << (i32_rs2 & 0x1F));pcWrite(pc + 4);break;
+					case 0x2:rfWrite(rd32, i32_rs1 < i32_rs2);pcWrite(pc + 4);break;
+					case 0x3:rfWrite(rd32, uint32_t(i32_rs1) < uint32_t(i32_rs2));pcWrite(pc + 4);break;
+					case 0x4:rfWrite(rd32, i32_rs1 ^ i32_rs2);pcWrite(pc + 4);break;
+					case 0x5:
+						switch ((i >> 25) & 0x7F) {
+						case 0x00:rfWrite(rd32, uint32_t(i32_rs1) >> (i32_rs2 & 0x1F));pcWrite(pc + 4);break;
+						case 0x20:rfWrite(rd32, i32_rs1 >> (i32_rs2 & 0x1F));pcWrite(pc + 4);break;
+						}
+						break;
+					case 0x6:rfWrite(rd32, i32_rs1 | i32_rs2);pcWrite(pc + 4);break;
+					case 0x7:rfWrite(rd32, i32_rs1 & i32_rs2); pcWrite(pc + 4);break;
+					}
+				}
+				break;
+			case 0x73:{
+				if(i32_func3 == 0){
+
+					switch(i){
+					case 0x30200073:{ //MRET
+				          status.mie = status.mpie;
+				          //privilege := mstatus.MPP
+				          pcWrite(mepc);
+						}break;
+					}
+				} else {
+					//CSR
+					uint32_t input = (i & 0x4000) ? ((i >> 15) & 0x1F) : i32_rs1;
+					uint32_t clear, set;
+					bool write;
+					switch ((i >> 12) & 0x3) {
+					case 1: clear = ~0; set = input; write = true; break;
+					case 2: clear = 0; set = input; write = ((i >> 15) & 0x1F) != 0; break;
+					case 3: clear = input; set = 0; write = ((i >> 15) & 0x1F) != 0; break;
+					}
+					uint32_t csrAddress = i32_csr;
+					uint32_t old = csrRead(i32_csr);
+					rfWrite(rd32, old);
+					if(write) csrWrite(i32_csr, (old & ~clear) | set);
+					pcWrite(pc + 4);
+				}
+				break;
+			}
+			default: decodingError(); break;
+			}
+		} else {
+			switch((iBits(0, 2) << 3) + iBits(13, 3)){
+			case 0: rfWrite(i16_addr2, rf_sp + i16_addi4spn_imm); pcWrite(pc + 2); break;
+			case 2:  {
+				uint32_t data;
+				dRead(i16_rf1 + i16_lw_imm, 4, &data);
+				rfWrite(i16_addr2, data); pcWrite(pc + 2);
+				break;
+			}
+			case 6: dWrite(i16_rf1 + i16_lw_imm, 4, i16_rf2); pcWrite(pc + 2); break;
+			case 8: rfWrite(rd32, regs[rd32] + i16_imm); pcWrite(pc + 2); break;
+			case 9: rfWrite(1, pc + 2);pcWrite(pc + i16_j_imm); break;
+			case 10: rfWrite(rd32, i16_imm);pcWrite(pc + 2); break;
+			case 11:
+				if(rd32 == 2) { rfWrite(2, rf_sp + i16_addi16sp_imm);pcWrite(pc + 2);  }
+				else {  		rfWrite(rd32, i16_imm << 12);pcWrite(pc + 2);  } break;
+			case 12:
+				switch(iBits(10,2)){
+				case 0: rfWrite(i16_addr1, uint32_t(i16_rf1) >> i16_zimm); pcWrite(pc + 2);break;
+				case 1: rfWrite(i16_addr1, i16_rf1 >> i16_zimm); pcWrite(pc + 2);break;
+				case 2: rfWrite(i16_addr1, i16_rf1 & i16_imm); pcWrite(pc + 2);break;
+				case 3:
+					switch(iBits(5,2)){
+					case 0: rfWrite(i16_addr1, i16_rf1 - i16_rf2); pcWrite(pc + 2);break;
+					case 1: rfWrite(i16_addr1, i16_rf1 ^ i16_rf2); pcWrite(pc + 2);break;
+					case 2: rfWrite(i16_addr1, i16_rf1 | i16_rf2); pcWrite(pc + 2);break;
+					case 3: rfWrite(i16_addr1, i16_rf1 & i16_rf2); pcWrite(pc + 2);break;
+					}
+					break;
+				}
+				break;
+			case 13: pcWrite(pc + i16_j_imm); break;
+			case 14: pcWrite(i16_rf1 == 0 ? pc + i16_b_imm : pc + 2); break;
+			case 15: pcWrite(i16_rf1 != 0 ? pc + i16_b_imm : pc + 2); break;
+			case 16: rfWrite(rd32, regs[rd32] << i16_zimm); pcWrite(pc + 2); break;
+			case 18:{
+				uint32_t data;
+				dRead(rf_sp + i16_lwsp_imm, 4, &data);
+				rfWrite(rd32, data); pcWrite(pc + 2);  break;
+			}
+			case 20:
+				if(i & 0x1000){
+					if(iBits(2,10) == 0){
+
+					} else if(iBits(2,5) == 0){
+						rfWrite(1, pc + 2); pcWrite(regs[rd32] & ~1);
+					} else {
+						rfWrite(rd32, regs[rd32] + regs[iBits(2,5)]); pcWrite(pc + 2);
+					}
+				} else {
+					if(iBits(2,5) == 0){
+						pcWrite(regs[rd32] & ~1);
+					} else {
+						rfWrite(rd32, regs[iBits(2,5)]); pcWrite(pc + 2);
+					}
+				}
+				break;
+			case 22: dWrite(rf_sp + i16_swsp_imm, 4, regs[iBits(2,5)]); pcWrite(pc + 2); break;
+			}
+		}
+	}
+};
+
 
 class SimElement{
 public:
@@ -163,6 +603,7 @@ public:
 
 
 
+class Workspace;
 
 class Workspace{
 public:
@@ -178,14 +619,17 @@ public:
 	uint64_t mTime = 0;
 	VVexRiscv* top;
 	bool resetDone = false;
+	bool riscvRefEnable = false;
 	uint64_t i;
 	double cyclesPerSecond = 10e6;
 	double allowedCycles = 0.0;
 	uint32_t bootPc = -1;
-	uint32_t iStall = 1,dStall = 1;
+	uint32_t iStall = STALL,dStall = STALL;
 	#ifdef TRACE
 	VerilatedVcdC* tfp;
 	#endif
+
+	uint32_t seed;
 
 	bool withInstructionReadCheck = true;
 	void setIStall(bool enable) { iStall = enable; }
@@ -197,8 +641,115 @@ public:
 
 	struct timespec start_time;
 
+    class CpuRef : public RiscvGolden{
+    public:
+    	Memory mem;
+
+    	class MemWrite {
+    	public:
+    		int32_t address, size;
+    		uint32_t data;
+    	};
+
+    	class MemRead {
+    	public:
+    		int32_t address, size;
+    		uint32_t data;
+    		bool error;
+    	};
+
+        uint32_t periphWriteTimer = 0;
+    	queue<MemWrite> periphWritesGolden;
+    	queue<MemWrite> periphWrites;
+    	queue<MemRead> periphRead;
+    	Workspace *ws;
+    	CpuRef(Workspace *ws){
+			this->ws = ws;
+    	}
+
+    	virtual void fail() { ws->fail(); }
+
+    	bool rfWriteValid;
+    	int32_t rfWriteAddress;
+    	int32_t rfWriteData;
+        virtual void rfWrite(int32_t address, int32_t data){
+        	rfWriteValid = address != 0;
+        	rfWriteAddress = address;
+        	rfWriteData = data;
+        	RiscvGolden::rfWrite(address,data);
+        }
+
+
+        virtual bool iRead(int32_t address, uint32_t *data){
+        	mem.read(address, 4, (uint8_t*)data);
+        	bool error;
+    		ws->iBusAccessPatch(address,data,&error);
+    		return error;
+        }
+
+        virtual bool dRead(int32_t address, int32_t size, uint32_t *data){
+            if(size < 1 || size > 4){
+                cout << "dRead size=" << size << endl;
+                fail();
+            }
+            if(address & (size-1) != 0) cout << "Ref did a unaligned read" << endl;
+    		if((address & 0xF0000000) == 0xF0000000){
+				MemRead t = periphRead.front();
+				if(t.address != address || t.size != size){
+					fail();
+				}
+				*data = t.data;
+				periphRead.pop();
+    		}else {
+            	mem.read(address, size, (uint8_t*)data);
+    		}
+    		return false;
+        }
+        virtual void dWrite(int32_t address, int32_t size, uint32_t data){
+            if(address & (size-1) != 0) cout << "Ref did a unaligned write" << endl;
+    		if((address & 0xF0000000) == 0xF0000000){
+				MemWrite w;
+				w.address = address;
+				w.size = size;
+				w.data = data;
+				periphWritesGolden.push(w);
+    		}else {
+    			mem.write(address, size, (uint8_t*)&data);
+    		}
+        }
+
+
+        void step() {
+        	rfWriteValid = false;
+        	RiscvGolden::step();
+
+        	switch(periphWrites.empty() + uint32_t(periphWritesGolden.empty())*2){
+        	case 3: periphWriteTimer = 0; break;
+        	case 1: case 2: if(periphWriteTimer++ == 20){
+        		cout << "periphWrite timout" << endl; fail();
+        	} break;
+        	case 0:
+    			MemWrite t = periphWrites.front();
+    			MemWrite t2 = periphWritesGolden.front();
+    			if(t.address != t2.address || t.size != t2.size || t.data != t2.data){
+    				cout << "periphWrite missmatch" << endl;
+    				fail();
+    			}
+    			periphWrites.pop();
+    			periphWritesGolden.pop();
+    			periphWriteTimer = 0;
+    			break;
+        	}
+
+
+        }
+    };
+
+	CpuRef riscvRef = CpuRef(this);
 
 	Workspace(string name){
+	    //seed = VL_RANDOM_I(32)^VL_RANDOM_I(32)^0x1093472;
+	    //srand48(seed);
     //    setIStall(false);
    //     setDStall(false);
 		staticMutex.lock();
@@ -228,6 +779,7 @@ public:
 
 	Workspace* loadHex(string path){
 		loadHexImpl(path,&mem);
+		loadHexImpl(path,&riscvRef.mem);
 		return this;
 	}
 
@@ -236,12 +788,20 @@ public:
 		return this;
 	}
 
-    Workspace* bootAt(uint32_t pc) { bootPc = pc;}
+    Workspace* bootAt(uint32_t pc) {
+    	bootPc = pc;
+    	riscvRef.pc = pc;
+		return this;
+    }
 
+    Workspace* withRiscvRef(){
+    	riscvRefEnable = true;
+		return this;
+    }
 
-	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
+	void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
 		if(addr % 4 != 0) {
-			cout << "Warning, unaligned IBusAccess : " << addr << endl;
+			//cout << "Warning, unaligned IBusAccess : " << addr << endl;
 		//	fail();
 		}
 		*data =     (  (mem[addr + 0] << 0)
@@ -249,7 +809,11 @@ public:
 					 | (mem[addr + 2] << 16)
 					 | (mem[addr + 3] << 24));
 		*error = addr == 0xF00FFF60u;
+		iBusAccessPatch(addr,data,error);
 	}
+
+	virtual void iBusAccessPatch(uint32_t addr, uint32_t *data, bool *error){}
+
 	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
 		assertEq(addr % (1 << size), 0);
 		*error = addr == 0xF00FFF60u;
@@ -326,6 +890,23 @@ public:
 			  " : READ  mem" << (1 << size) << "[" << addr << "] = " << *data << endl;
 
 		}
+
+		if((addr & 0xF0000000) == 0xF0000000){
+			if(wr){
+				CpuRef::MemWrite w;
+				w.address = addr;
+				w.size = 1 << size;
+				w.data = *data;
+				riscvRef.periphWrites.push(w);
+			} else {
+				CpuRef::MemRead r;
+				r.address = addr;
+				r.size = 1 << size;
+				r.data = *data;
+				r.error = *error;
+				riscvRef.periphRead.push(r);
+			}
+		}
 	}
 	virtual void postReset() {}
 	virtual void checks(){}
@@ -335,7 +916,7 @@ public:
     Workspace* noInstructionReadCheck(){withInstructionReadCheck = false; return this;}
 	void dump(int i){
 		#ifdef TRACE
-		if(i/2 >= TRACE_START) tfp->dump(i);
+		if(i >= TRACE_START) tfp->dump(i);
 		#endif
 	}
 	Workspace* run(uint64_t timeout = 5000){
@@ -381,15 +962,31 @@ public:
 
 		postReset();
 
+        //Sync register file initial content
+        for(int i = 1;i < 32;i++){
+            riscvRef.regs[i] = top->VexRiscv->RegFilePlugin_regFile[i];
+        }
 		resetDone = true;
 
 		#ifdef  REF
 		if(bootPc != -1) top->VexRiscv->core->prefetch_pc = bootPc;
 		#else
-		if(bootPc != -1) top->VexRiscv->prefetch_PcManagerSimplePlugin_pcReg = bootPc;
+		if(bootPc != -1) {
+		    #if defined(IBUS_SIMPLE) || defined(IBUS_SIMPLE_WISHBONE)
+                top->VexRiscv->IBusSimplePlugin_fetchPc_pcReg = bootPc;
+                #ifdef COMPRESSED
+                top->VexRiscv->IBusSimplePlugin_decodePc_pcReg = bootPc;
+                #endif
+            #else
+                top->VexRiscv->IBusCachedPlugin_fetchPc_pcReg = bootPc;
+                #ifdef COMPRESSED
+                top->VexRiscv->IBusCachedPlugin_decodePc_pcReg = bootPc;
+                #endif
+            #endif
+		}
 		#endif
 
-
+        bool failed = false;
 		try {
 			// run simulation for 100 clock periods
 			for (i = 16; i < timeout*2; i+=2) {
@@ -412,7 +1009,7 @@ public:
 				mTime += top->VexRiscv->writeBack_arbitration_isFiring*MTIME_INSTR_FACTOR;
                 #endif
 				#endif
-				#ifdef CSR
+				#ifdef TIMER_INTERRUPT
 				top->timerInterrupt = mTime >= mTimeCmp ? 1 : 0;
 				//if(mTime == mTimeCmp) printf("SIM timer tick\n");
 				#endif
@@ -429,21 +1026,67 @@ public:
 				top->clk = 0;
 				top->eval();
 
+				#ifdef CSR
+					if(top->VexRiscv->CsrPlugin_interruptJump){
+						if(riscvRefEnable) riscvRef.exception(true, top->VexRiscv->CsrPlugin_interruptCode);
+					}
+				#endif
+                if(top->VexRiscv->writeBack_arbitration_isFiring){
+                   	if(riscvRefEnable && top->VexRiscv->writeBack_PC != riscvRef.pc){
+						cout << " pc missmatch " << top->VexRiscv->writeBack_PC << " should be " << riscvRef.pc << endl;
+						fail();
+					}
+
+                   	if(riscvRefEnable) {
+                   	    riscvRef.step();
+                   	    bool mIntTimer = false;
+                   	    bool mIntExt = false;
+
+#ifdef TIMER_INTERRUPT
+                   	    mIntTimer = top->timerInterrupt;
+#endif
+#ifdef EXTERNAL_INTERRUPT
+                   	    mIntExt = top->externalInterrupt;
+#endif
+
+
+                   	    riscvRef.liveness(mIntTimer, mIntExt);
+                   	}
 
 
 
-				if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
-					regTraces <<
-						#ifdef TRACE_WITH_TIME
-						currentTime <<
-						 #endif
-						 " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data << endl;
-				}
+                	bool rfWriteValid = false;
+                	int32_t rfWriteAddress;
+                	int32_t rfWriteData;
+
+                    if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
+                    	rfWriteValid = true;
+                    	rfWriteAddress = top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address;
+                    	rfWriteData = top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data;
+                        regTraces <<
+                            #ifdef TRACE_WITH_TIME
+                            currentTime <<
+                             #endif
+                             " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data <<  dec << endl;
+                    } else {
+                        regTraces <<
+                                #ifdef TRACE_WITH_TIME
+                                currentTime <<
+                                 #endif
+                                 " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << dec << endl;
+                    }
+					if(riscvRefEnable) if(rfWriteValid != riscvRef.rfWriteValid ||
+						(rfWriteValid && (rfWriteAddress!= riscvRef.rfWriteAddress || rfWriteData!= riscvRef.rfWriteData))){
+                    	cout << "regFile write missmatch at " << endl;
+                    	fail();
+                    }
+                }
 
 				for(SimElement* simElement : simElements) simElement->preCycle();
 
 				dump(i + 1);
 
+                #ifndef COMPRESSED
 				if(withInstructionReadCheck){
 					if(top->VexRiscv->decode_arbitration_isValid && !top->VexRiscv->decode_arbitration_haltItself && !top->VexRiscv->decode_arbitration_flushAll){
 						uint32_t expectedData;
@@ -452,6 +1095,7 @@ public:
 						assertEq(top->VexRiscv->decode_INSTRUCTION,expectedData);
 					}
 				}
+				#endif
 
 				checks();
 				//top->eval();
@@ -477,9 +1121,10 @@ public:
 			staticMutex.unlock();
 		} catch (const std::exception& e) {
 			staticMutex.lock();
-			cout << "FAIL " <<  name << endl;
+			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->writeBack_PC << dec << " T=" << i << endl; //<<  " seed : " << seed <<
 			cycles += instanceCycles;
 			staticMutex.unlock();
+			failed = true;
 		}
 
 
@@ -489,6 +1134,12 @@ public:
 		#ifdef TRACE
 		tfp->close();
 		#endif
+        #ifdef STOP_ON_ERROR
+            if(failed){
+                sleep(1);
+                exit(-1);
+            }
+        #endif
 		return this;
 	}
 };
@@ -498,9 +1149,8 @@ public:
 #ifdef IBUS_SIMPLE
 class IBusSimple : public SimElement{
 public:
-	uint32_t inst_next = VL_RANDOM_I(32);
-	bool error_next = false;
-	bool pending = false;
+	uint32_t pendings[256];
+	uint32_t rPtr = 0, wPtr = 0;
 
 	Workspace *ws;
 	VVexRiscv* top;
@@ -511,32 +1161,76 @@ public:
 
 	virtual void onReset(){
 		top->iBus_cmd_ready = 1;
-		top->iBus_rsp_ready = 1;
+		top->iBus_rsp_valid = 0;
 	}
 
 	virtual void preCycle(){
-		if (top->iBus_cmd_valid && top->iBus_cmd_ready && !pending) {
+		if (top->iBus_cmd_valid && top->iBus_cmd_ready) {
 			//assertEq(top->iBus_cmd_payload_pc & 3,0);
-			pending = true;
-			ws->iBusAccess(top->iBus_cmd_payload_pc,&inst_next,&error_next);
+			pendings[wPtr] = (top->iBus_cmd_payload_pc);
+			wPtr = (wPtr + 1) & 0xFF;
+			//ws->iBusAccess(top->iBus_cmd_payload_pc,&inst_next,&error_next);
 		}
 	}
 	//TODO doesn't catch when instruction removed ?
 	virtual void postCycle(){
-		top->iBus_rsp_ready = !pending;
-		if(pending && (!ws->iStall || VL_RANDOM_I(7) < 100)){
-			top->iBus_rsp_inst = inst_next;
-			pending = false;
-			top->iBus_rsp_ready = 1;
-			top->iBus_rsp_error = error_next;
+		top->iBus_rsp_valid = 0;
+		if(rPtr != wPtr && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+	        uint32_t inst_next;
+	        bool error_next;
+		    ws->iBusAccess(pendings[rPtr], &inst_next,&error_next);
+        	rPtr = (rPtr + 1) & 0xFF;
+			top->iBus_rsp_payload_inst = inst_next;
+			top->iBus_rsp_valid = 1;
+			top->iBus_rsp_payload_error = error_next;
+		} else {
+		    top->iBus_rsp_payload_inst = VL_RANDOM_I(32);
+		    top->iBus_rsp_payload_error = VL_RANDOM_I(1);
 		}
-		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100 && !pending;
+		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100;
 	}
 };
 #endif
 
+
+#ifdef IBUS_TC
+
+class IBusTc : public SimElement{
+public:
+
+    uint32_t nextData;
+
+	Workspace *ws;
+	VVexRiscv* top;
+	IBusTc(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+	}
+
+	virtual void preCycle(){
+		if (top->iBusTc_enable) {
+		    if((top->iBusTc_address & 0x70000000) != 0 || (top->iBusTc_address & 0x20) == 0){
+		        printf("IBusTc access out of range\n");
+		        ws->fail();
+		    }
+	        bool error_next;
+		    ws->iBusAccess(top->iBusTc_address, &nextData,&error_next);
+		}
+	}
+
+	virtual void postCycle(){
+		top->iBusTc_data = nextData;
+	}
+};
+
+#endif
+
+
 #ifdef IBUS_SIMPLE_AVALON
-#include <queue>
+
 struct IBusSimpleAvalonRsp{
 	uint32_t data;
 	bool error;
@@ -617,6 +1311,12 @@ public:
 		bool error;
 		top->iBus_rsp_valid = 0;
 		if(pendingCount != 0 && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+		    #ifdef IBUS_TC
+            if((address & 0x70000000) == 0 && (address & 0x20) != 0){
+                printf("IBUS_CACHED access out of range\n");
+                ws->fail();
+            }
+            #endif
 			ws->iBusAccess(address,&top->iBus_rsp_payload_data,&error);
 			top->iBus_rsp_payload_error = error;
 			pendingCount--;
@@ -687,9 +1387,8 @@ public:
 #endif
 
 
-#ifdef IBUS_CACHED_WISHBONE
+#if defined(IBUS_CACHED_WISHBONE) || defined(IBUS_SIMPLE_WISHBONE)
 #include <queue>
-
 
 class IBusCachedWishbone : public SimElement{
 public:
@@ -708,21 +1407,24 @@ public:
 	}
 
 	virtual void preCycle(){
-	    top->iBusWishbone_DAT_MISO = VL_RANDOM_I(32);
-		if (top->iBusWishbone_CYC && top->iBusWishbone_STB && top->iBusWishbone_ACK) {
-			if(top->iBusWishbone_WE){
 
-			} else {
-		        bool error;
-			    ws->iBusAccess(top->iBusWishbone_ADR << 2,&top->iBusWishbone_DAT_MISO,&error);
-			    top->iBusWishbone_ERR = error;
-			}
-		}
 	}
 
 	virtual void postCycle(){
+
 		if(ws->iStall)
 			top->iBusWishbone_ACK = VL_RANDOM_I(7) < 100;
+
+        top->iBusWishbone_DAT_MISO = VL_RANDOM_I(32);
+        if (top->iBusWishbone_CYC && top->iBusWishbone_STB && top->iBusWishbone_ACK) {
+            if(top->iBusWishbone_WE){
+
+            } else {
+                bool error;
+                ws->iBusAccess(top->iBusWishbone_ADR << 2,&top->iBusWishbone_DAT_MISO,&error);
+                top->iBusWishbone_ERR = error;
+            }
+        }
 	}
 };
 #endif
@@ -824,7 +1526,7 @@ public:
 };
 #endif
 
-#ifdef DBUS_CACHED_WISHBONE
+#if defined(DBUS_CACHED_WISHBONE) || defined(DBUS_SIMPLE_WISHBONE)
 #include <queue>
 
 
@@ -845,22 +1547,23 @@ public:
 	}
 
 	virtual void preCycle(){
-	    top->dBusWishbone_DAT_MISO = VL_RANDOM_I(32);
-		if (top->dBusWishbone_CYC && top->dBusWishbone_STB && top->dBusWishbone_ACK) {
-			if(top->dBusWishbone_WE){
-			    bool dummy;
-                ws->dBusAccess(top->dBusWishbone_ADR << 2 ,1,2,top->dBusWishbone_SEL,&top->dBusWishbone_DAT_MOSI,&dummy);
-			} else {
-			    bool error;
-			    ws->dBusAccess(top->dBusWishbone_ADR << 2,0,2,0xF,&top->dBusWishbone_DAT_MISO,&error);
-                top->dBusWishbone_ERR = error;
-			}
-		}
+
 	}
 
 	virtual void postCycle(){
 		if(ws->iStall)
 			top->dBusWishbone_ACK = VL_RANDOM_I(7) < 100;
+        top->dBusWishbone_DAT_MISO = VL_RANDOM_I(32);
+        if (top->dBusWishbone_CYC && top->dBusWishbone_STB && top->dBusWishbone_ACK) {
+            if(top->dBusWishbone_WE){
+                bool dummy;
+                ws->dBusAccess(top->dBusWishbone_ADR << 2 ,1,2,top->dBusWishbone_SEL,&top->dBusWishbone_DAT_MOSI,&dummy);
+            } else {
+                bool error;
+                ws->dBusAccess(top->dBusWishbone_ADR << 2,0,2,0xF,&top->dBusWishbone_DAT_MISO,&error);
+                top->dBusWishbone_ERR = error;
+            }
+        }
 	}
 };
 #endif
@@ -1297,9 +2000,14 @@ void Workspace::fillSimELements(){
 	#ifdef IBUS_CACHED_AVALON
 		simElements.push_back(new IBusCachedAvalon(this));
 	#endif
-	#ifdef IBUS_CACHED_WISHBONE
+	#if defined(IBUS_CACHED_WISHBONE) || defined(IBUS_SIMPLE_WISHBONE)
 		simElements.push_back(new IBusCachedWishbone(this));
 	#endif
+
+	#ifdef IBUS_TC
+		simElements.push_back(new IBusTc(this));
+	#endif
+
 	#ifdef DBUS_SIMPLE
 		simElements.push_back(new DBusSimple(this));
 	#endif
@@ -1312,7 +2020,7 @@ void Workspace::fillSimELements(){
 	#ifdef DBUS_CACHED_AVALON
 		simElements.push_back(new DBusCachedAvalon(this));
 	#endif
-	#ifdef DBUS_CACHED_WISHBONE
+	#if defined(DBUS_CACHED_WISHBONE) || defined(DBUS_SIMPLE_WISHBONE)
 		simElements.push_back(new DBusCachedWishbone(this));
 	#endif
 	#ifdef DEBUG_PLUGIN_STD
@@ -1402,17 +2110,19 @@ public:
 	}
 
 	virtual void checks(){
-		if(top->VexRiscv->writeBack_INSTRUCTION == 0x00000073){
+		if(top->VexRiscv->writeBack_arbitration_isFiring && top->VexRiscv->writeBack_INSTRUCTION == 0x00000013){
 			uint32_t instruction;
 			bool error;
-			iBusAccess(top->VexRiscv->writeBack_PC, &instruction, &error);
+			Workspace::mem.read(top->VexRiscv->writeBack_PC, 4, (uint8_t*)&instruction);
+			//printf("%x => %x\n", top->VexRiscv->writeBack_PC, instruction );
 			if(instruction == 0x00000073){
 				uint32_t code = top->VexRiscv->RegFilePlugin_regFile[28];
-				if((code & 1) == 0){
+				uint32_t code2 = top->VexRiscv->RegFilePlugin_regFile[3];
+				if((code & 1) == 0 && (code2 & 1) == 0){
 					cout << "Wrong error code"<< endl;
 					fail();
 				}
-				if(code == 1){
+				if(code == 1 || code2 == 1){
 					pass();
 				}else{
 					cout << "Error code " << code/2 << endl;
@@ -1422,9 +2132,9 @@ public:
 		}
 	}
 
-	virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error){
-		Workspace::iBusAccess(addr,data,error);
+	virtual void iBusAccessPatch(uint32_t addr, uint32_t *data, bool *error){
 		if(*data == 0x0ff0000f) *data = 0x00000013;
+		if(*data == 0x00000073) *data = 0x00000013;
 	}
 };
 #endif
@@ -1434,6 +2144,7 @@ public:
 	Dhrystone(string name,string hexName,bool iStall, bool dStall) : Workspace(name) {
 		setIStall(iStall);
 		setDStall(dStall);
+		withRiscvRef();
 		loadHex("../../resources/hex/" + hexName + ".hex");
 		this->hexName = hexName;
 	}
@@ -1449,15 +2160,19 @@ public:
     	fseek(refFile, 0, SEEK_SET);
     	char* ref = new char[refSize];
     	fread(ref, 1, refSize, refFile);
+    	fclose(refFile);
     	
 
     	logTraces.flush();
+    	logTraces.close();
+
 		FILE *logFile = fopen((name + ".logTrace").c_str(), "r");
     	fseek(logFile, 0, SEEK_END);
     	uint32_t logSize = ftell(logFile);
     	fseek(logFile, 0, SEEK_SET);
     	char* log = new char[logSize];
     	fread(log, 1, logSize, logFile);
+    	fclose(logFile);
     	
     	if(refSize > logSize || memcmp(log,ref,refSize))
     		fail();
@@ -1465,6 +2180,64 @@ public:
 			Workspace::pass();
 	}
 };
+
+class Compliance : public Workspace{
+public:
+	string name;
+	ofstream out32;
+	int out32Counter = 0;
+	Compliance(string name) : Workspace(name) {
+		//withRiscvRef();
+		loadHex("../../resources/hex/" + name + ".elf.hex");
+		out32.open (name + ".out32");
+		this->name = name;
+		if(name == "I-FENCE.I-01") withInstructionReadCheck = false;
+	}
+
+
+    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+        Workspace::dBusAccess(addr,wr,size,mask,data,error);
+        if(wr && addr == 0xF00FFF2C){
+            out32 << hex << setw(8) << std::setfill('0') << *data << dec;
+            if(++out32Counter % 4 == 0) out32 << "\n";
+            *error = 0;
+        }
+    }
+
+	virtual void checks(){
+
+	}
+
+
+
+	virtual void pass(){
+		FILE *refFile = fopen((string("../../resources/ref/") + name + ".reference_output").c_str(), "r");
+    	fseek(refFile, 0, SEEK_END);
+    	uint32_t refSize = ftell(refFile);
+    	fseek(refFile, 0, SEEK_SET);
+    	char* ref = new char[refSize];
+    	fread(ref, 1, refSize, refFile);
+    	fclose(refFile);
+
+
+    	out32.flush();
+    	out32.close();
+
+		FILE *logFile = fopen((name + ".out32").c_str(), "r");
+    	fseek(logFile, 0, SEEK_END);
+    	uint32_t logSize = ftell(logFile);
+    	fseek(logFile, 0, SEEK_SET);
+    	char* log = new char[logSize];
+    	fread(log, 1, logSize, logFile);
+    	fclose(logFile);
+
+    	if(refSize > logSize || memcmp(log,ref,refSize))
+    		fail();
+		else
+			Workspace::pass();
+	}
+};
+
 
 #ifdef DEBUG_PLUGIN
 
@@ -1513,9 +2286,10 @@ public:
 
 	uint32_t readCmd(uint32_t size, uint32_t address){
 		accessCmd(false, 2, address, VL_RANDOM_I(32));
-		if(recv(clientSocket, buffer, 4, 0) != 4){
-			printf("Should read 4 bytes");
-			fail();
+		int error;
+		if((error = recv(clientSocket, buffer, 4, 0)) != 4){
+			printf("Should read 4 bytes, had %d", error);
+			while(1);
 		}
 
 		return *((uint32_t*) buffer);
@@ -1558,25 +2332,25 @@ public:
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
 		if((readValue = readCmd(2,debugAddress + 4)) != 0x8000000C){
-			printf("wrong break PC %x\n",readValue);
+			printf("wrong breakA PC %x\n",readValue);
 			clientFail = true; return;
 		}
 
 		writeCmd(2, debugAddress + 4, 0x13 + (1 << 15)); //Read regfile
 		if((readValue = readCmd(2,debugAddress + 4)) != 10){
-			printf("wrong break PC %x\n",readValue);
+			printf("wrong breakB PC %x\n",readValue);
 			clientFail = true; return;
 		}
 
 		writeCmd(2, debugAddress + 4, 0x13 + (2 << 15)); //Read regfile
 		if((readValue = readCmd(2,debugAddress + 4)) != 20){
-			printf("wrong break PC %x\n",readValue);
+			printf("wrong breakC PC %x\n",readValue);
 			clientFail = true; return;
 		}
 
 		writeCmd(2, debugAddress + 4, 0x13 + (3 << 15)); //Read regfile
 		if((readValue = readCmd(2,debugAddress + 4)) != 30){
-			printf("wrong break PC %x\n",readValue);
+			printf("wrong breakD PC %x\n",readValue);
 			clientFail = true; return;
 		}
 
@@ -1588,7 +2362,7 @@ public:
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
 		if((readValue = readCmd(2,debugAddress + 4)) != 0x80000014){
-			printf("wrong break PC 2 %x\n",readValue);
+			printf("wrong breakE PC 3 %x\n",readValue);
 			clientFail = true; return;
 		}
 
@@ -1609,7 +2383,7 @@ public:
 
 		while((readCmd(2,debugAddress) & RISCV_SPINAL_FLAGS_HALT) == 0){usleep(100);}
 		if((readValue = readCmd(2,debugAddress + 4)) != 0x80000024){
-			printf("wrong break PC 2 %x\n",readValue);
+			printf("wrong breakF PC 3 %x\n",readValue);
 			clientFail = true; return;
 		}
 
@@ -1644,7 +2418,7 @@ public:
 #endif
 
 string riscvTestMain[] = {
-	"rv32ui-p-simple",
+	//"rv32ui-p-simple",
 	"rv32ui-p-lui",
 	"rv32ui-p-auipc",
 	"rv32ui-p-jal",
@@ -1703,12 +2477,150 @@ string riscvTestDiv[] = {
 };
 
 string freeRtosTests[] = {
-		"AltBlock", "AltQTest", "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
-		"QueueSet", "recmutex", "semtest", "TaskNotify", "BlockQ", "crhook", "dynamic",
-		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
-		 //"flop", "sp_flop" // <- Simple test
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1",
+//    "test1","test1","test1","test1","test1","test1","test1","test1"
+
+//		"AltQTest", "AltBlock",  "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
+//		"QueueSet", "recmutex", "semtest", "TaskNotify", "BlockQ", "crhook", "dynamic",
+//		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
+		//"BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ"
+//		"flop"
+//		 "flop", "sp_flop" // <- Simple test
 		 // "AltBlckQ" ???
+
+		"TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify",
+		"TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify",
+		"TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify",
+		"TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify",
+		"TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify",
+		"TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify","TaskNotify"
 };
+
+
+
+string riscvComplianceMain[] = {
+    "I-IO",
+    "I-NOP-01",
+    "I-LUI-01",
+    "I-ADD-01",
+    "I-ADDI-01",
+    "I-AND-01",
+    "I-ANDI-01",
+    "I-SUB-01",
+    "I-OR-01",
+    "I-ORI-01",
+    "I-XOR-01",
+    "I-XORI-01",
+    "I-SRA-01",
+    "I-SRAI-01",
+    "I-SRL-01",
+    "I-SRLI-01",
+    "I-SLL-01",
+    "I-SLLI-01",
+    "I-SLT-01",
+    "I-SLTI-01",
+    "I-SLTIU-01",
+    "I-SLTU-01",
+    "I-AUIPC-01",
+    "I-BEQ-01",
+    "I-BGE-01",
+    "I-BGEU-01",
+    "I-BLT-01",
+    "I-BLTU-01",
+    "I-BNE-01",
+    "I-JAL-01",
+    "I-JALR-01",
+    "I-DELAY_SLOTS-01",
+    "I-ENDIANESS-01",
+    "I-RF_size-01",
+    "I-RF_width-01",
+    "I-RF_x0-01",
+};
+
+
+
+string complianceTestMemory[] = {
+    "I-LB-01",
+    "I-LBU-01",
+    "I-LH-01",
+    "I-LHU-01",
+    "I-LW-01",
+    "I-SB-01",
+    "I-SH-01",
+    "I-SW-01"
+};
+
+
+string complianceTestCsr[] = {
+    "I-CSRRC-01",
+    "I-CSRRCI-01",
+    "I-CSRRS-01",
+    "I-CSRRSI-01",
+    "I-CSRRW-01",
+    "I-CSRRWI-01",
+    #ifndef COMPRESSED
+    "I-MISALIGN_JMP-01", //Only apply for non RVC cores
+    #endif
+    "I-MISALIGN_LDST-01",
+    "I-ECALL-01",
+};
+
+
+string complianceTestMul[] = {
+    "MUL",
+    "MULH",
+    "MULHSU",
+    "MULHU",
+};
+
+string complianceTestDiv[] = {
+    "DIV",
+    "DIVU",
+    "REM",
+    "REMU",
+};
+
+
+string complianceTestC[] = {
+    "C.ADD",
+    "C.ADDI16SP",
+    "C.ADDI4SPN",
+    "C.ADDI",
+    "C.AND",
+    "C.ANDI",
+    "C.BEQZ",
+    "C.BNEZ",
+    "C.JAL",
+    "C.JALR",
+    "C.J",
+    "C.JR",
+    "C.LI",
+    "C.LUI",
+    "C.LW",
+    "C.LWSP",
+    "C.MV",
+    "C.OR",
+    "C.SLLI",
+    "C.SRAI",
+    "C.SRLI",
+    "C.SUB",
+    "C.SW",
+    "C.SWSP",
+    "C.XOR",
+};
+
+
 
 
 struct timespec timer_start(){
@@ -1732,12 +2644,20 @@ long timer_end(struct timespec start_time){
 
 
 static void multiThreading(queue<std::function<void()>> *lambdas, std::mutex *mutex){
+    uint32_t counter = 0;
 	while(true){
 		mutex->lock();
 		if(lambdas->empty()){
 			mutex->unlock();
 			break;
 		}
+
+        #ifdef SEED
+            uint32_t seed = SEED + counter;
+            counter++;
+            srand48(seed);
+            printf("FREERTOS_SEED=%d \n", seed);
+        #endif
 		std::function<void()> lambda = lambdas->front();
 		lambdas->pop();
 		mutex->unlock();
@@ -1761,6 +2681,9 @@ static void multiThreadedExecute(queue<std::function<void()>> &lambdas){
 
 
 int main(int argc, char **argv, char **env) {
+    #ifdef SEED
+    srand48(SEED);
+    #endif
 	Verilated::randReset(2);
 	Verilated::commandArgs(argc, argv);
 
@@ -1769,10 +2692,13 @@ int main(int argc, char **argv, char **env) {
 
 	for(int idx = 0;idx < 1;idx++){
 
-		#ifdef DEBUG_PLUGIN_EXTERNAL
+		#if defined(DEBUG_PLUGIN_EXTERNAL) || defined(RUN_HEX)
 		{
-			Workspace w("debugPluginExternal");
-			w.loadHex("../../resources/hex/debugPluginExternal.hex");
+			Workspace w("run");
+			#ifdef RUN_HEX
+			//w.loadHex("/home/spinalvm/hdl/zephyr/zephyrSpinalHdl/samples/synchronization/build/zephyr/zephyr.hex");
+			w.loadHex(RUN_HEX);
+			#endif
 			w.noInstructionReadCheck();
 			//w.setIStall(false);
 			//w.setDStall(false);
@@ -1788,9 +2714,42 @@ int main(int argc, char **argv, char **env) {
 
 		#ifdef ISA_TEST
 
-//			redo(REDO,TestA().run();)
+		//	redo(REDO,TestA().run();)
+			for(const string &name : riscvComplianceMain){
+				redo(REDO, Compliance(name).run();)
+			}
+			for(const string &name : complianceTestMemory){
+				redo(REDO, Compliance(name).run();)
+			}
 
+			#ifdef COMPRESSED
+            for(const string &name : complianceTestC){
+                redo(REDO, Compliance(name).run();)
+            }
+			#endif
 
+			#ifdef MUL
+			for(const string &name : complianceTestMul){
+				redo(REDO, Compliance(name).run();)
+			}
+			#endif
+			#ifdef DIV
+			for(const string &name : complianceTestDiv){
+				redo(REDO, Compliance(name).run();)
+			}
+			#endif
+			#ifdef CSR
+			for(const string &name : complianceTestCsr){
+				redo(REDO, Compliance(name).run();)
+			}
+			#endif
+
+            #ifdef FENCEI
+            redo(REDO, Compliance("I-FENCE.I-01").run();)
+			#endif
+            #ifdef EBREAK
+            redo(REDO, Compliance("I-EBREAK-01").run();)
+			#endif
 
 			for(const string &name : riscvTestMain){
 				redo(REDO,RiscvTest(name).run();)
@@ -1798,6 +2757,7 @@ int main(int argc, char **argv, char **env) {
 			for(const string &name : riscvTestMemory){
 				redo(REDO,RiscvTest(name).run();)
 			}
+
 			#ifdef MUL
 			for(const string &name : riscvTestMul){
 				redo(REDO,RiscvTest(name).run();)
@@ -1809,10 +2769,20 @@ int main(int argc, char **argv, char **env) {
 			}
 			#endif
 
+            #ifdef COMPRESSED
+            redo(REDO,RiscvTest("rv32uc-p-rvc").bootAt(0x800000FCu)->run());
+            #endif
+
 			#ifdef CSR
-				uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
-				8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
-				redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
+			    #ifndef COMPRESSED
+				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
+				    8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
+				    redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
+                #else
+				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
+				    8,6,9,6,10,4,11,4,    12,13,   14,2,     15,5,16,17,1 };
+				    redo(REDO,TestX28("machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
+                #endif
 			#endif
 			#ifdef MMU
 				uint32_t mmuRef[] = {1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
@@ -1842,30 +2812,60 @@ int main(int argc, char **argv, char **env) {
 
 		#ifdef DHRYSTONE
 			Dhrystone("dhrystoneO3_Stall","dhrystoneO3",true,true).run(1.5e6);
+			#if defined(COMPRESSED)
+			    Dhrystone("dhrystoneO3C_Stall","dhrystoneO3C",true,true).run(1.5e6);
+            #endif
 			#if defined(MUL) && defined(DIV)
 				Dhrystone("dhrystoneO3M_Stall","dhrystoneO3M",true,true).run(1.9e6);
+				#if defined(COMPRESSED)
+				    Dhrystone("dhrystoneO3MC_Stall","dhrystoneO3MC",true,true).run(1.9e6);
+				#endif
 			#endif
 			Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.9e6);
+			#if defined(COMPRESSED)
+			Dhrystone("dhrystoneO3C","dhrystoneO3C",false,false).run(1.9e6);
+            #endif
 			#if defined(MUL) && defined(DIV)
 				Dhrystone("dhrystoneO3M","dhrystoneO3M",false,false).run(1.9e6);
+				#if defined(COMPRESSED)
+				    Dhrystone("dhrystoneO3MC","dhrystoneO3MC",false,false).run(1.9e6);
+				#endif
 			#endif
 		#endif
 
 
 		#ifdef FREERTOS
+		    #ifdef SEED
+            srand48(SEED);
+            #endif
 			//redo(1,Workspace("freeRTOS_demo").loadHex("../../resources/hex/freeRTOS_demo.hex")->bootAt(0x80000000u)->run(100e6);)
-			queue<std::function<void()>> tasks;
+			vector <std::function<void()>> tasks;
 
-			for(const string &name : freeRtosTests){
-				tasks.push([=]() { Workspace(name + "_rv32i_O0").loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
-				tasks.push([=]() { Workspace(name + "_rv32i_O3").loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
-				#if defined(MUL) && defined(DIV)
-				tasks.push([=]() { Workspace(name + "_rv32im_O0").loadHex("../../resources/freertos/" + name + "_rv32im_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
-				tasks.push([=]() { Workspace(name + "_rv32im_O3").loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
-				#endif
+            /*for(int redo = 0;redo < 4;redo++)*/{
+                for(const string &name : freeRtosTests){
+//                    tasks.push_back([=]() { Workspace(name + "_rv32i_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                    tasks.push_back([=]() { Workspace(name + "_rv32i_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                    #ifdef COMPRESSED
+//                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
+//                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                    #endif
+                    #if defined(MUL) && defined(DIV)
+                        #ifdef COMPRESSED
+                            tasks.push_back([=]() { Workspace(name + "_rv32imac_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                        #else
+//                            tasks.push_back([=]() { Workspace(name + "_rv32im_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                        #endif
+                    #endif
+                }
 			}
 
-			multiThreadedExecute(tasks);
+            while(tasks.size() > FREERTOS_COUNT){
+                tasks.erase(tasks.begin() + (VL_RANDOM_I(32)%tasks.size()));
+            }
+
+
+            queue <std::function<void()>> tasksSelected(std::deque<std::function<void()>>(tasks.begin(), tasks.end()));
+			multiThreadedExecute(tasksSelected);
 		#endif
 	}
 

@@ -35,6 +35,7 @@ object VexRiscvAxi4WithIntegratedJtag{
 //            catchAccessFault = false
 //          ),
           new IBusCachedPlugin(
+            prediction = STATIC,
             config = InstructionCacheConfig(
               cacheSize = 4096,
               bytePerLine =32,
@@ -46,7 +47,8 @@ object VexRiscvAxi4WithIntegratedJtag{
               catchAccessFault = true,
               catchMemoryTranslationMiss = true,
               asyncTagMemory = false,
-              twoCycleRam = true
+              twoCycleRam = true,
+              twoCycleCache = true
             )
             //            askMemoryTranslation = true,
             //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
@@ -101,8 +103,7 @@ object VexRiscvAxi4WithIntegratedJtag{
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
             earlyBranch = false,
-            catchAddressMisaligned = true,
-            prediction = STATIC
+            catchAddressMisaligned = true
           ),
           new CsrPlugin(
             config = CsrPluginConfig(
@@ -122,7 +123,7 @@ object VexRiscvAxi4WithIntegratedJtag{
               mcycleAccess   = CsrAccess.NONE,
               minstretAccess = CsrAccess.NONE,
               ecallGen       = false,
-              wfiGen         = false,
+              wfiGenAsWait         = false,
               ucycleAccess   = CsrAccess.NONE
             )
           ),
@@ -139,31 +140,31 @@ object VexRiscvAxi4WithIntegratedJtag{
         var iBus : Axi4ReadOnly = null
         for (plugin <- cpuConfig.plugins) plugin match {
           case plugin: IBusSimplePlugin => {
-            plugin.iBus.asDirectionLess() //Unset IO properties of iBus
+            plugin.iBus.setAsDirectionLess() //Unset IO properties of iBus
             iBus = master(plugin.iBus.toAxi4ReadOnly().toFullConfig())
               .setName("iBusAxi")
               .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
           }
           case plugin: IBusCachedPlugin => {
-            plugin.iBus.asDirectionLess() //Unset IO properties of iBus
+            plugin.iBus.setAsDirectionLess() //Unset IO properties of iBus
             iBus = master(plugin.iBus.toAxi4ReadOnly().toFullConfig())
               .setName("iBusAxi")
               .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
           }
           case plugin: DBusSimplePlugin => {
-            plugin.dBus.asDirectionLess()
+            plugin.dBus.setAsDirectionLess()
             master(plugin.dBus.toAxi4Shared().toAxi4().toFullConfig())
               .setName("dBusAxi")
               .addTag(ClockDomainTag(ClockDomain.current))
           }
           case plugin: DBusCachedPlugin => {
-            plugin.dBus.asDirectionLess()
+            plugin.dBus.setAsDirectionLess()
             master(plugin.dBus.toAxi4Shared().toAxi4().toFullConfig())
               .setName("dBusAxi")
               .addTag(ClockDomainTag(ClockDomain.current))
           }
-          case plugin: DebugPlugin => {
-            plugin.io.bus.asDirectionLess()
+          case plugin: DebugPlugin => plugin.debugClockDomain {
+            plugin.io.bus.setAsDirectionLess()
             val jtag = slave(new Jtag())
               .setName("jtag")
             jtag <> plugin.io.bus.fromJtag()

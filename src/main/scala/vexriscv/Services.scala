@@ -11,6 +11,15 @@ trait JumpService{
   def createJumpInterface(stage : Stage, priority : Int = 0) : Flow[UInt]
 }
 
+trait IBusFetcher{
+  def haltIt() : Unit
+  def flushIt() : Unit
+  def incoming() : Bool
+  def pcValid(stage : Stage) : Bool
+  def getInjectionPort() : Stream[Bits]
+}
+
+
 trait DecoderService{
   def add(key : MaskedLiteral,values : Seq[(Stageable[_ <: BaseType],Any)])
   def add(encoding :Seq[(MaskedLiteral,Seq[(Stageable[_ <: BaseType],Any)])])
@@ -30,6 +39,10 @@ trait PrivilegeService{
   def isUser(stage : Stage) : Bool
 }
 
+case class PrivilegeServiceDefault() extends PrivilegeService{
+  override def isUser(stage: Stage): Bool = False
+}
+
 trait InterruptionInhibitor{
   def inhibateInterrupts() : Unit
 }
@@ -37,6 +50,11 @@ trait InterruptionInhibitor{
 trait ExceptionInhibitor{
   def inhibateException() : Unit
 }
+
+trait RegFileService{
+  def readStage() : Stage
+}
+
 
 case class MemoryTranslatorCmd() extends Bundle{
   val isValid = Bool
@@ -48,20 +66,22 @@ case class MemoryTranslatorRsp() extends Bundle{
   val isIoAccess = Bool
   val allowRead, allowWrite, allowExecute, allowUser = Bool
   val miss = Bool
+  val hit = Bool
 }
 
 case class MemoryTranslatorBus() extends Bundle with IMasterSlave{
   val cmd = MemoryTranslatorCmd()
   val rsp = MemoryTranslatorRsp()
+  val end = Bool
 
   override def asMaster() : Unit = {
-    out(cmd)
+    out(cmd, end)
     in(rsp)
   }
 }
 
 trait MemoryTranslator{
-  def newTranslationPort(stage : Stage, args : Any) : MemoryTranslatorBus
+  def newTranslationPort(priority : Int, args : Any) : MemoryTranslatorBus
 }
 
 
@@ -77,4 +97,8 @@ class BusReport{
 class CacheReport {
   @BeanProperty var size = 0
   @BeanProperty var bytePerLine = 0
+}
+
+class DebugReport {
+  @BeanProperty var hardwareBreakpointCount = 0
 }

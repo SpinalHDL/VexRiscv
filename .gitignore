@@ -45,3 +45,5 @@ obj_dir
 
 simWorkspace/
 tmp/
+/archive.tar.gz
+*.out32

@@ -7,12 +7,14 @@ import spinal.lib._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
+trait PipelineConfig[T]
 
 trait Pipeline {
   type T <: Pipeline
   val plugins = ArrayBuffer[Plugin[T]]()
   var stages = ArrayBuffer[Stage]()
   var unremovableStages = mutable.Set[Stage]()
+  val configs = mutable.HashMap[PipelineConfig[_], Any]()
 //  val services = ArrayBuffer[Any]()
 
   def indexOf(stage : Stage) = stages.indexOf(stage)
@@ -27,6 +29,16 @@ trait Pipeline {
     val filtered = plugins.filter(o => clazz.isAssignableFrom(o.getClass))
      filtered.length != 0
   }
+
+  def serviceElse[T](clazz : Class[T], default : => T) : T = {
+    if(!serviceExist(clazz)) return default
+    val filtered = plugins.filter(o => clazz.isAssignableFrom(o.getClass))
+    assert(filtered.length == 1)
+    filtered.head.asInstanceOf[T]
+  }
+
+  def update[T](that : PipelineConfig[T], value : T) : Unit = configs(that) = value
+  def apply[T](that : PipelineConfig[T]) : T = configs(that).asInstanceOf[T]
 
   def build(): Unit ={
     plugins.foreach(_.pipeline = this.asInstanceOf[T])
@@ -117,7 +129,7 @@ trait Pipeline {
     }
 
     for(stageIndex <- 0 until stages.length; stage = stages(stageIndex)){
-      stage.arbitration.isStuckByOthers := stage.arbitration.haltByOther || stages.takeRight(stages.length - stageIndex - 1).map(s => s.arbitration.haltItself/* && !s.arbitration.removeIt*/).foldLeft(False)(_ || _)
+      stage.arbitration.isStuckByOthers := stage.arbitration.haltByOther || stages.takeRight(stages.length - stageIndex - 1).map(s => s.arbitration.isStuck/* && !s.arbitration.removeIt*/).foldLeft(False)(_ || _)
       stage.arbitration.isStuck := stage.arbitration.haltItself || stage.arbitration.isStuckByOthers
       stage.arbitration.isMoving := !stage.arbitration.isStuck && !stage.arbitration.removeIt
       stage.arbitration.isFiring := stage.arbitration.isValid && !stage.arbitration.isStuck && !stage.arbitration.removeIt
@@ -126,7 +138,7 @@ trait Pipeline {
     for(stageIndex <- 1 until stages.length){
       val stageBefore = stages(stageIndex - 1)
       val stage = stages(stageIndex)
-
+      stage.arbitration.isValid.setAsReg() init(False)
       when(!stage.arbitration.isStuck || stage.arbitration.removeIt) {
         stage.arbitration.isValid := False
       }

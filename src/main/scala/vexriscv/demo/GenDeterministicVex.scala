@@ -11,13 +11,13 @@ object GenDeterministicVex extends App{
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       plugins = List(
-        new PcManagerSimplePlugin(
-          resetVector = 0x80000000l,
-          relaxedPcCalculation = false
-        ),
         new IBusSimplePlugin(
-          interfaceKeepData = false,
-          catchAccessFault = true
+          resetVector = 0x80000000l,
+          cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
+          prediction = STATIC,
+          catchAccessFault = true,
+          compressedGen = false
         ),
         new DBusSimplePlugin(
           catchAddressMisaligned = true,
@@ -55,8 +55,7 @@ object GenDeterministicVex extends App{
         new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
           earlyBranch = true,
-          catchAddressMisaligned = true,
-          prediction = STATIC
+          catchAddressMisaligned = true
         ),
         new YamlPlugin("cpu0.yaml")
       )

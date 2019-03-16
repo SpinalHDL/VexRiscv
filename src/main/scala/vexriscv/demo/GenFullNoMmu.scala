@@ -13,10 +13,11 @@ object GenFullNoMmu extends App{
     config = VexRiscvConfig(
       plugins = List(
         new PcManagerSimplePlugin(
-          resetVector = 0x00000000l,
+          resetVector = 0x80000000l,
           relaxedPcCalculation = false
         ),
         new IBusCachedPlugin(
+          prediction = STATIC,
           config = InstructionCacheConfig(
             cacheSize = 4096,
             bytePerLine =32,
@@ -28,7 +29,8 @@ object GenFullNoMmu extends App{
             catchAccessFault = true,
             catchMemoryTranslationMiss = true,
             asyncTagMemory = false,
-            twoCycleRam = true
+            twoCycleRam = true,
+            twoCycleCache = true
           )
         ),
         new DBusCachedPlugin(
@@ -76,8 +78,7 @@ object GenFullNoMmu extends App{
         new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
           earlyBranch = false,
-          catchAddressMisaligned = true,
-          prediction = STATIC
+          catchAddressMisaligned = true
         ),
         new YamlPlugin("cpu0.yaml")
       )

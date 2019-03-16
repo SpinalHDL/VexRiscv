@@ -12,7 +12,7 @@ class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
 
   override def build(pipeline: VexRiscv): Unit = {
     super.build(pipeline)
-    dBus.asDirectionLess()
+    dBus.setAsDirectionLess()
     dAxi = master(dBus.toAxi4Shared().toAxi4()).setName("dAxi")
     dBus = null //For safety, as nobody should use it anymore :)
   }
@@ -53,7 +53,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       BYPASSABLE_MEMORY_STAGE -> False,
       MEMORY_WR -> False,
       MEMORY_MANAGMENT -> False
-    )
+    ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
 
     val storeActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMS,
@@ -97,7 +97,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       MEMORY_MANAGMENT -> True
     ))
 
-    mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(pipeline.memory,memoryTranslatorPortConfig)
+    mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA ,memoryTranslatorPortConfig)
 
     if(catchSomething)
       exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(pipeline.writeBack)
@@ -173,6 +173,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       arbitration.haltItself setWhen(cache.io.cpu.memory.haltIt)
 
       cache.io.cpu.memory.mmuBus <> mmuBus
+      arbitration.haltItself setWhen (mmuBus.cmd.isValid && !mmuBus.rsp.hit && !mmuBus.rsp.miss)
     }
 
     writeBack plug new Area{

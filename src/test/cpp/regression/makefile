@@ -1,4 +1,7 @@
+DEBUG?=no
+
 IBUS?=CACHED
+IBUS_TC?=no
 DBUS?=CACHED
 TRACE?=no
 TRACE_ACCESS?=no
@@ -7,10 +10,15 @@ ISA_TEST?=yes
 MUL?=yes
 DIV?=yes
 CSR?=yes
+EBREAK?=no
+FENCEI?=no
 MMU?=yes
+SEED?=no
 ATOMIC?=no
+NO_STALL?=no
 DEBUG_PLUGIN?=STD
 DEBUG_PLUGIN_EXTERNAL?=no
+RUN_HEX=no
 CUSTOM_SIMD_ADD?=no
 CUSTOM_CSR?=no
 DHRYSTONE=yes
@@ -21,6 +29,8 @@ TRACE_WITH_TIME=no
 REF_TIME=no
 THREAD_COUNT?=4
 MTIME_INSTR_FACTOR?=no
+COMPRESSED?=no
+STOP_ON_ERROR?=no
 
 
 ADDCFLAGS += -CFLAGS -DIBUS_${IBUS}
@@ -30,13 +40,66 @@ ADDCFLAGS += -CFLAGS -pthread
 
 ADDCFLAGS += -CFLAGS -DTHREAD_COUNT=${THREAD_COUNT}
 
+ifeq ($(DEBUG),yes)
+	ADDCFLAGS += -CFLAGS -O0 -CFLAGS -g
+else
+	ADDCFLAGS += -CFLAGS -O3  -O3
+endif
+
+
+ifneq ($(shell grep timerInterrupt ../../../../VexRiscv.v -w),)
+    ADDCFLAGS += -CFLAGS -DTIMER_INTERRUPT
+endif
+
+ifneq ($(shell grep externalInterrupt ../../../../VexRiscv.v -w),)
+    ADDCFLAGS += -CFLAGS -DEXTERNAL_INTERRUPT
+endif
+
+ifneq ($(RUN_HEX),no)
+	ADDCFLAGS += -CFLAGS -DRUN_HEX='\"$(RUN_HEX)\"'
+endif
+
+
+ifeq ($(IBUS_TC),yes)
+	ADDCFLAGS += -CFLAGS -DIBUS_TC=yes
+endif
+
+ifeq ($(COMPRESSED),yes)
+	ADDCFLAGS += -CFLAGS -DCOMPRESSED
+endif
+
+ifeq ($(FENCEI),yes)
+	ADDCFLAGS += -CFLAGS -DFENCEI
+endif
+
+ifeq ($(EBREAK),yes)
+	ADDCFLAGS += -CFLAGS -DEBREAK
+endif
+
+
 ifeq ($(DHRYSTONE),yes)
 	ADDCFLAGS += -CFLAGS -DDHRYSTONE
+endif
+
+ifeq ($(STOP_ON_ERROR),yes)
+	ADDCFLAGS += -CFLAGS -DSTOP_ON_ERROR
+endif
+
+
+ifeq ($(NO_STALL),yes)
+	ADDCFLAGS += -CFLAGS -DSTALL=0
+else
+    ADDCFLAGS += -CFLAGS -DSTALL=1
 endif
 
 ifneq ($(MTIME_INSTR_FACTOR),no)
 	ADDCFLAGS += -CFLAGS -DMTIME_INSTR_FACTOR=${MTIME_INSTR_FACTOR}
 endif
+
+ifneq ($(SEED),no)
+	ADDCFLAGS += -CFLAGS -DSEED=${SEED}
+endif
+
 
 ifeq ($(TRACE),yes)
 	VERILATOR_ARGS += --trace
@@ -104,6 +167,12 @@ endif
 ADDCFLAGS += -CFLAGS -DTRACE_START=${TRACE_START}
 ifeq ($(FREERTOS),yes)
 	ADDCFLAGS += -CFLAGS -DFREERTOS
+	ADDCFLAGS += -CFLAGS -DFREERTOS_COUNT=99999
+else
+ifneq ($(FREERTOS),no)
+    ADDCFLAGS += -CFLAGS -DFREERTOS
+    ADDCFLAGS += -CFLAGS -DFREERTOS_COUNT=$(FREERTOS)
+endif
 endif
 
 all: clean run
@@ -114,10 +183,10 @@ run: compile
 verilate: ../../../../VexRiscv.v
 	rm -f VexRiscv.v*.bin
 	cp ../../../../VexRiscv.v*.bin . | true
-	verilator -cc  ../../../../VexRiscv.v  -O3 -CFLAGS -std=c++11 -LDFLAGS -pthread  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-UNOPTFLAT -Wno-WIDTH --x-assign unique --exe main.cpp
+	verilator -cc  ../../../../VexRiscv.v  -O3 -CFLAGS -std=c++11 -LDFLAGS -pthread  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-UNOPTFLAT -Wno-WIDTH --x-assign 0 --exe main.cpp
  	
 compile: verilate
-	make  -j  -C obj_dir/ -f VVexRiscv.mk VVexRiscv
+	make  -j${THREAD_COUNT} -C obj_dir/ -f VVexRiscv.mk VVexRiscv
  	
 clean:
 	rm -rf obj_dir

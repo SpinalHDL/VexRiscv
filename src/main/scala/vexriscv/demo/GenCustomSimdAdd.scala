@@ -12,13 +12,13 @@ object GenCustomSimdAdd extends App{
     config = VexRiscvConfig(
       plugins = List(
         new SimdAddPlugin,
-        new PcManagerSimplePlugin(
-          resetVector = 0x00000000l,
-          relaxedPcCalculation = false
-        ),
         new IBusSimplePlugin(
-          interfaceKeepData = false,
-          catchAccessFault = false
+          resetVector = 0x00000000l,
+          cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
+          prediction = NONE,
+          catchAccessFault = false,
+          compressedGen = false
         ),
         new DBusSimplePlugin(
           catchAddressMisaligned = false,
@@ -48,8 +48,7 @@ object GenCustomSimdAdd extends App{
         ),
         new BranchPlugin(
           earlyBranch = false,
-          catchAddressMisaligned = false,
-          prediction = NONE
+          catchAddressMisaligned = false
         ),
         new YamlPlugin("cpu0.yaml")
       )

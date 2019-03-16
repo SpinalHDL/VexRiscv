@@ -1,45 +1,24 @@
 package vexriscv.demo
 
+import java.nio.{ByteBuffer, ByteOrder}
+
 import spinal.core._
 import spinal.lib.bus.amba3.apb.{Apb3, Apb3Config, Apb3SlaveFactory}
 import spinal.lib.bus.misc.SizeMapping
-import spinal.lib.misc.{InterruptCtrl, Prescaler, Timer}
+import spinal.lib.misc.{HexTools, InterruptCtrl, Prescaler, Timer}
 import spinal.lib._
+import spinal.lib.bus.simple._
 import vexriscv.plugin.{DBusSimpleBus, IBusSimpleBus}
 
-case class SimpleBusConfig(addressWidth : Int, dataWidth : Int)
-
-case class SimpleBusCmd(config : SimpleBusConfig) extends Bundle{
-  val wr = Bool
-  val address = UInt(config.addressWidth bits)
-  val data = Bits(config.dataWidth bits)
-  val mask = Bits(4 bit)
-}
-
-case class SimpleBusRsp(config : SimpleBusConfig) extends Bundle{
-  val data = Bits(config.dataWidth bits)
-}
-
-
-case class SimpleBus(config : SimpleBusConfig) extends Bundle with IMasterSlave {
-  val cmd = Stream(SimpleBusCmd(config))
-  val rsp = Flow(SimpleBusRsp(config))
-
-  override def asMaster(): Unit = {
-    master(cmd)
-    slave(rsp)
-  }
-}
-
-class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
+class MuraxMasterArbiter(pipelinedMemoryBusConfig : PipelinedMemoryBusConfig) extends Component{
   val io = new Bundle{
     val iBus = slave(IBusSimpleBus(false))
     val dBus = slave(DBusSimpleBus())
-    val masterBus = master(SimpleBus(simpleBusConfig))
+    val masterBus = master(PipelinedMemoryBus(pipelinedMemoryBusConfig))
   }
 
   io.masterBus.cmd.valid   := io.iBus.cmd.valid || io.dBus.cmd.valid
-  io.masterBus.cmd.wr      := io.dBus.cmd.valid && io.dBus.cmd.wr
+  io.masterBus.cmd.write      := io.dBus.cmd.valid && io.dBus.cmd.wr
   io.masterBus.cmd.address := io.dBus.cmd.valid ? io.dBus.cmd.address | io.iBus.cmd.pc
   io.masterBus.cmd.data    := io.dBus.cmd.data
   io.masterBus.cmd.mask    := io.dBus.cmd.size.mux(
@@ -53,7 +32,7 @@ class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
 
   val rspPending = RegInit(False) clearWhen(io.masterBus.rsp.valid)
   val rspTarget = RegInit(False)
-  when(io.masterBus.cmd.fire && !io.masterBus.cmd.wr){
+  when(io.masterBus.cmd.fire && !io.masterBus.cmd.write){
     rspTarget  := io.dBus.cmd.valid
     rspPending := True
   }
@@ -64,7 +43,7 @@ class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
     io.masterBus.cmd.valid := False
   }
 
-  io.iBus.rsp.ready := io.masterBus.rsp.valid && !rspTarget
+  io.iBus.rsp.valid := io.masterBus.rsp.valid && !rspTarget
   io.iBus.rsp.inst  := io.masterBus.rsp.data
   io.iBus.rsp.error := False
 
@@ -73,58 +52,19 @@ class MuraxMasterArbiter(simpleBusConfig : SimpleBusConfig) extends Component{
   io.dBus.rsp.error := False
 }
 
-object HexTools{
-  def readHexFile(path : String, callback : (Int, Int) => Unit): Unit ={
-    import scala.io.Source
-    def hToI(that : String, start : Int, size : Int) = Integer.parseInt(that.substring(start,start + size), 16)
 
-    var offset = 0
-    for (line <- Source.fromFile(path).getLines) {
-      if (line.charAt(0) == ':'){
-        val byteCount = hToI(line, 1, 2)
-        val nextAddr = hToI(line, 3, 4) + offset
-        val key = hToI(line, 7, 2)
-        key match {
-          case 0 =>
-            for(i <- 0 until byteCount){
-              callback(nextAddr + i, hToI(line, 9 + i * 2, 2))
-            }
-          case 2 =>
-            offset = hToI(line, 9, 4) << 4
-          case 4 =>
-            offset = hToI(line, 9, 4) << 16
-          case 3 =>
-          case 5 =>
-          case 1 =>
-        }
-      }
-    }
-  }
-
-
-
-  def initRam[T <: Data](ram : Mem[T], onChipRamHexFile : String, ramOffset : BigInt): Unit ={
-    val initContent = Array.fill[BigInt](ram.wordCount)(0)
-    HexTools.readHexFile(onChipRamHexFile,(address,data) => {
-      val addressWithoutOffset = (address - ramOffset).toInt
-      initContent(addressWithoutOffset >> 2) |= BigInt(data) << ((addressWithoutOffset & 3)*8)
-    })
-    ram.initBigInt(initContent)
-  }
-}
-
-class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpleBusConfig : SimpleBusConfig) extends Component{
+case class MuraxPipelinedMemoryBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, pipelinedMemoryBusConfig : PipelinedMemoryBusConfig) extends Component{
   val io = new Bundle{
-    val bus = slave(SimpleBus(simpleBusConfig))
+    val bus = slave(PipelinedMemoryBus(pipelinedMemoryBusConfig))
   }
 
   val ram = Mem(Bits(32 bits), onChipRamSize / 4)
-  io.bus.rsp.valid := RegNext(io.bus.cmd.fire && !io.bus.cmd.wr) init(False)
+  io.bus.rsp.valid := RegNext(io.bus.cmd.fire && !io.bus.cmd.write) init(False)
   io.bus.rsp.data := ram.readWriteSync(
     address = (io.bus.cmd.address >> 2).resized,
     data  = io.bus.cmd.data,
     enable  = io.bus.cmd.valid,
-    write  = io.bus.cmd.wr,
+    write  = io.bus.cmd.write,
     mask  = io.bus.cmd.mask
   )
   io.bus.cmd.ready := True
@@ -135,42 +75,31 @@ class MuraxSimpleBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, simpl
 }
 
 
-class MuraxSimpleBusToApbBridge(apb3Config: Apb3Config, pipelineBridge : Boolean, simpleBusConfig : SimpleBusConfig) extends Component{
-  assert(apb3Config.dataWidth == simpleBusConfig.dataWidth)
 
-  val io = new Bundle {
-    val simpleBus = slave(SimpleBus(simpleBusConfig))
-    val apb = master(Apb3(apb3Config))
+case class Apb3Rom(onChipRamBinFile : String) extends Component{
+  import java.nio.file.{Files, Paths}
+  val byteArray = Files.readAllBytes(Paths.get(onChipRamBinFile))
+  val wordCount = (byteArray.length+3)/4
+  val buffer = ByteBuffer.wrap(Files.readAllBytes(Paths.get(onChipRamBinFile))).order(ByteOrder.LITTLE_ENDIAN);
+  val wordArray = (0 until wordCount).map(i => {
+    val v = buffer.getInt
+    if(v < 0)  BigInt(v.toLong & 0xFFFFFFFFl) else  BigInt(v)
+  })
+
+  val io = new Bundle{
+    val apb = slave(Apb3(log2Up(wordCount*4),32))
   }
 
-  val simpleBusStage = SimpleBus(simpleBusConfig)
-  simpleBusStage.cmd << (if(pipelineBridge) io.simpleBus.cmd.halfPipe() else io.simpleBus.cmd)
-  simpleBusStage.rsp >-> io.simpleBus.rsp
-
-  val state = RegInit(False)
-  simpleBusStage.cmd.ready := False
-
-  io.apb.PSEL(0) := simpleBusStage.cmd.valid
-  io.apb.PENABLE := state
-  io.apb.PWRITE  := simpleBusStage.cmd.wr
-  io.apb.PADDR   := simpleBusStage.cmd.address.resized
-  io.apb.PWDATA  := simpleBusStage.cmd.data
-
-  simpleBusStage.rsp.valid := False
-  simpleBusStage.rsp.data  := io.apb.PRDATA
-  when(!state) {
-    state := simpleBusStage.cmd.valid
-  } otherwise {
-    when(io.apb.PREADY){
-      state := False
-      simpleBusStage.rsp.valid := !simpleBusStage.cmd.wr
-      simpleBusStage.cmd.ready := True
-    }
-  }
+  val rom = Mem(Bits(32 bits), wordCount) initBigInt(wordArray)
+//  io.apb.PRDATA := rom.readSync(io.apb.PADDR >> 2)
+  io.apb.PRDATA := rom.readAsync(RegNext(io.apb.PADDR >> 2))
+  io.apb.PREADY := True
 }
 
-class MuraxSimpleBusDecoder(master : SimpleBus, val specification : List[(SimpleBus,SizeMapping)], pipelineMaster : Boolean) extends Area{
-  val masterPipelined = SimpleBus(master.config)
+
+
+class MuraxPipelinedMemoryBusDecoder(master : PipelinedMemoryBus, val specification : Seq[(PipelinedMemoryBus,SizeMapping)], pipelineMaster : Boolean) extends Area{
+  val masterPipelined = PipelinedMemoryBus(master.config)
   if(!pipelineMaster) {
     masterPipelined.cmd << master.cmd
     masterPipelined.rsp >> master.rsp
@@ -185,13 +114,13 @@ class MuraxSimpleBusDecoder(master : SimpleBus, val specification : List[(Simple
   val hits = for((slaveBus, memorySpace) <- specification) yield {
     val hit = memorySpace.hit(masterPipelined.cmd.address)
     slaveBus.cmd.valid   := masterPipelined.cmd.valid && hit
-    slaveBus.cmd.payload := masterPipelined.cmd.payload
+    slaveBus.cmd.payload := masterPipelined.cmd.payload.resized
     hit
   }
   val noHit = !hits.orR
   masterPipelined.cmd.ready := (hits,slaveBuses).zipped.map(_ && _.cmd.ready).orR || noHit
 
-  val rspPending  = RegInit(False) clearWhen(masterPipelined.rsp.valid) setWhen(masterPipelined.cmd.fire && !masterPipelined.cmd.wr)
+  val rspPending  = RegInit(False) clearWhen(masterPipelined.rsp.valid) setWhen(masterPipelined.cmd.fire && !masterPipelined.cmd.write)
   val rspNoHit    = RegNext(False) init(False) setWhen(noHit)
   val rspSourceId = RegNextWhen(OHToUInt(hits), masterPipelined.cmd.fire)
   masterPipelined.rsp.valid   := slaveBuses.map(_.rsp.valid).orR || (rspPending && rspNoHit)

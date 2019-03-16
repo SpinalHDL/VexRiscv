@@ -6,7 +6,8 @@ import spinal.lib._
 import scala.collection.mutable
 
 
-class Stageable[T <: Data](val dataType : T) extends HardType[T](dataType) with Nameable{
+class Stageable[T <: Data](_dataType : => T) extends HardType[T](_dataType) with Nameable{
+  def dataType = apply()
   setWeakName(this.getClass.getSimpleName.replace("$",""))
 }
 
@@ -49,7 +50,7 @@ class Stage() extends Area{
     val removeIt    = False   //When settable, unschedule the instruction as if it was never executed (no side effect)
     val flushAll    = False   //When settable, unschedule instructions in the current stage and all prior ones
     val redoIt      = False   //Allow to notify that a given instruction in a pipeline is rescheduled
-    val isValid     = RegInit(False) //Inform if a instruction is in the current stage
+    val isValid     = Bool //Inform if a instruction is in the current stage
     val isStuck     = Bool           //Inform if the instruction is stuck (haltItself || haltByOther)
     val isStuckByOthers = Bool       //Inform if the instruction is stuck by sombody else
     def isRemoved   = removeIt       //Inform if the instruction is going to be unschedule the current cycle

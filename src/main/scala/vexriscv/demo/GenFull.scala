@@ -12,11 +12,8 @@ object GenFull extends App{
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       plugins = List(
-        new PcManagerSimplePlugin(
-          resetVector = 0x00000000l,
-          relaxedPcCalculation = false
-        ),
         new IBusCachedPlugin(
+          prediction = DYNAMIC,
           config = InstructionCacheConfig(
             cacheSize = 4096,
             bytePerLine =32,
@@ -28,7 +25,8 @@ object GenFull extends App{
             catchAccessFault = true,
             catchMemoryTranslationMiss = true,
             asyncTagMemory = false,
-            twoCycleRam = true
+            twoCycleRam = true,
+            twoCycleCache = true
           ),
           memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
             portTlbSize = 4
@@ -52,7 +50,7 @@ object GenFull extends App{
           )
         ),
         new MemoryTranslatorPlugin(
-          tlbSize = 64,
+          tlbSize = 32,
           virtualRange = _(31 downto 28) === 0xC,
           ioRange      = _(31 downto 28) === 0xF
         ),
@@ -80,12 +78,11 @@ object GenFull extends App{
         ),
         new MulPlugin,
         new DivPlugin,
-        new CsrPlugin(CsrPluginConfig.small),
+        new CsrPlugin(CsrPluginConfig.small(0x80000020l)),
         new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
           earlyBranch = false,
-          catchAddressMisaligned = true,
-          prediction = DYNAMIC
+          catchAddressMisaligned = true
         ),
         new YamlPlugin("cpu0.yaml")
       )
