@@ -51,6 +51,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       REGFILE_WRITE_VALID -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
       BYPASSABLE_MEMORY_STAGE -> False,
+      BYPASSABLE_MEMORY2_STAGE -> False,
       MEMORY_WR -> False,
       MEMORY_MANAGMENT -> False
     ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
@@ -85,6 +86,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
           REGFILE_WRITE_VALID -> True,
           BYPASSABLE_EXECUTE_STAGE -> False,
           BYPASSABLE_MEMORY_STAGE -> False,
+          BYPASSABLE_MEMORY2_STAGE -> False,
           MEMORY_ATOMIC -> True
         )
       )

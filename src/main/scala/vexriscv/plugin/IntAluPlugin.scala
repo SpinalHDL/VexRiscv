@@ -28,6 +28,7 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,
+      BYPASSABLE_MEMORY2_STAGE -> True,
       RS1_USE -> True
     )
 
@@ -37,6 +38,7 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,
+      BYPASSABLE_MEMORY2_STAGE -> True,
       RS1_USE -> True,
       RS2_USE -> True
     )
@@ -44,7 +46,8 @@ class IntAluPlugin extends Plugin[VexRiscv]{
     val otherAction = List[(Stageable[_ <: BaseType],Any)](
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
-      BYPASSABLE_MEMORY_STAGE  -> True
+      BYPASSABLE_MEMORY_STAGE  -> True,
+      BYPASSABLE_MEMORY2_STAGE -> True
     )
 
 

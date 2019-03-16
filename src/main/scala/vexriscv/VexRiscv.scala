@@ -6,19 +6,21 @@ import spinal.core._
 import scala.collection.mutable.ArrayBuffer
 
 object VexRiscvConfig{
-  def apply(withMemoryStage : Boolean, withWriteBackStage : Boolean, plugins : Seq[Plugin[VexRiscv]]): VexRiscvConfig = {
+  def apply(withMemoryStage : Boolean, withMemory2Stage : Boolean, withWriteBackStage : Boolean, plugins : Seq[Plugin[VexRiscv]]): VexRiscvConfig = {
     val config = VexRiscvConfig()
     config.plugins ++= plugins
     config.withMemoryStage = withMemoryStage
+    config.withMemory2Stage = withMemory2Stage
     config.withWriteBackStage = withWriteBackStage
     config
   }
 
-  def apply(plugins : Seq[Plugin[VexRiscv]] = ArrayBuffer()) : VexRiscvConfig = apply(true,true,plugins)
+  def apply(plugins : Seq[Plugin[VexRiscv]] = ArrayBuffer()) : VexRiscvConfig = apply(true,true,true,plugins)
 }
 
 case class VexRiscvConfig(){
   var withMemoryStage = true
+  var withMemory2Stage = true
   var withWriteBackStage = true
   val plugins = ArrayBuffer[Plugin[VexRiscv]]()
 
@@ -28,6 +30,7 @@ case class VexRiscvConfig(){
   object IS_RVC extends Stageable(Bool)
   object BYPASSABLE_EXECUTE_STAGE   extends Stageable(Bool)
   object BYPASSABLE_MEMORY_STAGE   extends Stageable(Bool)
+  object BYPASSABLE_MEMORY2_STAGE   extends Stageable(Bool)
   object RS1   extends Stageable(Bits(32 bits))
   object RS2   extends Stageable(Bits(32 bits))
   object RS1_USE extends Stageable(Bool)
@@ -89,6 +92,7 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   val decode    = newStage()
   val execute   = newStage()
   val memory    = ifGen(config.withMemoryStage)    (newStage())
+  val memory2   = ifGen(config.withMemory2Stage)   (newStage())
   val writeBack = ifGen(config.withWriteBackStage) (newStage())
 
   def stagesFromExecute = stages.dropWhile(_ != execute)
@@ -110,6 +114,9 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   decode.arbitration.removeIt.noBackendCombMerge //Verilator perf
   if(withMemoryStage){
     memory.arbitration.removeIt.noBackendCombMerge
+  }
+  if(withMemory2Stage){
+    memory2.arbitration.removeIt.noBackendCombMerge
   }
   execute.arbitration.flushAll.noBackendCombMerge
 

@@ -300,7 +300,8 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       IS_CSR                   -> True,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
-      BYPASSABLE_MEMORY_STAGE  -> True
+      BYPASSABLE_MEMORY_STAGE  -> True,
+      BYPASSABLE_MEMORY2_STAGE -> True
     ) ++ (if(catchIllegalAccess) List(HAS_SIDE_EFFECT -> True) else Nil)
 
     val nonImmediatActions = defaultCsrActions ++ List(
