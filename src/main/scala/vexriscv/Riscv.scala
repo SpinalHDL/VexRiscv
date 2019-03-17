@@ -105,6 +105,7 @@ object Riscv{
 
   def FENCE              = M"-----------------000-----0001111"
   def FENCE_I            = M"-----------------001-----0001111"
+  def SFENCE_VMA         = M"0001001----------000000001110011"
 
   object CSR{
     def MVENDORID = 0xF11 // MRO Vendor ID.

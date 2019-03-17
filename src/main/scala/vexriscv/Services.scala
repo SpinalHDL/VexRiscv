@@ -65,8 +65,8 @@ case class MemoryTranslatorRsp() extends Bundle{
   val physicalAddress = UInt(32 bits)
   val isIoAccess = Bool
   val allowRead, allowWrite, allowExecute, allowUser = Bool
-  val miss = Bool
-  val hit = Bool
+  val exception = Bool
+  val refilling = Bool
 }
 
 case class MemoryTranslatorBus() extends Bundle with IMasterSlave{
