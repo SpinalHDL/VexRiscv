@@ -214,6 +214,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
   object MEMORY_READ_DATA extends Stageable(Bits(32 bits))
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
   object ALIGNEMENT_FAULT extends Stageable(Bool)
+  object MMU_FAULT extends Stageable(Bool)
   object MMU_RSP extends Stageable(MemoryTranslatorRsp())
 
   var memoryExceptionPort : Flow[ExceptionCause] = null
@@ -285,6 +286,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     val cmdStage = if(emitCmdInMemoryStage) memory else execute
     cmdStage plug new Area{
       import cmdStage._
+      val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
 
       val cmdSent =  if(rspStage == execute) RegInit(False) setWhen(dBus.cmd.fire) clearWhen(!execute.arbitration.isStuck) else False
 
@@ -295,7 +297,11 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
           False
       }
 
-      dBus.cmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers && !arbitration.isFlushed && !input(ALIGNEMENT_FAULT) && !cmdSent
+
+      val skipCmd = False
+      skipCmd setWhen(input(ALIGNEMENT_FAULT))
+
+      dBus.cmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers && !arbitration.isFlushed && !skipCmd && !cmdSent
       dBus.cmd.wr := input(INSTRUCTION)(5)
       dBus.cmd.size := input(INSTRUCTION)(13 downto 12).asUInt
       dBus.cmd.payload.data := dBus.cmd.size.mux (
@@ -303,7 +309,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         U(1) -> input(RS2)(15 downto 0) ## input(RS2)(15 downto 0),
         default -> input(RS2)(31 downto 0)
       )
-      when(arbitration.isValid && input(MEMORY_ENABLE) && !dBus.cmd.ready && !input(ALIGNEMENT_FAULT) && !cmdSent){
+      when(arbitration.isValid && input(MEMORY_ENABLE) && !dBus.cmd.ready && !skipCmd && !cmdSent){
         arbitration.haltItself := True
       }
 
@@ -326,11 +332,9 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         mmuBus.cmd.bypassTranslation := False
         dBus.cmd.address := mmuBus.rsp.physicalAddress
 
-        //do not emit memory request if MMU miss
-        when(mmuBus.cmd.isValid && (mmuBus.rsp.exception || mmuBus.rsp.refilling)){
-          dBus.cmd.valid := False
-          arbitration.haltItself := False
-        }
+        //do not emit memory request if MMU refilling
+        insert(MMU_FAULT) := input(MMU_RSP).exception || (!input(MMU_RSP).allowWrite && input(INSTRUCTION)(5)) || (!input(MMU_RSP).allowRead && !input(INSTRUCTION)(5)) || (!input(MMU_RSP).allowUser && privilegeService.isUser(memory))
+        skipCmd.setWhen(input(MMU_FAULT) || input(MMU_RSP).refilling)
 
         insert(MMU_RSP) := mmuBus.rsp
       }
@@ -370,7 +374,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
           when(input(MMU_RSP).refilling){
             redoBranch.valid := True
             memoryExceptionPort.valid := False
-          } elsewhen(input(MMU_RSP).exception) {
+          } elsewhen(input(MMU_FAULT)) {
             memoryExceptionPort.valid := True
             memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(15) | U(13)).resized
           }

@@ -314,9 +314,12 @@ class IBusSimplePlugin(resetVector : BigInt,
             decodeExceptionPort.code  := 1
             exceptionDetected := True
           }
-          if(memoryTranslatorPortConfig != null) when(stages.last.input.valid && mmu.joinCtx.exception){
-            decodeExceptionPort.code  := 12
-            exceptionDetected := True
+          if(memoryTranslatorPortConfig != null) {
+            val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
+            when(stages.last.input.valid && (mmu.joinCtx.exception || !mmu.joinCtx.allowExecute || (!mmu.joinCtx.allowUser && privilegeService.isUser(decode)))){
+              decodeExceptionPort.code  := 12
+              exceptionDetected := True
+            }
           }
           decodeExceptionPort.valid  :=  exceptionDetected && iBusRsp.readyForError
         }
