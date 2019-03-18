@@ -290,12 +290,10 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
       val cmdSent =  if(rspStage == execute) RegInit(False) setWhen(dBus.cmd.fire) clearWhen(!execute.arbitration.isStuck) else False
 
-      insert(ALIGNEMENT_FAULT) := {
-        if (catchAddressMisaligned)
-          (dBus.cmd.size === 2 && dBus.cmd.address(1 downto 0) =/= 0) || (dBus.cmd.size === 1 && dBus.cmd.address(0 downto 0) =/= 0)
-        else
-          False
-      }
+      if (catchAddressMisaligned)
+        insert(ALIGNEMENT_FAULT) := (dBus.cmd.size === 2 && dBus.cmd.address(1 downto 0) =/= 0) || (dBus.cmd.size === 1 && dBus.cmd.address(0 downto 0) =/= 0)
+      else
+        insert(ALIGNEMENT_FAULT) := False
 
 
       val skipCmd = False
@@ -321,6 +319,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         U(1) -> B"0011",
         default -> B"1111"
       ) |<< dBus.cmd.address(1 downto 0)
+
       insert(FORMAL_MEM_ADDR) := dBus.cmd.address & U"xFFFFFFFC"
       insert(FORMAL_MEM_WMASK) := (dBus.cmd.valid &&  dBus.cmd.wr) ? formalMask | B"0000"
       insert(FORMAL_MEM_RMASK) := (dBus.cmd.valid && !dBus.cmd.wr) ? formalMask | B"0000"
