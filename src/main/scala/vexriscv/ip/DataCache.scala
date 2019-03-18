@@ -684,11 +684,11 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     when(io.cpu.writeBack.isValid) {
       if (catchMemoryTranslationMiss) {
-        io.cpu.writeBack.mmuMiss := mmuRsp.miss
+        io.cpu.writeBack.mmuMiss := ??? //TODO mmuRsp.miss
       }
       switch(request.kind) {
         is(MANAGMENT) {
-          when(delayedIsStuck && !mmuRsp.miss) {
+          when(delayedIsStuck && ???){ //TODO!mmuRsp.miss) {
             when(delayedWaysHitValid || (request.way && way.tagReadRspTwo.used)) {
               io.cpu.writeBack.haltIt.clearWhen(!(victim.requestIn.valid && !victim.requestIn.ready))
               victim.requestIn.valid  := request.clean && way.tagReadRspTwo.dirty
@@ -708,7 +708,7 @@ class DataCache(p : DataCacheConfig) extends Component{
           val unaligned = if(catchUnaligned) ((request.size === 2 && mmuRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && mmuRsp.physicalAddress(0 downto 0) =/= 0)) else False
           io.cpu.writeBack.illegalAccess := illegal
           io.cpu.writeBack.unalignedAccess := unaligned
-          when((Bool(!catchMemoryTranslationMiss) || !mmuRsp.miss) && !illegal && !unaligned) {
+          when((Bool(!catchMemoryTranslationMiss) || ???) && !illegal && !unaligned) {  //TODO !mmuRsp.miss
             when(request.forceUncachedAccess || mmuRsp.isIoAccess) {
               val memCmdSent = RegInit(False)
               when(!victim.request.valid) {

@@ -6,11 +6,15 @@ import spinal.lib._
 
 import scala.collection.mutable.ArrayBuffer
 
+trait DBusAccessService{
+  def newDBusAccess() : DBusAccess
+}
+
 case class DBusAccessCmd() extends Bundle {
   val address = UInt(32 bits)
   val size = UInt(2 bits)
   val write = Bool
-  val writeData = Bits(32 bits)
+  val data = Bits(32 bits)
   val writeMask = Bits(4 bits)
 }
 
@@ -56,7 +60,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
     decoderService.add(SFENCE_VMA, List(IS_SFENCE_VMA -> True))
 
 
-    dBus = ???
+    dBus = pipeline.service(classOf[DBusAccessService]).newDBusAccess()
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -81,7 +85,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
     }
 
     val core = pipeline plug new Area {
-      val ports = for (port <- sortedPortsInfo yield new Area {
+      val ports = for (port <- sortedPortsInfo) yield new Area {
         val id = port.id
         val cache = Vec(Reg(CacheLine()) init, port.args.portTlbSize)
         val cacheHits = cache.map(line => line.valid && line.virtualAddress === port.bus.cmd.virtualAddress(31 downto 12))
@@ -144,7 +148,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
         dBus.cmd.write := False
         dBus.cmd.size := 2
         dBus.cmd.address.assignDontCare()
-        dBus.cmd.writeData.assignDontCare()
+        dBus.cmd.data.assignDontCare()
         dBus.cmd.writeMask.assignDontCare()
         switch(state){
           is(State.IDLE){

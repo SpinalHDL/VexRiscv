@@ -9,6 +9,8 @@ import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 import vexriscv.ip.DataCacheMemCmd
 
+import scala.collection.mutable.ArrayBuffer
+
 
 case class DBusSimpleCmd() extends Bundle{
   val wr = Bool
@@ -202,7 +204,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
                        catchAccessFault : Boolean = false,
                        earlyInjection : Boolean = false, /*, idempotentRegions : (UInt) => Bool = (x) => False*/
                        emitCmdInMemoryStage : Boolean = false,
-                       onlyLoadWords : Boolean = false) extends Plugin[VexRiscv]{
+                       onlyLoadWords : Boolean = false,
+                       memoryTranslatorPortConfig : Any = null) extends Plugin[VexRiscv] with DBusAccessService {
 
   var dBus  : DBusSimpleBus = null
   assert(!(emitCmdInMemoryStage && earlyInjection))
@@ -211,9 +214,20 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
   object MEMORY_READ_DATA extends Stageable(Bits(32 bits))
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
   object ALIGNEMENT_FAULT extends Stageable(Bool)
+  object MMU_RSP extends Stageable(MemoryTranslatorRsp())
 
   var memoryExceptionPort : Flow[ExceptionCause] = null
   var rspStage : Stage = null
+  var mmuBus : MemoryTranslatorBus = null
+  var redoBranch : Flow[UInt] = null
+  val catchSomething = catchAccessFault || catchAddressMisaligned || memoryTranslatorPortConfig != null
+
+  var dBusAccess : DBusAccess = null
+  override def newDBusAccess(): DBusAccess = {
+    assert(dBusAccess == null)
+    dBusAccess = DBusAccess()
+    dBusAccess
+  }
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -250,9 +264,14 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
 
     rspStage = if(stages.last == execute) execute else (if(emitCmdInMemoryStage) writeBack else memory)
-    if(catchAccessFault || catchAddressMisaligned) {
+    if(catchSomething) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
       memoryExceptionPort = exceptionService.newExceptionPort(rspStage)
+    }
+
+    if(memoryTranslatorPortConfig != null) {
+      mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_INSTRUCTION, memoryTranslatorPortConfig)
+      redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.memory)
     }
   }
 
@@ -261,7 +280,6 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     import pipeline.config._
 
     dBus = master(DBusSimpleBus()).setName("dBus")
-
 
     //Emit dBus.cmd request
     val cmdStage = if(emitCmdInMemoryStage) memory else execute
@@ -279,7 +297,6 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
       dBus.cmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers && !arbitration.isFlushed && !input(ALIGNEMENT_FAULT) && !cmdSent
       dBus.cmd.wr := input(INSTRUCTION)(5)
-      dBus.cmd.address := input(SRC_ADD).asUInt
       dBus.cmd.size := input(INSTRUCTION)(13 downto 12).asUInt
       dBus.cmd.payload.data := dBus.cmd.size.mux (
         U(0) -> input(RS2)(7 downto 0) ## input(RS2)(7 downto 0) ## input(RS2)(7 downto 0) ## input(RS2)(7 downto 0),
@@ -302,6 +319,25 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       insert(FORMAL_MEM_WMASK) := (dBus.cmd.valid &&  dBus.cmd.wr) ? formalMask | B"0000"
       insert(FORMAL_MEM_RMASK) := (dBus.cmd.valid && !dBus.cmd.wr) ? formalMask | B"0000"
       insert(FORMAL_MEM_WDATA) := dBus.cmd.payload.data
+
+      val mmu = (mmuBus != null) generate new Area {
+        mmuBus.cmd.isValid := arbitration.isValid && input(MEMORY_ENABLE)
+        mmuBus.cmd.virtualAddress := input(SRC_ADD).asUInt
+        mmuBus.cmd.bypassTranslation := False
+        dBus.cmd.address := mmuBus.rsp.physicalAddress
+
+        //do not emit memory request if MMU miss
+        when(mmuBus.cmd.isValid && (mmuBus.rsp.exception || mmuBus.rsp.refilling)){
+          dBus.cmd.valid := False
+          arbitration.haltItself := False
+        }
+
+        insert(MMU_RSP) := mmuBus.rsp
+      }
+
+      val mmuLess = (mmuBus == null) generate new Area{
+        dBus.cmd.address := input(SRC_ADD).asUInt
+      }
     }
 
     //Collect dBus.rsp read responses
@@ -312,26 +348,38 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       insert(MEMORY_READ_DATA) := dBus.rsp.data
       arbitration.haltItself setWhen(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && !dBus.rsp.ready)
 
-      if(catchAccessFault || catchAddressMisaligned){
-        if(!catchAccessFault){
-          memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(6) | U(4)).resized
-          memoryExceptionPort.valid := input(ALIGNEMENT_FAULT)
-        } else if(!catchAddressMisaligned){
-          memoryExceptionPort.valid := dBus.rsp.ready && dBus.rsp.error && !input(INSTRUCTION)(5)
-          memoryExceptionPort.code  := 5
-        } else {
-          memoryExceptionPort.valid := dBus.rsp.ready && dBus.rsp.error && !input(INSTRUCTION)(5)
-          memoryExceptionPort.code  := 5
-          when(input(ALIGNEMENT_FAULT)){
-            memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(6) | U(4)).resized
-            memoryExceptionPort.valid := True
-          }
-        }
-        when(!(arbitration.isValid && input(MEMORY_ENABLE) && (if(cmdStage == rspStage) !arbitration.isStuckByOthers else True))){
-          memoryExceptionPort.valid := False
+      if(catchSomething) {
+        memoryExceptionPort.valid := False
+        memoryExceptionPort.code.assignDontCare()
+        memoryExceptionPort.badAddr := input(REGFILE_WRITE_DATA).asUInt
+
+        if(catchAccessFault) when(dBus.rsp.ready && dBus.rsp.error && !input(INSTRUCTION)(5)) {
+          memoryExceptionPort.valid := True
+          memoryExceptionPort.code := 5
         }
 
-        memoryExceptionPort.badAddr := input(REGFILE_WRITE_DATA).asUInt  //Drived by IntAluPlugin
+        if(catchAddressMisaligned) when(input(ALIGNEMENT_FAULT)){
+          memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(6) | U(4)).resized
+          memoryExceptionPort.valid := True
+        }
+
+        if(memoryTranslatorPortConfig != null) {
+          redoBranch.valid := False
+          redoBranch.payload := input(PC)
+
+          when(input(MMU_RSP).refilling){
+            redoBranch.valid := True
+            memoryExceptionPort.valid := False
+          } elsewhen(input(MMU_RSP).exception) {
+            memoryExceptionPort.valid := True
+            memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(15) | U(13)).resized
+          }
+        }
+
+        when(!(arbitration.isValid && input(MEMORY_ENABLE) && (Bool(cmdStage != rspStage) || !arbitration.isStuckByOthers))){
+          memoryExceptionPort.valid := False
+          redoBranch.valid := False
+        }
       }
 
 
@@ -367,6 +415,43 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
       //formal
       insert(FORMAL_MEM_RDATA) := input(MEMORY_READ_DATA)
+    }
+
+    //Share access to the dBus (used by self refilled MMU)
+    val dBusSharing = (dBusAccess != null) generate new Area{
+      val state = Reg(UInt(2 bits)) init(0)
+      dBusAccess.rsp.valid := False
+      dBusAccess.rsp.data := dBus.rsp.data
+      dBusAccess.rsp.error := dBus.rsp.error
+
+      switch(state){
+        is(0){
+          when(dBusAccess.cmd.valid){
+            decode.arbitration.haltItself := True
+            when(!stages.dropWhile(_ != execute).map(_.arbitration.isValid).orR){
+              state := 1
+            }
+          }
+        }
+        is(1){
+          decode.arbitration.haltItself := True
+          dBus.cmd.valid := True
+          dBus.cmd.address := dBusAccess.cmd.address
+          dBus.cmd.wr := dBusAccess.cmd.write
+          dBus.cmd.data := dBusAccess.cmd.data
+          dBus.cmd.size := dBusAccess.cmd.size
+          when(dBus.cmd.ready){
+            state := (dBusAccess.cmd.write ? U(0) | U(2))
+          }
+        }
+        is(2){
+          decode.arbitration.haltItself := True
+          when(dBus.rsp.ready){
+            dBusAccess.rsp.valid := True
+            state := 0
+          }
+        }
+      }
     }
   }
 }

@@ -411,7 +411,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
       io.cpu.fetch.cacheMiss := !hit.valid
       io.cpu.fetch.error := hit.error
-      io.cpu.fetch.mmuMiss := mmuRsp.miss
+      io.cpu.fetch.mmuMiss := ??? //TODO mmuRsp.miss
       io.cpu.fetch.illegalAccess := !mmuRsp.allowExecute || (io.cpu.fetch.isUser && !mmuRsp.allowUser)
     })
   }
@@ -441,7 +441,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
     io.cpu.decode.cacheMiss := !hit.valid
     io.cpu.decode.error := hit.error
-    io.cpu.decode.mmuMiss := mmuRsp.miss
+    io.cpu.decode.mmuMiss := ??? //TODO mmuRsp.miss
     io.cpu.decode.illegalAccess := !mmuRsp.allowExecute || (io.cpu.decode.isUser && !mmuRsp.allowUser)
     io.cpu.decode.physicalAddress := mmuRsp.physicalAddress
   })

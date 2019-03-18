@@ -173,7 +173,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       arbitration.haltItself setWhen(cache.io.cpu.memory.haltIt)
 
       cache.io.cpu.memory.mmuBus <> mmuBus
-      arbitration.haltItself setWhen (mmuBus.cmd.isValid && !mmuBus.rsp.hit && !mmuBus.rsp.miss)
+      arbitration.haltItself setWhen (mmuBus.cmd.isValid &&  ???) //TODO !mmuBus.rsp.hit && !mmuBus.rsp.miss
     }
 
     writeBack plug new Area{
