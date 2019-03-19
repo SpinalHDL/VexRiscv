@@ -47,3 +47,12 @@ simWorkspace/
 tmp/
 /archive.tar.gz
 *.out32
+
+#Docs
+*.doctree
+*.pickle
+docs/build/*
+
+#vscode
+.vscode/*
+.metals/*
