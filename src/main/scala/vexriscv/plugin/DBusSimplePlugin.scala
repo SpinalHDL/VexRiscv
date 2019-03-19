@@ -380,8 +380,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         }
 
         when(!(arbitration.isValid && input(MEMORY_ENABLE) && (Bool(cmdStage != rspStage) || !arbitration.isStuckByOthers))){
-          memoryExceptionPort.valid := False
-          redoBranch.valid := False
+          if(catchSomething) memoryExceptionPort.valid := False
+          if(memoryTranslatorPortConfig != null) redoBranch.valid := False
         }
       }
 
@@ -423,6 +423,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     //Share access to the dBus (used by self refilled MMU)
     val dBusSharing = (dBusAccess != null) generate new Area{
       val state = Reg(UInt(2 bits)) init(0)
+      dBusAccess.cmd.ready := False
       dBusAccess.rsp.valid := False
       dBusAccess.rsp.data := dBus.rsp.data
       dBusAccess.rsp.error := dBus.rsp.error
@@ -445,6 +446,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
           dBus.cmd.size := dBusAccess.cmd.size
           when(dBus.cmd.ready){
             state := (dBusAccess.cmd.write ? U(0) | U(2))
+            dBusAccess.cmd.ready := True
           }
         }
         is(2){

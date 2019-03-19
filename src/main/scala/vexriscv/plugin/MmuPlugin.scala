@@ -119,9 +119,9 @@ class MmuPlugin(virtualRange : UInt => Bool,
       val shared = new Area {
         val busy = Reg(Bool) init(False)
 
-        val satp = new Bundle {
-          val mode = Bool()
-          val ppn = UInt(20 bits)
+        val satp = new Area {
+          val mode = RegInit(False)
+          val ppn = Reg(UInt(20 bits))
         }
         csrService.rw(CSR.SATP, 31 -> satp.mode, 0 -> satp.ppn)  //TODO write only ?
         val State = new SpinalEnum{
@@ -145,6 +145,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
 
         val pteBuffer = RegNextWhen(dBusRsp.pte, dBus.rsp.valid)
 
+        dBus.cmd.valid := False
         dBus.cmd.write := False
         dBus.cmd.size := 2
         dBus.cmd.address.assignDontCare()

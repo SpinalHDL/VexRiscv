@@ -306,7 +306,6 @@ class IBusSimplePlugin(resetVector : BigInt,
         }
 
         if(catchSomething){
-          decodeExceptionPort.valid := False
           decodeExceptionPort.code.assignDontCare()
           decodeExceptionPort.badAddr := join.pc //TODO Should it be the physical address insted ?
 

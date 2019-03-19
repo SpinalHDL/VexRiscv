@@ -759,7 +759,7 @@ public:
 		top = new VVexRiscv;
 		#ifdef TRACE_ACCESS
 			regTraces.open (name + ".regTrace");
-			memTraces.open (name + ".memTrace");
+			memTraces.open (name + ".memTrace");hh
 		#endif
 		logTraces.open (name + ".logTrace");
 		fillSimELements();
@@ -990,7 +990,7 @@ public:
 		try {
 			// run simulation for 100 clock periods
 			for (i = 16; i < timeout*2; i+=2) {
-				while(allowedCycles <= 0.0){
+				/*while(allowedCycles <= 0.0){
 					struct timespec end_time;
 					clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &end_time);
 					uint64_t diffInNanos = end_time.tv_sec*1e9 + end_time.tv_nsec -  start_time.tv_sec*1e9 - start_time.tv_nsec;
@@ -999,7 +999,7 @@ public:
 					allowedCycles += dt*cyclesPerSecond;
 					if(allowedCycles > cyclesPerSecond/100) allowedCycles = cyclesPerSecond/100;
 				}
-				allowedCycles-=1.0;
+				allowedCycles-=1.0;*/
 
 
 				#ifndef REF_TIME
@@ -1063,17 +1063,21 @@ public:
                     	rfWriteValid = true;
                     	rfWriteAddress = top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address;
                     	rfWriteData = top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data;
+                    	#ifdef TRACE_ACCESS
                         regTraces <<
                             #ifdef TRACE_WITH_TIME
                             currentTime <<
                              #endif
                              " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data <<  dec << endl;
+                        #endif
                     } else {
+                        #ifdef TRACE_ACCESS
                         regTraces <<
                                 #ifdef TRACE_WITH_TIME
                                 currentTime <<
                                  #endif
                                  " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << dec << endl;
+                        #endif
                     }
 					if(riscvRefEnable) if(rfWriteValid != riscvRef.rfWriteValid ||
 						(rfWriteValid && (rfWriteAddress!= riscvRef.rfWriteAddress || rfWriteData!= riscvRef.rfWriteData))){
