@@ -39,7 +39,8 @@ case class MmuPortConfig(portTlbSize : Int)
 
 class MmuPlugin(virtualRange : UInt => Bool,
                 ioRange : UInt => Bool,
-                allowUserIo : Boolean) extends Plugin[VexRiscv] with MemoryTranslator {
+                allowUserIo : Boolean,
+                allowMachineModeMmu : Boolean = false) extends Plugin[VexRiscv] with MemoryTranslator {
 
   var dBus : DBusAccess = null
   val portsInfo = ArrayBuffer[MmuPort]()
@@ -91,11 +92,13 @@ class MmuPlugin(virtualRange : UInt => Bool,
         val cacheHits = cache.map(line => line.valid && line.virtualAddress === port.bus.cmd.virtualAddress(31 downto 12))
         val cacheHit = cacheHits.asBits.orR
         val cacheLine = MuxOH(cacheHits, cache)
-        val isInMmuRange = virtualRange(port.bus.cmd.virtualAddress) && !port.bus.cmd.bypassTranslation
+        val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
         val entryToReplace = Counter(port.args.portTlbSize)
 
+        val requireMmuLockup = virtualRange(port.bus.cmd.virtualAddress) && !port.bus.cmd.bypassTranslation
+        if(!allowMachineModeMmu) requireMmuLockup clearWhen(privilegeService.isMachine(execute))
 
-        when(isInMmuRange) {
+        when(requireMmuLockup) {
           port.bus.rsp.physicalAddress := cacheLine.physicalAddress @@ port.bus.cmd.virtualAddress(11 downto 0)
           port.bus.rsp.allowRead := cacheLine.allowRead
           port.bus.rsp.allowWrite := cacheLine.allowWrite
@@ -103,7 +106,6 @@ class MmuPlugin(virtualRange : UInt => Bool,
           port.bus.rsp.allowUser := cacheLine.allowUser
           port.bus.rsp.exception := cacheHit && cacheLine.exception
           port.bus.rsp.refilling := !cacheHit
-
         } otherwise {
           port.bus.rsp.physicalAddress := port.bus.cmd.virtualAddress
           port.bus.rsp.allowRead := True
@@ -122,6 +124,8 @@ class MmuPlugin(virtualRange : UInt => Bool,
         val satp = new Area {
           val mode = RegInit(False)
           val ppn = Reg(UInt(20 bits))
+
+          ports.foreach(_.requireMmuLockup clearWhen(!mode))
         }
         csrService.rw(CSR.SATP, 31 -> satp.mode, 0 -> satp.ppn)  //TODO write only ?
         val State = new SpinalEnum{

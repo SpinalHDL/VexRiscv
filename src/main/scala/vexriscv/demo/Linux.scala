@@ -108,7 +108,7 @@ object LinuxGen {
           catchIllegalInstruction = true
         ),
         new RegFilePlugin(
-          regFileReadyKind = plugin.ASYNC,
+          regFileReadyKind = plugin.SYNC,
           zeroBoot = true
         ),
         new IntAluPlugin,
