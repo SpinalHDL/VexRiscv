@@ -803,12 +803,14 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
             is(3){
               mstatus.MPP := U"00"
               mstatus.MIE := mstatus.MPIE
+              mstatus.MPIE := True
               privilege := mstatus.MPP
               jumpInterface.payload := mepc
             }
             if(supervisorGen) is(1){
               sstatus.SPP := U"0"
               sstatus.SIE := sstatus.SPIE
+              sstatus.SPIE := True
               privilege := U"0" @@ sstatus.SPP
               jumpInterface.payload := sepc
             }
@@ -864,7 +866,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         //Manage MRET / SRET instructions
         when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.XRET) {
           //TODO check MPP value too
-          when(input(INSTRUCTION)(29 downto 28).asUInt =/= privilege) {
+          when(input(INSTRUCTION)(29 downto 28).asUInt > privilege) {
             illegalInstruction := True
           }
         }
