@@ -20,10 +20,11 @@ _start:
     csrw mtvec, x1
     csrw stvec, x1
 
-//Test 1  SC on unreserved area should fail and not write memory
+//Test 1
     li x28, 1
 
-
+//Test 2
+    li x28, 2
 
     j pass
 
