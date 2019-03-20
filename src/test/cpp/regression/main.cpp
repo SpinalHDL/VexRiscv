@@ -192,7 +192,7 @@ class success : public std::exception { };
 
 class RiscvGolden {
 public:
-	int32_t pc;
+	int32_t pc, lastPc;
 	int32_t regs[32];
 
 	union status {
@@ -273,7 +273,7 @@ public:
 		status.raw = 0;
 		mip.raw = 0;
 		mie.raw = 0;
-		mtvec.raw = 0;
+		mtvec.raw = 0x80000020;
 		mcause.raw = 0;
 		mbadaddr = 0;
 		mepc = 0;
@@ -286,7 +286,12 @@ public:
 	}
 
 	virtual void pcWrite(int32_t target) {
-		pc = target;
+		if(isPcAligned(target)){
+			lastPc = pc;
+			pc = target;
+		} else {
+			exception(0, 0);
+		}
 	}
 	uint32_t mbadaddr;
 	uint32_t mepc;
@@ -305,6 +310,11 @@ public:
 		if(interrupt) livenessInterrupt = 0;
 
         //status.MPP  := privilege
+		if(!interrupt) step(); //As VexRiscv instruction which trap do not reach writeback stage fire
+	}
+
+	void ilegalInstruction(){
+		exception(0, 2);
 	}
 
 	virtual void fail() {
@@ -361,6 +371,15 @@ public:
         
     }
 
+    bool isPcAligned(uint32_t pc){
+#ifdef COMPRESSED
+    	return (pc & 1) == 0;
+#else
+    	return (pc & 3) == 0;
+#endif
+    }
+
+
 
 	virtual void step() {
 	    livenessStep = 0;
@@ -393,15 +412,24 @@ public:
 		uint32_t i;
 		uint32_t u32Buf;
 		if (pc & 2) {
-			iRead(pc - 2, &i);
+			if(iRead(pc - 2, &i)){
+				exception(0, 1);
+				return;
+			}
 			i >>= 16;
 			if (i & 3 == 3) {
 				uint32_t u32Buf;
-				iRead(pc + 2, &u32Buf);
+				if(iRead(pc + 2, &u32Buf)){
+					exception(0, 1);
+					return;
+				}
 				i |= u32Buf << 16;
 			}
 		} else {
-			iRead(pc, &i);
+			if(iRead(pc, &i)){
+				exception(0, 1);
+				return;
+			}
 		}
 		if ((i & 0x3) == 0x3) {
 			//32 bit
@@ -411,7 +439,7 @@ public:
 			case 0x6F:rfWrite(rd32, pc + 4);pcWrite(pc + (iBits(21, 10) << 1) + (iBits(20, 1) << 11) + (iBits(12, 8) << 12) + (iSign() << 20));break; //JAL
 			case 0x67:{
 				uint32_t target = (i32_rs1 + i32_i_imm) & ~1;
-				rfWrite(rd32, pc + 4);
+				if(isPcAligned(target)) rfWrite(rd32, pc + 4);
 				pcWrite(target);
 			} break; //JALR
 			case 0x63:
@@ -424,24 +452,36 @@ public:
 				case 0x7:if (uint32_t(i32_rs1) >= uint32_t(i32_rs2))pcWrite(pc + i32_sb_imm); else pcWrite(pc + 4);break;
 				}
 				break;
-			case 0x03: //LOADS
+			case 0x03:{ //LOADS
 				uint32_t data;
-				dRead(i32_rs1 + i32_i_imm, 1 << ((i >> 12) & 0x3), &data);
-				switch ((i >> 12) & 0x7) {
-				case 0x0:rfWrite(rd32, int8_t(data));pcWrite(pc + 4);break;
-				case 0x1:rfWrite(rd32, int16_t(data));pcWrite(pc + 4);break;
-				case 0x2:rfWrite(rd32, int32_t(data));pcWrite(pc + 4);break;
-				case 0x4:rfWrite(rd32, uint8_t(data));pcWrite(pc + 4);break;
-				case 0x5:rfWrite(rd32, uint16_t(data));pcWrite(pc + 4);break;
+				uint32_t address = i32_rs1 + i32_i_imm;
+				uint32_t size = 1 << ((i >> 12) & 0x3);
+				if(address & (size-1)){
+					exception(0, 4);
+				} else {
+					if(dRead(address, size, &data)){
+					    exception(0, 5);
+					} else {
+                        switch ((i >> 12) & 0x7) {
+                        case 0x0:rfWrite(rd32, int8_t(data));pcWrite(pc + 4);break;
+                        case 0x1:rfWrite(rd32, int16_t(data));pcWrite(pc + 4);break;
+                        case 0x2:rfWrite(rd32, int32_t(data));pcWrite(pc + 4);break;
+                        case 0x4:rfWrite(rd32, uint8_t(data));pcWrite(pc + 4);break;
+                        case 0x5:rfWrite(rd32, uint16_t(data));pcWrite(pc + 4);break;
+                        }
+					}
 				}
-				break;
-			case 0x23: //STORE
-				switch ((i >> 12) & 0x7) {
-				case 0x0:dWrite(i32_rs1 + i32_s_imm, 1, i32_rs2);pcWrite(pc + 4);break;
-				case 0x1:dWrite(i32_rs1 + i32_s_imm, 2, i32_rs2);pcWrite(pc + 4);break;
-				case 0x2:dWrite(i32_rs1 + i32_s_imm, 4, i32_rs2);pcWrite(pc + 4);break;
+			}break;
+			case 0x23: { //STORE
+				uint32_t address = i32_rs1 + i32_s_imm;
+				uint32_t size = 1 << ((i >> 12) & 0x3);
+				if(address & (size-1)){
+					exception(0, 6);
+				} else {
+					dWrite(address, size, i32_rs2);
+					pcWrite(pc + 4);
 				}
-				break;
+			}break;
 			case 0x13: //ALUi
 				switch ((i >> 12) & 0x7) {
 				case 0x0:rfWrite(rd32, i32_rs1 + i32_i_imm);pcWrite(pc + 4);break;
@@ -500,13 +540,21 @@ public:
 				break;
 			case 0x73:{
 				if(i32_func3 == 0){
-
 					switch(i){
 					case 0x30200073:{ //MRET
-				          status.mie = status.mpie;
-				          //privilege := mstatus.MPP
-				          pcWrite(mepc);
+							status.mie = status.mpie;
+							//privilege := mstatus.MPP
+							pcWrite(mepc);
 						}break;
+					case 0x00000073:{ //ECALL
+						exception(0, 11);
+						}break;
+					case 0x10500073:{ //WFI
+						pcWrite(pc + 4);
+						}break;
+					default:
+						ilegalInstruction();
+						break;
 					}
 				} else {
 					//CSR
@@ -533,11 +581,26 @@ public:
 			case 0: rfWrite(i16_addr2, rf_sp + i16_addi4spn_imm); pcWrite(pc + 2); break;
 			case 2:  {
 				uint32_t data;
-				dRead(i16_rf1 + i16_lw_imm, 4, &data);
-				rfWrite(i16_addr2, data); pcWrite(pc + 2);
-				break;
-			}
-			case 6: dWrite(i16_rf1 + i16_lw_imm, 4, i16_rf2); pcWrite(pc + 2); break;
+				uint32_t address = i16_rf1 + i16_lw_imm;
+				if(address & 0x3){
+					exception(0, 4);
+				} else {
+					if(dRead(i16_rf1 + i16_lw_imm, 4, &data)) {
+					    exception(1, 5);
+					} else {
+					    rfWrite(i16_addr2, data); pcWrite(pc + 2);
+                    }
+				}
+			} break;
+			case 6: {
+				uint32_t address = i16_rf1 + i16_lw_imm;
+				if(address & 0x3){
+					exception(0, 6);
+				} else {
+					dWrite(address, 4, i16_rf2);
+                    pcWrite(pc + 2);
+				}
+			}break;
 			case 8: rfWrite(rd32, regs[rd32] + i16_imm); pcWrite(pc + 2); break;
 			case 9: rfWrite(1, pc + 2);pcWrite(pc + i16_j_imm); break;
 			case 10: rfWrite(rd32, i16_imm);pcWrite(pc + 2); break;
@@ -565,9 +628,17 @@ public:
 			case 16: rfWrite(rd32, regs[rd32] << i16_zimm); pcWrite(pc + 2); break;
 			case 18:{
 				uint32_t data;
-				dRead(rf_sp + i16_lwsp_imm, 4, &data);
-				rfWrite(rd32, data); pcWrite(pc + 2);  break;
-			}
+				uint32_t address = rf_sp + i16_lwsp_imm;
+				if(address & 0x3){
+					exception(0, 4);
+				} else {
+				    if(dRead(address, 4, &data)){
+					    exception(1, 5);
+                    } else {
+					    rfWrite(rd32, data); pcWrite(pc + 2);
+                    }
+				}
+			}break;
 			case 20:
 				if(i & 0x1000){
 					if(iBits(2,10) == 0){
@@ -585,7 +656,14 @@ public:
 					}
 				}
 				break;
-			case 22: dWrite(rf_sp + i16_swsp_imm, 4, regs[iBits(2,5)]); pcWrite(pc + 2); break;
+			case 22: {
+				uint32_t address = rf_sp + i16_swsp_imm;
+				if(address & 3){
+					exception(0,6);
+				} else {
+					dWrite(address, 4, regs[iBits(2,5)]); pcWrite(pc + 2);
+				}
+			}break;
 			}
 		}
 	}
@@ -681,9 +759,9 @@ public:
 
 
         virtual bool iRead(int32_t address, uint32_t *data){
-        	mem.read(address, 4, (uint8_t*)data);
         	bool error;
-    		ws->iBusAccessPatch(address,data,&error);
+        	ws->iBusAccess(address, data, &error);
+//    		ws->iBusAccessPatch(address,data,&error);
     		return error;
         }
 
@@ -700,6 +778,7 @@ public:
 				}
 				*data = t.data;
 				periphRead.pop();
+				return t.error;
     		}else {
             	mem.read(address, size, (uint8_t*)data);
     		}
@@ -1032,11 +1111,6 @@ public:
 					}
 				#endif
                 if(top->VexRiscv->writeBack_arbitration_isFiring){
-                   	if(riscvRefEnable && top->VexRiscv->writeBack_PC != riscvRef.pc){
-						cout << " pc missmatch " << top->VexRiscv->writeBack_PC << " should be " << riscvRef.pc << endl;
-						fail();
-					}
-
                    	if(riscvRefEnable) {
                    	    riscvRef.step();
                    	    bool mIntTimer = false;
@@ -1053,6 +1127,10 @@ public:
                    	    riscvRef.liveness(mIntTimer, mIntExt);
                    	}
 
+                   	if(riscvRefEnable && top->VexRiscv->writeBack_PC != riscvRef.lastPc){
+						cout << hex << " pc missmatch " << top->VexRiscv->writeBack_PC << " should be " << riscvRef.lastPc << dec << endl;
+						fail();
+					}
 
 
                 	bool rfWriteValid = false;
@@ -2686,6 +2764,7 @@ int main(int argc, char **argv, char **env) {
 
 	printf("BOOT\n");
 	timespec startedAt = timer_start();
+
 
 	for(int idx = 0;idx < 1;idx++){
 
