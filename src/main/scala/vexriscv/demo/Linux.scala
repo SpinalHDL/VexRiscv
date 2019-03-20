@@ -37,7 +37,7 @@ object LinuxGen {
           prediction = NONE,
           historyRamSizeLog2 = 10,
           catchAccessFault = true,
-          compressedGen = false,
+          compressedGen = true,
           busLatencyMin = 1,
           injectorStage = true,
           memoryTranslatorPortConfig = withMmu generate MmuPortConfig(

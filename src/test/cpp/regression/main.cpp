@@ -194,6 +194,8 @@ class RiscvGolden {
 public:
 	int32_t pc, lastPc;
 	int32_t regs[32];
+	uint32_t mscratch;
+	uint32_t misa;
 
 	union status {
 		uint32_t raw;
@@ -277,6 +279,7 @@ public:
 		mcause.raw = 0;
 		mbadaddr = 0;
 		mepc = 0;
+		misa = 0; //TODO
 		status.mpp = 3;
 	}
 
@@ -290,7 +293,7 @@ public:
 			lastPc = pc;
 			pc = target;
 		} else {
-			exception(0, 0);
+			exception(0, 0, target);
 		}
 	}
 	uint32_t mbadaddr;
@@ -300,7 +303,16 @@ public:
 	virtual bool dRead(int32_t address, int32_t size, uint32_t *data) = 0;
 	virtual void dWrite(int32_t address, int32_t size, uint32_t data) = 0;
 
-	void exception(bool interrupt,int32_t cause) {
+    void exception(bool interrupt,int32_t cause) {
+        exception(interrupt, cause, false, 0);
+    }
+    void exception(bool interrupt,int32_t cause, uint32_t value) {
+        exception(interrupt, cause, true, value);
+    }
+	void exception(bool interrupt,int32_t cause, bool valueWrite, uint32_t value) {
+	    if(valueWrite){
+	        mbadaddr = value;
+	    }
 		mcause.interrupt = interrupt;
 		mcause.exceptionCode = cause;
         status.mie  = false;
@@ -319,10 +331,7 @@ public:
 
 	virtual void fail() {
 	}
-	virtual void decodingError() {
-		cout << "decoding error" << endl;
-		fail();
-	}
+
 
 	uint32_t* csrPtr(int32_t csr){
 		switch(csr){
@@ -333,16 +342,24 @@ public:
 		case MCAUSE: return &mcause.raw; break;
 		case MBADADDR: return &mbadaddr; break;
 		case MEPC: return &mepc; break;
-		default: fail(); return NULL; break;
+		case MSCRATCH: return &mscratch; break;
+		case MISA: return &misa; break;
+		default: ilegalInstruction(); return NULL; break;
 		}
 	}
 
-	virtual uint32_t csrRead(int32_t csr){
-		return *csrPtr(csr);
+	virtual bool csrRead(int32_t csr, uint32_t *value){
+		auto ptr = csrPtr(csr);
+		if(ptr){
+			*value = *ptr;
+		}
+		return  ptr == NULL;
 	}
 
-	virtual void csrWrite(int32_t csr, uint32_t value){
-		*csrPtr(csr) = value;
+	virtual bool csrWrite(int32_t csr, uint32_t value){
+		auto ptr = csrPtr(csr);
+		if(ptr) *csrPtr(csr) = value;
+		return  ptr == NULL;
 	}
 
     
@@ -457,10 +474,10 @@ public:
 				uint32_t address = i32_rs1 + i32_i_imm;
 				uint32_t size = 1 << ((i >> 12) & 0x3);
 				if(address & (size-1)){
-					exception(0, 4);
+					exception(0, 4, address);
 				} else {
 					if(dRead(address, size, &data)){
-					    exception(0, 5);
+					    exception(0, 5, address);
 					} else {
                         switch ((i >> 12) & 0x7) {
                         case 0x0:rfWrite(rd32, int8_t(data));pcWrite(pc + 4);break;
@@ -476,7 +493,7 @@ public:
 				uint32_t address = i32_rs1 + i32_s_imm;
 				uint32_t size = 1 << ((i >> 12) & 0x3);
 				if(address & (size-1)){
-					exception(0, 6);
+					exception(0, 6, address);
 				} else {
 					dWrite(address, size, i32_rs2);
 					pcWrite(pc + 4);
@@ -567,14 +584,15 @@ public:
 					case 3: clear = input; set = 0; write = ((i >> 15) & 0x1F) != 0; break;
 					}
 					uint32_t csrAddress = i32_csr;
-					uint32_t old = csrRead(i32_csr);
+					uint32_t old;
+					if(csrRead(i32_csr, &old)) { ilegalInstruction();return; }
+					if(write) if(csrWrite(i32_csr, (old & ~clear) | set)) { ilegalInstruction();return; }
 					rfWrite(rd32, old);
-					if(write) csrWrite(i32_csr, (old & ~clear) | set);
 					pcWrite(pc + 4);
 				}
 				break;
 			}
-			default: decodingError(); break;
+			default: ilegalInstruction(); break;
 			}
 		} else {
 			switch((iBits(0, 2) << 3) + iBits(13, 3)){
@@ -583,10 +601,10 @@ public:
 				uint32_t data;
 				uint32_t address = i16_rf1 + i16_lw_imm;
 				if(address & 0x3){
-					exception(0, 4);
+					exception(0, 4, address);
 				} else {
 					if(dRead(i16_rf1 + i16_lw_imm, 4, &data)) {
-					    exception(1, 5);
+					    exception(1, 5, address);
 					} else {
 					    rfWrite(i16_addr2, data); pcWrite(pc + 2);
                     }
@@ -595,7 +613,7 @@ public:
 			case 6: {
 				uint32_t address = i16_rf1 + i16_lw_imm;
 				if(address & 0x3){
-					exception(0, 6);
+					exception(0, 6, address);
 				} else {
 					dWrite(address, 4, i16_rf2);
                     pcWrite(pc + 2);
@@ -630,10 +648,10 @@ public:
 				uint32_t data;
 				uint32_t address = rf_sp + i16_lwsp_imm;
 				if(address & 0x3){
-					exception(0, 4);
+					exception(0, 4, address);
 				} else {
 				    if(dRead(address, 4, &data)){
-					    exception(1, 5);
+					    exception(1, 5, address);
                     } else {
 					    rfWrite(rd32, data); pcWrite(pc + 2);
                     }
@@ -659,7 +677,7 @@ public:
 			case 22: {
 				uint32_t address = rf_sp + i16_swsp_imm;
 				if(address & 3){
-					exception(0,6);
+					exception(0,6, address);
 				} else {
 					dWrite(address, 4, regs[iBits(2,5)]); pcWrite(pc + 2);
 				}
