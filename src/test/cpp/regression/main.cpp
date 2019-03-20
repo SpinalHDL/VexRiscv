@@ -190,21 +190,49 @@ class success : public std::exception { };
 #define MCYCLEH    0xB80 // MRW Upper 32 bits of mcycle, RV32I only.
 #define MINSTRETH  0xB82 // MRW Upper 32 bits of minstret, RV32I only.
 
+
+#define SSTATUS 0x100
+#define SIE 0x104
+#define STVEC 0x105
+#define SCOUNTEREN 0x106
+#define SSCRATCH 0x140
+#define SEPC 0x141
+#define SCAUSE 0x142
+#define STVAL 0x143
+#define SIP 0x144
+#define SATP 0x180
+
+
+
+#define SSTATUS_SIE         0x00000002
+#define SSTATUS_SPIE        0x00000020
+#define SSTATUS_SPP         0x00000100
+
 class RiscvGolden {
 public:
 	int32_t pc, lastPc;
 	int32_t regs[32];
+
 	uint32_t mscratch;
 	uint32_t misa;
+	uint32_t privilege;
+
+    uint32_t medeleg;
+	uint32_t mideleg;
 
 	union status {
 		uint32_t raw;
 		struct {
-			uint32_t _1 : 3;
+			uint32_t _1a : 1;
+			uint32_t sie : 1;
+			uint32_t _1b : 1;
 			uint32_t mie : 1;
-			uint32_t _2 : 3;
+			uint32_t _2a : 1;
+			uint32_t spie : 1;
+			uint32_t _2b : 1;
 			uint32_t mpie : 1;
-			uint32_t _3 : 3;
+			uint32_t spp : 1;
+			uint32_t _3 : 2;
 			uint32_t mpp : 2;
 		};
 	}__attribute__((packed)) status;
@@ -235,13 +263,16 @@ public:
 		};
 	}__attribute__((packed)) mie;
 
-	union mtvec {
+	union Xtvec {
 		uint32_t raw;
-		struct {
+		struct __attribute__((packed)) {
 			uint32_t _1 : 2;
 			uint32_t base : 30;
 		};
-	}__attribute__((packed)) mtvec;
+	};
+
+	Xtvec mtvec, stvec;
+
 
 
 	union mcause {
@@ -253,19 +284,16 @@ public:
 	}__attribute__((packed)) mcause;
 
 
-    //Machine CSR
-//    misaAccess(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
-//    READ_ONLY(CSR.MIP, 11 -> mip.MEIP, 7 -> mip.MTIP)
-//    READ_WRITE(CSR.MIP, 3 -> mip.MSIP)
-//    READ_WRITE(CSR.MIE, 11 -> mie.MEIE, 7 -> mie.MTIE, 3 -> mie.MSIE)
-//
-//    mtvecAccess(CSR.MTVEC, mtvec)
-//    mepcAccess(CSR.MEPC, mepc)
-//    READ_WRITE(CSR.MSTATUS,11 -> mstatus.MPP, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
-//    if(mscratchGen) READ_WRITE(CSR.MSCRATCH, mscratch)
-//    mcauseAccess(CSR.MCAUSE, xlen-1 -> mcause.interrupt, 0 -> mcause.exceptionCode)
-//    mbadaddrAccess(CSR.MBADADDR, mbadaddr)
-    //READ_WRITE(CSR.MSTATUS,11 -> mstatus.MPP, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
+	union scause {
+		uint32_t raw;
+		struct {
+			uint32_t exceptionCode : 31;
+			uint32_t interrupt : 1;
+		};
+	}__attribute__((packed)) scause;
+
+
+
 	RiscvGolden() {
 		pc = 0x80000000;
 		regs[0] = 0;
@@ -281,6 +309,9 @@ public:
 		mepc = 0;
 		misa = 0; //TODO
 		status.mpp = 3;
+		privilege = 3;
+		medeleg = 0;
+		mideleg = 0;
 	}
 
 	virtual void rfWrite(int32_t address, int32_t data) {
@@ -296,8 +327,8 @@ public:
 			exception(0, 0, target);
 		}
 	}
-	uint32_t mbadaddr;
-	uint32_t mepc;
+	uint32_t mbadaddr, sbadaddr;
+	uint32_t mepc, sepc;
 
 	virtual bool iRead(int32_t address, uint32_t *data) = 0;
 	virtual bool dRead(int32_t address, int32_t size, uint32_t *data) = 0;
@@ -310,18 +341,36 @@ public:
         exception(interrupt, cause, true, value);
     }
 	void exception(bool interrupt,int32_t cause, bool valueWrite, uint32_t value) {
-	    if(valueWrite){
-	        mbadaddr = value;
-	    }
-		mcause.interrupt = interrupt;
-		mcause.exceptionCode = cause;
-        status.mie  = false;
-        status.mpie = status.mie;
-        mepc = pc;
-		pcWrite(mtvec.base << 2);
+		uint32_t deleg = interrupt ? mideleg : medeleg;
+		uint32_t targetPrivilege = 3;
+		if(deleg & (1 << cause)) targetPrivilege = 1;
+		Xtvec xtvec = targetPrivilege == 3 ? mtvec : stvec;
+
+		switch(targetPrivilege){
+		case 3:
+		    if(valueWrite) mbadaddr = value;
+			mcause.interrupt = interrupt;
+			mcause.exceptionCode = cause;
+	        status.mie  = false;
+	        status.mpie = status.mie;
+	        status.mpp = privilege;
+	        mepc = pc;
+			break;
+		case 1:
+			if(valueWrite) sbadaddr = value;
+			scause.interrupt = interrupt;
+			scause.exceptionCode = cause;
+	        status.sie  = false;
+	        status.spie = status.sie;
+	        status.spp  = privilege;
+	        sepc = pc;
+			break;
+		}
+
+		privilege = targetPrivilege;
+		pcWrite(xtvec.base << 2);
 		if(interrupt) livenessInterrupt = 0;
 
-        //status.MPP  := privilege
 		if(!interrupt) step(); //As VexRiscv instruction which trap do not reach writeback stage fire
 	}
 
@@ -333,33 +382,37 @@ public:
 	}
 
 
-	uint32_t* csrPtr(int32_t csr){
-		switch(csr){
-		case MSTATUS: return &status.raw; break;
-		case MIP: return &mip.raw; break;
-		case MIE: return &mie.raw; break;
-		case MTVEC: return &mtvec.raw; break;
-		case MCAUSE: return &mcause.raw; break;
-		case MBADADDR: return &mbadaddr; break;
-		case MEPC: return &mepc; break;
-		case MSCRATCH: return &mscratch; break;
-		case MISA: return &misa; break;
-		default: ilegalInstruction(); return NULL; break;
-		}
-	}
 
 	virtual bool csrRead(int32_t csr, uint32_t *value){
-		auto ptr = csrPtr(csr);
-		if(ptr){
-			*value = *ptr;
+		switch(csr){
+		case MSTATUS: *value = status.raw; break;
+		case MIP: *value = mip.raw; break;
+		case MIE: *value = mie.raw; break;
+		case MTVEC: *value = mtvec.raw; break;
+		case MCAUSE: *value = mcause.raw; break;
+		case MBADADDR: *value = mbadaddr; break;
+		case MEPC: *value = mepc; break;
+		case MSCRATCH: *value = mscratch; break;
+		case MISA: *value = misa; break;
+		default: return true; break;
 		}
-		return  ptr == NULL;
+		return false;
 	}
 
 	virtual bool csrWrite(int32_t csr, uint32_t value){
-		auto ptr = csrPtr(csr);
-		if(ptr) *csrPtr(csr) = value;
-		return  ptr == NULL;
+		switch(csr){
+		case MSTATUS: status.raw = value; break;
+		case MIP: mip.raw = value; break;
+		case MIE: mie.raw = value; break;
+		case MTVEC: mtvec.raw = value; break;
+		case MCAUSE: mcause.raw = value; break;
+		case MBADADDR: mbadaddr = value; break;
+		case MEPC: mepc = value; break;
+		case MSCRATCH: mscratch = value; break;
+		case MISA: misa = value; break;
+		default: ilegalInstruction(); return true; break;
+		}
+		return false;
 	}
 
     
@@ -559,19 +612,30 @@ public:
 				if(i32_func3 == 0){
 					switch(i){
 					case 0x30200073:{ //MRET
-							status.mie = status.mpie;
-							//privilege := mstatus.MPP
-							pcWrite(mepc);
-						}break;
+						if(privilege < 3){ ilegalInstruction(); return;}
+						status.mpp = 0;
+						status.mie = status.mpie;
+						status.mpie = 1;
+						privilege = status.mpp;
+						pcWrite(mepc);
+					}break;
+					case 0x10200073:{ //SRET
+						if(privilege < 1){ ilegalInstruction(); return;}
+						status.spp = 0;
+						status.sie = status.spie;
+						status.spie = 1;
+						privilege = status.spp;
+						pcWrite(sepc);
+					}break;
 					case 0x00000073:{ //ECALL
 						exception(0, 11);
-						}break;
+					}break;
 					case 0x10500073:{ //WFI
 						pcWrite(pc + 4);
-						}break;
+					}break;
 					default:
 						ilegalInstruction();
-						break;
+					break;
 					}
 				} else {
 					//CSR
