@@ -136,7 +136,7 @@ object LinuxGen {
           divUnrollFactor = 1
         ),
         //          new DivPlugin,
-        new CsrPlugin(CsrPluginConfig.all(0x80000020l)),
+        new CsrPlugin(CsrPluginConfig.linux(0x80000020l)),
         //          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
         //             CsrPluginConfig(
         //            catchIllegalAccess = false,

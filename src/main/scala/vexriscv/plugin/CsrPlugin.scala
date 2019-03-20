@@ -89,7 +89,7 @@ object CsrPluginConfig{
     mtvecAccess         = CsrAccess.READ_WRITE,
     mtvecInit           = mtVecInit,
     mepcAccess          = CsrAccess.READ_WRITE,
-    mscratchGen         = false,
+    mscratchGen         = true,
     mcauseAccess        = CsrAccess.READ_WRITE,
     mbadaddrAccess      = CsrAccess.READ_WRITE,
     mcycleAccess        = CsrAccess.READ_WRITE,
