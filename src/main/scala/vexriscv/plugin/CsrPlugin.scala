@@ -525,13 +525,14 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         }
 
         //Supervisor CSR
-        WRITE_ONLY(CSR.SSTATUS,8 -> sstatus.SPP, 5 -> sstatus.SPIE, 1 -> sstatus.SIE)
-        for(offset <- List(0, 0x200)) {
-          READ_ONLY(CSR.SSTATUS + offset,8 -> sstatus.SPP, 5 -> sstatus.SPIE, 1 -> sstatus.SIE)
+        for(offset <- List(CSR.MSTATUS, CSR.SSTATUS)) READ_WRITE(offset,8 -> sstatus.SPP, 5 -> sstatus.SPIE, 1 -> sstatus.SIE)
+        for(offset <- List(CSR.MIP, CSR.SIP)) {
+          READ_ONLY(offset,  9 -> sip.SEIP, 5 -> sip.STIP)
+          READ_WRITE(offset, 1 -> sip.SSIP)
         }
-        READ_ONLY(CSR.SIP, 9 -> sip.SEIP, 5 -> sip.STIP)
-        READ_WRITE(CSR.SIP, 1 -> sip.SSIP)
-        READ_WRITE(CSR.SIE, 9 -> sie.SEIE, 5 -> sie.STIE, 1 -> sie.SSIE)
+
+        for(offset <- List(CSR.MIE, CSR.SIE)) READ_WRITE(offset, 9 -> sie.SEIE, 5 -> sie.STIE, 1 -> sie.SSIE)
+
 
         stvecAccess(CSR.STVEC, 2 -> stvec.base, 0 -> stvec.mode)
         sepcAccess(CSR.SEPC, sepc)
