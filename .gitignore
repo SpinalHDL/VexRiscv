@@ -24,6 +24,7 @@ out
 bin/
 .classpath
 .project
+.cproject
 .settings
 .cache-main
 

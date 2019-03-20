@@ -470,9 +470,9 @@ public:
 					case 0x1:rfWrite(rd32,(int64_t(i32_rs1) * int64_t(i32_rs2)) >> 32);pcWrite(pc + 4);break;
 					case 0x2:rfWrite(rd32,(int64_t(i32_rs1) * uint64_t(uint32_t(i32_rs2)))>> 32);pcWrite(pc + 4);break;
 					case 0x3:rfWrite(rd32,(uint64_t(uint32_t(i32_rs1)) * uint64_t(uint32_t(i32_rs2))) >> 32);pcWrite(pc + 4);break;
-					case 0x4:rfWrite(rd32,i32_rs2 == 0 ? -1 : int32_t(i32_rs1) / int32_t(i32_rs2));pcWrite(pc + 4);break;
+					case 0x4:rfWrite(rd32,i32_rs2 == 0 ? -1 : int64_t(i32_rs1) / int64_t(i32_rs2));pcWrite(pc + 4);break;
 					case 0x5:rfWrite(rd32,i32_rs2 == 0 ? -1 : uint32_t(i32_rs1) / uint32_t(i32_rs2));pcWrite(pc + 4);break;
-					case 0x6:rfWrite(rd32,i32_rs2 == 0 ? i32_rs1 : int32_t(i32_rs1)% int32_t(i32_rs2));pcWrite(pc + 4);break;
+					case 0x6:rfWrite(rd32,i32_rs2 == 0 ? i32_rs1 : int64_t(i32_rs1)% int64_t(i32_rs2));pcWrite(pc + 4);break;
 					case 0x7:rfWrite(rd32,i32_rs2 == 0 ? i32_rs1 : uint32_t(i32_rs1) % uint32_t(i32_rs2));pcWrite(pc + 4);break;
 					}
 				} else {
@@ -2191,7 +2191,7 @@ public:
 	ofstream out32;
 	int out32Counter = 0;
 	Compliance(string name) : Workspace(name) {
-		//withRiscvRef();
+		withRiscvRef();
 		loadHex("../../resources/hex/" + name + ".elf.hex");
 		out32.open (name + ".out32");
 		this->name = name;
@@ -2774,20 +2774,24 @@ int main(int argc, char **argv, char **env) {
 			    #ifndef COMPRESSED
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
-				    redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
+				    redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->noInstructionReadCheck()->run(10e4);)
                 #else
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,   14,2,     15,5,16,17,1 };
-				    redo(REDO,TestX28("machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).noInstructionReadCheck()->run(10e4);)
+				    redo(REDO,TestX28("machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->noInstructionReadCheck()->run(10e4);)
                 #endif
 			#endif
-			#ifdef MMU
-				uint32_t mmuRef[] = {1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
-					13, 0xC4000000,0x33333333, 6,7,
-					1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
-					13, 0xC4000000,0x33333333, 6,7};
-				redo(REDO,TestX28("mmu",mmuRef, sizeof(mmuRef)/4).noInstructionReadCheck()->run(4e4);)
-			#endif
+//			#ifdef MMU
+//				uint32_t mmuRef[] = {1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
+//					13, 0xC4000000,0x33333333, 6,7,
+//					1,2,3, 0x11111111, 0x11111111, 0x11111111, 0x22222222, 0x22222222, 0x22222222, 4, 0x11111111, 0x33333333, 0x33333333, 5,
+//					13, 0xC4000000,0x33333333, 6,7};
+//				redo(REDO,TestX28("mmu",mmuRef, sizeof(mmuRef)/4).noInstructionReadCheck()->run(4e4);)
+//			#endif
+
+            #ifdef MMU
+                redo(REDO,Workspace("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
+            #endif
 
 			#ifdef DEBUG_PLUGIN
 				redo(REDO,DebugPluginTest().run(1e6););
