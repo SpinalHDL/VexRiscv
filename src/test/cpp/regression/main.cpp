@@ -213,7 +213,7 @@ public:
 	int32_t pc, lastPc;
 	int32_t regs[32];
 
-	uint32_t mscratch;
+	uint32_t mscratch, sscratch;
 	uint32_t misa;
 	uint32_t privilege;
 
@@ -241,27 +241,39 @@ public:
 	union mip {
 		uint32_t raw;
 		struct {
-			uint32_t _1 : 3;
+			uint32_t _1a : 1;
+			uint32_t ssip : 1;
+			uint32_t _1b : 1;
 			uint32_t msip : 1;
-			uint32_t _2 : 3;
+			uint32_t _2a : 1;
+			uint32_t stip : 1;
+			uint32_t _2b : 1;
 			uint32_t mtip : 1;
-			uint32_t _3 : 3;
-			uint32_t meip : 2;
+			uint32_t _3a : 1;
+			uint32_t seip : 1;
+			uint32_t _3b : 1;
+			uint32_t meip : 1;
 		};
-	}__attribute__((packed)) mip;
+	}__attribute__((packed)) ip;
 
 
 	union mie {
 		uint32_t raw;
 		struct {
-			uint32_t _1 : 3;
+			uint32_t _1a : 1;
+			uint32_t ssie : 1;
+			uint32_t _1b : 1;
 			uint32_t msie : 1;
-			uint32_t _2 : 3;
+			uint32_t _2a : 1;
+			uint32_t stie : 1;
+			uint32_t _2b : 1;
 			uint32_t mtie : 1;
-			uint32_t _3 : 3;
-			uint32_t meie : 2;
+			uint32_t _3a : 1;
+			uint32_t seie : 1;
+			uint32_t _3b : 1;
+			uint32_t meie : 1;
 		};
-	}__attribute__((packed)) mie;
+	}__attribute__((packed)) ie;
 
 	union Xtvec {
 		uint32_t raw;
@@ -301,8 +313,8 @@ public:
 			regs[i] = 0;
 
 		status.raw = 0;
-		mip.raw = 0;
-		mie.raw = 0;
+		ip.raw = 0;
+		ie.raw = 0;
 		mtvec.raw = 0x80000020;
 		mcause.raw = 0;
 		mbadaddr = 0;
@@ -386,30 +398,50 @@ public:
 	virtual bool csrRead(int32_t csr, uint32_t *value){
 		switch(csr){
 		case MSTATUS: *value = status.raw; break;
-		case MIP: *value = mip.raw; break;
-		case MIE: *value = mie.raw; break;
+		case MIP: *value = ip.raw; break;
+		case MIE: *value = ie.raw; break;
 		case MTVEC: *value = mtvec.raw; break;
 		case MCAUSE: *value = mcause.raw; break;
 		case MBADADDR: *value = mbadaddr; break;
 		case MEPC: *value = mepc; break;
 		case MSCRATCH: *value = mscratch; break;
 		case MISA: *value = misa; break;
+
+		case SSTATUS: *value = status.raw & 0x133; break;
+		case SIP: *value = ip.raw & 0x333; break;
+		case SIE: *value = ie.raw & 0x333; break;
+		case STVEC: *value = stvec.raw; break;
+		case SCAUSE: *value = scause.raw; break;
+		case STVAL: *value = sbadaddr; break;
+		case SEPC: *value = sepc; break;
+		case SSCRATCH: *value = sscratch; break;
 		default: return true; break;
 		}
 		return false;
 	}
 
+#define maskedWrite(dst, src, mask) dst=(dst & ~mask)|(src & mask);
 	virtual bool csrWrite(int32_t csr, uint32_t value){
 		switch(csr){
 		case MSTATUS: status.raw = value; break;
-		case MIP: mip.raw = value; break;
-		case MIE: mie.raw = value; break;
+		case MIP: ip.raw = value; break;
+		case MIE: ie.raw = value; break;
 		case MTVEC: mtvec.raw = value; break;
 		case MCAUSE: mcause.raw = value; break;
 		case MBADADDR: mbadaddr = value; break;
 		case MEPC: mepc = value; break;
 		case MSCRATCH: mscratch = value; break;
 		case MISA: misa = value; break;
+
+		case SSTATUS: maskedWrite(status.raw, value,0x133); break;
+		case SIP: maskedWrite(ip.raw, value,0x333); break;
+		case SIE: maskedWrite(ie.raw, value,0x333); break;
+		case STVEC: stvec.raw = value; break;
+		case SCAUSE: scause.raw = value; break;
+		case STVAL: sbadaddr = value; break;
+		case SEPC: sepc = value; break;
+		case SSCRATCH: sscratch = value; break;
+
 		default: ilegalInstruction(); return true; break;
 		}
 		return false;
@@ -420,7 +452,7 @@ public:
     int livenessInterrupt = 0;
     virtual void liveness(bool mIntTimer, bool mIntExt){
         livenessStep++;
-        bool interruptRequest = (mie.mtie && mIntTimer);
+        bool interruptRequest = (ie.mtie && mIntTimer);
         if(interruptRequest){
             if(status.mie){
                 livenessInterrupt++;
