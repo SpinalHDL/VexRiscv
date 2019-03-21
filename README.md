@@ -714,24 +714,25 @@ Simple and light multi-way instruction cache.
 
 | Parameters | type | description |
 | ------ | ----------- | ------ |
-| cacheSize  | Int | Total storage capacity of the cache |
-| bytePerLine  | Int | Number of bytes per cache line  |
-| wayCount  | Int | Number of cache ways |
-| twoCycleRam  | Boolean | Check the tags values in the decode stage instead of the fetch stage to relax timings |
-| asyncTagMemory  | Boolean | Read the cache tags in a asyncronus manner instead of syncronous one |
-| addressWidth  | Int | Address width, should be 32 |
-| cpuDataWidth  | Int | Cpu data width, should be 32 |
-| memDataWidth  | Int | Memory data width, could potentialy be something else than 32, but only 32 is currently tested |
-| catchIllegalAccess  | Boolean  | Catch when a memory access is done on non valid memory address (MMU) |
-| catchAccessFault  | Boolean | Catch when the memeory bus is responding with an error  |
-| catchMemoryTranslationMiss  | Boolean  |  Catch when the MMU miss a TLB |
-| resetVector | BigInt | Address of the program counter after the reset |
-| relaxedPcCalculation | Boolean | By default jump have an asynchronous immediate effect on the program counter, which allow to reduce the branch penalties by one cycle but could reduce the FMax as it will combinatorialy drive the instruction bus address signal. To avoid this you can set this parameter to true, which will make the jump affecting the programm counter in a sequancial way, which will cut the combinatorial path but add one additional cycle of penalty when a jump occur. |
-| compressedGen | Boolean | Enable RVC support |
-| prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation, see bellow for more descriptions |
+| resetVector | BigInt | Address of the program counter after the reset. |
+| relaxedPcCalculation | Boolean | When false, branches immediately update the program counter. This minimizes branch penalties but might reduce FMax because the instruction bus address signal is a combinatorial path. When true, this combinatorial path is removed and the program counter is updated one cycle after a branch is detected. While FMax may improve, an additional branch penalty will be incurred as well. |
+| prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation. See below for more details. |
 | historyRamSizeLog2 | Int | Specify the number of entries in the direct mapped prediction cache of DYNAMIC/DYNAMIC_TARGET implementation. 2 pow historyRamSizeLog2 entries |
+| compressedGen | Boolean | Enable RISC-V compressed instruction (RVC) support. |
 
-Note: If you enable the twoCycleRam option and if wayCount is bigger than one, then the register file plugin should be configured to read the regFile in a asynchronous manner.
+| config.cacheSize  | Int | Total storage capacity of the cache in bytes. |
+| config.bytePerLine  | Int | Number of bytes per cache line  |
+| config.wayCount  | Int | Number of cache ways |
+| config.twoCycleRam  | Boolean | Check the tags values in the decode stage instead of the fetch stage to relax timings |
+| config.asyncTagMemory  | Boolean | Read the cache tags in an asynchronous manner instead of syncronous one |
+| config.addressWidth  | Int | CPU address width. Should be 32 |
+| config.cpuDataWidth  | Int | CPU data width. Should be 32 |
+| config.memDataWidth  | Int | Memory data width. Could potentialy be something else than 32, but only 32 is currently tested |
+| config.catchIllegalAccess  | Boolean  | Catch when a memory access is done on non-valid memory address (MMU) |
+| config.catchAccessFault  | Boolean | Catch when the memeory bus is responding with an error  |
+| config.catchMemoryTranslationMiss  | Boolean  |  Catch when the MMU miss a TLB |
+
+Note: If you enable the twoCycleRam option and if wayCount is bigger than one, then the register file plugin should be configured to read the regFile in an asynchronous manner.
 
 #### DecoderSimplePlugin
 
