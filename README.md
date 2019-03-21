@@ -719,7 +719,6 @@ Simple and light multi-way instruction cache.
 | prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation. See below for more details. |
 | historyRamSizeLog2 | Int | Specify the number of entries in the direct mapped prediction cache of DYNAMIC/DYNAMIC_TARGET implementation. 2 pow historyRamSizeLog2 entries |
 | compressedGen | Boolean | Enable RISC-V compressed instruction (RVC) support. |
-
 | config.cacheSize  | Int | Total storage capacity of the cache in bytes. |
 | config.bytePerLine  | Int | Number of bytes per cache line  |
 | config.wayCount  | Int | Number of cache ways |
