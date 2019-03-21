@@ -737,12 +737,12 @@ Note: If you enable the twoCycleRam option and if wayCount is bigger than one, t
 
 This plugin provides instruction decoding capabilities to others plugins.
 
-For instance, for a given instruction, the pipeline hazard plugin needs to know if it uses the register file source 1/2 in order stall the pipeline until the hazard is gone.
+For instance, for a given instruction, the pipeline hazard plugin needs to know if it uses the register file source 1/2 in order to stall the pipeline until the hazard is gone.
 To provide this kind of information, each plugin which implements an instruction documents this kind of information to the DecoderSimplePlugin plugin.
 
 | Parameters | type | description |
 | ------ | ----------- | ------ |
-| catchIllegalInstruction | Boolean | If set to true, instruction which have no decoding specification will generate a trap exception  |
+| catchIllegalInstruction | Boolean | When true, instructions that don't match a decoding specification will generate a trap exception  |
 
 Here is a usage example :
 
@@ -754,11 +754,11 @@ Here is a usage example :
 
       //Decoding specification when the 'key' pattern is recognized in the instruction
       List(
-        IS_SIMD_ADD              -> True,
-        REGFILE_WRITE_VALID      -> True, //Enable the register file write
+        IS_SIMD_ADD              -> True, //Inform the pipeline that the current instruction is a SIMD_ADD instruction
+        REGFILE_WRITE_VALID      -> True, //Notify the hazard management unit that this instruction writes to the register file
         BYPASSABLE_EXECUTE_STAGE -> True, //Notify the hazard management unit that the instruction result is already accessible in the EXECUTE stage (Bypass ready)
         BYPASSABLE_MEMORY_STAGE  -> True, //Same as above but for the memory stage
-        RS1_USE                  -> True, //Notify the hazard management unit that this instruction use the RS1 value
+        RS1_USE                  -> True, //Notify the hazard management unit that this instruction uses the RS1 value
         RS2_USE                  -> True  //Same than above but for RS2.
       )
     )
