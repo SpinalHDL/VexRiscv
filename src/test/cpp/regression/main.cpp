@@ -736,7 +736,11 @@ public:
 						pcWrite(pc + 4);
 					}break;
 					default:
-						ilegalInstruction();
+						if((i & 0xFE007FFF) == 0x12000073){ //SFENCE.VMA
+							pcWrite(pc + 4);
+						}else {
+							ilegalInstruction();
+						}
 					break;
 					}
 				} else {

@@ -1,21 +1,26 @@
 .globl _start
 
+#define TEST_ID x28
+#define TRAP_OK x29
+#define TRAP_RET x30
+
+
 ROM_SUPER_0:
 
 _start:
-    li x29, 0 //Do not allow trap
+    li TRAP_OK, 0 //Do not allow trap
     la x1, trap
     csrw mtvec, x1
 
 test1: //test ram
-    li x28, 1
+    li TEST_ID, 1
     la x1, ROM_2
     li x2, 0x27262524
     lw x1, 4(x1)
     bne x1, x2, fail
 
 test2: //dummy mret
-    li x28, 2
+    li TEST_ID, 2
     la x1, test3
     csrw mepc, x1
     li x1, 0x1800
@@ -25,7 +30,7 @@ test2: //dummy mret
 
 
 test3: // jump to supervisor
-    li x28, 3
+    li TEST_ID, 3
     li x1, 0x0800
     csrw mstatus, x1
     la x1, test4
@@ -36,7 +41,7 @@ test3: // jump to supervisor
 
 
 test4: //test ram mmu off
-    li x28, 4
+    li TEST_ID, 4
     la x1, ROM_3
     li x2, 0x37363534
     lw x1, 4(x1)
@@ -44,7 +49,7 @@ test4: //test ram mmu off
 
 test5: //setup MMU
 
-    li x28, 5
+    li TEST_ID, 5
     la x1, MMU_TABLE_0 + 0x800
     la x2, MMU_TABLE_1
     srli x2, x2, 2
@@ -54,11 +59,11 @@ test5: //setup MMU
     la x1, MMU_TABLE_1 + 0x000*4
     li x2, 0x80000000
     srli x2, x2, 2
-    ori x2, x2, 0x1F
+    ori x2, x2, 0x0F
     sw x2, 0(x1)
 
 
-    li x28, 5
+    li TEST_ID, 5
     la x1, MMU_TABLE_0 + 0x900
     la x2, MMU_TABLE_2
     srli x2, x2, 2
@@ -95,14 +100,20 @@ test5: //setup MMU
     ori x2, x2, 0x11 + (0x5 << 1)
     sw x2, 0(x1)
 
-    li x28, 5
+    la x1, MMU_TABLE_2 + 0x014*4 //no user
+    la x2, ROM_5
+    srli x2, x2, 2
+    ori x2, x2, 0x01 + (0x7 << 1)
+    sw x2, 0(x1)
+
+    li TEST_ID, 5
     la x1, MMU_TABLE_0 + 0xA00
     la x2, ROM_SUPER_0
     srli x2, x2, 2
     ori x2, x2, 0x1F
     sw x2, 0(x1)
 
-    li x28, 5
+    li TEST_ID, 5
     la x1, MMU_TABLE_0 + 0xB00
     sw x0, 0(x1)
 
@@ -117,7 +128,7 @@ test5: //setup MMU
 
 
 test6: //read through MMU
-    li x28, 6
+    li TEST_ID, 6
     li x1, 0x9000A008
     li x2, 0x4B4A4948
     lw x1, 0(x1)
@@ -126,7 +137,7 @@ test6: //read through MMU
 
 
 test7: //write-read through MMU
-    li x28, 7
+    li TEST_ID, 7
     li x1, 0x9000A360
     li x2, 0xAAEE0001
     sw x2, 0(x1)
@@ -135,7 +146,7 @@ test7: //write-read through MMU
 
 
 test8: //read through MMU super page
-    li x28, 8
+    li TEST_ID, 8
     la x1, ROM_7 + 0x20000004
     li x2, 0x77767574
     lw x1, 0(x1)
@@ -144,7 +155,7 @@ test8: //read through MMU super page
 
 
 test9: //write-read through MMU  super page
-    li x28, 9
+    li TEST_ID, 9
     li x1, 0xA000A360
     li x2, 0xAAEE0002
     sw x2, 0(x1)
@@ -154,7 +165,7 @@ test9: //write-read through MMU  super page
 
 
 test10: //check previously written value without the MMU
-    li x28, 10
+    li TEST_ID, 10
     csrwi satp, 0
 
     la x1, ROM_4 + 0x360
@@ -164,7 +175,7 @@ test10: //check previously written value without the MMU
 
 
 test11:
-    li x28, 11
+    li TEST_ID, 11
     la x1, ROM_SUPER_0 + 0xA360
     li x2, 0xAAEE0002
     lw x1, 0(x1)
@@ -179,32 +190,32 @@ test11:
 
 
 test12: //Dummy trap
-    li x28, 12
-    li x29, 1 //Allow trap
-    la x30, test13 // trap return address
+    li TEST_ID, 12
+    li TRAP_OK, 1 //Allow trap
+    la TRAP_RET, test13 // trap return address
     ecall
     j fail
 
 
 test13: //Trap load page fault
-    li x28, 13
-    la x30, test14
+    li TEST_ID, 13
+    la TRAP_RET, test14
     li x1, 0xB0000000
     lw x1, 8(x1)
     j fail
 
 
 test14: //Trap store page fault
-    li x28, 14
-    la x30, test15
+    li TEST_ID, 14
+    la TRAP_RET, test15
     li x1, 0xB0000000
     sw x1, 8(x1)
     j fail
 
 
 test15: //Trap instruction fetch
-    li x28, 15
-    la x30, test15_end
+    li TEST_ID, 15
+    la TRAP_RET, test15_end
     li x1, 0xB0000000
     jr x1
     j fail
@@ -213,8 +224,8 @@ test15_end:
 
 
 test16: //Test limited read access
-    li x28, 16
-    li x29, 0 //disable trap
+    li TEST_ID, 16
+    li TRAP_OK, 0 //disable trap
 
     li x1, 0x90010008
     li x2, 0x5B5A5958
@@ -233,7 +244,7 @@ test16: //Test limited read access
     bne x1, x2, fail
 
 test17: //Test limited write access
-    li x28, 17
+    li TEST_ID, 17
 
     li x1, 0x90011360
     li x2, 0xAAEE0003
@@ -242,7 +253,7 @@ test17: //Test limited write access
     bne x1, x2, fail
 
 test18: //Test limited execute access
-    li x28, 18
+    li TEST_ID, 18
 
     la x1, test18_end
     li x2, 0x90012010
@@ -252,46 +263,166 @@ test18_end:
 
 
 test19: //exception by access limitations
-    li x29, 1 //Allow trap
-    la x30, test19_readTrap
+    li TEST_ID, 19
+    li TRAP_OK, 1 //Allow trap
+    la TRAP_RET, test19_readTrap
     li x1, 0x90012010
     lw x1, 0(x1)
     j fail
 test19_readTrap:
-    la x30, test19_writeTrap
+    la TRAP_RET, test19_writeTrap
     li x1, 0x90013010
     sw x1, 0(x1)
     j fail
 test19_writeTrap:
-    la x30, test19_executeTrap
+    la TRAP_RET, test19_executeTrap
     li x1, 0x90011010
     jr x1
     j fail
 test19_executeTrap:
 
 
+test20: //mxr set, read executable
+    li TEST_ID, 21
+    li TRAP_OK, 0
+    li x1, 1 << 19
+    csrs sstatus, x1
+    li x1, 0x90012008
+    li x2, 0x5B5A5958
+    lw x1, 0(x1)
+    bne x1, x2, fail
+    li x1, 1 << 19
+    csrc sstatus, x1
+
+
+test21: //supervisor accessing not user
+    li TRAP_OK, 0
+    li TEST_ID, 20
+    li x1, 0x90014380
+    li x2, 0xAAEE0005
+    sw x2, 0(x1)
+    lw x1, 0(x1)
+    bne x1, x2, fail
+
+
+
+    li x1, 1 << 18 //clear SUM
+    csrc sstatus, x1
+    li TRAP_OK, 1
+    la TRAP_RET, test21_pass
+    li x1, 0x90011648
+    sw x1, 0(x1)
+    j fail
+
+test21_pass:
+
+
+
+
+
+test50:  //User mode setup
+    li TEST_ID, 50
+    li TRAP_OK, 0
+
+    //set SUM
+    li x1, 1 << 18
+    csrs sstatus, x1
+
+    //remap code tlb into userspace
+    csrr x10, satp
+    csrw satp, x0
+    la x1, MMU_TABLE_1 + 0x000*4
+    li x2, 0x80000000
+    srli x2, x2, 2
+    ori x2, x2, 0x1F
+    sw x2, 0(x1)
+    csrw satp, x10
+
+    li x1, 1 << 8
+    csrc sstatus, x1 //clear SPP
+
+    la x1, test51
+    csrw sepc, x1
+    sfence.vma
+    sret
+    j fail
+
+test51: //user read/write
+    li TEST_ID, 51
+    li x1, 0x90011008
+    li x2, 0x5B5A5958
+    lw x1, 0(x1)
+    bne x1, x2, fail
+
+    li x1, 0xA000A324
+    li x2, 0xAAEE0008
+    sw x2, 0(x1)
+    lw x1, 0(x1)
+    bne x1, x2, fail
+
+test52: //user fetch
+    li TEST_ID, 52
+    la x1, test53
+    li x2, 0x90012010
+    jr x2
+    j fail
+
+test53: // user fetch page fault
+    li TEST_ID, 53
+    li TRAP_OK, 1
+    la TRAP_RET, test54
+    li x1, 0x90014390
+    jr x1
+    j fail
+    
+test54: //user load page fault
+    li TEST_ID, 54
+    li TRAP_OK, 1
+    la TRAP_RET, test55
+    li x1, 0x90014394
+    lw x1, 0(x1)
+    j fail
+    
+test55: //user store page fault
+    li TEST_ID, 55
+    li TRAP_OK, 1
+    la TRAP_RET, test56
+    li x1, 0x90014398
+    sw x1, 0(x1)
+    j fail
+
+test56:
+
+
+
+
+
+
+
     j pass
 
-fail: //x28 => error code
-    csrwi satp, 0
-    j failFence
+fail: //TEST_ID => error code
+    li TRAP_OK, 0
+    ecall
 failFence:
     li x2, 0xF00FFF24
-    sw x28, 0(x2)
+    sw TEST_ID, 0(x2)
 
 pass:
-    csrwi satp, 0
-    j passFence
+    li TRAP_OK, 2
+    ecall
 passFence:
     li x2, 0xF00FFF20
     sw x0, 0(x2)
 
 
 trap:
-    beq x29, x0, fail
+    beq TRAP_OK, x0, failFence
     csrr x1, mcause
     csrr x1, mepc
-    csrw mepc, x30
+    li x1, 2
+    beq TRAP_OK, x1, passFence
+    csrw mepc, TRAP_RET
     mret
 
 
