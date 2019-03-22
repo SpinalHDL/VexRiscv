@@ -2,24 +2,10 @@
 
 ROM_SUPER_0:
 
-  j _start
-  nop
-  nop
-  nop
-  nop
-  nop
-  nop
-  nop
-
-.global  trap_entry
-trap_entry:
-    j fail
-    mret
-
 _start:
-    la x1, fail
+    li x29, 0 //Do not allow trap
+    la x1, trap
     csrw mtvec, x1
-    csrw stvec, x1
 
 test1: //test ram
     li x28, 1
@@ -85,12 +71,40 @@ test5: //setup MMU
     ori x2, x2, 0x1F
     sw x2, 0(x1)
 
+    la x1, MMU_TABLE_2 + 0x010*4 // Read Only
+    la x2, ROM_5
+    srli x2, x2, 2
+    ori x2, x2, 0x11 + (0x1 << 1)
+    sw x2, 0(x1)
+
+    la x1, MMU_TABLE_2 + 0x011*4 // Read Write
+    la x2, ROM_5
+    srli x2, x2, 2
+    ori x2, x2, 0x11 + (0x3 << 1)
+    sw x2, 0(x1)
+
+    la x1, MMU_TABLE_2 + 0x012*4 // Execute only
+    la x2, ROM_5
+    srli x2, x2, 2
+    ori x2, x2, 0x11 + (0x4 << 1)
+    sw x2, 0(x1)
+
+    la x1, MMU_TABLE_2 + 0x013*4 //Read Execute
+    la x2, ROM_5
+    srli x2, x2, 2
+    ori x2, x2, 0x11 + (0x5 << 1)
+    sw x2, 0(x1)
+
     li x28, 5
     la x1, MMU_TABLE_0 + 0xA00
     la x2, ROM_SUPER_0
     srli x2, x2, 2
     ori x2, x2, 0x1F
     sw x2, 0(x1)
+
+    li x28, 5
+    la x1, MMU_TABLE_0 + 0xB00
+    sw x0, 0(x1)
 
 
     la x1, MMU_TABLE_0
@@ -147,18 +161,111 @@ test10: //check previously written value without the MMU
     bne x1, x2, fail
 
 
+test11:
+    li x28, 11
     la x1, ROM_SUPER_0 + 0xA360
     li x2, 0xAAEE0002
     lw x1, 0(x1)
     bne x1, x2, fail
 
 
+    la x1, MMU_TABLE_0
+    srli x1, x1, 12
+    li x2, 0x80000000
+    or x1, x1, x2
+    csrw satp, x1
 
 
+test12: //Dummy trap
+    li x28, 12
+    li x29, 1 //Allow trap
+    la x30, test13 // trap return address
+    ecall
+    j fail
 
 
+test13: //Trap load page fault
+    li x28, 13
+    la x30, test14
+    li x1, 0xB0000000
+    lw x1, 8(x1)
+    j fail
 
 
+test14: //Trap store page fault
+    li x28, 14
+    la x30, test15
+    li x1, 0xB0000000
+    sw x1, 8(x1)
+    j fail
+
+
+test15: //Trap instruction fetch
+    li x28, 15
+    la x30, test15_end
+    li x1, 0xB0000000
+    jr x1
+    j fail
+
+test15_end:
+
+
+test16: //Test limited read access
+    li x28, 16
+    li x29, 0 //disable trap
+
+    li x1, 0x90010008
+    li x2, 0x5B5A5958
+    lw x1, 0(x1)
+    bne x1, x2, fail
+
+
+    li x1, 0x90011008
+    li x2, 0x5B5A5958
+    lw x1, 0(x1)
+    bne x1, x2, fail
+
+    li x1, 0x90013008
+    li x2, 0x5B5A5958
+    lw x1, 0(x1)
+    bne x1, x2, fail
+
+test17: //Test limited write access
+    li x28, 17
+
+    li x1, 0x90011360
+    li x2, 0xAAEE0003
+    sw x2, 0(x1)
+    lw x1, 0(x1)
+    bne x1, x2, fail
+
+test18: //Test limited execute access
+    li x28, 18
+
+    la x1, test18_end
+    li x2, 0x90012010
+    jr x2
+    j fail
+test18_end:
+
+
+test19: //exception by access limitations
+    li x29, 1 //Allow trap
+    la x30, test19_readTrap
+    li x1, 0x90012010
+    lw x1, 0(x1)
+    j fail
+test19_readTrap:
+    la x30, test19_writeTrap
+    li x1, 0x90013010
+    sw x1, 0(x1)
+    j fail
+test19_writeTrap:
+    la x30, test19_executeTrap
+    li x1, 0x90011010
+    jr x1
+    j fail
+test19_executeTrap:
 
 
     j pass
@@ -177,6 +284,13 @@ passFence:
     li x2, 0xF00FFF20
     sw x0, 0(x2)
 
+
+trap:
+    beq x29, x0, fail
+    csrr x1, mcause
+    csrr x1, mepc
+    csrw mepc, x30
+    mret
 
 
     nop
@@ -243,6 +357,7 @@ ROM_5:
 .word 0x57565554
 .word 0x5B5A5958
 .word 0x5F5E5D5C
+    jr x1
 
 .align 12
 ROM_6:

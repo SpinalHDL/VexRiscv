@@ -377,6 +377,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
             memoryExceptionPort.valid := True
             memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(15) | U(13)).resized
           }
+
+          arbitration.flushAll setWhen(redoBranch.valid)
         }
 
         when(!(arbitration.isValid && input(MEMORY_ENABLE) && (Bool(cmdStage != rspStage) || !arbitration.isStuckByOthers))){
@@ -384,7 +386,6 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
           if(memoryTranslatorPortConfig != null) redoBranch.valid := False
         }
 
-        arbitration.flushAll setWhen(redoBranch.valid)
       }
 
 

@@ -724,7 +724,7 @@ public:
 						pcWrite(sepc);
 					}break;
 					case 0x00000073:{ //ECALL
-						exception(0, 11);
+						exception(0, 8+privilege);
 					}break;
 					case 0x10500073:{ //WFI
 						pcWrite(pc + 4);
@@ -1343,7 +1343,11 @@ public:
                     }
 					if(riscvRefEnable) if(rfWriteValid != riscvRef.rfWriteValid ||
 						(rfWriteValid && (rfWriteAddress!= riscvRef.rfWriteAddress || rfWriteData!= riscvRef.rfWriteData))){
-                    	cout << "regFile write missmatch at " << endl;
+                    	cout << "regFile write missmatch ";
+                    	if(rfWriteValid) cout << "REF: RF[" << riscvRef.rfWriteAddress << "] = 0x" << hex << riscvRef.rfWriteData << dec << " ";
+                    	if(rfWriteValid) cout << "RTL: RF[" << rfWriteAddress << "] = 0x" << hex << rfWriteData << dec << " ";
+
+						cout << endl;
                     	fail();
                     }
                 }

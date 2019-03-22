@@ -4,6 +4,7 @@ import spinal.core._
 import spinal.lib._
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 
 class Stageable[T <: Data](_dataType : => T) extends HardType[T](_dataType) with Nameable{
@@ -67,6 +68,8 @@ class Stage() extends Area{
 
   val inputsDefault   = mutable.HashMap[Stageable[Data],Data]()
   val outputsDefault  = mutable.HashMap[Stageable[Data],Data]()
+
+  val dontSample      = mutable.HashMap[Stageable[_], ArrayBuffer[Bool]]()
 
   def inputInit[T <: BaseType](stageable : Stageable[T],initValue : T) =
     Component.current.addPrePopTask(() => inputsDefault(stageable.asInstanceOf[Stageable[Data]]).asInstanceOf[T].getDrivingReg.init(initValue))

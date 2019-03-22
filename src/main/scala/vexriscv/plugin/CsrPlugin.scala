@@ -672,6 +672,9 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         when(exceptionValidsRegs.orR){
           fetcher.haltIt()
         }
+
+        //Avoid the PC register of the last stage to change durring an exception handleing (Used to fill Xepc)
+        stages.last.dontSample.getOrElseUpdate(PC, ArrayBuffer[Bool]()) += exceptionValids.last
       } else null
 
 
@@ -744,18 +747,6 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         trapCause := exceptionPortCtrl.exceptionContext.code
       }
 
-      when(exception || interruptJump){
-        switch(privilege){
-          if(supervisorGen) is(1) {
-            sepc := mepcCaptureStage.input(PC)
-          }
-          is(3){
-            mepc := mepcCaptureStage.input(PC)
-          }
-        }
-      }
-
-
       val xtvec = Xtvec().assignDontCare()
       switch(targetPrivilege){
         if(supervisorGen) is(1) { xtvec := supervisorCsr.stvec }
@@ -768,6 +759,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         beforeLastStage.arbitration.flushAll := True
 
         privilege := targetPrivilege
+
         switch(targetPrivilege){
           if(supervisorGen) is(1) {
             sstatus.SIE := False
@@ -775,6 +767,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
             sstatus.SPP := privilege(0 downto 0)
             scause.interrupt := !hadException
             scause.exceptionCode := trapCause
+            sepc := mepcCaptureStage.input(PC)
             if (exceptionPortCtrl != null) {
               stval := exceptionPortCtrl.exceptionContext.badAddr
             }
@@ -786,6 +779,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
             mstatus.MPP  := privilege
             mcause.interrupt := !hadException
             mcause.exceptionCode := trapCause
+            mepc := mepcCaptureStage.input(PC)
             if(exceptionPortCtrl != null) {
               mtval := exceptionPortCtrl.exceptionContext.badAddr
             }

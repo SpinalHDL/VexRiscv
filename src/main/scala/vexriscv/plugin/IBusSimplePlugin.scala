@@ -303,9 +303,9 @@ class IBusSimplePlugin(resetVector : BigInt,
           redoRequired setWhen( stages.last.input.valid && mmu.joinCtx.refilling)
           redoBranch.valid := redoRequired && iBusRsp.readyForError
           redoBranch.payload := stages.last.input.payload
+          decode.arbitration.flushAll setWhen(redoBranch.valid)
         }
 
-        decode.arbitration.flushAll setWhen(redoBranch.valid)
 
         if(catchSomething){
           decodeExceptionPort.code.assignDontCare()
@@ -322,7 +322,7 @@ class IBusSimplePlugin(resetVector : BigInt,
               exceptionDetected := True
             }
           }
-          decodeExceptionPort.valid  :=  exceptionDetected && iBusRsp.readyForError
+          decodeExceptionPort.valid  :=  exceptionDetected && iBusRsp.readyForError && !fetcherHalt
         }
       }
     }
