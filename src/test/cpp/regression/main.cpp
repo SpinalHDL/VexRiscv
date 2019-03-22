@@ -2963,10 +2963,10 @@ int main(int argc, char **argv, char **env) {
 	printf("BOOT\n");
 	timespec startedAt = timer_start();
 
-    #ifdef MMU
-        redo(REDO,Workspace("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
-    #endif
-    return 0;
+//    #ifdef MMU
+//        redo(REDO,Workspace("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
+//    #endif
+//    return 0;
 
 	for(int idx = 0;idx < 1;idx++){
 
