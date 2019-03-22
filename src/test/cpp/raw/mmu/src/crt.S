@@ -1,5 +1,6 @@
 .globl _start
 
+ROM_SUPER_0:
 
   j _start
   nop
@@ -84,6 +85,14 @@ test5: //setup MMU
     ori x2, x2, 0x1F
     sw x2, 0(x1)
 
+    li x28, 5
+    la x1, MMU_TABLE_0 + 0xA00
+    la x2, ROM_SUPER_0
+    srli x2, x2, 2
+    ori x2, x2, 0x1F
+    sw x2, 0(x1)
+
+
     la x1, MMU_TABLE_0
     srli x1, x1, 12
     li x2, 0x80000000
@@ -91,7 +100,7 @@ test5: //setup MMU
     csrw satp, x1
 
 
-test6: //read through MMU !
+test6: //read through MMU
     li x28, 6
     li x1, 0x9000A008
     li x2, 0x4B4A4948
@@ -99,6 +108,49 @@ test6: //read through MMU !
     bne x1, x2, fail
 
 
+
+test7: //write-read through MMU
+    li x28, 7
+    li x1, 0x9000A360
+    li x2, 0xAAEE0001
+    sw x2, 0(x1)
+    lw x1, 0(x1)
+    bne x1, x2, fail
+
+
+test8: //read through MMU super page
+    li x28, 8
+    la x1, ROM_7 + 0x20000004
+    li x2, 0x77767574
+    lw x1, 0(x1)
+    bne x1, x2, fail
+
+
+
+test9: //write-read through MMU  super page
+    li x28, 9
+    li x1, 0xA000A360
+    li x2, 0xAAEE0002
+    sw x2, 0(x1)
+    lw x1, 0(x1)
+    bne x1, x2, fail
+
+
+
+test10: //check previously written value without the MMU
+    li x28, 10
+    csrwi satp, 0
+
+    la x1, ROM_4 + 0x360
+    li x2, 0xAAEE0001
+    lw x1, 0(x1)
+    bne x1, x2, fail
+
+
+    la x1, ROM_SUPER_0 + 0xA360
+    li x2, 0xAAEE0002
+    lw x1, 0(x1)
+    bne x1, x2, fail
 
 
 
@@ -205,5 +257,20 @@ ROM_7:
 .word 0x77767574
 .word 0x7B7A7978
 .word 0x7F7E7D7C
+
+/*
+.align 22
+ROM_SUPER_0:
+.word 0x83828180
+.word 0x87868584
+.word 0x8B8A8988
+.word 0x8F8E8D8C
+
+.align 12
+ROM_SUPER_1:
+.word 0x93929190
+.word 0x97969594
+.word 0x9B9A9998
+.word 0x9F9E9D9C*/
 
 

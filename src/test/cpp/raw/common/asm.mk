@@ -27,7 +27,7 @@ OBJS := $(addprefix $(OBJDIR)/,$(OBJS))
 
 
 
-all: $(OBJDIR)/$(PROJ_NAME).elf $(OBJDIR)/$(PROJ_NAME).hex $(OBJDIR)/$(PROJ_NAME).asm $(OBJDIR)/$(PROJ_NAME).v
+all: $(OBJDIR)/$(PROJ_NAME).elf $(OBJDIR)/$(PROJ_NAME).hex $(OBJDIR)/$(PROJ_NAME).asm
 	@echo "done"
 
 $(OBJDIR)/%.elf: $(OBJS) | $(OBJDIR)

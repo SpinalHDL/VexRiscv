@@ -324,6 +324,11 @@ public:
 			uint32_t _dummy : 5;
 			uint32_t ppn : 22;
 		};
+		struct __attribute__((packed)){
+			uint32_t _dummyX : 10;
+			uint32_t ppn0 : 10;
+			uint32_t ppn1 : 12;
+		};
 	};
 
 
@@ -377,17 +382,20 @@ public:
 			Tlb tlb;
 			dRead((satp.ppn << 12) | ((v >> 22) << 2), 4, &tlb.raw);
 			if(!tlb.v) return true;
+			bool superPage = true;
 			if(!tlb.x && !tlb.r && !tlb.w){
 				dRead((tlb.ppn << 12) | (((v >> 12) & 0x3FF) << 2), 4, &tlb.raw);
 				if(!tlb.v) return true;
+				superPage = false;
 			}
 			if(!tlb.u && privilege == 0) return true;
+			if(superPage && tlb.ppn0 != 0) return true;
 			switch(kind){
 			case READ: if(!tlb.r) return true; break;
 			case WRITE: if(!tlb.w) return true; break;
 			case EXECUTE: if(!tlb.x) return true; break;
 			}
-			*p = (tlb.ppn << 12) | (v & 0xFFF);
+			*p = (tlb.ppn1 << 22) | (superPage ? v & 0x3FF000 : tlb.ppn0 << 12) | (v & 0xFFF);
 		}
 		return false;
 	}

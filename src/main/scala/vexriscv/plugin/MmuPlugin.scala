@@ -74,9 +74,9 @@ class MmuPlugin(virtualRange : UInt => Bool,
     val sortedPortsInfo = portsInfo.sortWith((a,b) => a.priority > b.priority)
 
     case class CacheLine() extends Bundle {
-      val valid, exception = Bool
-      val virtualAddress = UInt(20 bits)
-      val physicalAddress = UInt(20 bits)
+      val valid, exception, superPage = Bool
+      val virtualAddress = Vec(UInt(10 bits), UInt(10 bits))
+      val physicalAddress = Vec(UInt(10 bits), UInt(10 bits))
       val allowRead, allowWrite, allowExecute, allowUser = Bool
 
       def init = {
@@ -89,7 +89,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
       val ports = for (port <- sortedPortsInfo) yield new Area {
         val id = port.id
         val cache = Vec(Reg(CacheLine()) init, port.args.portTlbSize)
-        val cacheHits = cache.map(line => line.valid && line.virtualAddress === port.bus.cmd.virtualAddress(31 downto 12))
+        val cacheHits = cache.map(line => line.valid && line.virtualAddress(1) === port.bus.cmd.virtualAddress(31 downto 22) && (line.superPage || line.virtualAddress(0) === port.bus.cmd.virtualAddress(21 downto 12)))
         val cacheHit = cacheHits.asBits.orR
         val cacheLine = MuxOH(cacheHits, cache)
         val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
@@ -99,7 +99,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
         if(!allowMachineModeMmu) requireMmuLockup clearWhen(privilegeService.isMachine(execute))
 
         when(requireMmuLockup) {
-          port.bus.rsp.physicalAddress := cacheLine.physicalAddress @@ port.bus.cmd.virtualAddress(11 downto 0)
+          port.bus.rsp.physicalAddress := cacheLine.physicalAddress(1) @@ (cacheLine.superPage ? port.bus.cmd.virtualAddress(21 downto 12) | cacheLine.physicalAddress(0)) @@ port.bus.cmd.virtualAddress(11 downto 0)
           port.bus.rsp.allowRead := cacheLine.allowRead
           port.bus.rsp.allowWrite := cacheLine.allowWrite
           port.bus.rsp.allowExecute := cacheLine.allowExecute
@@ -132,7 +132,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
           val IDLE, L1_CMD, L1_RSP, L0_CMD, L0_RSP = newElement()
         }
         val state = RegInit(State.IDLE)
-        val vpn1, vpn0 = Reg(UInt(10 bits))
+        val vpn = Reg(Vec(UInt(10 bits), UInt(10 bits)))
         val portId = Reg(UInt(log2Up(portsInfo.length) bits))
         case class PTE() extends Bundle {
           val V, R, W ,X, U, G, A, D = Bool()
@@ -160,8 +160,8 @@ class MmuPlugin(virtualRange : UInt => Bool,
             for(port <- portsInfo.sortBy(_.priority)){
               when(port.bus.cmd.isValid && port.bus.rsp.refilling){
                 busy := True
-                vpn1 := port.bus.cmd.virtualAddress(31 downto 22)
-                vpn0 := port.bus.cmd.virtualAddress(21 downto 12)
+                vpn(1) := port.bus.cmd.virtualAddress(31 downto 22)
+                vpn(0) := port.bus.cmd.virtualAddress(21 downto 12)
                 portId := port.id
                 state := State.L1_CMD
               }
@@ -169,7 +169,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
           }
           is(State.L1_CMD){
             dBusAccess.cmd.valid := True
-            dBusAccess.cmd.address := satp.ppn @@ vpn1 @@ U"00"
+            dBusAccess.cmd.address := satp.ppn @@ vpn(1) @@ U"00"
             when(dBusAccess.cmd.ready){
               state := State.L1_RSP
             }
@@ -185,7 +185,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
           }
           is(State.L0_CMD){
             dBusAccess.cmd.valid := True
-            dBusAccess.cmd.address := pteBuffer.PPN1(9 downto 0) @@ pteBuffer.PPN0 @@ vpn0 @@ U"00"
+            dBusAccess.cmd.address := pteBuffer.PPN1(9 downto 0) @@ pteBuffer.PPN0 @@ vpn(0) @@ U"00"
             when(dBusAccess.cmd.ready){
               state := State.L0_RSP
             }
@@ -203,14 +203,16 @@ class MmuPlugin(virtualRange : UInt => Bool,
               port.entryToReplace.increment()
               for ((line, lineId) <- port.cache.zipWithIndex) {
                 when(port.entryToReplace === lineId){
+                  val superPage = state === State.L1_RSP
                   line.valid := True
-                  line.exception := dBusRsp.exception
-                  line.virtualAddress := vpn1 @@ vpn0
-                  line.physicalAddress := dBusRsp.pte.PPN1(9 downto 0) @@ dBusRsp.pte.PPN0
+                  line.exception := dBusRsp.exception || (superPage && dBusRsp.pte.PPN0 =/= 0)
+                  line.virtualAddress := vpn
+                  line.physicalAddress := Vec(dBusRsp.pte.PPN0, dBusRsp.pte.PPN1(9 downto 0))
                   line.allowRead := dBusRsp.pte.R
                   line.allowWrite := dBusRsp.pte.W
                   line.allowExecute := dBusRsp.pte.X
                   line.allowUser := dBusRsp.pte.U
+                  line.superPage := state === State.L1_RSP
                 }
               }
             }
