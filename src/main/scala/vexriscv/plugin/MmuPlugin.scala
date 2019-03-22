@@ -42,7 +42,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
                 allowUserIo : Boolean,
                 allowMachineModeMmu : Boolean = false) extends Plugin[VexRiscv] with MemoryTranslator {
 
-  var dBus : DBusAccess = null
+  var dBusAccess : DBusAccess = null
   val portsInfo = ArrayBuffer[MmuPort]()
 
   override def newTranslationPort(priority : Int,args : Any): MemoryTranslatorBus = {
@@ -61,7 +61,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
     decoderService.add(SFENCE_VMA, List(IS_SFENCE_VMA -> True))
 
 
-    dBus = pipeline.service(classOf[DBusAccessService]).newDBusAccess()
+    dBusAccess = pipeline.service(classOf[DBusAccessService]).newDBusAccess()
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -142,19 +142,19 @@ class MmuPlugin(virtualRange : UInt => Bool,
         }
         val dBusRsp = new Area{
           val pte = PTE()
-          pte.assignFromBits(dBus.rsp.data)
-          val exception = !pte.V || (!pte.R && pte.W) || dBus.rsp.error
+          pte.assignFromBits(dBusAccess.rsp.data)
+          val exception = !pte.V || (!pte.R && pte.W) || dBusAccess.rsp.error
           val leaf = pte.R || pte.X
         }
 
-        val pteBuffer = RegNextWhen(dBusRsp.pte, dBus.rsp.valid)
+        val pteBuffer = RegNextWhen(dBusRsp.pte, dBusAccess.rsp.valid)
 
-        dBus.cmd.valid := False
-        dBus.cmd.write := False
-        dBus.cmd.size := 2
-        dBus.cmd.address.assignDontCare()
-        dBus.cmd.data.assignDontCare()
-        dBus.cmd.writeMask.assignDontCare()
+        dBusAccess.cmd.valid := False
+        dBusAccess.cmd.write := False
+        dBusAccess.cmd.size := 2
+        dBusAccess.cmd.address.assignDontCare()
+        dBusAccess.cmd.data.assignDontCare()
+        dBusAccess.cmd.writeMask.assignDontCare()
         switch(state){
           is(State.IDLE){
             for(port <- portsInfo.sortBy(_.priority)){
@@ -168,14 +168,14 @@ class MmuPlugin(virtualRange : UInt => Bool,
             }
           }
           is(State.L1_CMD){
-            dBus.cmd.valid := True
-            dBus.cmd.address := satp.ppn @@ vpn1 @@ U"00"
-            when(dBus.cmd.ready){
+            dBusAccess.cmd.valid := True
+            dBusAccess.cmd.address := satp.ppn @@ vpn1 @@ U"00"
+            when(dBusAccess.cmd.ready){
               state := State.L1_RSP
             }
           }
           is(State.L1_RSP){
-            when(dBus.rsp.valid){
+            when(dBusAccess.rsp.valid){
               when(dBusRsp.leaf || dBusRsp.exception){
                 state := State.IDLE
               } otherwise {
@@ -184,20 +184,20 @@ class MmuPlugin(virtualRange : UInt => Bool,
             }
           }
           is(State.L0_CMD){
-            dBus.cmd.valid := True
-            dBus.cmd.address := pteBuffer.PPN1(9 downto 0) @@ pteBuffer.PPN0 @@ vpn0 @@ U"00"
-            when(dBus.cmd.ready){
+            dBusAccess.cmd.valid := True
+            dBusAccess.cmd.address := pteBuffer.PPN1(9 downto 0) @@ pteBuffer.PPN0 @@ vpn0 @@ U"00"
+            when(dBusAccess.cmd.ready){
               state := State.L0_RSP
             }
           }
           is(State.L0_RSP){
-            when(dBus.rsp.valid) {
+            when(dBusAccess.rsp.valid) {
               state := State.IDLE
             }
           }
         }
 
-        when(dBus.rsp.valid && (dBusRsp.leaf || dBusRsp.exception)){
+        when(dBusAccess.rsp.valid && (dBusRsp.leaf || dBusRsp.exception)){
           for(port <- ports){
             when(portId === port.id) {
               port.entryToReplace.increment()

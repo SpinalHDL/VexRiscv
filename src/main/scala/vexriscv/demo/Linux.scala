@@ -170,7 +170,7 @@ object LinuxGen {
       )
     )
     if(withMmu) config.plugins += new MmuPlugin(
-      virtualRange = _(31 downto 28) === 0xC,
+      virtualRange = a => True,
       ioRange = _(31 downto 28) === 0xF,
       allowUserIo = true
     )

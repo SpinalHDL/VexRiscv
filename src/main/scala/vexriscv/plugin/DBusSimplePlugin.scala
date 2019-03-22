@@ -223,7 +223,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
   var redoBranch : Flow[UInt] = null
   val catchSomething = catchAccessFault || catchAddressMisaligned || memoryTranslatorPortConfig != null
 
-  var dBusAccess : DBusAccess = null
+  @dontName var dBusAccess : DBusAccess = null
   override def newDBusAccess(): DBusAccess = {
     assert(dBusAccess == null)
     dBusAccess = DBusAccess()
@@ -383,6 +383,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
           if(catchSomething) memoryExceptionPort.valid := False
           if(memoryTranslatorPortConfig != null) redoBranch.valid := False
         }
+
+        arbitration.flushAll setWhen(redoBranch.valid)
       }
 
 

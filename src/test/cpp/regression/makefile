@@ -1,4 +1,4 @@
-DEBUG?=no
+DEBUG?=yes
 
 IBUS?=CACHED
 IBUS_TC?=no

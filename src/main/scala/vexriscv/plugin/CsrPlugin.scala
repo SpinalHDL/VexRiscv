@@ -109,7 +109,7 @@ object CsrPluginConfig{
     sbadaddrAccess      = CsrAccess.READ_WRITE,
     scycleAccess        = CsrAccess.READ_WRITE,
     sinstretAccess      = CsrAccess.READ_WRITE,
-    satpAccess          = CsrAccess.READ_WRITE,
+    satpAccess          = CsrAccess.NONE, //Implemented into the MMU plugin
     medelegAccess       = CsrAccess.READ_WRITE,
     midelegAccess       = CsrAccess.READ_WRITE,
     pipelineCsrRead     = false,
@@ -643,7 +643,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         })
 
         val sortedByStage = groupedByStage.sortWith((a, b) => pipeline.indexOf(a.stage) < pipeline.indexOf(b.stage))
-        sortedByStage.zipWithIndex.foreach(e => e._1.port.setName(e._1.stage.getName() + "_exception_agregat"))
+//        sortedByStage.zipWithIndex.foreach(e => e._1.port.setName(e._1.stage.getName() + "_exception_agregat"))
         exceptionValids := exceptionValidsRegs
         for(portInfo <- sortedByStage; port = portInfo.port ; stage = portInfo.stage; stageId = indexOf(portInfo.stage)) {
           when(port.valid) {

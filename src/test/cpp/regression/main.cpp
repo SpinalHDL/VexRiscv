@@ -289,20 +289,42 @@ public:
 
 	union mcause {
 		uint32_t raw;
-		struct {
+		struct __attribute__((packed)) {
 			uint32_t exceptionCode : 31;
 			uint32_t interrupt : 1;
 		};
-	}__attribute__((packed)) mcause;
+	} mcause;
 
 
 	union scause {
 		uint32_t raw;
-		struct {
+		struct __attribute__((packed)){
 			uint32_t exceptionCode : 31;
 			uint32_t interrupt : 1;
 		};
-	}__attribute__((packed)) scause;
+	} scause;
+
+	union satp {
+		uint32_t raw;
+		struct __attribute__((packed)){
+			uint32_t ppn : 22;
+			uint32_t _x : 9;
+			uint32_t mode : 1;
+		};
+	}satp;
+
+	union Tlb {
+		uint32_t raw;
+		struct __attribute__((packed)){
+			uint32_t v : 1;
+			uint32_t r : 1;
+			uint32_t w : 1;
+			uint32_t x : 1;
+			uint32_t u : 1;
+			uint32_t _dummy : 5;
+			uint32_t ppn : 22;
+		};
+	};
 
 
 
@@ -324,6 +346,7 @@ public:
 		privilege = 3;
 		medeleg = 0;
 		mideleg = 0;
+		satp.mode = 0;
 	}
 
 	virtual void rfWrite(int32_t address, int32_t data) {
@@ -345,6 +368,29 @@ public:
 	virtual bool iRead(int32_t address, uint32_t *data) = 0;
 	virtual bool dRead(int32_t address, int32_t size, uint32_t *data) = 0;
 	virtual void dWrite(int32_t address, int32_t size, uint32_t data) = 0;
+
+	enum AccessKind {READ,WRITE,EXECUTE};
+	bool v2p(uint32_t v, uint32_t *p, AccessKind kind){
+		if(privilege == 3 || satp.mode == 0){
+			*p = v;
+		} else {
+			Tlb tlb;
+			dRead((satp.ppn << 12) | ((v >> 22) << 2), 4, &tlb.raw);
+			if(!tlb.v) return true;
+			if(!tlb.x && !tlb.r && !tlb.w){
+				dRead((tlb.ppn << 12) | (((v >> 12) & 0x3FF) << 2), 4, &tlb.raw);
+				if(!tlb.v) return true;
+			}
+			if(!tlb.u && privilege == 0) return true;
+			switch(kind){
+			case READ: if(!tlb.r) return true; break;
+			case WRITE: if(!tlb.w) return true; break;
+			case EXECUTE: if(!tlb.x) return true; break;
+			}
+			*p = (tlb.ppn << 12) | (v & 0xFFF);
+		}
+		return false;
+	}
 
     void exception(bool interrupt,int32_t cause) {
         exception(interrupt, cause, false, 0);
@@ -396,6 +442,7 @@ public:
 
 
 	virtual bool csrRead(int32_t csr, uint32_t *value){
+		if(((csr >> 8) & 0x3) > privilege) return true;
 		switch(csr){
 		case MSTATUS: *value = status.raw; break;
 		case MIP: *value = ip.raw; break;
@@ -415,6 +462,7 @@ public:
 		case STVAL: *value = sbadaddr; break;
 		case SEPC: *value = sepc; break;
 		case SSCRATCH: *value = sscratch; break;
+		case SATP: *value = satp.raw; break;
 		default: return true; break;
 		}
 		return false;
@@ -422,6 +470,7 @@ public:
 
 #define maskedWrite(dst, src, mask) dst=(dst & ~mask)|(src & mask);
 	virtual bool csrWrite(int32_t csr, uint32_t value){
+		if(((csr >> 8) & 0x3) > privilege) return true;
 		switch(csr){
 		case MSTATUS: status.raw = value; break;
 		case MIP: ip.raw = value; break;
@@ -441,6 +490,7 @@ public:
 		case STVAL: sbadaddr = value; break;
 		case SEPC: sepc = value; break;
 		case SSCRATCH: sscratch = value; break;
+		case SATP: satp.raw = value; break;
 
 		default: ilegalInstruction(); return true; break;
 		}
@@ -513,22 +563,26 @@ public:
 		#define i16_swsp_imm ((iBits(9, 4) << 2) + (iBits(7, 2) << 6))
 		uint32_t i;
 		uint32_t u32Buf;
+		uint32_t pAddr;
 		if (pc & 2) {
-			if(iRead(pc - 2, &i)){
+			if(v2p(pc - 2, &pAddr, EXECUTE)){ exception(0, 12); return; }
+			if(iRead(pAddr, &i)){
 				exception(0, 1);
 				return;
 			}
 			i >>= 16;
 			if (i & 3 == 3) {
 				uint32_t u32Buf;
-				if(iRead(pc + 2, &u32Buf)){
+				if(v2p(pc + 2, &pAddr, EXECUTE)){ exception(0, 12); return; }
+				if(iRead(pAddr, &u32Buf)){
 					exception(0, 1);
 					return;
 				}
 				i |= u32Buf << 16;
 			}
 		} else {
-			if(iRead(pc, &i)){
+			if(v2p(pc, &pAddr, EXECUTE)){ exception(0, 12); return; }
+			if(iRead(pAddr, &i)){
 				exception(0, 1);
 				return;
 			}
@@ -561,7 +615,8 @@ public:
 				if(address & (size-1)){
 					exception(0, 4, address);
 				} else {
-					if(dRead(address, size, &data)){
+					if(v2p(address, &pAddr, READ)){ exception(0, 13); return; }
+					if(dRead(pAddr, size, &data)){
 					    exception(0, 5, address);
 					} else {
                         switch ((i >> 12) & 0x7) {
@@ -580,7 +635,8 @@ public:
 				if(address & (size-1)){
 					exception(0, 6, address);
 				} else {
-					dWrite(address, size, i32_rs2);
+					if(v2p(address, &pAddr, WRITE)){ exception(0, 15); return; }
+					dWrite(pAddr, size, i32_rs2);
 					pcWrite(pc + 4);
 				}
 			}break;
@@ -645,18 +701,18 @@ public:
 					switch(i){
 					case 0x30200073:{ //MRET
 						if(privilege < 3){ ilegalInstruction(); return;}
-						status.mpp = 0;
+						privilege = status.mpp;
 						status.mie = status.mpie;
 						status.mpie = 1;
-						privilege = status.mpp;
+						status.mpp = 0;
 						pcWrite(mepc);
 					}break;
 					case 0x10200073:{ //SRET
 						if(privilege < 1){ ilegalInstruction(); return;}
-						status.spp = 0;
+						privilege = status.spp;
 						status.sie = status.spie;
 						status.spie = 1;
-						privilege = status.spp;
+						status.spp = 0;
 						pcWrite(sepc);
 					}break;
 					case 0x00000073:{ //ECALL
@@ -699,7 +755,8 @@ public:
 				if(address & 0x3){
 					exception(0, 4, address);
 				} else {
-					if(dRead(i16_rf1 + i16_lw_imm, 4, &data)) {
+					if(v2p(address, &pAddr, READ)){ exception(0, 13); return; }
+					if(dRead(address, 4, &data)) {
 					    exception(1, 5, address);
 					} else {
 					    rfWrite(i16_addr2, data); pcWrite(pc + 2);
@@ -711,7 +768,8 @@ public:
 				if(address & 0x3){
 					exception(0, 6, address);
 				} else {
-					dWrite(address, 4, i16_rf2);
+					if(v2p(address, &pAddr, WRITE)){ exception(0, 15); return; }
+					dWrite(pAddr, 4, i16_rf2);
                     pcWrite(pc + 2);
 				}
 			}break;
@@ -746,7 +804,8 @@ public:
 				if(address & 0x3){
 					exception(0, 4, address);
 				} else {
-				    if(dRead(address, 4, &data)){
+					if(v2p(address, &pAddr, READ)){ exception(0, 13); return; }
+				    if(dRead(pAddr, 4, &data)){
 					    exception(1, 5, address);
                     } else {
 					    rfWrite(rd32, data); pcWrite(pc + 2);
@@ -775,7 +834,8 @@ public:
 				if(address & 3){
 					exception(0,6, address);
 				} else {
-					dWrite(address, 4, regs[iBits(2,5)]); pcWrite(pc + 2);
+					if(v2p(address, &pAddr, WRITE)){ exception(0, 15); return; }
+					dWrite(pAddr, 4, regs[iBits(2,5)]); pcWrite(pc + 2);
 				}
 			}break;
 			}
@@ -884,7 +944,8 @@ public:
                 cout << "dRead size=" << size << endl;
                 fail();
             }
-            if(address & (size-1) != 0) cout << "Ref did a unaligned read" << endl;
+            if(address & (size-1) != 0)
+            	cout << "Ref did a unaligned read" << endl;
     		if((address & 0xF0000000) == 0xF0000000){
 				MemRead t = periphRead.front();
 				if(t.address != address || t.size != size){
@@ -899,7 +960,8 @@ public:
     		return false;
         }
         virtual void dWrite(int32_t address, int32_t size, uint32_t data){
-            if(address & (size-1) != 0) cout << "Ref did a unaligned write" << endl;
+            if(address & (size-1) != 0)
+            	cout << "Ref did a unaligned write" << endl;
     		if((address & 0xF0000000) == 0xF0000000){
 				MemWrite w;
 				w.address = address;
@@ -2879,6 +2941,10 @@ int main(int argc, char **argv, char **env) {
 	printf("BOOT\n");
 	timespec startedAt = timer_start();
 
+    #ifdef MMU
+        redo(REDO,Workspace("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
+    #endif
+    return 0;
 
 	for(int idx = 0;idx < 1;idx++){
 

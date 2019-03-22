@@ -44,8 +44,15 @@ trait Pipeline {
     plugins.foreach(_.pipeline = this.asInstanceOf[T])
     plugins.foreach(_.setup(this.asInstanceOf[T]))
 
+    plugins.foreach{ p =>
+      p.parentScope = Component.current.dslBody //Put the given plugin as a child of the current component
+      p.reflectNames()
+    }
+
     //Build plugins
     plugins.foreach(_.build(this.asInstanceOf[T]))
+
+
 
     //Interconnect stages
     class KeyInfo{

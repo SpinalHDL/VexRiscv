@@ -607,8 +607,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
     }
 
     def stageXToIBusRsp[T <: Data](stage : Any, input : T): (T) ={
-      iBusRsp.stages.dropWhile(_ != stage).foldLeft(input)((data,stage) => RegNextWhen(data, stage.output.ready))
-
+      iBusRsp.stages.dropWhile(_ != stage).tail.foldLeft(input)((data,stage) => RegNextWhen(data, stage.output.ready))
     }
 
   }
