@@ -332,7 +332,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         dBus.cmd.address := mmuBus.rsp.physicalAddress
 
         //do not emit memory request if MMU refilling
-        insert(MMU_FAULT) := input(MMU_RSP).exception || (!input(MMU_RSP).allowWrite && input(INSTRUCTION)(5)) || (!input(MMU_RSP).allowRead && !input(INSTRUCTION)(5)) || (!input(MMU_RSP).allowUser && privilegeService.isUser(memory))
+        insert(MMU_FAULT) := input(MMU_RSP).exception || (!input(MMU_RSP).allowWrite && input(INSTRUCTION)(5)) || (!input(MMU_RSP).allowRead && !input(INSTRUCTION)(5)) || (!input(MMU_RSP).allowUser && privilegeService.isUser())
         skipCmd.setWhen(input(MMU_FAULT) || input(MMU_RSP).refilling)
 
         insert(MMU_RSP) := mmuBus.rsp

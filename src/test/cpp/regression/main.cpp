@@ -234,6 +234,9 @@ public:
 			uint32_t spp : 1;
 			uint32_t _3 : 2;
 			uint32_t mpp : 2;
+			uint32_t _4 : 5;
+			uint32_t sum : 1;
+			uint32_t mxr : 1;
 		};
 	}__attribute__((packed)) status;
 
@@ -352,6 +355,8 @@ public:
 		medeleg = 0;
 		mideleg = 0;
 		satp.mode = 0;
+		status.mxr = 0;
+		status.sum = 0;
 	}
 
 	virtual void rfWrite(int32_t address, int32_t data) {
@@ -389,9 +394,10 @@ public:
 				superPage = false;
 			}
 			if(!tlb.u && privilege == 0) return true;
+			if( tlb.u && privilege == 1 && !status.sum) return true;
 			if(superPage && tlb.ppn0 != 0) return true;
 			switch(kind){
-			case READ: if(!tlb.r) return true; break;
+			case READ: if(!tlb.r && !(status.mxr && tlb.x)) return true; break;
 			case WRITE: if(!tlb.w) return true; break;
 			case EXECUTE: if(!tlb.x) return true; break;
 			}
@@ -462,7 +468,7 @@ public:
 		case MSCRATCH: *value = mscratch; break;
 		case MISA: *value = misa; break;
 
-		case SSTATUS: *value = status.raw & 0x133; break;
+		case SSTATUS: *value = status.raw & 0xC0133; break;
 		case SIP: *value = ip.raw & 0x333; break;
 		case SIE: *value = ie.raw & 0x333; break;
 		case STVEC: *value = stvec.raw; break;
@@ -490,7 +496,7 @@ public:
 		case MSCRATCH: mscratch = value; break;
 		case MISA: misa = value; break;
 
-		case SSTATUS: maskedWrite(status.raw, value,0x133); break;
+		case SSTATUS: maskedWrite(status.raw, value,0xC0133); break;
 		case SIP: maskedWrite(ip.raw, value,0x333); break;
 		case SIE: maskedWrite(ie.raw, value,0x333); break;
 		case STVEC: stvec.raw = value; break;

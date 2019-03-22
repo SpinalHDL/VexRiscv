@@ -36,13 +36,15 @@ trait ExceptionService{
 }
 
 trait PrivilegeService{
-  def isUser(stage : Stage) : Bool
-  def isMachine(stage : Stage) : Bool
+  def isUser() : Bool
+  def isSupervisor() : Bool
+  def isMachine() : Bool
 }
 
 case class PrivilegeServiceDefault() extends PrivilegeService{
-  override def isUser(stage: Stage): Bool = False
-  override def isMachine(stage: Stage): Bool = True
+  override def isUser(): Bool = False
+  override def isSupervisor(): Bool = False
+  override def isMachine(): Bool = True
 }
 
 trait InterruptionInhibitor{

@@ -7,7 +7,7 @@ Disassembly of section .crt_section:
 80000000 <_start>:
 80000000:	00000e93          	li	t4,0
 80000004:	00000097          	auipc	ra,0x0
-80000008:	3e808093          	addi	ra,ra,1000 # 800003ec <trap>
+80000008:	3f008093          	addi	ra,ra,1008 # 800003f4 <trap>
 8000000c:	30509073          	csrw	mtvec,ra
 
 80000010 <test1>:
@@ -17,7 +17,7 @@ Disassembly of section .crt_section:
 8000001c:	27262137          	lui	sp,0x27262
 80000020:	52410113          	addi	sp,sp,1316 # 27262524 <_start-0x58d9dadc>
 80000024:	0040a083          	lw	ra,4(ra)
-80000028:	38209e63          	bne	ra,sp,800003c4 <fail>
+80000028:	3a209263          	bne	ra,sp,800003cc <fail>
 
 8000002c <test2>:
 8000002c:	00200e13          	li	t3,2
@@ -28,7 +28,7 @@ Disassembly of section .crt_section:
 80000040:	80008093          	addi	ra,ra,-2048 # 1800 <_start-0x7fffe800>
 80000044:	30009073          	csrw	mstatus,ra
 80000048:	30200073          	mret
-8000004c:	3780006f          	j	800003c4 <fail>
+8000004c:	3800006f          	j	800003cc <fail>
 
 80000050 <test3>:
 80000050:	00300e13          	li	t3,3
@@ -39,7 +39,7 @@ Disassembly of section .crt_section:
 80000064:	01408093          	addi	ra,ra,20 # 80000074 <test4>
 80000068:	34109073          	csrw	mepc,ra
 8000006c:	30200073          	mret
-80000070:	3540006f          	j	800003c4 <fail>
+80000070:	35c0006f          	j	800003cc <fail>
 
 80000074 <test4>:
 80000074:	00400e13          	li	t3,4
@@ -48,7 +48,7 @@ Disassembly of section .crt_section:
 80000080:	37363137          	lui	sp,0x37363
 80000084:	53410113          	addi	sp,sp,1332 # 37363534 <_start-0x48c9cacc>
 80000088:	0040a083          	lw	ra,4(ra)
-8000008c:	32209c63          	bne	ra,sp,800003c4 <fail>
+8000008c:	34209063          	bne	ra,sp,800003cc <fail>
 
 80000090 <test5>:
 80000090:	00500e13          	li	t3,5
@@ -120,203 +120,203 @@ Disassembly of section .crt_section:
 80000198:	00002097          	auipc	ra,0x2
 8000019c:	96808093          	addi	ra,ra,-1688 # 80001b00 <MMU_TABLE_0+0xb00>
 800001a0:	0000a023          	sw	zero,0(ra)
-800001a4:	00001097          	auipc	ra,0x1
-800001a8:	e5c08093          	addi	ra,ra,-420 # 80001000 <MMU_TABLE_0>
-800001ac:	00c0d093          	srli	ra,ra,0xc
-800001b0:	80000137          	lui	sp,0x80000
-800001b4:	0020e0b3          	or	ra,ra,sp
-800001b8:	18009073          	csrw	satp,ra
+800001a4:	000400b7          	lui	ra,0x40
+800001a8:	1000a073          	csrs	sstatus,ra
+800001ac:	00001097          	auipc	ra,0x1
+800001b0:	e5408093          	addi	ra,ra,-428 # 80001000 <MMU_TABLE_0>
+800001b4:	00c0d093          	srli	ra,ra,0xc
+800001b8:	80000137          	lui	sp,0x80000
+800001bc:	0020e0b3          	or	ra,ra,sp
+800001c0:	18009073          	csrw	satp,ra
 
-800001bc <test6>:
-800001bc:	00600e13          	li	t3,6
-800001c0:	9000a0b7          	lui	ra,0x9000a
-800001c4:	00808093          	addi	ra,ra,8 # 9000a008 <ROM_7+0xfffe008>
-800001c8:	4b4a5137          	lui	sp,0x4b4a5
-800001cc:	94810113          	addi	sp,sp,-1720 # 4b4a4948 <_start-0x34b5b6b8>
-800001d0:	0000a083          	lw	ra,0(ra)
-800001d4:	1e209863          	bne	ra,sp,800003c4 <fail>
+800001c4 <test6>:
+800001c4:	00600e13          	li	t3,6
+800001c8:	9000a0b7          	lui	ra,0x9000a
+800001cc:	00808093          	addi	ra,ra,8 # 9000a008 <ROM_7+0xfffe008>
+800001d0:	4b4a5137          	lui	sp,0x4b4a5
+800001d4:	94810113          	addi	sp,sp,-1720 # 4b4a4948 <_start-0x34b5b6b8>
+800001d8:	0000a083          	lw	ra,0(ra)
+800001dc:	1e209863          	bne	ra,sp,800003cc <fail>
 
-800001d8 <test7>:
-800001d8:	00700e13          	li	t3,7
-800001dc:	9000a0b7          	lui	ra,0x9000a
-800001e0:	36008093          	addi	ra,ra,864 # 9000a360 <ROM_7+0xfffe360>
-800001e4:	aaee0137          	lui	sp,0xaaee0
-800001e8:	00110113          	addi	sp,sp,1 # aaee0001 <ROM_7+0x2aed4001>
-800001ec:	0020a023          	sw	sp,0(ra)
-800001f0:	0000a083          	lw	ra,0(ra)
-800001f4:	1c209863          	bne	ra,sp,800003c4 <fail>
+800001e0 <test7>:
+800001e0:	00700e13          	li	t3,7
+800001e4:	9000a0b7          	lui	ra,0x9000a
+800001e8:	36008093          	addi	ra,ra,864 # 9000a360 <ROM_7+0xfffe360>
+800001ec:	aaee0137          	lui	sp,0xaaee0
+800001f0:	00110113          	addi	sp,sp,1 # aaee0001 <ROM_7+0x2aed4001>
+800001f4:	0020a023          	sw	sp,0(ra)
+800001f8:	0000a083          	lw	ra,0(ra)
+800001fc:	1c209863          	bne	ra,sp,800003cc <fail>
 
-800001f8 <test8>:
-800001f8:	00800e13          	li	t3,8
-800001fc:	2000c097          	auipc	ra,0x2000c
-80000200:	e0808093          	addi	ra,ra,-504 # a000c004 <ROM_7+0x20000004>
-80000204:	77767137          	lui	sp,0x77767
-80000208:	57410113          	addi	sp,sp,1396 # 77767574 <_start-0x8898a8c>
-8000020c:	0000a083          	lw	ra,0(ra)
-80000210:	1a209a63          	bne	ra,sp,800003c4 <fail>
+80000200 <test8>:
+80000200:	00800e13          	li	t3,8
+80000204:	2000c097          	auipc	ra,0x2000c
+80000208:	e0008093          	addi	ra,ra,-512 # a000c004 <ROM_7+0x20000004>
+8000020c:	77767137          	lui	sp,0x77767
+80000210:	57410113          	addi	sp,sp,1396 # 77767574 <_start-0x8898a8c>
+80000214:	0000a083          	lw	ra,0(ra)
+80000218:	1a209a63          	bne	ra,sp,800003cc <fail>
 
-80000214 <test9>:
-80000214:	00900e13          	li	t3,9
-80000218:	a000a0b7          	lui	ra,0xa000a
-8000021c:	36008093          	addi	ra,ra,864 # a000a360 <ROM_7+0x1fffe360>
-80000220:	aaee0137          	lui	sp,0xaaee0
-80000224:	00210113          	addi	sp,sp,2 # aaee0002 <ROM_7+0x2aed4002>
-80000228:	0020a023          	sw	sp,0(ra)
-8000022c:	0000a083          	lw	ra,0(ra)
-80000230:	18209a63          	bne	ra,sp,800003c4 <fail>
+8000021c <test9>:
+8000021c:	00900e13          	li	t3,9
+80000220:	a000a0b7          	lui	ra,0xa000a
+80000224:	36008093          	addi	ra,ra,864 # a000a360 <ROM_7+0x1fffe360>
+80000228:	aaee0137          	lui	sp,0xaaee0
+8000022c:	00210113          	addi	sp,sp,2 # aaee0002 <ROM_7+0x2aed4002>
+80000230:	0020a023          	sw	sp,0(ra)
+80000234:	0000a083          	lw	ra,0(ra)
+80000238:	18209a63          	bne	ra,sp,800003cc <fail>
 
-80000234 <test10>:
-80000234:	00a00e13          	li	t3,10
-80000238:	18005073          	csrwi	satp,0
-8000023c:	00009097          	auipc	ra,0x9
-80000240:	12408093          	addi	ra,ra,292 # 80009360 <ROM_4+0x360>
-80000244:	aaee0137          	lui	sp,0xaaee0
-80000248:	00110113          	addi	sp,sp,1 # aaee0001 <ROM_7+0x2aed4001>
-8000024c:	0000a083          	lw	ra,0(ra)
-80000250:	16209a63          	bne	ra,sp,800003c4 <fail>
+8000023c <test10>:
+8000023c:	00a00e13          	li	t3,10
+80000240:	18005073          	csrwi	satp,0
+80000244:	00009097          	auipc	ra,0x9
+80000248:	11c08093          	addi	ra,ra,284 # 80009360 <ROM_4+0x360>
+8000024c:	aaee0137          	lui	sp,0xaaee0
+80000250:	00110113          	addi	sp,sp,1 # aaee0001 <ROM_7+0x2aed4001>
+80000254:	0000a083          	lw	ra,0(ra)
+80000258:	16209a63          	bne	ra,sp,800003cc <fail>
 
-80000254 <test11>:
-80000254:	00b00e13          	li	t3,11
-80000258:	0000a097          	auipc	ra,0xa
-8000025c:	10808093          	addi	ra,ra,264 # 8000a360 <ROM_5+0x360>
-80000260:	aaee0137          	lui	sp,0xaaee0
-80000264:	00210113          	addi	sp,sp,2 # aaee0002 <ROM_7+0x2aed4002>
-80000268:	0000a083          	lw	ra,0(ra)
-8000026c:	14209c63          	bne	ra,sp,800003c4 <fail>
-80000270:	00001097          	auipc	ra,0x1
-80000274:	d9008093          	addi	ra,ra,-624 # 80001000 <MMU_TABLE_0>
-80000278:	00c0d093          	srli	ra,ra,0xc
-8000027c:	80000137          	lui	sp,0x80000
-80000280:	0020e0b3          	or	ra,ra,sp
-80000284:	18009073          	csrw	satp,ra
+8000025c <test11>:
+8000025c:	00b00e13          	li	t3,11
+80000260:	0000a097          	auipc	ra,0xa
+80000264:	10008093          	addi	ra,ra,256 # 8000a360 <ROM_5+0x360>
+80000268:	aaee0137          	lui	sp,0xaaee0
+8000026c:	00210113          	addi	sp,sp,2 # aaee0002 <ROM_7+0x2aed4002>
+80000270:	0000a083          	lw	ra,0(ra)
+80000274:	14209c63          	bne	ra,sp,800003cc <fail>
+80000278:	00001097          	auipc	ra,0x1
+8000027c:	d8808093          	addi	ra,ra,-632 # 80001000 <MMU_TABLE_0>
+80000280:	00c0d093          	srli	ra,ra,0xc
+80000284:	80000137          	lui	sp,0x80000
+80000288:	0020e0b3          	or	ra,ra,sp
+8000028c:	18009073          	csrw	satp,ra
 
-80000288 <test12>:
-80000288:	00c00e13          	li	t3,12
-8000028c:	00100e93          	li	t4,1
-80000290:	00000f17          	auipc	t5,0x0
-80000294:	010f0f13          	addi	t5,t5,16 # 800002a0 <test13>
-80000298:	00000073          	ecall
-8000029c:	1280006f          	j	800003c4 <fail>
+80000290 <test12>:
+80000290:	00c00e13          	li	t3,12
+80000294:	00100e93          	li	t4,1
+80000298:	00000f17          	auipc	t5,0x0
+8000029c:	010f0f13          	addi	t5,t5,16 # 800002a8 <test13>
+800002a0:	00000073          	ecall
+800002a4:	1280006f          	j	800003cc <fail>
 
-800002a0 <test13>:
-800002a0:	00d00e13          	li	t3,13
-800002a4:	00000f17          	auipc	t5,0x0
-800002a8:	014f0f13          	addi	t5,t5,20 # 800002b8 <test14>
-800002ac:	b00000b7          	lui	ra,0xb0000
-800002b0:	0080a083          	lw	ra,8(ra) # b0000008 <ROM_7+0x2fff4008>
-800002b4:	1100006f          	j	800003c4 <fail>
+800002a8 <test13>:
+800002a8:	00d00e13          	li	t3,13
+800002ac:	00000f17          	auipc	t5,0x0
+800002b0:	014f0f13          	addi	t5,t5,20 # 800002c0 <test14>
+800002b4:	b00000b7          	lui	ra,0xb0000
+800002b8:	0080a083          	lw	ra,8(ra) # b0000008 <ROM_7+0x2fff4008>
+800002bc:	1100006f          	j	800003cc <fail>
 
-800002b8 <test14>:
-800002b8:	00e00e13          	li	t3,14
-800002bc:	00000f17          	auipc	t5,0x0
-800002c0:	014f0f13          	addi	t5,t5,20 # 800002d0 <test15>
-800002c4:	b00000b7          	lui	ra,0xb0000
-800002c8:	0010a423          	sw	ra,8(ra) # b0000008 <ROM_7+0x2fff4008>
-800002cc:	0f80006f          	j	800003c4 <fail>
+800002c0 <test14>:
+800002c0:	00e00e13          	li	t3,14
+800002c4:	00000f17          	auipc	t5,0x0
+800002c8:	014f0f13          	addi	t5,t5,20 # 800002d8 <test15>
+800002cc:	b00000b7          	lui	ra,0xb0000
+800002d0:	0010a423          	sw	ra,8(ra) # b0000008 <ROM_7+0x2fff4008>
+800002d4:	0f80006f          	j	800003cc <fail>
 
-800002d0 <test15>:
-800002d0:	00f00e13          	li	t3,15
-800002d4:	00000f17          	auipc	t5,0x0
-800002d8:	014f0f13          	addi	t5,t5,20 # 800002e8 <test15_end>
-800002dc:	b00000b7          	lui	ra,0xb0000
-800002e0:	00008067          	ret
-800002e4:	0e00006f          	j	800003c4 <fail>
+800002d8 <test15>:
+800002d8:	00f00e13          	li	t3,15
+800002dc:	00000f17          	auipc	t5,0x0
+800002e0:	014f0f13          	addi	t5,t5,20 # 800002f0 <test15_end>
+800002e4:	b00000b7          	lui	ra,0xb0000
+800002e8:	00008067          	ret
+800002ec:	0e00006f          	j	800003cc <fail>
 
-800002e8 <test15_end>:
-800002e8:	01000e13          	li	t3,16
-800002ec:	00000e93          	li	t4,0
-800002f0:	900100b7          	lui	ra,0x90010
-800002f4:	00808093          	addi	ra,ra,8 # 90010008 <ROM_7+0x10004008>
-800002f8:	5b5a6137          	lui	sp,0x5b5a6
-800002fc:	95810113          	addi	sp,sp,-1704 # 5b5a5958 <_start-0x24a5a6a8>
-80000300:	0000a083          	lw	ra,0(ra)
-80000304:	0c209063          	bne	ra,sp,800003c4 <fail>
-80000308:	900110b7          	lui	ra,0x90011
-8000030c:	00808093          	addi	ra,ra,8 # 90011008 <ROM_7+0x10005008>
-80000310:	5b5a6137          	lui	sp,0x5b5a6
-80000314:	95810113          	addi	sp,sp,-1704 # 5b5a5958 <_start-0x24a5a6a8>
-80000318:	0000a083          	lw	ra,0(ra)
-8000031c:	0a209463          	bne	ra,sp,800003c4 <fail>
-80000320:	900130b7          	lui	ra,0x90013
-80000324:	00808093          	addi	ra,ra,8 # 90013008 <ROM_7+0x10007008>
-80000328:	5b5a6137          	lui	sp,0x5b5a6
-8000032c:	95810113          	addi	sp,sp,-1704 # 5b5a5958 <_start-0x24a5a6a8>
-80000330:	0000a083          	lw	ra,0(ra)
-80000334:	08209863          	bne	ra,sp,800003c4 <fail>
+800002f0 <test15_end>:
+800002f0:	01000e13          	li	t3,16
+800002f4:	00000e93          	li	t4,0
+800002f8:	900100b7          	lui	ra,0x90010
+800002fc:	00808093          	addi	ra,ra,8 # 90010008 <ROM_7+0x10004008>
+80000300:	5b5a6137          	lui	sp,0x5b5a6
+80000304:	95810113          	addi	sp,sp,-1704 # 5b5a5958 <_start-0x24a5a6a8>
+80000308:	0000a083          	lw	ra,0(ra)
+8000030c:	0c209063          	bne	ra,sp,800003cc <fail>
+80000310:	900110b7          	lui	ra,0x90011
+80000314:	00808093          	addi	ra,ra,8 # 90011008 <ROM_7+0x10005008>
+80000318:	5b5a6137          	lui	sp,0x5b5a6
+8000031c:	95810113          	addi	sp,sp,-1704 # 5b5a5958 <_start-0x24a5a6a8>
+80000320:	0000a083          	lw	ra,0(ra)
+80000324:	0a209463          	bne	ra,sp,800003cc <fail>
+80000328:	900130b7          	lui	ra,0x90013
+8000032c:	00808093          	addi	ra,ra,8 # 90013008 <ROM_7+0x10007008>
+80000330:	5b5a6137          	lui	sp,0x5b5a6
+80000334:	95810113          	addi	sp,sp,-1704 # 5b5a5958 <_start-0x24a5a6a8>
+80000338:	0000a083          	lw	ra,0(ra)
+8000033c:	08209863          	bne	ra,sp,800003cc <fail>
 
-80000338 <test17>:
-80000338:	01100e13          	li	t3,17
-8000033c:	900110b7          	lui	ra,0x90011
-80000340:	36008093          	addi	ra,ra,864 # 90011360 <ROM_7+0x10005360>
-80000344:	aaee0137          	lui	sp,0xaaee0
-80000348:	00310113          	addi	sp,sp,3 # aaee0003 <ROM_7+0x2aed4003>
-8000034c:	0020a023          	sw	sp,0(ra)
-80000350:	0000a083          	lw	ra,0(ra)
-80000354:	06209863          	bne	ra,sp,800003c4 <fail>
+80000340 <test17>:
+80000340:	01100e13          	li	t3,17
+80000344:	900110b7          	lui	ra,0x90011
+80000348:	36008093          	addi	ra,ra,864 # 90011360 <ROM_7+0x10005360>
+8000034c:	aaee0137          	lui	sp,0xaaee0
+80000350:	00310113          	addi	sp,sp,3 # aaee0003 <ROM_7+0x2aed4003>
+80000354:	0020a023          	sw	sp,0(ra)
+80000358:	0000a083          	lw	ra,0(ra)
+8000035c:	06209863          	bne	ra,sp,800003cc <fail>
 
-80000358 <test18>:
-80000358:	01200e13          	li	t3,18
-8000035c:	00000097          	auipc	ra,0x0
-80000360:	01808093          	addi	ra,ra,24 # 80000374 <test18_end>
-80000364:	90012137          	lui	sp,0x90012
-80000368:	01010113          	addi	sp,sp,16 # 90012010 <ROM_7+0x10006010>
-8000036c:	00010067          	jr	sp
-80000370:	0540006f          	j	800003c4 <fail>
+80000360 <test18>:
+80000360:	01200e13          	li	t3,18
+80000364:	00000097          	auipc	ra,0x0
+80000368:	01808093          	addi	ra,ra,24 # 8000037c <test18_end>
+8000036c:	90012137          	lui	sp,0x90012
+80000370:	01010113          	addi	sp,sp,16 # 90012010 <ROM_7+0x10006010>
+80000374:	00010067          	jr	sp
+80000378:	0540006f          	j	800003cc <fail>
 
-80000374 <test18_end>:
-80000374:	00100e93          	li	t4,1
-80000378:	00000f17          	auipc	t5,0x0
-8000037c:	018f0f13          	addi	t5,t5,24 # 80000390 <test19_readTrap>
-80000380:	900120b7          	lui	ra,0x90012
-80000384:	01008093          	addi	ra,ra,16 # 90012010 <ROM_7+0x10006010>
-80000388:	0000a083          	lw	ra,0(ra)
-8000038c:	0380006f          	j	800003c4 <fail>
+8000037c <test18_end>:
+8000037c:	00100e93          	li	t4,1
+80000380:	00000f17          	auipc	t5,0x0
+80000384:	018f0f13          	addi	t5,t5,24 # 80000398 <test19_readTrap>
+80000388:	900120b7          	lui	ra,0x90012
+8000038c:	01008093          	addi	ra,ra,16 # 90012010 <ROM_7+0x10006010>
+80000390:	0000a083          	lw	ra,0(ra)
+80000394:	0380006f          	j	800003cc <fail>
 
-80000390 <test19_readTrap>:
-80000390:	00000f17          	auipc	t5,0x0
-80000394:	018f0f13          	addi	t5,t5,24 # 800003a8 <test19_writeTrap>
-80000398:	900130b7          	lui	ra,0x90013
-8000039c:	01008093          	addi	ra,ra,16 # 90013010 <ROM_7+0x10007010>
-800003a0:	0010a023          	sw	ra,0(ra)
-800003a4:	0200006f          	j	800003c4 <fail>
+80000398 <test19_readTrap>:
+80000398:	00000f17          	auipc	t5,0x0
+8000039c:	018f0f13          	addi	t5,t5,24 # 800003b0 <test19_writeTrap>
+800003a0:	900130b7          	lui	ra,0x90013
+800003a4:	01008093          	addi	ra,ra,16 # 90013010 <ROM_7+0x10007010>
+800003a8:	0010a023          	sw	ra,0(ra)
+800003ac:	0200006f          	j	800003cc <fail>
 
-800003a8 <test19_writeTrap>:
-800003a8:	00000f17          	auipc	t5,0x0
-800003ac:	018f0f13          	addi	t5,t5,24 # 800003c0 <test19_executeTrap>
-800003b0:	900110b7          	lui	ra,0x90011
-800003b4:	01008093          	addi	ra,ra,16 # 90011010 <ROM_7+0x10005010>
-800003b8:	00008067          	ret
-800003bc:	0080006f          	j	800003c4 <fail>
+800003b0 <test19_writeTrap>:
+800003b0:	00000f17          	auipc	t5,0x0
+800003b4:	018f0f13          	addi	t5,t5,24 # 800003c8 <test19_executeTrap>
+800003b8:	900110b7          	lui	ra,0x90011
+800003bc:	01008093          	addi	ra,ra,16 # 90011010 <ROM_7+0x10005010>
+800003c0:	00008067          	ret
+800003c4:	0080006f          	j	800003cc <fail>
 
-800003c0 <test19_executeTrap>:
-800003c0:	0180006f          	j	800003d8 <pass>
+800003c8 <test19_executeTrap>:
+800003c8:	0180006f          	j	800003e0 <pass>
 
-800003c4 <fail>:
-800003c4:	18005073          	csrwi	satp,0
-800003c8:	0040006f          	j	800003cc <failFence>
+800003cc <fail>:
+800003cc:	18005073          	csrwi	satp,0
+800003d0:	0040006f          	j	800003d4 <failFence>
 
-800003cc <failFence>:
-800003cc:	f0100137          	lui	sp,0xf0100
-800003d0:	f2410113          	addi	sp,sp,-220 # f00fff24 <ROM_7+0x700f3f24>
-800003d4:	01c12023          	sw	t3,0(sp)
+800003d4 <failFence>:
+800003d4:	f0100137          	lui	sp,0xf0100
+800003d8:	f2410113          	addi	sp,sp,-220 # f00fff24 <ROM_7+0x700f3f24>
+800003dc:	01c12023          	sw	t3,0(sp)
 
-800003d8 <pass>:
-800003d8:	18005073          	csrwi	satp,0
-800003dc:	0040006f          	j	800003e0 <passFence>
+800003e0 <pass>:
+800003e0:	18005073          	csrwi	satp,0
+800003e4:	0040006f          	j	800003e8 <passFence>
 
-800003e0 <passFence>:
-800003e0:	f0100137          	lui	sp,0xf0100
-800003e4:	f2010113          	addi	sp,sp,-224 # f00fff20 <ROM_7+0x700f3f20>
-800003e8:	00012023          	sw	zero,0(sp)
+800003e8 <passFence>:
+800003e8:	f0100137          	lui	sp,0xf0100
+800003ec:	f2010113          	addi	sp,sp,-224 # f00fff20 <ROM_7+0x700f3f20>
+800003f0:	00012023          	sw	zero,0(sp)
 
-800003ec <trap>:
-800003ec:	fc0e8ce3          	beqz	t4,800003c4 <fail>
-800003f0:	342020f3          	csrr	ra,mcause
-800003f4:	341020f3          	csrr	ra,mepc
-800003f8:	341f1073          	csrw	mepc,t5
-800003fc:	30200073          	mret
-80000400:	00000013          	nop
-80000404:	00000013          	nop
+800003f4 <trap>:
+800003f4:	fc0e8ce3          	beqz	t4,800003cc <fail>
+800003f8:	342020f3          	csrr	ra,mcause
+800003fc:	341020f3          	csrr	ra,mepc
+80000400:	341f1073          	csrw	mepc,t5
+80000404:	30200073          	mret
 80000408:	00000013          	nop
 8000040c:	00000013          	nop
 80000410:	00000013          	nop

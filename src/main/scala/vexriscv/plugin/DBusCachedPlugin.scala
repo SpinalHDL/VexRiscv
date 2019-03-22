@@ -180,7 +180,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       import writeBack._
       cache.io.cpu.writeBack.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
-      cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser(writeBack) else False)
+      cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
       if(genAtomic) cache.io.cpu.writeBack.clearAtomicEntries := service(classOf[IContextSwitching]).isContextSwitching
 
       if(catchSomething) {

@@ -399,8 +399,9 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
   def inhibateInterrupts() : Unit = allowInterrupts := False
   def inhibateException() : Unit  = allowException  := False
 
-  override def isUser(stage : Stage) : Bool = privilege === 0
-  override def isMachine(stage: Stage): Bool = privilege === 3
+  override def isUser() : Bool = privilege === 0
+  override def isSupervisor(): Bool = privilege === 1
+  override def isMachine(): Bool = privilege === 3
 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._

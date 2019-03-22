@@ -106,6 +106,8 @@ test5: //setup MMU
     la x1, MMU_TABLE_0 + 0xB00
     sw x0, 0(x1)
 
+    li x1, 1 << 18 //SUM
+    csrs sstatus, x1
 
     la x1, MMU_TABLE_0
     srli x1, x1, 12

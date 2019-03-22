@@ -85,6 +85,19 @@ class MmuPlugin(virtualRange : UInt => Bool,
       }
     }
 
+    val csr = pipeline plug new Area{
+      val status = new Area{
+        val sum, mxr = RegInit(False)
+      }
+      val satp = new Area {
+        val mode = RegInit(False)
+        val ppn = Reg(UInt(20 bits))
+      }
+
+      for(offset <- List(CSR.MSTATUS, CSR.SSTATUS)) csrService.rw(offset, 19 -> status.mxr, 18 -> status.sum)
+      csrService.rw(CSR.SATP, 31 -> satp.mode, 0 -> satp.ppn)  //TODO write only ?
+    }
+
     val core = pipeline plug new Area {
       val ports = for (port <- sortedPortsInfo) yield new Area {
         val id = port.id
@@ -94,17 +107,16 @@ class MmuPlugin(virtualRange : UInt => Bool,
         val cacheLine = MuxOH(cacheHits, cache)
         val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
         val entryToReplace = Counter(port.args.portTlbSize)
-
-        val requireMmuLockup = virtualRange(port.bus.cmd.virtualAddress) && !port.bus.cmd.bypassTranslation
-        if(!allowMachineModeMmu) requireMmuLockup clearWhen(privilegeService.isMachine(execute))
+        val requireMmuLockup = virtualRange(port.bus.cmd.virtualAddress) && !port.bus.cmd.bypassTranslation && csr.satp.mode
+        if(!allowMachineModeMmu) requireMmuLockup clearWhen(privilegeService.isMachine())
 
         when(requireMmuLockup) {
           port.bus.rsp.physicalAddress := cacheLine.physicalAddress(1) @@ (cacheLine.superPage ? port.bus.cmd.virtualAddress(21 downto 12) | cacheLine.physicalAddress(0)) @@ port.bus.cmd.virtualAddress(11 downto 0)
-          port.bus.rsp.allowRead := cacheLine.allowRead
+          port.bus.rsp.allowRead := cacheLine.allowRead  || csr.status.mxr && cacheLine.allowExecute
           port.bus.rsp.allowWrite := cacheLine.allowWrite
           port.bus.rsp.allowExecute := cacheLine.allowExecute
           port.bus.rsp.allowUser := cacheLine.allowUser
-          port.bus.rsp.exception := cacheHit && cacheLine.exception
+          port.bus.rsp.exception := cacheHit && (cacheLine.exception || cacheLine.allowUser && privilegeService.isSupervisor() && !csr.status.sum)
           port.bus.rsp.refilling := !cacheHit
         } otherwise {
           port.bus.rsp.physicalAddress := port.bus.cmd.virtualAddress
@@ -121,13 +133,6 @@ class MmuPlugin(virtualRange : UInt => Bool,
       val shared = new Area {
         val busy = Reg(Bool) init(False)
 
-        val satp = new Area {
-          val mode = RegInit(False)
-          val ppn = Reg(UInt(20 bits))
-
-          ports.foreach(_.requireMmuLockup clearWhen(!mode))
-        }
-        csrService.rw(CSR.SATP, 31 -> satp.mode, 0 -> satp.ppn)  //TODO write only ?
         val State = new SpinalEnum{
           val IDLE, L1_CMD, L1_RSP, L0_CMD, L0_RSP = newElement()
         }
@@ -169,7 +174,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
           }
           is(State.L1_CMD){
             dBusAccess.cmd.valid := True
-            dBusAccess.cmd.address := satp.ppn @@ vpn(1) @@ U"00"
+            dBusAccess.cmd.address := csr.satp.ppn @@ vpn(1) @@ U"00"
             when(dBusAccess.cmd.ready){
               state := State.L1_RSP
             }

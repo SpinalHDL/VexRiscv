@@ -164,7 +164,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         cache.io.cpu.fetch.pc := stages(1).input.payload
 
         if (!twoCycleCache) {
-          cache.io.cpu.fetch.isUser := privilegeService.isUser(decode)
+          cache.io.cpu.fetch.isUser := privilegeService.isUser()
         }
       }
 
@@ -173,7 +173,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         cache.io.cpu.decode.isValid := stages(2).input.valid && !tightlyCoupledHit
         cache.io.cpu.decode.isStuck := !stages(2).input.ready
         cache.io.cpu.decode.pc := stages(2).input.payload
-        cache.io.cpu.decode.isUser := privilegeService.isUser(decode)
+        cache.io.cpu.decode.isUser := privilegeService.isUser()
 
         if ((!twoCycleRam || wayCount == 1) && !compressedGen && !injectorStage) {
           decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), cache.io.cpu.fetch.data)
