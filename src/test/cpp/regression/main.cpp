@@ -221,7 +221,6 @@ public:
     uint32_t medeleg;
 	uint32_t mideleg;
 
-	uint32_t interrupts;
 
 	union status {
 		uint32_t raw;
@@ -244,7 +243,10 @@ public:
 	}__attribute__((packed)) status;
 
 
-	union mip {
+
+	uint32_t ipInput;
+	uint32_t ipSoft;
+	union IpOr {
 		uint32_t raw;
 		struct {
 			uint32_t _1a : 1;
@@ -260,8 +262,13 @@ public:
 			uint32_t _3b : 1;
 			uint32_t meip : 1;
 		};
-	}__attribute__((packed)) ip;
+	}__attribute__((packed));
 
+	IpOr getIp(){
+		IpOr ret;
+		ret.raw = ipSoft | ipInput;
+		return ret;
+	}
 
 	union mie {
 		uint32_t raw;
@@ -346,7 +353,6 @@ public:
 			regs[i] = 0;
 
 		status.raw = 0;
-		ip.raw = 0;
 		ie.raw = 0;
 		mtvec.raw = 0x80000020;
 		mcause.raw = 0;
@@ -360,7 +366,8 @@ public:
 		medeleg = 0;
 		mideleg = 0;
 		satp.mode = 0;
-		interrupts = 0;
+		ipSoft = 0;
+		ipInput = 0;
 	}
 
 	virtual void rfWrite(int32_t address, int32_t data) {
@@ -479,7 +486,7 @@ public:
 		if(((csr >> 8) & 0x3) > privilege) return true;
 		switch(csr){
 		case MSTATUS: *value = status.raw; break;
-		case MIP: *value = ip.raw; break;
+		case MIP: *value = getIp().raw; break;
 		case MIE: *value = ie.raw; break;
 		case MTVEC: *value = mtvec.raw; break;
 		case MCAUSE: *value = mcause.raw; break;
@@ -491,7 +498,7 @@ public:
 		case MIDELEG: *value = mideleg; break;
 
 		case SSTATUS: *value = status.raw & 0xC0133; break;
-		case SIP: *value = ip.raw & 0x333; break;
+		case SIP: *value = getIp().raw & 0x333; break;
 		case SIE: *value = ie.raw & 0x333; break;
 		case STVEC: *value = stvec.raw; break;
 		case SCAUSE: *value = scause.raw; break;
@@ -504,12 +511,21 @@ public:
 		return false;
 	}
 
+	virtual uint32_t csrReadToWriteOverride(int32_t csr, uint32_t value){
+		if(((csr >> 8) & 0x3) > privilege) return true;
+		switch(csr){
+		case MIP: return ipSoft; break;
+		case SIP: return ipSoft & 0x333; break;
+		};
+		return value;
+	}
+
 #define maskedWrite(dst, src, mask) dst=(dst & ~mask)|(src & mask);
 	virtual bool csrWrite(int32_t csr, uint32_t value){
 		if(((csr >> 8) & 0x3) > privilege) return true;
 		switch(csr){
 		case MSTATUS: status.raw = value; break;
-		case MIP: ip.raw = value; break;
+		case MIP: ipSoft = value; break;
 		case MIE: ie.raw = value; break;
 		case MTVEC: mtvec.raw = value; break;
 		case MCAUSE: mcause.raw = value; break;
@@ -521,7 +537,7 @@ public:
 		case MIDELEG: mideleg = value; break;
 
 		case SSTATUS: maskedWrite(status.raw, value,0xC0133); break;
-		case SIP: maskedWrite(ip.raw, value,0x333); break;
+		case SIP: maskedWrite(ipSoft, value,0x333); break;
 		case SIE: maskedWrite(ie.raw, value,0x333); break;
 		case STVEC: stvec.raw = value; break;
 		case SCAUSE: scause.raw = value; break;
@@ -563,9 +579,9 @@ public:
     	uint32_t mEnabled = status.mie && privilege == 3 || privilege < 3;
     	uint32_t sEnabled = status.sie && privilege == 1 || privilege < 1;
 
-    	uint32_t masked = interrupts & ~mideleg & -mEnabled & ie.raw;
+    	uint32_t masked = getIp().raw & ~mideleg & -mEnabled & ie.raw;
 		if (masked == 0)
-			masked = interrupts & mideleg & -sEnabled & ie.raw & 0x333;
+			masked = getIp().raw & mideleg & -sEnabled & ie.raw & 0x333;
 
 		if (masked) {
 			if (masked & (MIP_MEIP | MIP_SEIP))
@@ -803,7 +819,7 @@ public:
 					uint32_t csrAddress = i32_csr;
 					uint32_t old;
 					if(csrRead(i32_csr, &old)) { ilegalInstruction();return; }
-					if(write) if(csrWrite(i32_csr, (old & ~clear) | set)) { ilegalInstruction();return; }
+					if(write) if(csrWrite(i32_csr, (csrReadToWriteOverride(i32_csr, old) & ~clear) | set)) { ilegalInstruction();return; }
 					rfWrite(rd32, old);
 					pcWrite(pc + 4);
 				}
@@ -1360,25 +1376,27 @@ public:
 				top->eval();
 
 				#ifdef CSR
-					riscvRef.interrupts = 0;
-#ifdef TIMER_INTERRUPT
-					riscvRef.interrupts |= top->timerInterrupt << 7;
-#endif
-#ifdef EXTERNAL_INTERRUPT
-					riscvRef.interrupts |= top->externalInterrupt << 11;
-#endif
-#ifdef CSR
-					riscvRef.interrupts |= top->softwareInterrupt << 3;
-#endif
-#ifdef SUPERVISOR
-//					riscvRef.interrupts |= top->timerInterruptS << 5;
-					riscvRef.interrupts |= top->externalInterruptS << 9;
-#endif
+				    if(riscvRefEnable) {
+                        riscvRef.ipInput = 0;
+    #ifdef TIMER_INTERRUPT
+                        riscvRef.ipInput |= top->timerInterrupt << 7;
+    #endif
+    #ifdef EXTERNAL_INTERRUPT
+                        riscvRef.ipInput |= top->externalInterrupt << 11;
+    #endif
+    #ifdef CSR
+                        riscvRef.ipInput |= top->softwareInterrupt << 3;
+    #endif
+    #ifdef SUPERVISOR
+    //					riscvRef.ipInput |= top->timerInterruptS << 5;
+                        riscvRef.ipInput |= top->externalInterruptS << 9;
+    #endif
 
-           	    	riscvRef.liveness(top->VexRiscv->execute_CsrPlugin_inWfi);
-					if(top->VexRiscv->CsrPlugin_interruptJump){
-						if(riscvRefEnable) riscvRef.trap(true, top->VexRiscv->CsrPlugin_interruptCode);
-					}
+                        riscvRef.liveness(top->VexRiscv->execute_CsrPlugin_inWfi);
+                        if(top->VexRiscv->CsrPlugin_interruptJump){
+                            if(riscvRefEnable) riscvRef.trap(true, top->VexRiscv->CsrPlugin_interruptCode);
+                        }
+                    }
 				#endif
                 if(top->VexRiscv->writeBack_arbitration_isFiring){
                    	if(riscvRefEnable) {

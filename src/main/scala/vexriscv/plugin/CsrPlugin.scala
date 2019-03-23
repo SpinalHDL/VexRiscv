@@ -214,6 +214,7 @@ object CsrPluginConfig{
 }
 case class CsrWrite(that : Data, bitOffset : Int)
 case class CsrRead(that : Data , bitOffset : Int)
+case class CsrReadToWriteOverride(that : Data, bitOffset : Int) //Used for special cases, as MIP where there shadow stuff
 case class CsrOnWrite(doThat :() => Unit)
 case class CsrOnRead(doThat : () => Unit)
 case class CsrMapping() extends CsrInterface{
@@ -221,6 +222,7 @@ case class CsrMapping() extends CsrInterface{
   def addMappingAt(address : Int,that : Any) = mapping.getOrElseUpdate(address,new ArrayBuffer[Any]) += that
   override def r(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrRead(that,bitOffset))
   override def w(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrWrite(that,bitOffset))
+  override def r2w(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrReadToWriteOverride(that,bitOffset))
   override def onWrite(csrAddress: Int)(body: => Unit): Unit = addMappingAt(csrAddress, CsrOnWrite(() => body))
   override def onRead(csrAddress: Int)(body: => Unit): Unit =  addMappingAt(csrAddress, CsrOnRead(() => {body}))
 }
@@ -235,6 +237,8 @@ trait CsrInterface{
     r(csrAddress,bitOffset,that)
     w(csrAddress,bitOffset,that)
   }
+
+  def r2w(csrAddress : Int, bitOffset : Int,that : Data): Unit
 
   def rw(csrAddress : Int, thats : (Int, Data)*) : Unit = for(that <- thats) rw(csrAddress,that._1, that._2)
   def w(csrAddress : Int, thats : (Int, Data)*) : Unit = for(that <- thats) w(csrAddress,that._1, that._2)
@@ -324,6 +328,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
   override def r(csrAddress: Int, bitOffset: Int, that: Data): Unit = csrMapping.r(csrAddress, bitOffset, that)
   override def w(csrAddress: Int, bitOffset: Int, that: Data): Unit = csrMapping.w(csrAddress, bitOffset, that)
+  override def r2w(csrAddress: Int, bitOffset: Int, that: Data): Unit = csrMapping.r2w(csrAddress, bitOffset, that)
   override def onWrite(csrAddress: Int)(body: => Unit): Unit = csrMapping.onWrite(csrAddress)(body)
   override def onRead(csrAddress: Int)(body: => Unit): Unit = csrMapping.onRead(csrAddress)(body)
 
@@ -531,7 +536,10 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         //Supervisor CSR
         for(offset <- List(CSR.MSTATUS, CSR.SSTATUS)) READ_WRITE(offset,8 -> sstatus.SPP, 5 -> sstatus.SPIE, 1 -> sstatus.SIE)
         for(offset <- List(CSR.MIP, CSR.SIP)) {
-          READ_WRITE(offset, 9 -> sip.SEIP_SOFT, 5 -> sip.STIP, 1 -> sip.SSIP)
+          READ_WRITE(offset, 5 -> sip.STIP, 1 -> sip.SSIP)
+          READ_ONLY(offset,  9 -> sip.SEIP_OR)
+          WRITE_ONLY(offset,  9 -> sip.SEIP_SOFT)
+          r2w(offset, 9, sip.SEIP_SOFT)
         }
 
         for(offset <- List(CSR.MIE, CSR.SIE)) READ_WRITE(offset, 9 -> sie.SEIE, 5 -> sie.STIE, 1 -> sie.SSIE)
@@ -907,9 +915,11 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 //          False -> writeSrc,
 //          True -> Mux(input(INSTRUCTION)(12), ~writeSrc,  writeSrc)
 //        )
+
+        val readToWriteData = CombInit(readData)
         val writeData = if(noCsrAlu) writeSrc else input(INSTRUCTION)(13).mux(
           False -> writeSrc,
-          True -> Mux(input(INSTRUCTION)(12), readData & ~writeSrc, readData | writeSrc)
+          True -> Mux(input(INSTRUCTION)(12), readToWriteData & ~writeSrc, readToWriteData | writeSrc)
         )
 
 
@@ -969,6 +979,17 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
                       element.doThat()
                     case _ =>
                   }
+                }
+              }
+            }
+          }
+
+          switch(csrAddress) {
+            for ((address, jobs) <- csrMapping.mapping if jobs.exists(_.isInstanceOf[CsrReadToWriteOverride])) {
+              is(address) {
+                for (element <- jobs) element match {
+                  case element: CsrReadToWriteOverride if element.that.getBitsWidth != 0 => readToWriteData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
+                  case _ =>
                 }
               }
             }

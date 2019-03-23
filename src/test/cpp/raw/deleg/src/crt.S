@@ -229,7 +229,89 @@ test19: //U external interrupt S with deleg
     j fail
 
 
-test20:
+
+
+
+test20:// M external interrupt S by software with deleg
+    externalInterruptS(0)
+    li TEST_ID, 20
+    la TRAP_RET, test21
+    li x1, MSTATUS_SIE
+    csrw mstatus, x1
+    li x1, 1 << 9
+    csrw mie, x1
+    li TRAP_OK, 0
+    li x1, 1 << 9
+    csrs sip, x1
+    delay()
+
+test21: //S external interrupt S by software with deleg
+    li TEST_ID, 21
+    la TRAP_RET, test22
+    li x1, 1 << 9
+    csrc sip, x1
+    li x1, SSTATUS_SIE
+    csrw mstatus, x1
+    li x1, 1 << 9
+    csrw mie, x1
+    setPriv(1)
+    li TRAP_OK, 1
+    li x1, 1 << 9
+    csrs sip, x1
+    wfi
+    j fail
+
+test22: //U external interrupt S by software with deleg
+    li TEST_ID, 22
+    la TRAP_RET, test23
+    li x1, 1 << 9
+    csrc sip, x1
+    li x1, SSTATUS_SIE
+    csrw mstatus, x1
+    li x1, 1 << 9
+    csrw mie, x1
+    li x1, 1 << 9
+    csrs sip, x1
+    setPriv(0)
+    wfi
+    j fail
+
+
+
+test23: //Test software and hardware setting inettrupt
+    li TEST_ID, 23
+    li TRAP_OK, 0
+    externalInterruptS(0)
+    li x1, 1 << 9
+    csrc sip, x1
+    csrr x3, mip
+
+
+    externalInterruptS(1)
+    li x1, 1 << 9
+    csrc sip, x1
+    csrr x3, mip
+
+
+    externalInterruptS(0)
+    li x1, 1 << 9
+    csrc sip, x1
+    csrr x3, mip
+
+
+    externalInterruptS(0)
+    li x1, 1 << 9
+    csrs sip, x1
+    csrr x3, mip
+
+
+    externalInterruptS(1)
+    li x1, 1 << 9
+    csrs sip, x1
+    csrr x3, mip
+
+
+
     j pass
 
 fail:
