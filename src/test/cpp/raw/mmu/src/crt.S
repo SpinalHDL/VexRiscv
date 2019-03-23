@@ -420,6 +420,7 @@ trap:
     beq TRAP_OK, x0, failFence
     csrr x1, mcause
     csrr x1, mepc
+    csrr x1, mstatus
     li x1, 2
     beq TRAP_OK, x1, passFence
     csrw mepc, TRAP_RET

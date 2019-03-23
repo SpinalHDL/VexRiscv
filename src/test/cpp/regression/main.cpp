@@ -18,6 +18,7 @@
 #include <iomanip>
 #include <queue>
 #include <time.h>
+#include "encoding.h"
 
 using namespace std;
 
@@ -220,6 +221,8 @@ public:
     uint32_t medeleg;
 	uint32_t mideleg;
 
+	uint32_t interrupts;
+
 	union status {
 		uint32_t raw;
 		struct {
@@ -350,13 +353,14 @@ public:
 		mbadaddr = 0;
 		mepc = 0;
 		misa = 0; //TODO
+		status.raw = 0;
 		status.mpp = 3;
+		status.spp = 1;
 		privilege = 3;
 		medeleg = 0;
 		mideleg = 0;
 		satp.mode = 0;
-		status.mxr = 0;
-		status.sum = 0;
+		interrupts = 0;
 	}
 
 	virtual void rfWrite(int32_t address, int32_t data) {
@@ -369,7 +373,7 @@ public:
 			lastPc = pc;
 			pc = target;
 		} else {
-			exception(0, 0, target);
+			trap(0, 0, target);
 		}
 	}
 	uint32_t mbadaddr, sbadaddr;
@@ -406,16 +410,32 @@ public:
 		return false;
 	}
 
-    void exception(bool interrupt,int32_t cause) {
-        exception(interrupt, cause, false, 0);
+    void trap(bool interrupt,int32_t cause) {
+        trap(interrupt, cause, false, 0);
     }
-    void exception(bool interrupt,int32_t cause, uint32_t value) {
-        exception(interrupt, cause, true, value);
+    void trap(bool interrupt,int32_t cause, uint32_t value) {
+        trap(interrupt, cause, true, value);
     }
-	void exception(bool interrupt,int32_t cause, bool valueWrite, uint32_t value) {
+	void trap(bool interrupt,int32_t cause, bool valueWrite, uint32_t value) {
+		//Check leguality of the interrupt
+		if(interrupt) {
+			bool hit = false;
+			for(int i = 0;i < 5;i++){
+				if(pendingInterrupts[i] == 1 << cause){
+					hit = true;
+					break;
+				}
+			}
+			if(!hit){
+				cout << "DUT had trigger an interrupts which wasn't by the REF" << endl;
+				fail();
+			}
+		}
+
 		uint32_t deleg = interrupt ? mideleg : medeleg;
 		uint32_t targetPrivilege = 3;
 		if(deleg & (1 << cause)) targetPrivilege = 1;
+		targetPrivilege = max(targetPrivilege, privilege);
 		Xtvec xtvec = targetPrivilege == 3 ? mtvec : stvec;
 
 		switch(targetPrivilege){
@@ -423,8 +443,8 @@ public:
 		    if(valueWrite) mbadaddr = value;
 			mcause.interrupt = interrupt;
 			mcause.exceptionCode = cause;
-	        status.mie  = false;
 	        status.mpie = status.mie;
+	        status.mie  = false;
 	        status.mpp = privilege;
 	        mepc = pc;
 			break;
@@ -432,8 +452,8 @@ public:
 			if(valueWrite) sbadaddr = value;
 			scause.interrupt = interrupt;
 			scause.exceptionCode = cause;
-	        status.sie  = false;
 	        status.spie = status.sie;
+	        status.sie  = false;
 	        status.spp  = privilege;
 	        sepc = pc;
 			break;
@@ -447,7 +467,7 @@ public:
 	}
 
 	void ilegalInstruction(){
-		exception(0, 2);
+		trap(0, 2);
 	}
 
 	virtual void fail() {
@@ -467,6 +487,8 @@ public:
 		case MEPC: *value = mepc; break;
 		case MSCRATCH: *value = mscratch; break;
 		case MISA: *value = misa; break;
+		case MEDELEG: *value = medeleg; break;
+		case MIDELEG: *value = mideleg; break;
 
 		case SSTATUS: *value = status.raw & 0xC0133; break;
 		case SIP: *value = ip.raw & 0x333; break;
@@ -495,6 +517,8 @@ public:
 		case MEPC: mepc = value; break;
 		case MSCRATCH: mscratch = value; break;
 		case MISA: misa = value; break;
+		case MEDELEG: medeleg = value; break;
+		case MIDELEG: mideleg = value; break;
 
 		case SSTATUS: maskedWrite(status.raw, value,0xC0133); break;
 		case SIP: maskedWrite(ip.raw, value,0x333); break;
@@ -514,16 +538,14 @@ public:
     
     int livenessStep = 0;
     int livenessInterrupt = 0;
-    virtual void liveness(bool mIntTimer, bool mIntExt){
-        livenessStep++;
-        bool interruptRequest = (ie.mtie && mIntTimer);
-        if(interruptRequest){
-            if(status.mie){
-                livenessInterrupt++;
-            }
-        } else {
-             livenessInterrupt = 0;
-        }
+    uint32_t pendingInterruptsPtr = 0;
+    uint32_t pendingInterrupts[5] = {0,0,0,0,0};
+    virtual void liveness(bool inWfi){
+    	uint32_t pendingInterrupt = getPendingInterrupt();
+    	pendingInterrupts[pendingInterruptsPtr++] = getPendingInterrupt();
+    	if(pendingInterruptsPtr >= 5) pendingInterruptsPtr = 0;
+        if(pendingInterrupt) livenessInterrupt++; else livenessInterrupt = 0;
+        if(!inWfi) livenessStep++; else livenessStep = 0;
 
         if(livenessStep > 1000){
             cout << "Liveness step failure" << endl;
@@ -534,8 +556,33 @@ public:
             cout << "Liveness interrupt failure" << endl;
             fail();
         }
-        
     }
+
+
+    uint32_t getPendingInterrupt(){
+    	uint32_t mEnabled = status.mie && privilege == 3 || privilege < 3;
+    	uint32_t sEnabled = status.sie && privilege == 1 || privilege < 1;
+
+    	uint32_t masked = interrupts & ~mideleg & -mEnabled & ie.raw;
+		if (masked == 0)
+			masked = interrupts & mideleg & -sEnabled & ie.raw & 0x333;
+
+		if (masked) {
+			if (masked & (MIP_MEIP | MIP_SEIP))
+				masked &= (MIP_MEIP | MIP_SEIP);
+			// software interrupts have next-highest priority
+			else if (masked & (MIP_MSIP | MIP_SSIP))
+				masked &= (MIP_MSIP | MIP_SSIP);
+			// timer interrupts have next-highest priority
+			else if (masked & (MIP_MTIP | MIP_STIP))
+				masked &= (MIP_MTIP | MIP_STIP);
+			else
+			  fail();
+		}
+
+		return masked;
+    }
+
 
     bool isPcAligned(uint32_t pc){
 #ifdef COMPRESSED
@@ -579,25 +626,25 @@ public:
 		uint32_t u32Buf;
 		uint32_t pAddr;
 		if (pc & 2) {
-			if(v2p(pc - 2, &pAddr, EXECUTE)){ exception(0, 12); return; }
+			if(v2p(pc - 2, &pAddr, EXECUTE)){ trap(0, 12); return; }
 			if(iRead(pAddr, &i)){
-				exception(0, 1);
+				trap(0, 1);
 				return;
 			}
 			i >>= 16;
 			if (i & 3 == 3) {
 				uint32_t u32Buf;
-				if(v2p(pc + 2, &pAddr, EXECUTE)){ exception(0, 12); return; }
+				if(v2p(pc + 2, &pAddr, EXECUTE)){ trap(0, 12); return; }
 				if(iRead(pAddr, &u32Buf)){
-					exception(0, 1);
+					trap(0, 1);
 					return;
 				}
 				i |= u32Buf << 16;
 			}
 		} else {
-			if(v2p(pc, &pAddr, EXECUTE)){ exception(0, 12); return; }
+			if(v2p(pc, &pAddr, EXECUTE)){ trap(0, 12); return; }
 			if(iRead(pAddr, &i)){
-				exception(0, 1);
+				trap(0, 1);
 				return;
 			}
 		}
@@ -627,11 +674,11 @@ public:
 				uint32_t address = i32_rs1 + i32_i_imm;
 				uint32_t size = 1 << ((i >> 12) & 0x3);
 				if(address & (size-1)){
-					exception(0, 4, address);
+					trap(0, 4, address);
 				} else {
-					if(v2p(address, &pAddr, READ)){ exception(0, 13); return; }
+					if(v2p(address, &pAddr, READ)){ trap(0, 13); return; }
 					if(dRead(pAddr, size, &data)){
-					    exception(0, 5, address);
+					    trap(0, 5, address);
 					} else {
                         switch ((i >> 12) & 0x7) {
                         case 0x0:rfWrite(rd32, int8_t(data));pcWrite(pc + 4);break;
@@ -647,9 +694,9 @@ public:
 				uint32_t address = i32_rs1 + i32_s_imm;
 				uint32_t size = 1 << ((i >> 12) & 0x3);
 				if(address & (size-1)){
-					exception(0, 6, address);
+					trap(0, 6, address);
 				} else {
-					if(v2p(address, &pAddr, WRITE)){ exception(0, 15); return; }
+					if(v2p(address, &pAddr, WRITE)){ trap(0, 15); return; }
 					dWrite(pAddr, size, i32_rs2);
 					pcWrite(pc + 4);
 				}
@@ -730,7 +777,7 @@ public:
 						pcWrite(sepc);
 					}break;
 					case 0x00000073:{ //ECALL
-						exception(0, 8+privilege);
+						trap(0, 8+privilege);
 					}break;
 					case 0x10500073:{ //WFI
 						pcWrite(pc + 4);
@@ -771,11 +818,11 @@ public:
 				uint32_t data;
 				uint32_t address = i16_rf1 + i16_lw_imm;
 				if(address & 0x3){
-					exception(0, 4, address);
+					trap(0, 4, address);
 				} else {
-					if(v2p(address, &pAddr, READ)){ exception(0, 13); return; }
+					if(v2p(address, &pAddr, READ)){ trap(0, 13); return; }
 					if(dRead(address, 4, &data)) {
-					    exception(1, 5, address);
+					    trap(1, 5, address);
 					} else {
 					    rfWrite(i16_addr2, data); pcWrite(pc + 2);
                     }
@@ -784,9 +831,9 @@ public:
 			case 6: {
 				uint32_t address = i16_rf1 + i16_lw_imm;
 				if(address & 0x3){
-					exception(0, 6, address);
+					trap(0, 6, address);
 				} else {
-					if(v2p(address, &pAddr, WRITE)){ exception(0, 15); return; }
+					if(v2p(address, &pAddr, WRITE)){ trap(0, 15); return; }
 					dWrite(pAddr, 4, i16_rf2);
                     pcWrite(pc + 2);
 				}
@@ -820,11 +867,11 @@ public:
 				uint32_t data;
 				uint32_t address = rf_sp + i16_lwsp_imm;
 				if(address & 0x3){
-					exception(0, 4, address);
+					trap(0, 4, address);
 				} else {
-					if(v2p(address, &pAddr, READ)){ exception(0, 13); return; }
+					if(v2p(address, &pAddr, READ)){ trap(0, 13); return; }
 				    if(dRead(pAddr, 4, &data)){
-					    exception(1, 5, address);
+					    trap(1, 5, address);
                     } else {
 					    rfWrite(rd32, data); pcWrite(pc + 2);
                     }
@@ -850,9 +897,9 @@ public:
 			case 22: {
 				uint32_t address = rf_sp + i16_swsp_imm;
 				if(address & 3){
-					exception(0,6, address);
+					trap(0,6, address);
 				} else {
-					if(v2p(address, &pAddr, WRITE)){ exception(0, 15); return; }
+					if(v2p(address, &pAddr, WRITE)){ trap(0, 15); return; }
 					dWrite(pAddr, 4, regs[iBits(2,5)]); pcWrite(pc + 2);
 				}
 			}break;
@@ -1112,6 +1159,13 @@ public:
 				logTraces << (char)mem[0xF0010000u];
 				break;
 			}
+#ifdef EXTERNAL_INTERRUPT
+			case 0xF0011000u: top->externalInterrupt = *data & 1; break;
+#endif
+
+#ifdef SUPERVISOR
+			case 0xF0012000u: top->externalInterruptS = *data & 1; break;
+#endif
 			case 0xF00FFF00u: {
 				cout << mem[0xF00FFF00u];
 				logTraces << (char)mem[0xF00FFF00u];
@@ -1222,6 +1276,9 @@ public:
 		top->timerInterrupt = 0;
 		top->externalInterrupt = 1;
 		#endif
+		#ifdef SUPERVISOR
+		top->externalInterruptS = 0;
+		#endif
 		#ifdef DEBUG_PLUGIN_EXTERNAL
 		top->timerInterrupt = 0;
 		top->externalInterrupt = 0;
@@ -1300,8 +1357,21 @@ public:
 				top->eval();
 
 				#ifdef CSR
+					riscvRef.interrupts = 0;
+#ifdef TIMER_INTERRUPT
+					riscvRef.interrupts |= top->timerInterrupt << 7;
+#endif
+#ifdef EXTERNAL_INTERRUPT
+					riscvRef.interrupts |= top->externalInterrupt << 11;
+#endif
+#ifdef SUPERVISOR
+					riscvRef.interrupts |= top->timerInterruptS << 5;
+					riscvRef.interrupts |= top->externalInterruptS << 9;
+#endif
+
+           	    	riscvRef.liveness(top->VexRiscv->execute_CsrPlugin_inWfi);
 					if(top->VexRiscv->CsrPlugin_interruptJump){
-						if(riscvRefEnable) riscvRef.exception(true, top->VexRiscv->CsrPlugin_interruptCode);
+						if(riscvRefEnable) riscvRef.trap(true, top->VexRiscv->CsrPlugin_interruptCode);
 					}
 				#endif
                 if(top->VexRiscv->writeBack_arbitration_isFiring){
@@ -1309,16 +1379,6 @@ public:
                    	    riscvRef.step();
                    	    bool mIntTimer = false;
                    	    bool mIntExt = false;
-
-#ifdef TIMER_INTERRUPT
-                   	    mIntTimer = top->timerInterrupt;
-#endif
-#ifdef EXTERNAL_INTERRUPT
-                   	    mIntExt = top->externalInterrupt;
-#endif
-
-
-                   	    riscvRef.liveness(mIntTimer, mIntExt);
                    	}
 
                    	if(riscvRefEnable && top->VexRiscv->writeBack_PC != riscvRef.lastPc){
@@ -1353,11 +1413,9 @@ public:
                     }
 					if(riscvRefEnable) if(rfWriteValid != riscvRef.rfWriteValid ||
 						(rfWriteValid && (rfWriteAddress!= riscvRef.rfWriteAddress || rfWriteData!= riscvRef.rfWriteData))){
-                    	cout << "regFile write missmatch ";
-                    	if(rfWriteValid) cout << "REF: RF[" << riscvRef.rfWriteAddress << "] = 0x" << hex << riscvRef.rfWriteData << dec << " ";
-                    	if(rfWriteValid) cout << "RTL: RF[" << rfWriteAddress << "] = 0x" << hex << rfWriteData << dec << " ";
-
-						cout << endl;
+                    	cout << "regFile write missmatch :" << endl;
+                    	if(rfWriteValid) cout << " REF: RF[" << riscvRef.rfWriteAddress << "] = 0x" << hex << riscvRef.rfWriteData << dec << endl;
+                    	if(rfWriteValid) cout << " RTL: RF[" << rfWriteAddress << "] = 0x" << hex << rfWriteData << dec << endl;
                     	fail();
                     }
                 }
@@ -2966,6 +3024,7 @@ int main(int argc, char **argv, char **env) {
 //    #ifdef MMU
 //        redo(REDO,Workspace("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
 //    #endif
+//     redo(REDO,Workspace("deleg").withRiscvRef()->loadHex("../raw/deleg/build/deleg.hex")->bootAt(0x80000000u)->run(50e3););
 //    return 0;
 
 	for(int idx = 0;idx < 1;idx++){
@@ -3072,6 +3131,9 @@ int main(int argc, char **argv, char **env) {
 
             #ifdef MMU
                 redo(REDO,Workspace("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
+            #endif
+            #ifdef SUPERVISOR
+                redo(REDO,Workspace("deleg").withRiscvRef()->loadHex("../raw/deleg/build/deleg.hex")->bootAt(0x80000000u)->run(50e3););
             #endif
 
 			#ifdef DEBUG_PLUGIN

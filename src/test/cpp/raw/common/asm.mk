@@ -1,5 +1,3 @@
-PROJ_NAME=mmu
-
 
 RISCV_PATH?=/opt/riscv/
 CFLAGS += -march=rv32i   -mabi=ilp32

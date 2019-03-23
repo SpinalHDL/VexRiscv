@@ -833,7 +833,9 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       execute plug new Area{
         import execute._
         //Manage WFI instructions
+        val inWfi = False.addTag(Verilator.public)
         if(wfiGenAsWait) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.WFI){
+          inWfi := True
           when(!interrupt){
             arbitration.haltItself := True
           }
