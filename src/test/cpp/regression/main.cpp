@@ -418,7 +418,7 @@ public:
 	}
 
     void trap(bool interrupt,int32_t cause) {
-        trap(interrupt, cause, false, 0);
+        trap(interrupt, cause, true, 0);
     }
     void trap(bool interrupt,int32_t cause, uint32_t value) {
         trap(interrupt, cause, true, value);
@@ -642,7 +642,7 @@ public:
 		uint32_t u32Buf;
 		uint32_t pAddr;
 		if (pc & 2) {
-			if(v2p(pc - 2, &pAddr, EXECUTE)){ trap(0, 12); return; }
+			if(v2p(pc - 2, &pAddr, EXECUTE)){ trap(0, 12, pc - 2); return; }
 			if(iRead(pAddr, &i)){
 				trap(0, 1);
 				return;
@@ -650,7 +650,7 @@ public:
 			i >>= 16;
 			if (i & 3 == 3) {
 				uint32_t u32Buf;
-				if(v2p(pc + 2, &pAddr, EXECUTE)){ trap(0, 12); return; }
+				if(v2p(pc + 2, &pAddr, EXECUTE)){ trap(0, 12, pc + 2); return; }
 				if(iRead(pAddr, &u32Buf)){
 					trap(0, 1);
 					return;
@@ -658,7 +658,7 @@ public:
 				i |= u32Buf << 16;
 			}
 		} else {
-			if(v2p(pc, &pAddr, EXECUTE)){ trap(0, 12); return; }
+			if(v2p(pc, &pAddr, EXECUTE)){ trap(0, 12, pc); return; }
 			if(iRead(pAddr, &i)){
 				trap(0, 1);
 				return;
@@ -692,7 +692,7 @@ public:
 				if(address & (size-1)){
 					trap(0, 4, address);
 				} else {
-					if(v2p(address, &pAddr, READ)){ trap(0, 13); return; }
+					if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
 					if(dRead(pAddr, size, &data)){
 					    trap(0, 5, address);
 					} else {
@@ -712,7 +712,7 @@ public:
 				if(address & (size-1)){
 					trap(0, 6, address);
 				} else {
-					if(v2p(address, &pAddr, WRITE)){ trap(0, 15); return; }
+					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
 					dWrite(pAddr, size, i32_rs2);
 					pcWrite(pc + 4);
 				}
@@ -836,7 +836,7 @@ public:
 				if(address & 0x3){
 					trap(0, 4, address);
 				} else {
-					if(v2p(address, &pAddr, READ)){ trap(0, 13); return; }
+					if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
 					if(dRead(address, 4, &data)) {
 					    trap(1, 5, address);
 					} else {
@@ -849,7 +849,7 @@ public:
 				if(address & 0x3){
 					trap(0, 6, address);
 				} else {
-					if(v2p(address, &pAddr, WRITE)){ trap(0, 15); return; }
+					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
 					dWrite(pAddr, 4, i16_rf2);
                     pcWrite(pc + 2);
 				}
@@ -885,7 +885,7 @@ public:
 				if(address & 0x3){
 					trap(0, 4, address);
 				} else {
-					if(v2p(address, &pAddr, READ)){ trap(0, 13); return; }
+					if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
 				    if(dRead(pAddr, 4, &data)){
 					    trap(1, 5, address);
                     } else {
@@ -915,7 +915,7 @@ public:
 				if(address & 3){
 					trap(0,6, address);
 				} else {
-					if(v2p(address, &pAddr, WRITE)){ trap(0, 15); return; }
+					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
 					dWrite(pAddr, 4, regs[iBits(2,5)]); pcWrite(pc + 2);
 				}
 			}break;

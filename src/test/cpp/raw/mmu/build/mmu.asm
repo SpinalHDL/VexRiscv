@@ -436,11 +436,11 @@ Disassembly of section .crt_section:
 80000598:	342020f3          	csrr	ra,mcause
 8000059c:	341020f3          	csrr	ra,mepc
 800005a0:	300020f3          	csrr	ra,mstatus
-800005a4:	00200093          	li	ra,2
-800005a8:	fe1e80e3          	beq	t4,ra,80000588 <passFence>
-800005ac:	341f1073          	csrw	mepc,t5
-800005b0:	30200073          	mret
-800005b4:	00000013          	nop
+800005a4:	343020f3          	csrr	ra,mbadaddr
+800005a8:	00200093          	li	ra,2
+800005ac:	fc1e8ee3          	beq	t4,ra,80000588 <passFence>
+800005b0:	341f1073          	csrw	mepc,t5
+800005b4:	30200073          	mret
 800005b8:	00000013          	nop
 800005bc:	00000013          	nop
 800005c0:	00000013          	nop

@@ -328,6 +328,7 @@ mtrap:
     csrr x1, mcause
     csrr x1, mepc
     csrr x1, mstatus
+    csrr x1, mbadaddr
     li x1, MSTATUS_MPIE
     csrc mstatus, x1
     li x1, 2
@@ -343,6 +344,7 @@ strap:
     csrr x1, scause
     csrr x1, sepc
     csrr x1, sstatus
+    csrr x1, sbadaddr
     ecall
 
 

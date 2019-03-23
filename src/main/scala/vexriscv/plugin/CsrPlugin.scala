@@ -864,7 +864,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         if(selfException != null) {
           selfException.valid := False
           selfException.code.assignDontCare()
-          selfException.badAddr.assignDontCare()
+          selfException.badAddr := 0
           if(catchIllegalAccess) when(illegalAccess || illegalInstruction){
             selfException.valid := True
             selfException.code := 2

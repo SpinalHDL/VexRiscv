@@ -10,11 +10,11 @@ Disassembly of section .crt_section:
 80000008:	68408093          	addi	ra,ra,1668 # 80000688 <mtrap>
 8000000c:	30509073          	csrw	mtvec,ra
 80000010:	00000097          	auipc	ra,0x0
-80000014:	6ac08093          	addi	ra,ra,1708 # 800006bc <strap>
+80000014:	6b008093          	addi	ra,ra,1712 # 800006c0 <strap>
 80000018:	10509073          	csrw	stvec,ra
 8000001c:	f00110b7          	lui	ra,0xf0011
 80000020:	00000113          	li	sp,0
-80000024:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010944>
+80000024:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010940>
 
 80000028 <test1>:
 80000028:	00100e13          	li	t3,1
@@ -134,7 +134,7 @@ Disassembly of section .crt_section:
 800001a8:	03cf0f13          	addi	t5,t5,60 # 800001e0 <test11>
 800001ac:	f00110b7          	lui	ra,0xf0011
 800001b0:	00000113          	li	sp,0
-800001b4:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010944>
+800001b4:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010940>
 800001b8:	00800093          	li	ra,8
 800001bc:	30009073          	csrw	mstatus,ra
 800001c0:	000010b7          	lui	ra,0x1
@@ -142,7 +142,7 @@ Disassembly of section .crt_section:
 800001c8:	30409073          	csrw	mie,ra
 800001cc:	f00110b7          	lui	ra,0xf0011
 800001d0:	00100113          	li	sp,1
-800001d4:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010944>
+800001d4:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010940>
 800001d8:	10500073          	wfi
 800001dc:	4940006f          	j	80000670 <fail>
 
@@ -152,7 +152,7 @@ Disassembly of section .crt_section:
 800001e8:	068f0f13          	addi	t5,t5,104 # 8000024c <test12>
 800001ec:	f00110b7          	lui	ra,0xf0011
 800001f0:	00000113          	li	sp,0
-800001f4:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010944>
+800001f4:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010940>
 800001f8:	00800093          	li	ra,8
 800001fc:	30009073          	csrw	mstatus,ra
 80000200:	000010b7          	lui	ra,0x1
@@ -171,7 +171,7 @@ Disassembly of section .crt_section:
 80000234:	43c0006f          	j	80000670 <fail>
 80000238:	f00110b7          	lui	ra,0xf0011
 8000023c:	00100113          	li	sp,1
-80000240:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010944>
+80000240:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010940>
 80000244:	10500073          	wfi
 80000248:	4280006f          	j	80000670 <fail>
 
@@ -181,7 +181,7 @@ Disassembly of section .crt_section:
 80000254:	064f0f13          	addi	t5,t5,100 # 800002b4 <test14>
 80000258:	f00110b7          	lui	ra,0xf0011
 8000025c:	00000113          	li	sp,0
-80000260:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010944>
+80000260:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010940>
 80000264:	00800093          	li	ra,8
 80000268:	30009073          	csrw	mstatus,ra
 8000026c:	000010b7          	lui	ra,0x1
@@ -199,7 +199,7 @@ Disassembly of section .crt_section:
 8000029c:	3d40006f          	j	80000670 <fail>
 800002a0:	f00110b7          	lui	ra,0xf0011
 800002a4:	00100113          	li	sp,1
-800002a8:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010944>
+800002a8:	0020a023          	sw	sp,0(ra) # f0011000 <strap+0x70010940>
 800002ac:	10500073          	wfi
 800002b0:	3c00006f          	j	80000670 <fail>
 
@@ -211,7 +211,7 @@ Disassembly of section .crt_section:
 800002c4:	040f0f13          	addi	t5,t5,64 # 80000300 <test15>
 800002c8:	f00120b7          	lui	ra,0xf0012
 800002cc:	00000113          	li	sp,0
-800002d0:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+800002d0:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 800002d4:	00200093          	li	ra,2
 800002d8:	30009073          	csrw	mstatus,ra
 800002dc:	20000093          	li	ra,512
@@ -219,7 +219,7 @@ Disassembly of section .crt_section:
 800002e4:	00000e93          	li	t4,0
 800002e8:	f00120b7          	lui	ra,0xf0012
 800002ec:	00100113          	li	sp,1
-800002f0:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+800002f0:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 800002f4:	06400093          	li	ra,100
 800002f8:	fff08093          	addi	ra,ra,-1
 800002fc:	fe104ee3          	bgtz	ra,800002f8 <test14+0x44>
@@ -230,7 +230,7 @@ Disassembly of section .crt_section:
 80000308:	068f0f13          	addi	t5,t5,104 # 8000036c <test16>
 8000030c:	f00120b7          	lui	ra,0xf0012
 80000310:	00000113          	li	sp,0
-80000314:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+80000314:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 80000318:	00200093          	li	ra,2
 8000031c:	30009073          	csrw	mstatus,ra
 80000320:	20000093          	li	ra,512
@@ -249,7 +249,7 @@ Disassembly of section .crt_section:
 80000354:	00100e93          	li	t4,1
 80000358:	f00120b7          	lui	ra,0xf0012
 8000035c:	00100113          	li	sp,1
-80000360:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+80000360:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 80000364:	10500073          	wfi
 80000368:	3080006f          	j	80000670 <fail>
 
@@ -259,7 +259,7 @@ Disassembly of section .crt_section:
 80000374:	060f0f13          	addi	t5,t5,96 # 800003d0 <test17>
 80000378:	f00120b7          	lui	ra,0xf0012
 8000037c:	00000113          	li	sp,0
-80000380:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+80000380:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 80000384:	00200093          	li	ra,2
 80000388:	30009073          	csrw	mstatus,ra
 8000038c:	20000093          	li	ra,512
@@ -276,7 +276,7 @@ Disassembly of section .crt_section:
 800003b8:	2b80006f          	j	80000670 <fail>
 800003bc:	f00120b7          	lui	ra,0xf0012
 800003c0:	00100113          	li	sp,1
-800003c4:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+800003c4:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 800003c8:	10500073          	wfi
 800003cc:	2a40006f          	j	80000670 <fail>
 
@@ -288,7 +288,7 @@ Disassembly of section .crt_section:
 800003e0:	040f0f13          	addi	t5,t5,64 # 8000041c <test18>
 800003e4:	f00120b7          	lui	ra,0xf0012
 800003e8:	00000113          	li	sp,0
-800003ec:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+800003ec:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 800003f0:	00200093          	li	ra,2
 800003f4:	30009073          	csrw	mstatus,ra
 800003f8:	20000093          	li	ra,512
@@ -296,7 +296,7 @@ Disassembly of section .crt_section:
 80000400:	00000e93          	li	t4,0
 80000404:	f00120b7          	lui	ra,0xf0012
 80000408:	00100113          	li	sp,1
-8000040c:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+8000040c:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 80000410:	06400093          	li	ra,100
 80000414:	fff08093          	addi	ra,ra,-1
 80000418:	fe104ee3          	bgtz	ra,80000414 <test17+0x44>
@@ -307,7 +307,7 @@ Disassembly of section .crt_section:
 80000424:	068f0f13          	addi	t5,t5,104 # 80000488 <test19>
 80000428:	f00120b7          	lui	ra,0xf0012
 8000042c:	00000113          	li	sp,0
-80000430:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+80000430:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 80000434:	00200093          	li	ra,2
 80000438:	30009073          	csrw	mstatus,ra
 8000043c:	20000093          	li	ra,512
@@ -326,7 +326,7 @@ Disassembly of section .crt_section:
 80000470:	00100e93          	li	t4,1
 80000474:	f00120b7          	lui	ra,0xf0012
 80000478:	00100113          	li	sp,1
-8000047c:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+8000047c:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 80000480:	10500073          	wfi
 80000484:	1ec0006f          	j	80000670 <fail>
 
@@ -336,7 +336,7 @@ Disassembly of section .crt_section:
 80000490:	060f0f13          	addi	t5,t5,96 # 800004ec <test20>
 80000494:	f00120b7          	lui	ra,0xf0012
 80000498:	00000113          	li	sp,0
-8000049c:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+8000049c:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 800004a0:	00200093          	li	ra,2
 800004a4:	30009073          	csrw	mstatus,ra
 800004a8:	20000093          	li	ra,512
@@ -353,14 +353,14 @@ Disassembly of section .crt_section:
 800004d4:	19c0006f          	j	80000670 <fail>
 800004d8:	f00120b7          	lui	ra,0xf0012
 800004dc:	00100113          	li	sp,1
-800004e0:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+800004e0:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 800004e4:	10500073          	wfi
 800004e8:	1880006f          	j	80000670 <fail>
 
 800004ec <test20>:
 800004ec:	f00120b7          	lui	ra,0xf0012
 800004f0:	00000113          	li	sp,0
-800004f4:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+800004f4:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 800004f8:	01400e13          	li	t3,20
 800004fc:	00000f17          	auipc	t5,0x0
 80000500:	030f0f13          	addi	t5,t5,48 # 8000052c <test21>
@@ -432,31 +432,31 @@ Disassembly of section .crt_section:
 800005f0:	00000e93          	li	t4,0
 800005f4:	f00120b7          	lui	ra,0xf0012
 800005f8:	00000113          	li	sp,0
-800005fc:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+800005fc:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 80000600:	20000093          	li	ra,512
 80000604:	1440b073          	csrc	sip,ra
 80000608:	344021f3          	csrr	gp,mip
 8000060c:	f00120b7          	lui	ra,0xf0012
 80000610:	00100113          	li	sp,1
-80000614:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+80000614:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 80000618:	20000093          	li	ra,512
 8000061c:	1440b073          	csrc	sip,ra
 80000620:	344021f3          	csrr	gp,mip
 80000624:	f00120b7          	lui	ra,0xf0012
 80000628:	00000113          	li	sp,0
-8000062c:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+8000062c:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 80000630:	20000093          	li	ra,512
 80000634:	1440b073          	csrc	sip,ra
 80000638:	344021f3          	csrr	gp,mip
 8000063c:	f00120b7          	lui	ra,0xf0012
 80000640:	00000113          	li	sp,0
-80000644:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+80000644:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 80000648:	20000093          	li	ra,512
 8000064c:	1440a073          	csrs	sip,ra
 80000650:	344021f3          	csrr	gp,mip
 80000654:	f00120b7          	lui	ra,0xf0012
 80000658:	00100113          	li	sp,1
-8000065c:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011944>
+8000065c:	0020a023          	sw	sp,0(ra) # f0012000 <strap+0x70011940>
 80000660:	20000093          	li	ra,512
 80000664:	1440a073          	csrs	sip,ra
 80000668:	344021f3          	csrr	gp,mip
@@ -464,12 +464,12 @@ Disassembly of section .crt_section:
 
 80000670 <fail>:
 80000670:	f0100137          	lui	sp,0xf0100
-80000674:	f2410113          	addi	sp,sp,-220 # f00fff24 <strap+0x700ff868>
+80000674:	f2410113          	addi	sp,sp,-220 # f00fff24 <strap+0x700ff864>
 80000678:	01c12023          	sw	t3,0(sp)
 
 8000067c <pass>:
 8000067c:	f0100137          	lui	sp,0xf0100
-80000680:	f2010113          	addi	sp,sp,-224 # f00fff20 <strap+0x700ff864>
+80000680:	f2010113          	addi	sp,sp,-224 # f00fff20 <strap+0x700ff860>
 80000684:	00012023          	sw	zero,0(sp)
 
 80000688 <mtrap>:
@@ -477,25 +477,27 @@ Disassembly of section .crt_section:
 8000068c:	342020f3          	csrr	ra,mcause
 80000690:	341020f3          	csrr	ra,mepc
 80000694:	300020f3          	csrr	ra,mstatus
-80000698:	08000093          	li	ra,128
-8000069c:	3000b073          	csrc	mstatus,ra
-800006a0:	00200093          	li	ra,2
-800006a4:	fc1e8ce3          	beq	t4,ra,8000067c <pass>
-800006a8:	000020b7          	lui	ra,0x2
-800006ac:	80008093          	addi	ra,ra,-2048 # 1800 <_start-0x7fffe800>
-800006b0:	3000a073          	csrs	mstatus,ra
-800006b4:	341f1073          	csrw	mepc,t5
-800006b8:	30200073          	mret
+80000698:	343020f3          	csrr	ra,mbadaddr
+8000069c:	08000093          	li	ra,128
+800006a0:	3000b073          	csrc	mstatus,ra
+800006a4:	00200093          	li	ra,2
+800006a8:	fc1e8ae3          	beq	t4,ra,8000067c <pass>
+800006ac:	000020b7          	lui	ra,0x2
+800006b0:	80008093          	addi	ra,ra,-2048 # 1800 <_start-0x7fffe800>
+800006b4:	3000a073          	csrs	mstatus,ra
+800006b8:	341f1073          	csrw	mepc,t5
+800006bc:	30200073          	mret
 
-800006bc <strap>:
-800006bc:	fa0e8ae3          	beqz	t4,80000670 <fail>
-800006c0:	142020f3          	csrr	ra,scause
-800006c4:	141020f3          	csrr	ra,sepc
-800006c8:	100020f3          	csrr	ra,sstatus
-800006cc:	00000073          	ecall
-800006d0:	00000013          	nop
-800006d4:	00000013          	nop
+800006c0 <strap>:
+800006c0:	fa0e88e3          	beqz	t4,80000670 <fail>
+800006c4:	142020f3          	csrr	ra,scause
+800006c8:	141020f3          	csrr	ra,sepc
+800006cc:	100020f3          	csrr	ra,sstatus
+800006d0:	143020f3          	csrr	ra,sbadaddr
+800006d4:	00000073          	ecall
 800006d8:	00000013          	nop
 800006dc:	00000013          	nop
 800006e0:	00000013          	nop
 800006e4:	00000013          	nop
+800006e8:	00000013          	nop
+800006ec:	00000013          	nop

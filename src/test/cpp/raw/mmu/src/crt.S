@@ -421,6 +421,7 @@ trap:
     csrr x1, mcause
     csrr x1, mepc
     csrr x1, mstatus
+    csrr x1, mbadaddr
     li x1, 2
     beq TRAP_OK, x1, passFence
     csrw mepc, TRAP_RET
