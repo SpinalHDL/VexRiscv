@@ -1,12 +1,24 @@
 
 RISCV_PATH?=/opt/riscv/
-CFLAGS += -march=rv32i   -mabi=ilp32
 RISCV_NAME = riscv64-unknown-elf
 RISCV_OBJCOPY = $(RISCV_PATH)/bin/$(RISCV_NAME)-objcopy
 RISCV_OBJDUMP = $(RISCV_PATH)/bin/$(RISCV_NAME)-objdump
 RISCV_CLIB=$(RISCV_PATH)$(RISCV_NAME)/lib/
 RISCV_CC=$(RISCV_PATH)/bin/$(RISCV_NAME)-gcc
 LDSCRIPT=src/ld
+
+MABI=ilp32
+MARCH := rv32i
+ifeq ($(MULDIV),yes)
+	MARCH := $(MARCH)m
+endif
+ifeq ($(COMPRESSED),yes)
+	MARCH := $(MARCH)ac
+endif
+
+CFLAGS += -march=$(MARCH)  -mabi=$(MABI)
+LDFLAGS += -march=$(MARCH)  -mabi=$(MABI)
+
 
 
 SRCS = 	$(wildcard src/*.c) \

@@ -1162,9 +1162,11 @@ public:
 #ifdef EXTERNAL_INTERRUPT
 			case 0xF0011000u: top->externalInterrupt = *data & 1; break;
 #endif
-
 #ifdef SUPERVISOR
 			case 0xF0012000u: top->externalInterruptS = *data & 1; break;
+#endif
+#ifdef CSR
+			case 0xF0013000u: top->softwareInterrupt = *data & 1; break;
 #endif
 			case 0xF00FFF00u: {
 				cout << mem[0xF00FFF00u];
@@ -1275,6 +1277,7 @@ public:
 		#ifdef CSR
 		top->timerInterrupt = 0;
 		top->externalInterrupt = 1;
+		top->softwareInterrupt = 0;
 		#endif
 		#ifdef SUPERVISOR
 		top->externalInterruptS = 0;
@@ -1364,8 +1367,11 @@ public:
 #ifdef EXTERNAL_INTERRUPT
 					riscvRef.interrupts |= top->externalInterrupt << 11;
 #endif
+#ifdef CSR
+					riscvRef.interrupts |= top->softwareInterrupt << 3;
+#endif
 #ifdef SUPERVISOR
-					riscvRef.interrupts |= top->timerInterruptS << 5;
+//					riscvRef.interrupts |= top->timerInterruptS << 5;
 					riscvRef.interrupts |= top->externalInterruptS << 9;
 #endif
 
@@ -3114,11 +3120,11 @@ int main(int argc, char **argv, char **env) {
 			    #ifndef COMPRESSED
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
-				    redo(REDO,TestX28("machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->noInstructionReadCheck()->run(10e4);)
+				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->noInstructionReadCheck()->run(10e4);)
                 #else
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,   14,2,     15,5,16,17,1 };
-				    redo(REDO,TestX28("machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->noInstructionReadCheck()->run(10e4);)
+				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->noInstructionReadCheck()->run(10e4);)
                 #endif
 			#endif
 //			#ifdef MMU

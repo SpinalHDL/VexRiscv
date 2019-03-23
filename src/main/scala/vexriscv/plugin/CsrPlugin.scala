@@ -282,8 +282,8 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
   }
 
   var jumpInterface : Flow[UInt] = null
-  var timerInterrupt, externalInterrupt : Bool = null
-  var timerInterruptS, externalInterruptS : Bool = null
+  var timerInterrupt, externalInterrupt, softwareInterrupt : Bool = null
+  var externalInterruptS : Bool = null
   var privilege : UInt = null
   var selfException : Flow[ExceptionCause] = null
   var contextSwitching : Bool = null
@@ -376,8 +376,9 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
     timerInterrupt    = in Bool() setName("timerInterrupt")
     externalInterrupt = in Bool() setName("externalInterrupt")
+    softwareInterrupt = in Bool() setName("softwareInterrupt")
     if(supervisorGen){
-      timerInterruptS    = in Bool() setName("timerInterruptS")
+//      timerInterruptS    = in Bool() setName("timerInterruptS")
       externalInterruptS = in Bool() setName("externalInterruptS")
     }
     contextSwitching = Bool().setName("contextSwitching")
@@ -444,9 +445,9 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         val MPP = RegInit(U"11")
       }
       val mip = new Area{
-        val MEIP = RegNext(externalInterrupt) init(False)
-        val MTIP = RegNext(timerInterrupt) init(False)
-        val MSIP = RegInit(False)
+        val MEIP = RegNext(externalInterrupt)
+        val MTIP = RegNext(timerInterrupt)
+        val MSIP = RegNext(softwareInterrupt)
       }
       val mie = new Area{
         val MEIE, MTIE, MSIE = RegInit(False)
@@ -503,8 +504,10 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         }
 
         val sip = new Area {
-          val SEIP = RegNext(externalInterruptS) init (False)
-          val STIP = RegNext(timerInterruptS) init (False)
+          val SEIP_SOFT = RegInit(False)
+          val SEIP_INPUT = RegNext(externalInterruptS)
+          val SEIP_OR = SEIP_SOFT || SEIP_INPUT
+          val STIP = RegInit(False)
           val SSIP = RegInit(False)
         }
         val sie = new Area {
@@ -528,8 +531,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         //Supervisor CSR
         for(offset <- List(CSR.MSTATUS, CSR.SSTATUS)) READ_WRITE(offset,8 -> sstatus.SPP, 5 -> sstatus.SPIE, 1 -> sstatus.SIE)
         for(offset <- List(CSR.MIP, CSR.SIP)) {
-          READ_ONLY(offset,  9 -> sip.SEIP, 5 -> sip.STIP)
-          READ_WRITE(offset, 1 -> sip.SSIP)
+          READ_WRITE(offset, 9 -> sip.SEIP_SOFT, 5 -> sip.STIP, 1 -> sip.SSIP)
         }
 
         for(offset <- List(CSR.MIE, CSR.SIE)) READ_WRITE(offset, 9 -> sie.SEIE, 5 -> sie.STIE, 1 -> sie.SSIE)
@@ -566,7 +568,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         getInterruptPrivilege(1).sources ++= List(
           InterruptSource(sip.STIP && sie.STIE,  5),
           InterruptSource(sip.SSIP && sie.SSIE,  1),
-          InterruptSource(sip.SEIP && sie.SEIE,  9)
+          InterruptSource(sip.SEIP_OR && sie.SEIE,  9)
         )
       }
 
