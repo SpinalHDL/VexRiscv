@@ -26,8 +26,25 @@ import vexriscv._
 import vexriscv.ip._
 import vexriscv.plugin._
 
+/*
+Setup things =>
+git clone https://github.com/SpinalHDL/SpinalHDL.git -b dev
+git clone https://github.com/SpinalHDL/VexRiscv.git -b linux
+cd VexRiscv
+
+Run regressions =>
+sbt "runMain vexriscv.demo.LinuxGen -r"
+cd src/test/cpp/regression
+make run DBUS=SIMPLE IBUS=SIMPLE DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=10 TRACE=no
+
+Run linux =>
+sbt "runMain vexriscv.demo.LinuxGen"
+cd src/test/cpp/regression
+make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes LITEX=yes VMLINUX=/home/spinalvm/hdl/linuxDave/vmlinux.bin RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=no
+*/
+
 object LinuxGen {
-  def configFull(withMmu : Boolean = true) = {
+  def configFull(litex : Boolean, withMmu : Boolean) = {
     val config = VexRiscvConfig(
       plugins = List(
         new IBusSimplePlugin(
@@ -171,15 +188,15 @@ object LinuxGen {
     )
     if(withMmu) config.plugins += new MmuPlugin(
       virtualRange = a => True,
-      ioRange = _(31 downto 28) === 0xF,
+      ioRange = (x => if(litex) x(31 downto 28) === 0xB || x(31 downto 28) === 0xE else x(31 downto 28) === 0xF),
       allowUserIo = true
     )
     config
   }
+
+
+
   def main(args: Array[String]) {
-
-
-
 //    import spinal.core.sim._
 //    SimConfig.withConfig(SpinalConfig(mergeAsyncProcess = false, anonymSignalPrefix = "zz_")).allOptimisation.compile(new VexRiscv(configFull)).doSimUntilVoid{ dut =>
 //      dut.clockDomain.forkStimulus(10)
@@ -199,7 +216,10 @@ object LinuxGen {
     SpinalConfig(mergeAsyncProcess = true).generateVerilog {
 
 
-      val toplevel = new VexRiscv(configFull())
+      val toplevel = new VexRiscv(configFull(
+        litex = !args.contains("-r"),
+        withMmu = true
+      ))
 //      val toplevel = new VexRiscv(configLight)
 //      val toplevel = new VexRiscv(configTest)
 
@@ -288,13 +308,13 @@ object LinuxSyntesisBench extends App{
   val withoutMmu = new Rtl {
     override def getName(): String = "VexRiscv Without Mmu"
     override def getRtlPath(): String = "VexRiscvWithoutMmu.v"
-    SpinalVerilog(new VexRiscv(LinuxGen.configFull(withMmu=false)).setDefinitionName(getRtlPath().split("\\.").head))
+    SpinalVerilog(new VexRiscv(LinuxGen.configFull(litex = false, withMmu = false)).setDefinitionName(getRtlPath().split("\\.").head))
   }
 
   val withMmu = new Rtl {
     override def getName(): String = "VexRiscv With Mmu"
     override def getRtlPath(): String = "VexRiscvWithMmu.v"
-    SpinalVerilog(new VexRiscv(LinuxGen.configFull(withMmu=true)).setDefinitionName(getRtlPath().split("\\.").head))
+    SpinalVerilog(new VexRiscv(LinuxGen.configFull(litex = false, withMmu = true)).setDefinitionName(getRtlPath().split("\\.").head))
   }
 
   val rtls = List(withoutMmu, withMmu)
@@ -316,7 +336,7 @@ object LinuxSyntesisBench extends App{
 object LinuxSim extends App{
   import spinal.core.sim._
 
-  SimConfig.allOptimisation.compile(new VexRiscv(LinuxGen.configFull())).doSim{dut =>
+  SimConfig.allOptimisation.compile(new VexRiscv(LinuxGen.configFull(litex = false, withMmu = true))).doSim{dut =>
 //    dut.clockDomain.forkStimulus(10)
 //    dut.clockDomain.forkSimSpeedPrinter()
 //    dut.plugins.foreach{

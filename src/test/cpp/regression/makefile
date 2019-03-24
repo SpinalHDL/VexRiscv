@@ -48,6 +48,13 @@ else
 endif
 
 
+
+ifeq ($(LITEX),yes)
+	ADDCFLAGS += -CFLAGS -DLITEX
+	ADDCFLAGS += -CFLAGS -DVMLINUX='\"$(VMLINUX)\"'
+	ADDCFLAGS += -CFLAGS -DRAMDISK='\"$(RAMDISK)\"'
+endif
+
 ifneq ($(shell grep timerInterrupt ../../../../VexRiscv.v -w),)
     ADDCFLAGS += -CFLAGS -DTIMER_INTERRUPT
 endif
