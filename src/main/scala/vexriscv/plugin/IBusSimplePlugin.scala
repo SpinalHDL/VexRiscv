@@ -59,6 +59,11 @@ object IBusSimpleBus{
     useBTE = true,
     useCTI = true
   )
+
+  def getPipelinedMemoryBusConfig() = PipelinedMemoryBusConfig(
+    addressWidth = 32,
+    dataWidth = 32
+  )
 }
 
 
@@ -136,7 +141,8 @@ case class IBusSimpleBus(interfaceKeepData : Boolean = false) extends Bundle wit
   }
 
   def toPipelinedMemoryBus(): PipelinedMemoryBus = {
-    val bus = PipelinedMemoryBus(32,32)
+    val pipelinedMemoryBusConfig = IBusSimpleBus.getPipelinedMemoryBusConfig()
+    val bus = PipelinedMemoryBus(pipelinedMemoryBusConfig)
     bus.cmd.arbitrationFrom(cmd)
     bus.cmd.address := cmd.pc.resized
     bus.cmd.write := False
