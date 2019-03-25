@@ -40,9 +40,9 @@ class PlicBench(inputCount : Int) extends Component{
   io.cpuInterrupt := targets(0).iep
 
   val plicMapping = PlicMapping.light.copy(
-    //        gatewayPriorityReadGen = true,
-    //        gatewayPendingReadGen = true,
-    //        targetThresholdReadGen = true
+//      gatewayPriorityReadGen = true,
+//      gatewayPendingReadGen = true,
+//      targetThresholdReadGen = true
   )
 
   gateways.foreach(_.priority := 1)

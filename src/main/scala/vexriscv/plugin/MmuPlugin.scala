@@ -110,7 +110,13 @@ class MmuPlugin(virtualRange : UInt => Bool,
         val requireMmuLockup = virtualRange(port.bus.cmd.virtualAddress) && !port.bus.cmd.bypassTranslation && csr.satp.mode
         if(!allowMachineModeMmu) {
           requireMmuLockup clearWhen(!csr.status.mprv && privilegeService.isMachine())
-          if(port.priority != MmuPort.PRIORITY_DATA) requireMmuLockup clearWhen(csr.status.mprv && pipeline(config.MPP) === 3)
+          when(privilegeService.isMachine()) {
+            if (port.priority == MmuPort.PRIORITY_DATA) {
+              requireMmuLockup clearWhen (!csr.status.mprv)
+            } else {
+              requireMmuLockup := False
+            }
+          }
         }
 
         when(requireMmuLockup) {

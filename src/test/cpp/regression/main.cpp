@@ -256,7 +256,8 @@ public:
 			uint32_t spp : 1;
 			uint32_t _3 : 2;
 			uint32_t mpp : 2;
-			uint32_t _4 : 5;
+			uint32_t _4 : 4;
+			uint32_t mprv : 1;
 			uint32_t sum : 1;
 			uint32_t mxr : 1;
 		};
@@ -412,7 +413,8 @@ public:
 
 	enum AccessKind {READ,WRITE,EXECUTE};
 	bool v2p(uint32_t v, uint32_t *p, AccessKind kind){
-		if(privilege == 3 || satp.mode == 0){
+	    uint32_t effectivePrivilege = status.mprv && kind != EXECUTE ? status.mpp : privilege;
+		if(effectivePrivilege == 3 || satp.mode == 0){
 			*p = v;
 		} else {
 			Tlb tlb;
@@ -424,8 +426,8 @@ public:
 				if(!tlb.v) return true;
 				superPage = false;
 			}
-			if(!tlb.u && privilege == 0) return true;
-			if( tlb.u && privilege == 1 && !status.sum) return true;
+			if(!tlb.u && effectivePrivilege == 0) return true;
+			if( tlb.u && effectivePrivilege == 1 && !status.sum) return true;
 			if(superPage && tlb.ppn0 != 0) return true;
 			switch(kind){
 			case READ: if(!tlb.r && !(status.mxr && tlb.x)) return true; break;
