@@ -40,7 +40,20 @@ make run DBUS=SIMPLE IBUS=SIMPLE DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED
 Run linux =>
 sbt "runMain vexriscv.demo.LinuxGen"
 cd src/test/cpp/regression
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes LITEX=yes VMLINUX=/home/spinalvm/hdl/linuxDave/vmlinux.bin RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=no
+make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes LITEX=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/linuxDave/vmlinux.bin DTB=/home/spinalvm/hdl/linuxDave/vmlinux/rv32.dtb RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=no
+
+
+
+Other commands (Memo):
+cp litex_default_configuration .config
+ARCH=riscv CROSS_COMPILE=riscv64-unknown-elf- make -j`nproc`
+riscv64-unknown-elf-objcopy  -O binary vmlinux vmlinux.bin
+riscv64-unknown-elf-objdump -S -d vmlinux > vmlinux.asm
+
+split -b 1M vmlinux.asm
+dtc -O dtb -o rv32.dtb rv32.dts
+make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes LITEX=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/riscv-linux/vmlinux.bin DTB=/home/spinalvm/hdl/riscv-linux/rv32.dtb RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=yes FLOW_INFO=yes TRACE_START=0000000
+
 */
 
 object LinuxGen {
@@ -188,7 +201,7 @@ object LinuxGen {
     )
     if(withMmu) config.plugins += new MmuPlugin(
       virtualRange = a => True,
-      ioRange = (x => if(litex) x(31 downto 28) === 0xB || x(31 downto 28) === 0xE else x(31 downto 28) === 0xF),
+      ioRange = (x => if(litex) x(31 downto 28) === 0xB || x(31 downto 28) === 0xE || x(31 downto 28) === 0xF else x(31 downto 28) === 0xF),
       allowUserIo = true
     )
     config
@@ -324,10 +337,10 @@ object LinuxSyntesisBench extends App{
 
   val targets = XilinxStdTargets(
     vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
-  ) ++ AlteraStdTargets(
+  )/* ++ AlteraStdTargets(
     quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin",
     quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin"
-  ) ++  IcestormStdTargets().take(1)
+  ) ++  IcestormStdTargets().take(1)*/
 
 
   Bench(rtls, targets, "/eda/tmp")

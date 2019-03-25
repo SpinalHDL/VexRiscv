@@ -798,11 +798,17 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         }
       }
 
+      //Avoid having the fetch confused by the incomming privilege switch
+      when(hadException){
+        fetcher.haltIt()
+      }
+
       lastStage plug new Area{
         import lastStage._
 
         //Manage MRET / SRET instructions
         when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.XRET) {
+          fetcher.haltIt()
           jumpInterface.valid := True
           beforeLastStage.arbitration.flushAll := True
           switch(input(INSTRUCTION)(29 downto 28)){
@@ -852,7 +858,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         }
       }
 
-      decode.arbitration.haltByOther setWhen(stagesFromExecute.dropRight(1).map(s => s.arbitration.isValid && s.input(ENV_CTRL) === EnvCtrlEnum.XRET).asBits.orR)
+      decode.arbitration.haltByOther setWhen(stagesFromExecute.map(s => s.arbitration.isValid && s.input(ENV_CTRL) === EnvCtrlEnum.XRET).asBits.orR)
 
       execute plug new Area {
         import execute._

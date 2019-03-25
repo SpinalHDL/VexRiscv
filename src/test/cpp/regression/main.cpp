@@ -444,6 +444,12 @@ public:
         trap(interrupt, cause, true, value);
     }
 	void trap(bool interrupt,int32_t cause, bool valueWrite, uint32_t value) {
+#ifdef FLOW_INFO
+	    cout << "TRAP " << (interrupt ? "interrupt" : "exception") << " cause=" << cause << " PC=0x" << hex << pc << " val=0x" << hex << value << dec << endl;
+	    if(cause == 9){
+	        cout << hex <<  " a7=0x" << regs[17] << " a0=0x" << regs[10] << " a1=0x" << regs[11] << " a2=0x" << regs[12] << dec << endl;
+	    }
+#endif
 		//Check leguality of the interrupt
 		if(interrupt) {
 			bool hit = false;
@@ -493,8 +499,9 @@ public:
 		if(!interrupt) step(); //As VexRiscv instruction which trap do not reach writeback stage fire
 	}
 
+    uint32_t currentInstruction;
 	void ilegalInstruction(){
-		trap(0, 2);
+		trap(0, 2, currentInstruction);
 	}
 
 	virtual void fail() {
@@ -684,6 +691,7 @@ public:
 				return;
 			}
 		}
+		currentInstruction = i;
 		if ((i & 0x3) == 0x3) {
 			//32 bit
 			switch (i & 0x7F) {
@@ -1362,7 +1370,9 @@ public:
 
 				currentTime = i;
 
-
+                #ifdef FLOW_INFO
+                    if(i % 100000 == 0) cout << "PROGRESS TRACE_START=" << i << endl;
+                #endif
 
 
 				// dump variables into VCD file and toggle clock
@@ -2876,6 +2886,13 @@ public:
     virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
     	switch(addr){
     		//TODO Emulate peripherals here
+    		case 0xFFFFFFFC:   fail(); break; //Simulation end
+    		case 0xFFFFFFF8:
+    		    if(wr){
+                    cout << (char)*data;
+                    logTraces << (char)*data;
+				}
+				break;
     	}
 
     	Workspace::dBusAccess(addr,wr,size,mask,data,error);
@@ -3153,11 +3170,13 @@ int main(int argc, char **argv, char **env) {
 #ifdef LITEX
 	LitexSoC("linux")
 		.withRiscvRef()
-		->loadBin(VMLINUX, 0xc0000000)
-		->loadBin(RAMDISK, 0xc2000000)
+		->loadBin(EMULATOR, 0x80000000)
+		->loadBin(DTB,      0x81000000)
+		->loadBin(VMLINUX,  0xc0000000)
+		->loadBin(RAMDISK,  0xc2000000)
 		->setIStall(false) //TODO It currently improve speed but should be removed later
 		->setDStall(false)
-		->bootAt(0xc0000000)
+		->bootAt(0x80000000)
 		->run(0);
 	return 1;
 #endif

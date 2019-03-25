@@ -52,8 +52,16 @@ endif
 ifeq ($(LITEX),yes)
 	ADDCFLAGS += -CFLAGS -DLITEX
 	ADDCFLAGS += -CFLAGS -DVMLINUX='\"$(VMLINUX)\"'
+	ADDCFLAGS += -CFLAGS -DDTB='\"$(DTB)\"'
 	ADDCFLAGS += -CFLAGS -DRAMDISK='\"$(RAMDISK)\"'
+	ADDCFLAGS += -CFLAGS -DEMULATOR='\"$(EMULATOR)\"'
 endif
+
+ifeq ($(FLOW_INFO),yes)
+	ADDCFLAGS += -CFLAGS -DFLOW_INFO
+endif
+
+
 
 ifneq ($(shell grep timerInterrupt ../../../../VexRiscv.v -w),)
     ADDCFLAGS += -CFLAGS -DTIMER_INTERRUPT
