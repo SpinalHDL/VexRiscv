@@ -337,16 +337,16 @@ Here are some timing and area measurements of the Murax SoC:
 
 ```
 Murax interlocked stages (0.45 DMIPS/Mhz, 8 bits GPIO) ->
-  Artix 7    -> 299 Mhz 984 LUT 1186 FF 
+  Artix 7    -> 299 Mhz 984 LUT 1186 FF
   Cyclone V  -> 175 Mhz 710 ALMs
-  Cyclone IV -> 137 Mhz 1,436 LUT 1,193 FF 
+  Cyclone IV -> 137 Mhz 1,436 LUT 1,193 FF
   iCE40      -> 48 Mhz 2337 LC (icestorm)
   iCE40Ultra -> 20 Mhz 2337 LC (icestorm)
 
 MuraxFast bypassed stages (0.65 DMIPS/Mhz, 8 bits GPIO) ->
-  Artix 7    -> 294 Mhz 1128 LUT 1219 FF 
+  Artix 7    -> 294 Mhz 1128 LUT 1219 FF
   Cyclone V  -> 165 Mhz 840 ALMs
-  Cyclone IV -> 141 Mhz 1,680 LUT 1,227 FF 
+  Cyclone IV -> 141 Mhz 1,680 LUT 1,227 FF
   iCE40      -> 48 Mhz 2702 LC (icestorm)
   iCE40Ultra -> 22 Mhz 2702 LC (icestorm)
 ```
@@ -653,18 +653,18 @@ This chapter describes plugins currently implemented.
 This plugin implement the CPU frontend (instruction fetch) via a very simple and neutral memory interface going outside the CPU.
 
 | Parameters | type | description |
-| ------ | ----------- | ------ | 
-| catchAccessFault | Boolean | If an the read response specify an read error and this parameter is true, it will generate an CPU exception trap |
-| resetVector | BigInt | Address of the program counter after the reset |
-| cmdForkOnSecondStage | Boolean | By default jump have an asynchronous immediate effect on the program counter, which allow to reduce the branch penalties by one cycle but could reduce the FMax as it will combinatorialy drive the instruction bus address signal. To avoid this you can set this parameter to true, which will make the jump affecting the programm counter in a sequancial way, which will cut the combinatorial path but add one additional cycle of penalty when a jump occur. |
-| cmdForkPersistence  | Boolean | If this parameter is false, then request on the iBus can disappear/change before their completion. Which reduce area but isn't safe/supported by many arbitration/slaves. If you set this parameter to true, then the iBus cmd will stay until they are completed.
-| compressedGen | Boolean | Enable RVC support |
-| busLatencyMin | Int | Specify the minimal latency between the iBus.cmd and iBus.rsp, which will add the corresponding number of stages into the frontend to keep the IPC to 1.|
-| injectorStage | Boolean | Add a stage between the frontend and the decode stage of the CPU to improve FMax. (busLatencyMin + injectorStage) should be at least two. | 
-| prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation, see bellow for more descriptions |
-| historyRamSizeLog2 | Int | Specify the number of entries in the direct mapped prediction cache of DYNAMIC/DYNAMIC_TARGET implementation. 2 pow historyRamSizeLog2 entries |
+| ------ | ----------- | ------ |
+| catchAccessFault | Boolean | When true, an instruction read response with read error asserted results in a CPU exception trap. |
+| resetVector | BigInt | Address of the program counter after the reset. |
+| cmdForkOnSecondStage | Boolean | When false, branches immediately update the program counter. This minimizes branch penalties but might reduce FMax because the instruction bus address signal is a combinatorial path. When true, this combinatorial path is removed and the program counter is updated one cycle after a branch is detected. While FMax may improve, an additional branch penalty will be incurred as well. |
+| cmdForkPersistence  | Boolean | When false, requests on the iBus can disappear/change before they are acknowledged. This reduces area but isn't safe/supported by many arbitration/slaves. When true, once initiated, iBus requests will stay until they are acknowledged. |
+| compressedGen | Boolean | Enable RISC-V compressed instruction (RVC) support. |
+| busLatencyMin | Int | Specifies the minimal latency between the iBus.cmd and iBus.rsp. A corresponding number of stages are added to the frontend to keep the IPC to 1.|
+| injectorStage | Boolean | When true, a stage between the frontend and the decode stage of the CPU is added to improve FMax. (busLatencyMin + injectorStage) should be at least two. |
+| prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation. See below for more details. |
+| historyRamSizeLog2 | Int | Specify the number of entries in the direct mapped prediction cache of DYNAMIC/DYNAMIC_TARGET implementation. 2 pow historyRamSizeLog2 entries. |
 
-Here is the SimpleBus interface definition
+Here is the SimpleBus interface definition:
 
 ```scala
 case class IBusSimpleCmd() extends Bundle{
@@ -695,9 +695,9 @@ case class IBusSimpleBus(interfaceKeepData : Boolean) extends Bundle with IMaste
 
 Setting cmdForkPersistence and cmdForkOnSecondStage improves iBus cmd timings.
 
-Note that bridges are implemented to convert this interface into AXI4 and Avalon
+The iBusSimplePlugin includes bridges to convert from the IBusSimpleBus to AXI4, Avalon, and Wishbone interfaces.
 
-The jump interface implemented by this plugin allow all other plugin to request jumps. The stage argument specify from which stage the jump is asked, which will allow the PcManagerSimplePlugin plugin to manage priorities between jump requests.
+This plugin implements a jump interface that allows all other plugins to issue a jump:
 
 ```scala
 trait JumpService{
@@ -705,6 +705,8 @@ trait JumpService{
 }
 ```
 
+The stage argument specifies the stage from which the jump is asked. This allows the PcManagerSimplePlugin plugin to manage priorities between jump requests from
+diffent stages.
 
 #### IBusCachedPlugin
 
@@ -712,35 +714,35 @@ Simple and light multi-way instruction cache.
 
 | Parameters | type | description |
 | ------ | ----------- | ------ |
-| cacheSize  | Int | Total storage capacity of the cache |
-| bytePerLine  | Int | Number of bytes per cache line  |
-| wayCount  | Int | Number of cache ways |
-| twoCycleRam  | Boolean | Check the tags values in the decode stage instead of the fetch stage to relax timings |
-| asyncTagMemory  | Boolean | Read the cache tags in a asyncronus manner instead of syncronous one |
-| addressWidth  | Int | Address width, should be 32 |
-| cpuDataWidth  | Int | Cpu data width, should be 32 |
-| memDataWidth  | Int | Memory data width, could potentialy be something else than 32, but only 32 is currently tested |
-| catchIllegalAccess  | Boolean  | Catch when a memory access is done on non valid memory address (MMU) |
-| catchAccessFault  | Boolean | Catch when the memeory bus is responding with an error  |
-| catchMemoryTranslationMiss  | Boolean  |  Catch when the MMU miss a TLB |
-| resetVector | BigInt | Address of the program counter after the reset |
-| relaxedPcCalculation | Boolean | By default jump have an asynchronous immediate effect on the program counter, which allow to reduce the branch penalties by one cycle but could reduce the FMax as it will combinatorialy drive the instruction bus address signal. To avoid this you can set this parameter to true, which will make the jump affecting the programm counter in a sequancial way, which will cut the combinatorial path but add one additional cycle of penalty when a jump occur. |
-| compressedGen | Boolean | Enable RVC support |
-| prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation, see bellow for more descriptions |
+| resetVector | BigInt | Address of the program counter after the reset. |
+| relaxedPcCalculation | Boolean | When false, branches immediately update the program counter. This minimizes branch penalties but might reduce FMax because the instruction bus address signal is a combinatorial path. When true, this combinatorial path is removed and the program counter is updated one cycle after a branch is detected. While FMax may improve, an additional branch penalty will be incurred as well. |
+| prediction | BranchPrediction | Can be set to NONE/STATIC/DYNAMIC/DYNAMIC_TARGET to specify the branch predictor implementation. See below for more details. |
 | historyRamSizeLog2 | Int | Specify the number of entries in the direct mapped prediction cache of DYNAMIC/DYNAMIC_TARGET implementation. 2 pow historyRamSizeLog2 entries |
+| compressedGen | Boolean | Enable RISC-V compressed instruction (RVC) support. |
+| config.cacheSize  | Int | Total storage capacity of the cache in bytes. |
+| config.bytePerLine  | Int | Number of bytes per cache line  |
+| config.wayCount  | Int | Number of cache ways |
+| config.twoCycleRam  | Boolean | Check the tags values in the decode stage instead of the fetch stage to relax timings |
+| config.asyncTagMemory  | Boolean | Read the cache tags in an asynchronous manner instead of syncronous one |
+| config.addressWidth  | Int | CPU address width. Should be 32 |
+| config.cpuDataWidth  | Int | CPU data width. Should be 32 |
+| config.memDataWidth  | Int | Memory data width. Could potentialy be something else than 32, but only 32 is currently tested |
+| config.catchIllegalAccess  | Boolean  | Catch when a memory access is done on non-valid memory address (MMU) |
+| config.catchAccessFault  | Boolean | Catch when the memeory bus is responding with an error  |
+| config.catchMemoryTranslationMiss  | Boolean  |  Catch when the MMU miss a TLB |
 
-Note: If you enable the twoCycleRam option and if wayCount is bigger than one, then the register file plugin should be configured to read the regFile in a asynchronous manner.
+Note: If you enable the twoCycleRam option and if wayCount is bigger than one, then the register file plugin should be configured to read the regFile in an asynchronous manner.
 
 #### DecoderSimplePlugin
 
 This plugin provides instruction decoding capabilities to others plugins.
 
-For instance, for a given instruction, the pipeline hazard plugin needs to know if it uses the register file source 1/2 in order stall the pipeline until the hazard is gone.
+For instance, for a given instruction, the pipeline hazard plugin needs to know if it uses the register file source 1/2 in order to stall the pipeline until the hazard is gone.
 To provide this kind of information, each plugin which implements an instruction documents this kind of information to the DecoderSimplePlugin plugin.
 
 | Parameters | type | description |
 | ------ | ----------- | ------ |
-| catchIllegalInstruction | Boolean | If set to true, instruction which have no decoding specification will generate a trap exception  |
+| catchIllegalInstruction | Boolean | When true, instructions that don't match a decoding specification will generate a trap exception  |
 
 Here is a usage example :
 
@@ -752,11 +754,11 @@ Here is a usage example :
 
       //Decoding specification when the 'key' pattern is recognized in the instruction
       List(
-        IS_SIMD_ADD              -> True,
-        REGFILE_WRITE_VALID      -> True, //Enable the register file write
+        IS_SIMD_ADD              -> True, //Inform the pipeline that the current instruction is a SIMD_ADD instruction
+        REGFILE_WRITE_VALID      -> True, //Notify the hazard management unit that this instruction writes to the register file
         BYPASSABLE_EXECUTE_STAGE -> True, //Notify the hazard management unit that the instruction result is already accessible in the EXECUTE stage (Bypass ready)
         BYPASSABLE_MEMORY_STAGE  -> True, //Same as above but for the memory stage
-        RS1_USE                  -> True, //Notify the hazard management unit that this instruction use the RS1 value
+        RS1_USE                  -> True, //Notify the hazard management unit that this instruction uses the RS1 value
         RS2_USE                  -> True  //Same than above but for RS2.
       )
     )
