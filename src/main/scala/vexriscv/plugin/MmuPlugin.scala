@@ -87,14 +87,14 @@ class MmuPlugin(virtualRange : UInt => Bool,
 
     val csr = pipeline plug new Area{
       val status = new Area{
-        val sum, mxr = RegInit(False)
+        val sum, mxr, mprv = RegInit(False)
       }
       val satp = new Area {
         val mode = RegInit(False)
         val ppn = Reg(UInt(20 bits))
       }
 
-      for(offset <- List(CSR.MSTATUS, CSR.SSTATUS)) csrService.rw(offset, 19 -> status.mxr, 18 -> status.sum)
+      for(offset <- List(CSR.MSTATUS, CSR.SSTATUS)) csrService.rw(offset, 19 -> status.mxr, 18 -> status.sum, 17 -> status.mprv)
       csrService.rw(CSR.SATP, 31 -> satp.mode, 0 -> satp.ppn)  //TODO write only ?
     }
 
@@ -108,7 +108,10 @@ class MmuPlugin(virtualRange : UInt => Bool,
         val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
         val entryToReplace = Counter(port.args.portTlbSize)
         val requireMmuLockup = virtualRange(port.bus.cmd.virtualAddress) && !port.bus.cmd.bypassTranslation && csr.satp.mode
-        if(!allowMachineModeMmu) requireMmuLockup clearWhen(privilegeService.isMachine())
+        if(!allowMachineModeMmu) {
+          requireMmuLockup clearWhen(!csr.status.mprv && privilegeService.isMachine())
+          if(port.priority == MmuPort.PRIORITY_DATA) requireMmuLockup clearWhen(csr.status.mprv && pipeline(config.MPP) === 3)
+        }
 
         when(requireMmuLockup) {
           port.bus.rsp.physicalAddress := cacheLine.physicalAddress(1) @@ (cacheLine.superPage ? port.bus.cmd.virtualAddress(21 downto 12) | cacheLine.physicalAddress(0)) @@ port.bus.cmd.virtualAddress(11 downto 0)

@@ -499,6 +499,8 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       //User CSR
       ucycleAccess(CSR.UCYCLE, mcycle(31 downto 0))
       ucycleAccess(CSR.UCYCLEH, mcycle(63 downto 32))
+
+      pipeline.update(MPP, mstatus.MPP)
     }
 
     val supervisorCsr = ifGen(supervisorGen) {

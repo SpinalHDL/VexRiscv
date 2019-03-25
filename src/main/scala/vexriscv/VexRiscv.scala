@@ -42,6 +42,7 @@ case class VexRiscvConfig(){
   object REGFILE_WRITE_VALID extends Stageable(Bool)
   object REGFILE_WRITE_DATA extends Stageable(Bits(32 bits))
 
+  object MPP extends PipelineThing[UInt]
 
   object SRC1   extends Stageable(Bits(32 bits))
   object SRC2   extends Stageable(Bits(32 bits))
@@ -79,7 +80,7 @@ case class VexRiscvConfig(){
 
 
 
-object RVC_GEN extends PipelineConfig[Boolean]
+object RVC_GEN extends PipelineThing[Boolean]
 class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   type  T = VexRiscv
   import config._
