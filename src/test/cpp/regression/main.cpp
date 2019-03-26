@@ -365,13 +365,23 @@ public:
 		};
 	};
 
+#define RESERVED_ENTRY_COUNT 1
+	struct ReservedEntry{
+		bool valid;
+		uint32_t address;
+	};
 
+	ReservedEntry reservedEntries[RESERVED_ENTRY_COUNT];
+	int reservedEntriesPtr = 0;
 
 	RiscvGolden() {
 		pc = 0x80000000;
 		regs[0] = 0;
 		for (int i = 0; i < 32; i++)
 			regs[i] = 0;
+
+		for(int i = 0;i < RESERVED_ENTRY_COUNT;i++) reservedEntries[i].valid = false;
+
 
 		status.raw = 0;
 		ie.raw = 0;
@@ -412,9 +422,10 @@ public:
 	virtual void dWrite(int32_t address, int32_t size, uint32_t data) = 0;
 
 	enum AccessKind {READ,WRITE,EXECUTE};
+	virtual bool isMmuRegion(uint32_t v) = 0;
 	bool v2p(uint32_t v, uint32_t *p, AccessKind kind){
 	    uint32_t effectivePrivilege = status.mprv && kind != EXECUTE ? status.mpp : privilege;
-		if(effectivePrivilege == 3 || satp.mode == 0){
+		if(effectivePrivilege == 3 || satp.mode == 0 || !isMmuRegion(v)){
 			*p = v;
 		} else {
 			Tlb tlb;
@@ -440,7 +451,7 @@ public:
 	}
 
     void trap(bool interrupt,int32_t cause) {
-        trap(interrupt, cause, true, 0);
+        trap(interrupt, cause, false, 0);
     }
     void trap(bool interrupt,int32_t cause, uint32_t value) {
         trap(interrupt, cause, true, value);
@@ -452,6 +463,7 @@ public:
 	        cout << hex <<  " a7=0x" << regs[17] << " a0=0x" << regs[10] << " a1=0x" << regs[11] << " a2=0x" << regs[12] << dec << endl;
 	    }
 #endif
+	    for(int i = 0;i < RESERVED_ENTRY_COUNT;i++) reservedEntries[i].valid = false;
 		//Check leguality of the interrupt
 		if(interrupt) {
 			bool hit = false;
@@ -673,7 +685,7 @@ public:
 		if (pc & 2) {
 			if(v2p(pc - 2, &pAddr, EXECUTE)){ trap(0, 12, pc - 2); return; }
 			if(iRead(pAddr, &i)){
-				trap(0, 1);
+				trap(0, 1, 0);
 				return;
 			}
 			i >>= 16;
@@ -681,7 +693,7 @@ public:
 				uint32_t u32Buf;
 				if(v2p(pc + 2, &pAddr, EXECUTE)){ trap(0, 12, pc + 2); return; }
 				if(iRead(pAddr, &u32Buf)){
-					trap(0, 1);
+					trap(0, 1, 0);
 					return;
 				}
 				i |= u32Buf << 16;
@@ -689,7 +701,7 @@ public:
 		} else {
 			if(v2p(pc, &pAddr, EXECUTE)){ trap(0, 12, pc); return; }
 			if(iRead(pAddr, &i)){
-				trap(0, 1);
+				trap(0, 1, 0);
 				return;
 			}
 		}
@@ -855,6 +867,56 @@ public:
 				}
 				break;
 			}
+			case 0x2F: // Atomic stuff
+				switch(i32_func3){
+				case 0x2:
+					switch(iBits(27,5)){
+					case 0x2:{ //LR
+						uint32_t data;
+						uint32_t address = i32_rs1;
+						if(address & 3){
+							trap(0, 4, address);
+						} else {
+							if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
+							if(dRead(pAddr, 4, &data)){
+							    trap(0, 5, address);
+							} else {
+								reservedEntries[reservedEntriesPtr].valid = true;
+								reservedEntries[reservedEntriesPtr].address = address;
+								reservedEntriesPtr = (reservedEntriesPtr + 1) % RESERVED_ENTRY_COUNT;
+								rfWrite(rd32, data);
+								pcWrite(pc + 4);
+							}
+						}
+					}	break;
+					case 0x3:{ //SC
+						uint32_t address = i32_rs1;
+						if(address & 3){
+							trap(0, 6, address);
+						} else {
+							if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
+							bool hit = false;
+							for(int i = 0;i < RESERVED_ENTRY_COUNT;i++) hit |= reservedEntries[i].valid && reservedEntries[i].address == address;
+							rfWrite(rd32, !hit);
+							if(hit){
+								dWrite(pAddr, 4, i32_rs2);
+							}
+							pcWrite(pc + 4);
+						}
+					}	break;
+					default: ilegalInstruction(); break;
+					}
+					break;
+				default: ilegalInstruction(); break;
+				}
+				break;
+				case 0x0f:
+				    if(i == 0x100F || (i & 0xF00FFFFF) == 0x000F){ // FENCE FENCE.I
+							pcWrite(pc + 4);
+				    } else{
+				        ilegalInstruction();
+				    }
+				break;
 			default: ilegalInstruction(); break;
 			}
 		} else {
@@ -868,7 +930,7 @@ public:
 				} else {
 					if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
 					if(dRead(address, 4, &data)) {
-					    trap(1, 5, address);
+					    trap(0, 5, address);
 					} else {
 					    rfWrite(i16_addr2, data); pcWrite(pc + 2);
                     }
@@ -917,7 +979,7 @@ public:
 				} else {
 					if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
 				    if(dRead(pAddr, 4, &data)){
-					    trap(1, 5, address);
+					    trap(0, 5, address);
                     } else {
 					    rfWrite(rd32, data); pcWrite(pc + 2);
                     }
@@ -1031,6 +1093,9 @@ public:
     	}
 
     	virtual void fail() { ws->fail(); }
+
+
+	    virtual bool isMmuRegion(uint32_t v) {return ws->isMmuRegion(v);}
 
     	bool rfWriteValid;
     	int32_t rfWriteAddress;
@@ -1172,7 +1237,7 @@ public:
     }
 
     virtual bool isPerifRegion(uint32_t addr) { return false; }
-
+    virtual bool isMmuRegion(uint32_t addr) { return true;}
     virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
 		if(addr % 4 != 0) {
 			cout << "Warning, unaligned IBusAccess : " << addr << endl;
@@ -1186,7 +1251,7 @@ public:
 	}
 
 
-
+    virtual bool isDBusCheckedRegion(uint32_t address){ return isPerifRegion(address);}
 	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
 		assertEq(addr % (1 << size), 0);
 		if(isPerifRegion(addr)){
@@ -1448,7 +1513,7 @@ public:
 						(rfWriteValid && (rfWriteAddress!= riscvRef.rfWriteAddress || rfWriteData!= riscvRef.rfWriteData))){
                     	cout << "regFile write missmatch :" << endl;
                     	if(rfWriteValid) cout << " REF: RF[" << riscvRef.rfWriteAddress << "] = 0x" << hex << riscvRef.rfWriteData << dec << endl;
-                    	if(rfWriteValid) cout << " RTL: RF[" << rfWriteAddress << "] = 0x" << hex << rfWriteData << dec << endl;
+                    	if(rfWriteValid) cout << " DUT: RF[" << rfWriteAddress << "] = 0x" << hex << rfWriteData << dec << endl;
                     	fail();
                     }
                 }
@@ -1566,7 +1631,7 @@ public:
 				break;
 			#endif
 			case 0xF00FFF48u: mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data;break;
-			case 0xF00FFF4Cu: mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32);  /*cout << "mTimeCmp <= " << mTimeCmp << endl; */break;
+			case 0xF00FFF4Cu: mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); break;
 			}
 		}else{
 			switch(addr){
@@ -2882,19 +2947,25 @@ public:
 
 	}
 
-	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xB0000000 || (addr & 0xF0000000) == 0xE0000000;}
-
+	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xB0000000 || (addr & 0xE0000000) == 0xE0000000;}
+    virtual bool isMmuRegion(uint32_t addr) { return (addr & 0xFF000000) != 0x81000000;}
 
     virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
-    	switch(addr){
+        if(isPerifRegion(addr)) switch(addr){
     		//TODO Emulate peripherals here
-    		case 0xFFFFFFFC:   fail(); break; //Simulation end
+    		case 0xFFFFFFE0: if(wr) fail(); else *data = mTime; break;
+    		case 0xFFFFFFE4: if(wr) fail(); else *data = mTime >> 32; break;
+    		case 0xFFFFFFE8: if(wr) mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data; else *data = mTimeCmp; break;
+    		case 0xFFFFFFEC: if(wr) mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); else *data = mTimeCmp >> 32; break;
     		case 0xFFFFFFF8:
     		    if(wr){
                     cout << (char)*data;
                     logTraces << (char)*data;
-				}
+                    logTraces.flush();
+				} else fail();
 				break;
+    		case 0xFFFFFFFC: fail(); break; //Simulation end
+    		default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " mask=0x" << mask << " data=0x" << data << dec << endl; fail(); break;
     	}
 
     	Workspace::dBusAccess(addr,wr,size,mask,data,error);
@@ -3180,7 +3251,6 @@ int main(int argc, char **argv, char **env) {
 		->setDStall(false)
 		->bootAt(0x80000000)
 		->run(0);
-	return 1;
 #endif
 
 //    #ifdef MMU

@@ -46,9 +46,8 @@ make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes LITEX=yes
 
 Other commands (Memo):
 cp litex_default_configuration .config
-ARCH=riscv CROSS_COMPILE=riscv64-unknown-elf- make -j`nproc`
-riscv64-unknown-elf-objcopy  -O binary vmlinux vmlinux.bin
-riscv64-unknown-elf-objdump -S -d vmlinux > vmlinux.asm
+ARCH=riscv CROSS_COMPILE=riscv64-unknown-elf- make -j`nproc`; riscv64-unknown-elf-objcopy  -O binary vmlinux vmlinux.bin
+riscv64-unknown-elf-objdump -S -d vmlinux > vmlinux.asm; split -b 1M vmlinux.asm
 
 split -b 1M vmlinux.asm
 dtc -O dtb -o rv32.dtb rv32.dts
@@ -56,10 +55,13 @@ make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes LITEX=yes
 
 */
 
+
+//TODO have to check, look like supervisor can't get interrupt if the machine mod didn't delegated it, have to check exactly
 object LinuxGen {
   def configFull(litex : Boolean, withMmu : Boolean) = {
     val config = VexRiscvConfig(
       plugins = List(
+        new DummyFencePlugin(), //TODO should be removed for design with caches
         new IBusSimplePlugin(
           resetVector = 0x80000000l,
           cmdForkOnSecondStage = false,
@@ -102,6 +104,7 @@ object LinuxGen {
           catchAddressMisaligned = true,
           catchAccessFault = true,
           earlyInjection = false,
+          atomicEntriesCount = 1,
           memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
             portTlbSize = 4
           )
@@ -200,7 +203,8 @@ object LinuxGen {
       )
     )
     if(withMmu) config.plugins += new MmuPlugin(
-      virtualRange = a => True,
+//      virtualRange = a => True,
+      virtualRange = x => x(31 downto 24) =/= 0x81, //TODO It fix the DTB kernel access (workaround)
       ioRange = (x => if(litex) x(31 downto 28) === 0xB || x(31 downto 28) === 0xE || x(31 downto 28) === 0xF else x(31 downto 28) === 0xF),
       allowUserIo = true
     )

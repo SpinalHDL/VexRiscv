@@ -205,17 +205,21 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
                        earlyInjection : Boolean = false, /*, idempotentRegions : (UInt) => Bool = (x) => False*/
                        emitCmdInMemoryStage : Boolean = false,
                        onlyLoadWords : Boolean = false,
+                       atomicEntriesCount : Int = 0,
                        memoryTranslatorPortConfig : Any = null) extends Plugin[VexRiscv] with DBusAccessService {
 
   var dBus  : DBusSimpleBus = null
   assert(!(emitCmdInMemoryStage && earlyInjection))
-
+  def genAtomic = atomicEntriesCount != 0
   object MEMORY_ENABLE extends Stageable(Bool)
   object MEMORY_READ_DATA extends Stageable(Bits(32 bits))
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
   object ALIGNEMENT_FAULT extends Stageable(Bool)
   object MMU_FAULT extends Stageable(Bool)
   object MMU_RSP extends Stageable(MemoryTranslatorRsp())
+  object MEMORY_ATOMIC extends Stageable(Bool)
+  object ATOMIC_HIT extends Stageable(Bool)
+  object MEMORY_STORE extends Stageable(Bool)
 
   var memoryExceptionPort : Flow[ExceptionCause] = null
   var rspStage : Stage = null
@@ -248,12 +252,14 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       SRC2_CTRL -> Src2CtrlEnum.IMI,
       REGFILE_WRITE_VALID -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
-      BYPASSABLE_MEMORY_STAGE  -> Bool(earlyInjection)
+      BYPASSABLE_MEMORY_STAGE  -> Bool(earlyInjection),
+      MEMORY_STORE -> False
     ) ++ (if(catchAccessFault || catchAddressMisaligned) List(HAS_SIDE_EFFECT -> True) else Nil)
 
     val storeActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMS,
-      RS2_USE -> True
+      RS2_USE -> True,
+      MEMORY_STORE -> True
     )
 
     decoderService.addDefault(MEMORY_ENABLE, False)
@@ -262,6 +268,29 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       List(SB, SH, SW).map(_ -> storeActions)
     )
 
+
+    if(genAtomic){
+      List(LB, LH, LW, LBU, LHU, LWU, SB, SH, SW).foreach(e =>
+        decoderService.add(e, Seq(MEMORY_ATOMIC -> False))
+      )
+      decoderService.add(
+        key = LR,
+        values = loadActions.filter(_._1 != SRC2_CTRL) ++ Seq(
+          SRC2_CTRL -> Src2CtrlEnum.RS,
+          MEMORY_ATOMIC -> True
+        )
+      )
+      //TODO probably the cached implemention of SC is bugy (address calculation)
+      decoderService.add(
+        key = SC,
+        values = storeActions.filter(_._1 != SRC2_CTRL) ++ Seq(
+          REGFILE_WRITE_VALID -> True,
+          BYPASSABLE_EXECUTE_STAGE -> False,
+          BYPASSABLE_MEMORY_STAGE -> False,
+          MEMORY_ATOMIC -> True
+        )
+      )
+    }
 
 
     rspStage = if(stages.last == execute) execute else (if(emitCmdInMemoryStage) writeBack else memory)
@@ -300,7 +329,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       skipCmd setWhen(input(ALIGNEMENT_FAULT))
 
       dBus.cmd.valid := arbitration.isValid && input(MEMORY_ENABLE) && !arbitration.isStuckByOthers && !arbitration.isFlushed && !skipCmd && !cmdSent
-      dBus.cmd.wr := input(INSTRUCTION)(5)
+      dBus.cmd.wr := input(MEMORY_STORE)
       dBus.cmd.size := input(INSTRUCTION)(13 downto 12).asUInt
       dBus.cmd.payload.data := dBus.cmd.size.mux (
         U(0) -> input(RS2)(7 downto 0) ## input(RS2)(7 downto 0) ## input(RS2)(7 downto 0) ## input(RS2)(7 downto 0),
@@ -332,7 +361,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         dBus.cmd.address := mmuBus.rsp.physicalAddress
 
         //do not emit memory request if MMU refilling
-        insert(MMU_FAULT) := input(MMU_RSP).exception || (!input(MMU_RSP).allowWrite && input(INSTRUCTION)(5)) || (!input(MMU_RSP).allowRead && !input(INSTRUCTION)(5)) || (!input(MMU_RSP).allowUser && privilegeService.isUser())
+        insert(MMU_FAULT) := input(MMU_RSP).exception || (!input(MMU_RSP).allowWrite && input(MEMORY_STORE)) || (!input(MMU_RSP).allowRead && !input(MEMORY_STORE)) || (!input(MMU_RSP).allowUser && privilegeService.isUser())
         skipCmd.setWhen(input(MMU_FAULT) || input(MMU_RSP).refilling)
 
         insert(MMU_RSP) := mmuBus.rsp
@@ -340,6 +369,40 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
       val mmuLess = (mmuBus == null) generate new Area{
         dBus.cmd.address := input(SRC_ADD).asUInt
+      }
+
+
+      val atomic = genAtomic generate new Area{
+        val address = input(SRC1).asUInt //TODO could avoid 32 muxes if SRC_ADD can be disabled
+        case class AtomicEntry() extends Bundle{
+          val valid = Bool()
+          val address = UInt(32 bits)
+
+          def init: this.type ={
+            valid init(False)
+            this
+          }
+        }
+        val entries = Vec(Reg(AtomicEntry()).init, atomicEntriesCount)
+        val entriesAllocCounter = Counter(atomicEntriesCount)
+        insert(ATOMIC_HIT) := entries.map(e => e.valid && e.address === address).orR
+        when(arbitration.isValid &&  input(MEMORY_ENABLE) && input(MEMORY_ATOMIC) && !input(MEMORY_STORE)){
+          entries(entriesAllocCounter).valid := True
+          entries(entriesAllocCounter).address := address
+          when(!arbitration.isStuck){
+            entriesAllocCounter.increment()
+          }
+        }
+        when(service(classOf[IContextSwitching]).isContextSwitching){
+          entries.foreach(_.valid := False)
+        }
+
+        when(input(MEMORY_STORE) && input(MEMORY_ATOMIC) && !input(ATOMIC_HIT)){
+          skipCmd := True
+        }
+        when(input(MEMORY_ATOMIC)){
+          mmuBus.cmd.virtualAddress := address
+        }
       }
     }
 
@@ -349,20 +412,21 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
 
       insert(MEMORY_READ_DATA) := dBus.rsp.data
-      arbitration.haltItself setWhen(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && !dBus.rsp.ready)
+
+      arbitration.haltItself setWhen(arbitration.isValid && input(MEMORY_ENABLE) && !input(MEMORY_STORE) && !dBus.rsp.ready)
 
       if(catchSomething) {
         memoryExceptionPort.valid := False
         memoryExceptionPort.code.assignDontCare()
         memoryExceptionPort.badAddr := input(REGFILE_WRITE_DATA).asUInt
 
-        if(catchAccessFault) when(dBus.rsp.ready && dBus.rsp.error && !input(INSTRUCTION)(5)) {
+        if(catchAccessFault) when(dBus.rsp.ready && dBus.rsp.error && !input(MEMORY_STORE)) {
           memoryExceptionPort.valid := True
           memoryExceptionPort.code := 5
         }
 
         if(catchAddressMisaligned) when(input(ALIGNEMENT_FAULT)){
-          memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(6) | U(4)).resized
+          memoryExceptionPort.code := (input(MEMORY_STORE) ? U(6) | U(4)).resized
           memoryExceptionPort.valid := True
         }
 
@@ -375,7 +439,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
             memoryExceptionPort.valid := False
           } elsewhen(input(MMU_FAULT)) {
             memoryExceptionPort.valid := True
-            memoryExceptionPort.code := (input(INSTRUCTION)(5) ? U(15) | U(13)).resized
+            memoryExceptionPort.code := (input(MEMORY_STORE) ? U(15) | U(13)).resized
           }
 
           arbitration.flushAll setWhen(redoBranch.valid)
@@ -414,10 +478,15 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
       when(arbitration.isValid && input(MEMORY_ENABLE)) {
         output(REGFILE_WRITE_DATA) := (if(!onlyLoadWords) rspFormated else input(MEMORY_READ_DATA))
+        if(genAtomic){
+          when(input(MEMORY_ATOMIC) && input(MEMORY_STORE)){
+            output(REGFILE_WRITE_DATA)  := (!input(ATOMIC_HIT)).asBits.resized
+          }
+        }
       }
 
       if(!earlyInjection && !emitCmdInMemoryStage && config.withWriteBackStage)
-        assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(INSTRUCTION)(5) && arbitration.isStuck),"DBusSimplePlugin doesn't allow writeback stage stall when read happend")
+        assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(MEMORY_STORE) && arbitration.isStuck),"DBusSimplePlugin doesn't allow writeback stage stall when read happend")
 
       //formal
       insert(FORMAL_MEM_RDATA) := input(MEMORY_READ_DATA)

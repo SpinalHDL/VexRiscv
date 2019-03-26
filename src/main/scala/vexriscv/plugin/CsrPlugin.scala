@@ -781,7 +781,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
             scause.interrupt := !hadException
             scause.exceptionCode := trapCause
             sepc := mepcCaptureStage.input(PC)
-            if (exceptionPortCtrl != null) {
+            if (exceptionPortCtrl != null) when(hadException){
               stval := exceptionPortCtrl.exceptionContext.badAddr
             }
           }
@@ -793,7 +793,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
             mcause.interrupt := !hadException
             mcause.exceptionCode := trapCause
             mepc := mepcCaptureStage.input(PC)
-            if(exceptionPortCtrl != null) {
+            if(exceptionPortCtrl != null) when(hadException){
               mtval := exceptionPortCtrl.exceptionContext.badAddr
             }
           }
@@ -872,7 +872,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         if(selfException != null) {
           selfException.valid := False
           selfException.code.assignDontCare()
-          selfException.badAddr := 0
+          selfException.badAddr := input(INSTRUCTION).asUInt
           if(catchIllegalAccess) when(illegalAccess || illegalInstruction){
             selfException.valid := True
             selfException.code := 2

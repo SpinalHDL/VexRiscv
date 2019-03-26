@@ -39,8 +39,8 @@ _start:
 	call __libc_init_array
 	call init
 	la ra, done
-	li a0, DTB
-	li a1, 0
+	li a0, 0
+	li a1, DTB
 	mret
 done:
     j done

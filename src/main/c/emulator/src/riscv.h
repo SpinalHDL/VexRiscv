@@ -2,11 +2,16 @@
 #define RISCV_H
 
 #define CAUSE_ILLEGAL_INSTRUCTION 2
+#define CAUSE_MACHINE_TIMER 7
 #define CAUSE_SCALL 9
 
-#define MDELEG_INSTRUCTION_PAGE_FAULT (1 << 12)
-#define MDELEG_LOAD_PAGE_FAULT (1 << 13)
-#define MDELEG_STORE_PAGE_FAULT (1 << 15)
+#define MEDELEG_INSTRUCTION_PAGE_FAULT (1 << 12)
+#define MEDELEG_LOAD_PAGE_FAULT (1 << 13)
+#define MEDELEG_STORE_PAGE_FAULT (1 << 15)
+#define MIDELEG_SUPERVISOR_TIMER (1 << 5)
+
+#define MIE_MTIE (1 << 7)
+#define MIP_STIP (1 << 5)
 
 #define MSTATUS_UIE         0x00000001
 #define MSTATUS_SIE         0x00000002
@@ -45,6 +50,13 @@
 #define SSTATUS_UXL         0x0000000300000000
 #define SSTATUS64_SD        0x8000000000000000
 
+
+#define RDCYCLE 0xC00 //Read-only cycle Cycle counter for RDCYCLE instruction.
+#define RDTIME 0xC01 //Read-only time Timer for RDTIME instruction.
+#define RDINSTRET 0xC02 //Read-only instret Instructions-retired counter for RDINSTRET instruction.
+#define RDCYCLEH 0xC80 //Read-only cycleh Upper 32 bits of cycle, RV32I only.
+#define RDTIMEH 0xC81 //Read-only timeh Upper 32 bits of time, RV32I only.
+#define RDINSTRETH 0xC82 //Read-only instreth Upper 32 bits of instret, RV32I only.
 
 
 #define csr_swap(csr, val)					\

@@ -1,37 +1,33 @@
 #include <stdint.h>
 #include "riscv.h"
 #include "config.h"
+#include "hal.h"
 
-extern const unsigned int _sp;
+extern const uint32_t _sp;
 extern void trapEntry();
 extern void emulationTrap();
 
 void init() {
-    unsigned int sp = (unsigned int) (&_sp);
+	uint32_t sp = (uint32_t) (&_sp);
 	csr_write(mtvec, trapEntry);
 	csr_write(mscratch, sp -32*4);
-	csr_write(mstatus, 0x0800);
+	csr_write(mstatus, 0x0800 | MSTATUS_MPIE);
+	csr_write(mie, 0);
 	csr_write(mepc, OS_CALL);
-	csr_write(medeleg, MDELEG_INSTRUCTION_PAGE_FAULT | MDELEG_LOAD_PAGE_FAULT | MDELEG_STORE_PAGE_FAULT);
+	csr_write(medeleg, MEDELEG_INSTRUCTION_PAGE_FAULT | MEDELEG_LOAD_PAGE_FAULT | MEDELEG_STORE_PAGE_FAULT);
+	csr_write(mideleg, MIDELEG_SUPERVISOR_TIMER);
+	csr_write(sbadaddr, 0); //Used to avoid simulation missmatch
 }
 
-int readRegister(int id){
+int readRegister(uint32_t id){
     unsigned int sp = (unsigned int) (&_sp);
 	return ((int*) sp)[id-32];
 }
-void writeRegister(int id, int value){
-    unsigned int sp = (unsigned int) (&_sp);
-	((int*) sp)[id-32] = value;
+void writeRegister(uint32_t id, int value){
+	uint32_t sp = (uint32_t) (&_sp);
+	((uint32_t*) sp)[id-32] = value;
 }
 
-
-void stopSim(){
-	*((volatile int*) SIM_STOP) = 0;
-}
-
-void putC(char c){
-	*((volatile int*) PUTC) = c;
-}
 
 
 void redirectTrap(){
@@ -50,7 +46,7 @@ void emulationTrapToSupervisorTrap(uint32_t sepc, uint32_t mstatus){
 	csr_clear(sstatus, MSTATUS_SPP);
 	csr_set(sstatus, (mstatus >> 3) & MSTATUS_SPP);
 	csr_clear(mstatus, MSTATUS_MPP);
-	csr_set(mstatus, 0x8000);
+	csr_set(mstatus, 0x8000 | MSTATUS_MPIE);
 }
 
 #define max(a,b) \
@@ -67,9 +63,9 @@ void emulationTrapToSupervisorTrap(uint32_t sepc, uint32_t mstatus){
 
 
 //Will modify MEPC
-int readWord(int address, int *data){
-	int result, tmp;
-	int failed;
+int32_t readWord(uint32_t address, int32_t *data){
+	int32_t result, tmp;
+	int32_t failed;
 	__asm__ __volatile__ (
 		"  	li       %[tmp],  0x00020000\n"
 		"	csrs     mstatus,  %[tmp]\n"
@@ -91,9 +87,9 @@ int readWord(int address, int *data){
 }
 
 //Will modify MEPC
-int writeWord(uint32_t address, uint32_t data){
-	int result, tmp;
-	int failed;
+int32_t writeWord(uint32_t address, int32_t data){
+	int32_t result, tmp;
+	int32_t failed;
 	__asm__ __volatile__ (
 		"  	li       %[tmp],  0x00020000\n"
 		"	csrs     mstatus,  %[tmp]\n"
@@ -116,30 +112,33 @@ int writeWord(uint32_t address, uint32_t data){
 
 
 
-
-
-
 void trap(){
-	int cause = csr_read(mcause);
-	if(cause < 0){
-		redirectTrap();
-	} else {
+	int32_t cause = csr_read(mcause);
+	if(cause < 0){ //interrupt
+		switch(cause & 0xFF){
+		case CAUSE_MACHINE_TIMER:{
+			csr_set(sip, MIP_STIP);
+			csr_clear(mie, MIE_MTIE);
+		}break;
+		default: redirectTrap(); break;
+		}
+	} else { //exception
 		switch(cause){
 		case CAUSE_ILLEGAL_INSTRUCTION:{
-			int mepc = csr_read(mepc);
-			int mstatus = csr_read(mstatus);
-			int instruction = csr_read(mbadaddr);
-			int opcode = instruction & 0x7F;
-			int funct3 = (instruction >> 12) & 0x7;
+			uint32_t mepc = csr_read(mepc);
+			uint32_t mstatus = csr_read(mstatus);
+			uint32_t instruction = csr_read(mbadaddr);
+			uint32_t opcode = instruction & 0x7F;
+			uint32_t funct3 = (instruction >> 12) & 0x7;
 			switch(opcode){
 			case 0x2F: //Atomic
 				switch(funct3){
 				case 0x2:{
-					int sel = instruction >> 27;
-					int addr = readRegister((instruction >> 15) & 0x1F);
-					int src = readRegister((instruction >> 20) & 0x1F);
-					int rd = (instruction >> 7) & 0x1F;
-					int readValue;
+					uint32_t sel = instruction >> 27;
+					uint32_t addr = readRegister((instruction >> 15) & 0x1F);
+					int32_t  src = readRegister((instruction >> 20) & 0x1F);
+					uint32_t rd = (instruction >> 7) & 0x1F;
+					int32_t readValue;
 					if(readWord(addr, &readValue)){
 						emulationTrapToSupervisorTrap(mepc, mstatus);
 						return;
@@ -148,6 +147,11 @@ void trap(){
 					switch(sel){
 					case 0x0:  writeValue = src + readValue; break;
 					case 0x1:  writeValue = src; break;
+//LR SC done in hardware (cheap), and require to keep track of context switches
+//					case 0x2:{ //LR
+//					}break;
+//					case 0x3:{ //SC
+//					}break;
 					case 0x4:  writeValue = src ^ readValue; break;
 					case 0xC:  writeValue = src & readValue; break;
 					case 0x8:  writeValue = src | readValue; break;
@@ -165,14 +169,53 @@ void trap(){
 					csr_write(mepc, mepc + 4);
 				}break;
 				default: redirectTrap(); break;
-				}
+				} break;
+				case 0x73:{
+					//CSR
+					uint32_t input = (instruction & 0x4000) ? ((instruction >> 15) & 0x1F) : readRegister((instruction >> 15) & 0x1F);;
+					uint32_t clear, set;
+					uint32_t write;
+					switch (funct3 & 0x3) {
+					case 0: redirectTrap(); break;
+					case 1: clear = ~0; set = input; write = 1; break;
+					case 2: clear = 0; set = input; write = ((instruction >> 15) & 0x1F) != 0; break;
+					case 3: clear = input; set = 0; write = ((instruction >> 15) & 0x1F) != 0; break;
+					}
+					uint32_t csrAddress = instruction >> 20;
+					uint32_t old;
+					switch(csrAddress){
+					case RDTIME  : old = rdtime(); break;
+					case RDTIMEH : old = rdtimeh(); break;
+					default: redirectTrap(); break;
+					}
+					if(write) {
+						uint32_t newValue = (old & ~clear) | set;
+						switch(csrAddress){
+						default: redirectTrap(); break;
+						}
+					}
+
+					writeRegister((instruction >> 7) & 0x1F, old);
+					csr_write(mepc, mepc + 4);
+
+				}break;
+				default: redirectTrap();  break;
 			}
 		}break;
 		case CAUSE_SCALL:{
-			int which = readRegister(17);
+			uint32_t which = readRegister(17);
+			uint32_t a0 = readRegister(10);
+			uint32_t a1 = readRegister(11);
+			uint32_t a2 = readRegister(12);
 			switch(which){
-			case 1:{
-				putC(readRegister(10));
+			case SBI_CONSOLE_PUTCHAR:{
+				putC(a0);
+				csr_write(mepc, csr_read(mepc) + 4);
+			}break;
+			case SBI_SET_TIMER:{
+				setMachineTimerCmp(a0, a1);
+				csr_set(mie, MIE_MTIE);
+				csr_clear(sip, MIP_STIP);
 				csr_write(mepc, csr_read(mepc) + 4);
 			}break;
 			default: stopSim(); break;
