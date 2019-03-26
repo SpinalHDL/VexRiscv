@@ -14,7 +14,7 @@ void init() {
 	csr_write(mstatus, 0x0800 | MSTATUS_MPIE);
 	csr_write(mie, 0);
 	csr_write(mepc, OS_CALL);
-	csr_write(medeleg, MEDELEG_INSTRUCTION_PAGE_FAULT | MEDELEG_LOAD_PAGE_FAULT | MEDELEG_STORE_PAGE_FAULT);
+	csr_write(medeleg, MEDELEG_INSTRUCTION_PAGE_FAULT | MEDELEG_LOAD_PAGE_FAULT | MEDELEG_STORE_PAGE_FAULT | MEDELEG_USER_ENVIRONNEMENT_CALL);
 	csr_write(mideleg, MIDELEG_SUPERVISOR_TIMER);
 	csr_write(sbadaddr, 0); //Used to avoid simulation missmatch
 }
@@ -210,6 +210,10 @@ void trap(){
 			switch(which){
 			case SBI_CONSOLE_PUTCHAR:{
 				putC(a0);
+				csr_write(mepc, csr_read(mepc) + 4);
+			}break;
+			case SBI_CONSOLE_GETCHAR:{
+				writeRegister(10, -1); //no char
 				csr_write(mepc, csr_read(mepc) + 4);
 			}break;
 			case SBI_SET_TIMER:{

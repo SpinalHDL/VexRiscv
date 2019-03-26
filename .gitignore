@@ -40,6 +40,7 @@ obj_dir
 *.yaml
 *.memTrace
 *.regTrace
+*.debugTrace
 *.tcl
 *.o
 *.bin

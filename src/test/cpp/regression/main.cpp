@@ -835,7 +835,7 @@ public:
 						pcWrite(sepc);
 					}break;
 					case 0x00000073:{ //ECALL
-						trap(0, 8+privilege);
+						trap(0, 8+privilege, 0x00000073); //To follow the VexRiscv area saving implementation
 					}break;
 					case 0x10500073:{ //WFI
 						pcWrite(pc + 4);
@@ -897,10 +897,10 @@ public:
 							if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
 							bool hit = false;
 							for(int i = 0;i < RESERVED_ENTRY_COUNT;i++) hit |= reservedEntries[i].valid && reservedEntries[i].address == address;
-							rfWrite(rd32, !hit);
 							if(hit){
 								dWrite(pAddr, 4, i32_rs2);
 							}
+							rfWrite(rd32, !hit);
 							pcWrite(pc + 4);
 						}
 					}	break;
@@ -1063,6 +1063,7 @@ public:
 	ofstream regTraces;
 	ofstream memTraces;
 	ofstream logTraces;
+	ofstream debugLog;
 
 	struct timespec start_time;
 
@@ -1125,6 +1126,9 @@ public:
     		if(ws->isPerifRegion(address)){
 				MemRead t = periphRead.front();
 				if(t.address != address || t.size != size){
+					cout << "DRead missmatch" << hex <<  endl;
+					cout << " REF : address=" << address << " size=" << size << endl;
+					cout << " DUT : address=" << t.address  << " size=" << t.size << endl;
 					fail();
 				}
 				*data = t.data;
@@ -1138,14 +1142,24 @@ public:
         virtual void dWrite(int32_t address, int32_t size, uint32_t data){
             if(address & (size-1) != 0)
             	cout << "Ref did a unaligned write" << endl;
-    		if(ws->isPerifRegion(address)){
+
+    		if(!ws->isPerifRegion(address)){
+    			mem.write(address, size, (uint8_t*)&data);
+    		}
+    		if(ws->isDBusCheckedRegion(address)){
 				MemWrite w;
 				w.address = address;
 				w.size = size;
-				w.data = data;
+				switch(size){
+				case 1: w.data = data & 0xFF; break;
+				case 2: w.data = data & 0xFFFF; break;
+				case 4: w.data = data; break;
+				}
 				periphWritesGolden.push(w);
-    		}else {
-    			mem.write(address, size, (uint8_t*)&data);
+				if(periphWritesGolden.size() > 10){
+				    cout << "??? periphWritesGolden" << endl;
+				    fail();
+				}
     		}
         }
 
@@ -1193,6 +1207,7 @@ public:
 			memTraces.open (name + ".memTrace");hh
 		#endif
 		logTraces.open (name + ".logTrace");
+		debugLog.open (name + ".debugTrace");
 		fillSimELements();
 		clock_gettime(CLOCK_PROCESS_CPUTIME_ID, &start_time);
 	}
@@ -1254,22 +1269,7 @@ public:
     virtual bool isDBusCheckedRegion(uint32_t address){ return isPerifRegion(address);}
 	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
 		assertEq(addr % (1 << size), 0);
-		if(isPerifRegion(addr)){
-			if(wr){
-				CpuRef::MemWrite w;
-				w.address = addr;
-				w.size = 1 << size;
-				w.data = *data;
-				riscvRef.periphWrites.push(w);
-			} else {
-				CpuRef::MemRead r;
-				r.address = addr;
-				r.size = 1 << size;
-				r.data = *data;
-				r.error = *error;
-				riscvRef.periphRead.push(r);
-			}
-		} else {
+		if(!isPerifRegion(addr)) {
 			if(wr){
 				memTraces <<
 				#ifdef TRACE_WITH_TIME
@@ -1303,6 +1303,30 @@ public:
 				 #endif
 				  " : READ  mem" << (1 << size) << "[" << addr << "] = " << *data << endl;
 
+			}
+		}
+
+
+		if(wr){
+			if(isDBusCheckedRegion(addr)){
+				CpuRef::MemWrite w;
+				w.address = addr;
+				w.size = 1 << size;
+				switch(size){
+				case 0: w.data = *data & 0xFF; break;
+				case 1: w.data = *data & 0xFFFF; break;
+				case 2: w.data = *data ; break;
+				}
+				riscvRef.periphWrites.push(w);
+			}
+		} else {
+			if(isPerifRegion(addr)){
+				CpuRef::MemRead r;
+				r.address = addr;
+				r.size = 1 << size;
+				r.data = *data;
+				r.error = *error;
+				riscvRef.periphRead.push(r);
 			}
 		}
 	}
@@ -2946,7 +2970,7 @@ public:
 	LitexSoC(string name) : Workspace(name) {
 
 	}
-
+	virtual bool isDBusCheckedRegion(uint32_t address){ return true;}
 	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xB0000000 || (addr & 0xE0000000) == 0xE0000000;}
     virtual bool isMmuRegion(uint32_t addr) { return (addr & 0xFF000000) != 0x81000000;}
 

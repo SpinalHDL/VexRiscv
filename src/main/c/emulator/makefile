@@ -1,5 +1,5 @@
 PROJ_NAME=emulator
-DEBUG=yes
+DEBUG=no
 MULDIV=no
 COMPRESSED=no
 STANDALONE = ..

@@ -40,7 +40,7 @@ make run DBUS=SIMPLE IBUS=SIMPLE DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED
 Run linux =>
 sbt "runMain vexriscv.demo.LinuxGen"
 cd src/test/cpp/regression
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes LITEX=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/linuxDave/vmlinux.bin DTB=/home/spinalvm/hdl/linuxDave/vmlinux/rv32.dtb RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=no
+make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LITEX=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/riscv-linux/vmlinux.bin DTB=/home/spinalvm/hdl/riscv-linux/rv32.dtb RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
 
 
 
@@ -51,7 +51,7 @@ riscv64-unknown-elf-objdump -S -d vmlinux > vmlinux.asm; split -b 1M vmlinux.asm
 
 split -b 1M vmlinux.asm
 dtc -O dtb -o rv32.dtb rv32.dts
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes LITEX=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/riscv-linux/vmlinux.bin DTB=/home/spinalvm/hdl/riscv-linux/rv32.dtb RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=yes FLOW_INFO=yes TRACE_START=0000000
+make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LITEX=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/riscv-linux/vmlinux.bin DTB=/home/spinalvm/hdl/riscv-linux/rv32.dtb RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
 
 */
 
