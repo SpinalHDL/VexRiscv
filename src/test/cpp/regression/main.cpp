@@ -1279,6 +1279,50 @@ public:
 #endif
 
 
+
+#ifdef IBUS_SIMPLE_AHBLITE3
+class IBusSimpleAhbLite3 : public SimElement{
+public:
+	Workspace *ws;
+	VVexRiscv* top;
+
+	uint32_t iBusAhbLite3_HRDATA;
+	bool iBusAhbLite3_HRESP, iBusAhbLite3_HREADY;
+
+	IBusSimpleAhbLite3(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+		top->iBusAhbLite3_HREADY = 1;
+		top->iBusAhbLite3_HRESP = 0;
+	}
+
+	virtual void preCycle(){
+        if (top->iBusAhbLite3_HTRANS == 2 && top->iBusAhbLite3_HREADY && !top->iBusAhbLite3_HWRITE) {
+            ws->iBusAccess(top->iBusAhbLite3_HADDR,&iBusAhbLite3_HRDATA,&iBusAhbLite3_HRESP);
+        }
+	}
+
+	virtual void postCycle(){
+		if(top->iBusAhbLite3_HREADY && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+			IBusSimpleAvalonRsp rsp = rsps.front(); rsps.pop();
+			top->iBusAhbLite3_HRDATA = iBusAhbLite3_HRDATA;
+			top->iBusAhbLite3_HREADY = iBusAhbLite3_HREADY;
+			top->iBusAhbLite3_HRESP  = iBusAhbLite3_HRESP;
+		} else {
+			top->iBusAhbLite3_HRESP = 0;
+			top->iBusAhbLite3_HRDATA = VL_RANDOM_I(32);
+			top->iBusAhbLite3_HRESP = VL_RANDOM_I(1);
+		}
+		if(ws->iStall)
+			top->iBusAhbLite3_HREADY = VL_RANDOM_I(7) < 100;
+	}
+};
+#endif
+
+
 #ifdef IBUS_CACHED
 class IBusCached : public SimElement{
 public:
@@ -1994,6 +2038,11 @@ void Workspace::fillSimELements(){
 	#ifdef IBUS_SIMPLE_AVALON
 		simElements.push_back(new IBusSimpleAvalon(this));
 	#endif
+    #ifdef IBUS_SIMPLE_AHBLITE3
+        simElements.push_back(new IBusSimpleAhbLite3(this));
+    #endif
+
+
 	#ifdef IBUS_CACHED
 		simElements.push_back(new IBusCached(this));
 	#endif

@@ -3,6 +3,7 @@ package vexriscv.plugin
 import vexriscv._
 import spinal.core._
 import spinal.lib._
+import spinal.lib.bus.amba3.ahblite.{AhbLite3Config, AhbLite3Master}
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
@@ -62,6 +63,11 @@ object DBusSimpleBus{
     tgdWidth = 0,
     useBTE = true,
     useCTI = true
+  )
+
+  def getAhbLite3Config() = AhbLite3Config(
+    addressWidth = 32,
+    dataWidth = 32
   )
 }
 
@@ -195,6 +201,28 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
 
     bus
   }
+
+
+
+  def toAhbLite3Master(): AhbLite3Master = {
+    val bus = AhbLite3Master(DBusSimpleBus.getAhbLite3Config())
+    bus.HADDR     := this.cmd.address
+    bus.HWRITE    := this.cmd.wr
+    bus.HSIZE     := B(this.cmd.size, 3 bits)
+    bus.HBURST    := 0
+    bus.HPROT     := "1111"
+    bus.HTRANS    := B"0" ## this.cmd.valid
+    bus.HMASTLOCK := False
+    bus.HWDATA    := RegNextWhen(this.cmd.data, bus.HREADY)
+    this.cmd.ready := bus.HREADY
+
+    val pending = RegInit(False) clearWhen(bus.HREADY) setWhen(this.cmd.fire && !this.cmd.wr)
+    this.rsp.ready := bus.HREADY
+    this.rsp.data := bus.HRDATA
+    this.rsp.error := bus.HRESP
+    bus
+  }
+
 }
 
 
