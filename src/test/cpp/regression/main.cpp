@@ -2963,11 +2963,46 @@ public:
 #endif
 
 
-#ifdef LITEX
-class LitexSoC : public Workspace{
+//#ifdef LITEX
+//class LitexSoC : public Workspace{
+//public:
+//
+//	LitexSoC(string name) : Workspace(name) {
+//
+//	}
+//	virtual bool isDBusCheckedRegion(uint32_t address){ return true;}
+//	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xB0000000 || (addr & 0xE0000000) == 0xE0000000;}
+//    virtual bool isMmuRegion(uint32_t addr) { return (addr & 0xFF000000) != 0x81000000;}
+//
+//    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+//        if(isPerifRegion(addr)) switch(addr){
+//    		//TODO Emulate peripherals here
+//    		case 0xFFFFFFE0: if(wr) fail(); else *data = mTime; break;
+//    		case 0xFFFFFFE4: if(wr) fail(); else *data = mTime >> 32; break;
+//    		case 0xFFFFFFE8: if(wr) mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data; else *data = mTimeCmp; break;
+//    		case 0xFFFFFFEC: if(wr) mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); else *data = mTimeCmp >> 32; break;
+//    		case 0xFFFFFFF8:
+//    		    if(wr){
+//                    cout << (char)*data;
+//                    logTraces << (char)*data;
+//                    logTraces.flush();
+//				} else fail();
+//				break;
+//    		case 0xFFFFFFFC: fail(); break; //Simulation end
+//    		default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " mask=0x" << mask << " data=0x" << data << dec << endl; fail(); break;
+//    	}
+//
+//    	Workspace::dBusAccess(addr,wr,size,mask,data,error);
+//    }
+//};
+//#endif
+
+
+#ifdef LINUX_SOC
+class LinuxSoc : public Workspace{
 public:
 
-	LitexSoC(string name) : Workspace(name) {
+	LinuxSoc(string name) : Workspace(name) {
 
 	}
 	virtual bool isDBusCheckedRegion(uint32_t address){ return true;}
@@ -3264,8 +3299,24 @@ int main(int argc, char **argv, char **env) {
 	timespec startedAt = timer_start();
 
 
-#ifdef LITEX
-	LitexSoC("linux")
+
+
+//#ifdef LITEX
+//	LitexSoC("linux")
+//		.withRiscvRef()
+//		->loadBin(EMULATOR, 0x80000000)
+//		->loadBin(DTB,      0x81000000)
+//		->loadBin(VMLINUX,  0xc0000000)
+//		->loadBin(RAMDISK,  0xc2000000)
+//		->setIStall(false) //TODO It currently improve speed but should be removed later
+//		->setDStall(false)
+//		->bootAt(0x80000000)
+//		->run(0);
+//#endif
+
+
+#ifdef LINUX_SOC
+	LinuxSoc("linux")
 		.withRiscvRef()
 		->loadBin(EMULATOR, 0x80000000)
 		->loadBin(DTB,      0x81000000)
