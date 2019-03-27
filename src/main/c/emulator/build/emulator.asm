@@ -181,8 +181,8 @@ Disassembly of section .text:
 8000026c:	000027b7          	lui	a5,0x2
 80000270:	80078793          	addi	a5,a5,-2048 # 1800 <__stack_size+0x1000>
 80000274:	3007b073          	csrc	mstatus,a5
-80000278:	000087b7          	lui	a5,0x8
-8000027c:	08078793          	addi	a5,a5,128 # 8080 <__stack_size+0x7880>
+80000278:	000017b7          	lui	a5,0x1
+8000027c:	88078793          	addi	a5,a5,-1920 # 880 <__stack_size+0x80>
 80000280:	3007a073          	csrs	mstatus,a5
 80000284:	00008067          	ret
 
@@ -396,8 +396,8 @@ Disassembly of section .text:
 800005b0:	000027b7          	lui	a5,0x2
 800005b4:	80078793          	addi	a5,a5,-2048 # 1800 <__stack_size+0x1000>
 800005b8:	3007b073          	csrc	mstatus,a5
-800005bc:	000087b7          	lui	a5,0x8
-800005c0:	08078793          	addi	a5,a5,128 # 8080 <__stack_size+0x7880>
+800005bc:	000017b7          	lui	a5,0x1
+800005c0:	88078793          	addi	a5,a5,-1920 # 880 <__stack_size+0x80>
 800005c4:	3007a073          	csrs	mstatus,a5
 800005c8:	e81ff06f          	j	80000448 <trap+0x15c>
 800005cc:	00f45993          	srli	s3,s0,0xf

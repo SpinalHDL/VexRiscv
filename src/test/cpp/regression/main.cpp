@@ -561,7 +561,8 @@ public:
 		return value;
 	}
 
-#define maskedWrite(dst, src, mask) dst=(dst & ~mask)|(src & mask);
+	#define maskedWrite(dst, src, mask) dst=(dst & ~mask)|(src & mask);
+
 	virtual bool csrWrite(int32_t csr, uint32_t value){
 		if(((csr >> 8) & 0x3) > privilege) return true;
 		switch(csr){

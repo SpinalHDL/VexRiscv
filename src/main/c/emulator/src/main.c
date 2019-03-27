@@ -47,7 +47,7 @@ void emulationTrapToSupervisorTrap(uint32_t sepc, uint32_t mstatus){
 	csr_clear(sstatus, MSTATUS_SPP);
 	csr_set(sstatus, (mstatus >> 3) & MSTATUS_SPP);
 	csr_clear(mstatus, MSTATUS_MPP);
-	csr_set(mstatus, 0x8000 | MSTATUS_MPIE);
+	csr_set(mstatus, 0x0800 | MSTATUS_MPIE);
 }
 
 #define max(a,b) \
