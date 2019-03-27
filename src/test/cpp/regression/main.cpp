@@ -1177,7 +1177,9 @@ public:
     			MemWrite t = periphWrites.front();
     			MemWrite t2 = periphWritesGolden.front();
     			if(t.address != t2.address || t.size != t2.size || t.data != t2.data){
-    				cout << "periphWrite missmatch" << endl;
+    				cout << hex << "periphWrite missmatch" << endl;
+    				cout << " DUT address=" << t.address << " size=" << t.size  << " data=" << t.data << endl;
+    				cout << " REF address=" << t2.address << " size=" << t2.size  << " data=" << t2.data << endl;
     				fail();
     			}
     			periphWrites.pop();
@@ -3326,6 +3328,7 @@ int main(int argc, char **argv, char **env) {
 		->setDStall(false)
 		->bootAt(0x80000000)
 		->run(0);
+//		->run(1173000000l );
 #endif
 
 //    #ifdef MMU

@@ -4,7 +4,6 @@
 
 trapEntry:
 	csrrw sp, mscratch, sp
-	sw x0,   0*4(sp)
 	sw x1,   1*4(sp)
 	sw x3,   3*4(sp)
 	sw x4,   4*4(sp)
@@ -36,7 +35,6 @@ trapEntry:
 	sw x30,   30*4(sp)
 	sw x31,   31*4(sp)
 	call trap
-	lw x0,   0*4(sp)
 	lw x1,   1*4(sp)
 	lw x3,   3*4(sp)
 	lw x4,   4*4(sp)

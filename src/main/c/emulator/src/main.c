@@ -39,10 +39,11 @@ void redirectTrap(){
 }
 
 void emulationTrapToSupervisorTrap(uint32_t sepc, uint32_t mstatus){
+	csr_write(mtvec, trapEntry);
 	csr_write(sbadaddr, csr_read(mbadaddr));
 	csr_write(scause, csr_read(mcause));
 	csr_write(sepc, sepc);
-	csr_write(mepc,		csr_read(stvec));
+	csr_write(mepc,	csr_read(stvec));
 	csr_clear(sstatus, MSTATUS_SPP);
 	csr_set(sstatus, (mstatus >> 3) & MSTATUS_SPP);
 	csr_clear(mstatus, MSTATUS_MPP);
@@ -62,7 +63,7 @@ void emulationTrapToSupervisorTrap(uint32_t sepc, uint32_t mstatus){
 
 
 
-//Will modify MEPC
+//Will modify MTVEC
 int32_t readWord(uint32_t address, int32_t *data){
 	int32_t result, tmp;
 	int32_t failed;
@@ -70,7 +71,7 @@ int32_t readWord(uint32_t address, int32_t *data){
 		"  	li       %[tmp],  0x00020000\n"
 		"	csrs     mstatus,  %[tmp]\n"
 		"  	la       %[tmp],  1f\n"
-		"	csrw     mepc,  %[tmp]\n"
+		"	csrw     mtvec,  %[tmp]\n"
 		"	li       %[failed], 1\n"
 		"	lw       %[result], 0(%[address])\n"
 		"	li       %[failed], 0\n"
@@ -86,7 +87,7 @@ int32_t readWord(uint32_t address, int32_t *data){
 	return failed;
 }
 
-//Will modify MEPC
+//Will modify MTVEC
 int32_t writeWord(uint32_t address, int32_t data){
 	int32_t result, tmp;
 	int32_t failed;
@@ -94,7 +95,7 @@ int32_t writeWord(uint32_t address, int32_t data){
 		"  	li       %[tmp],  0x00020000\n"
 		"	csrs     mstatus,  %[tmp]\n"
 		"  	la       %[tmp],  1f\n"
-		"	csrw     mepc,  %[tmp]\n"
+		"	csrw     mtvec,  %[tmp]\n"
 		"	li       %[failed], 1\n"
 		"	sw       %[data], 0(%[address])\n"
 		"	li       %[failed], 0\n"
@@ -167,6 +168,7 @@ void trap(){
 						return;
 					}
 					csr_write(mepc, mepc + 4);
+					csr_write(mtvec, trapEntry); //Restore mtvec
 				}break;
 				default: redirectTrap(); break;
 				} break;

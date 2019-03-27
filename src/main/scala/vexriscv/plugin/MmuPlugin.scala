@@ -112,7 +112,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
           requireMmuLockup clearWhen(!csr.status.mprv && privilegeService.isMachine())
           when(privilegeService.isMachine()) {
             if (port.priority == MmuPort.PRIORITY_DATA) {
-              requireMmuLockup clearWhen (!csr.status.mprv)
+              requireMmuLockup clearWhen (!csr.status.mprv || pipeline(MPP) === 3)
             } else {
               requireMmuLockup := False
             }
