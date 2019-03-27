@@ -27,6 +27,11 @@ import vexriscv.ip._
 import vexriscv.plugin._
 
 /*
+prerequired stuff =>
+- JAVA JDK >= 8
+- SBT
+- Verilator
+
 Setup things =>
 git clone https://github.com/SpinalHDL/SpinalHDL.git -b dev
 git clone https://github.com/SpinalHDL/VexRiscv.git -b linux
