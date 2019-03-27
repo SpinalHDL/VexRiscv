@@ -276,7 +276,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       decoderService.add(
         key = LR,
         values = loadActions.filter(_._1 != SRC2_CTRL) ++ Seq(
-          SRC2_CTRL -> Src2CtrlEnum.RS,
+          SRC_ADD_ZERO -> True,
           MEMORY_ATOMIC -> True
         )
       )
@@ -284,6 +284,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       decoderService.add(
         key = SC,
         values = storeActions.filter(_._1 != SRC2_CTRL) ++ Seq(
+          SRC_ADD_ZERO -> True,
           REGFILE_WRITE_VALID -> True,
           BYPASSABLE_EXECUTE_STAGE -> False,
           BYPASSABLE_MEMORY_STAGE -> False,
@@ -373,7 +374,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
 
       val atomic = genAtomic generate new Area{
-        val address = input(SRC1).asUInt //TODO could avoid 32 muxes if SRC_ADD can be disabled
+        val address = input(SRC_ADD).asUInt
         case class AtomicEntry() extends Bundle{
           val valid = Bool()
           val address = UInt(32 bits)
@@ -399,9 +400,6 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
         when(input(MEMORY_STORE) && input(MEMORY_ATOMIC) && !input(ATOMIC_HIT)){
           skipCmd := True
-        }
-        when(input(MEMORY_ATOMIC)){
-          mmuBus.cmd.virtualAddress := address
         }
       }
     }

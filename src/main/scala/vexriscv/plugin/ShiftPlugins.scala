@@ -105,24 +105,30 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
     val immediateActions = List[(Stageable[_ <: BaseType],Any)](
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.IMI,
-      ALU_CTRL                 -> AluCtrlEnum.BITWISE,
-      ALU_BITWISE_CTRL         -> AluBitwiseCtrlEnum.SRC1,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,
-      RS1_USE                 -> True
+      RS1_USE                 -> True,
+
+      //Get SRC1 through the MMU to the RF write path
+      ALU_CTRL                 -> AluCtrlEnum.ADD_SUB,
+      SRC_USE_SUB_LESS         -> False,
+      SRC_ADD_ZERO             -> True
     )
 
     val nonImmediateActions = List[(Stageable[_ <: BaseType],Any)](
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
-      ALU_CTRL                 -> AluCtrlEnum.BITWISE,
-      ALU_BITWISE_CTRL         -> AluBitwiseCtrlEnum.SRC1,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,
       RS1_USE                 -> True,
-      RS2_USE                 -> True
+      RS2_USE                 -> True,
+
+      //Get SRC1 through the MMU to the RF write path
+      ALU_CTRL                 -> AluCtrlEnum.ADD_SUB,
+      SRC_USE_SUB_LESS         -> False,
+      SRC_ADD_ZERO             -> True
     )
 
     val decoderService = pipeline.service(classOf[DecoderService])

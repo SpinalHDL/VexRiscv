@@ -52,7 +52,8 @@ make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DH
 
 
 
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LITEX=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/riscv-linux/vmlinux.bin DTB=/home/spinalvm/hdl/riscv-linux/rv32.dtb RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
+make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/riscv-linux/vmlinux.bin DTB=/home/spinalvm/hdl/riscv-linux/rv32.dtb RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
+make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/riscv-linux/vmlinux.bin DTB=/home/spinalvm/hdl/riscv-linux/rv32.dtb RAMDISK=/home/spinalvm/hdl/linux/fs/rootfs.ext2 TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
 
 
 make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/linux/linux-1c163f4c7b3f621efff9b28a47abb36f7378d783/vmlinux.bin DTB=/home/spinalvm/hdl/linux/linux-1c163f4c7b3f621efff9b28a47abb36f7378d783/rv32.dtb RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
@@ -64,7 +65,9 @@ make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DH
 Other commands (Memo):
 cp litex_default_configuration .config
 ARCH=riscv CROSS_COMPILE=riscv64-unknown-elf- make -j`nproc`; riscv64-unknown-elf-objcopy  -O binary vmlinux vmlinux.bin
+ARCH=riscv CROSS_COMPILE=riscv32-unknown-linux-gnu- make -j`nproc`; riscv32-unknown-linux-gnu-objcopy  -O binary vmlinux vmlinux.bin
 riscv64-unknown-elf-objdump -S -d vmlinux > vmlinux.asm; split -b 1M vmlinux.asm
+riscv32-unknown-linux-gnu-objdump -S -d vmlinux > vmlinux.asm; split -b 1M vmlinux.asm
 
 
 
