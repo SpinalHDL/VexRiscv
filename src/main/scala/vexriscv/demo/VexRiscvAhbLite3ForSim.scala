@@ -141,10 +141,10 @@ object VexRiscvAhbLite3ForSim{
             plugin.iBus.setAsDirectionLess() //Unset IO properties of iBus
             master(plugin.iBus.toAhbLite3Master()).setName("iBusAhbLite3")
           }
-//          case plugin: DBusSimplePlugin => {
-//            plugin.dBus.setAsDirectionLess()
-//            master(plugin.dBus.toAhbLite3Master()).setName("dBusAhbLite3")
-//          }
+          case plugin: DBusSimplePlugin => {
+            plugin.dBus.setAsDirectionLess()
+            master(plugin.dBus.toAhbLite3Master(avoidWriteToReadHazard = true)).setName("dBusAhbLite3")
+          }
 //          case plugin: IBusCachedPlugin => {
 //            plugin.iBus.setAsDirectionLess() //Unset IO properties of iBus
 //            iBus = master(plugin.iBus.toAvalon())

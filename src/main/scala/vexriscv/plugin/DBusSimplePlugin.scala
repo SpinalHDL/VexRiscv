@@ -204,7 +204,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
 
 
 
-  def toAhbLite3Master(): AhbLite3Master = {
+  def toAhbLite3Master(avoidWriteToReadHazard : Boolean): AhbLite3Master = {
     val bus = AhbLite3Master(DBusSimpleBus.getAhbLite3Config())
     bus.HADDR     := this.cmd.address
     bus.HWRITE    := this.cmd.wr
@@ -220,6 +220,16 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     this.rsp.ready := bus.HREADY
     this.rsp.data := bus.HRDATA
     this.rsp.error := bus.HRESP
+
+    if(avoidWriteToReadHazard) {
+      val writeDataPhase = RegNextWhen(bus.HTRANS === 2 && bus.HWRITE, bus.HREADY) init (False)
+      val potentialHazard = this.cmd.valid && !this.cmd.wr && writeDataPhase
+      when(potentialHazard) {
+        bus.HTRANS := 0
+        this.cmd.ready := False
+      }
+    }
+
     bus
   }
 

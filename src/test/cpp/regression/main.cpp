@@ -1572,6 +1572,60 @@ public:
 };
 #endif
 
+
+
+#ifdef DBUS_SIMPLE_AHBLITE3
+class DBusSimpleAhbLite3 : public SimElement{
+public:
+	Workspace *ws;
+	VVexRiscv* top;
+
+    uint32_t dBusAhbLite3_HADDR, dBusAhbLite3_HSIZE, dBusAhbLite3_HTRANS, dBusAhbLite3_HWRITE;
+
+	DBusSimpleAhbLite3(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+		top->dBusAhbLite3_HREADY = 1;
+		top->dBusAhbLite3_HRESP = 0;
+		dBusAhbLite3_HTRANS = 0;
+	}
+
+	virtual void preCycle(){
+        if(top->dBusAhbLite3_HREADY && dBusAhbLite3_HTRANS == 2 && dBusAhbLite3_HWRITE){
+            uint32_t data = top->dBusAhbLite3_HWDATA;
+            bool error;
+            ws->dBusAccess(dBusAhbLite3_HADDR, 1, dBusAhbLite3_HSIZE, ((1 << (1 << dBusAhbLite3_HSIZE))-1) << (dBusAhbLite3_HADDR & 0x3),&data,&error);
+        }
+
+        if(top->dBusAhbLite3_HREADY){
+	        dBusAhbLite3_HADDR = top->dBusAhbLite3_HADDR ;
+	        dBusAhbLite3_HSIZE = top->dBusAhbLite3_HSIZE ;
+	        dBusAhbLite3_HTRANS = top->dBusAhbLite3_HTRANS ;
+	        dBusAhbLite3_HWRITE = top->dBusAhbLite3_HWRITE ;
+        }
+	}
+
+	virtual void postCycle(){
+		if(ws->iStall)
+			top->dBusAhbLite3_HREADY = (!ws->iStall || VL_RANDOM_I(7) < 100);
+
+        top->dBusAhbLite3_HRDATA = VL_RANDOM_I(32);
+        top->dBusAhbLite3_HRESP = VL_RANDOM_I(1);
+
+		if(top->dBusAhbLite3_HREADY && dBusAhbLite3_HTRANS == 2 && !dBusAhbLite3_HWRITE){
+
+		    bool error;
+		    ws->dBusAccess(dBusAhbLite3_HADDR, 0, dBusAhbLite3_HSIZE, ((1 << (1 << dBusAhbLite3_HSIZE))-1) << (dBusAhbLite3_HADDR & 0x3),&top->dBusAhbLite3_HRDATA,&error);
+            top->dBusAhbLite3_HRESP  = error;
+		}
+	}
+};
+#endif
+
+
 #if defined(DBUS_CACHED_WISHBONE) || defined(DBUS_SIMPLE_WISHBONE)
 #include <queue>
 
@@ -2065,6 +2119,9 @@ void Workspace::fillSimELements(){
 	#ifdef DBUS_SIMPLE_AVALON
 		simElements.push_back(new DBusSimpleAvalon(this));
 	#endif
+    #ifdef DBUS_SIMPLE_AHBLITE3
+        simElements.push_back(new DBusSimpleAhbLite3(this));
+    #endif
 	#ifdef DBUS_CACHED
 		simElements.push_back(new DBusCached(this));
 	#endif
