@@ -972,7 +972,7 @@ public:
 		if(bootPc != -1) top->VexRiscv->core->prefetch_pc = bootPc;
 		#else
 		if(bootPc != -1) {
-		    #if defined(IBUS_SIMPLE) || defined(IBUS_SIMPLE_WISHBONE)
+		    #if defined(IBUS_SIMPLE) || defined(IBUS_SIMPLE_WISHBONE) || defined(IBUS_SIMPLE_AHBLITE3)
                 top->VexRiscv->IBusSimplePlugin_fetchPc_pcReg = bootPc;
                 #ifdef COMPRESSED
                 top->VexRiscv->IBusSimplePlugin_decodePc_pcReg = bootPc;
@@ -1287,7 +1287,8 @@ public:
 	VVexRiscv* top;
 
 	uint32_t iBusAhbLite3_HRDATA;
-	bool iBusAhbLite3_HRESP, iBusAhbLite3_HREADY;
+	bool iBusAhbLite3_HRESP;
+	bool pending;
 
 	IBusSimpleAhbLite3(Workspace* ws){
 		this->ws = ws;
@@ -1295,6 +1296,7 @@ public:
 	}
 
 	virtual void onReset(){
+	    pending = false;
 		top->iBusAhbLite3_HREADY = 1;
 		top->iBusAhbLite3_HRESP = 0;
 	}
@@ -1302,22 +1304,22 @@ public:
 	virtual void preCycle(){
         if (top->iBusAhbLite3_HTRANS == 2 && top->iBusAhbLite3_HREADY && !top->iBusAhbLite3_HWRITE) {
             ws->iBusAccess(top->iBusAhbLite3_HADDR,&iBusAhbLite3_HRDATA,&iBusAhbLite3_HRESP);
+            pending = true;
         }
 	}
 
 	virtual void postCycle(){
-		if(top->iBusAhbLite3_HREADY && (!ws->iStall || VL_RANDOM_I(7) < 100)){
-			IBusSimpleAvalonRsp rsp = rsps.front(); rsps.pop();
+		if(ws->iStall)
+			top->iBusAhbLite3_HREADY = (!ws->iStall || VL_RANDOM_I(7) < 100);
+
+		if(pending && top->iBusAhbLite3_HREADY){
 			top->iBusAhbLite3_HRDATA = iBusAhbLite3_HRDATA;
-			top->iBusAhbLite3_HREADY = iBusAhbLite3_HREADY;
 			top->iBusAhbLite3_HRESP  = iBusAhbLite3_HRESP;
+			pending = false;
 		} else {
-			top->iBusAhbLite3_HRESP = 0;
 			top->iBusAhbLite3_HRDATA = VL_RANDOM_I(32);
 			top->iBusAhbLite3_HRESP = VL_RANDOM_I(1);
 		}
-		if(ws->iStall)
-			top->iBusAhbLite3_HREADY = VL_RANDOM_I(7) < 100;
 	}
 };
 #endif

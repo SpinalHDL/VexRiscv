@@ -162,7 +162,7 @@ case class IBusSimpleBus(interfaceKeepData : Boolean = false) extends Bundle wit
     bus.HSIZE     := 2
     bus.HBURST    := 0
     bus.HPROT     := "1110"
-    bus.HTRANS    := B"0" ## this.cmd.valid
+    bus.HTRANS    := this.cmd.valid ## B"0"
     bus.HMASTLOCK := False
     bus.HWDATA.assignDontCare()
     this.cmd.ready := bus.HREADY

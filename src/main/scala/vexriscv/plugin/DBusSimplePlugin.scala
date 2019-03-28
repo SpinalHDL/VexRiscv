@@ -211,7 +211,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     bus.HSIZE     := B(this.cmd.size, 3 bits)
     bus.HBURST    := 0
     bus.HPROT     := "1111"
-    bus.HTRANS    := B"0" ## this.cmd.valid
+    bus.HTRANS    := this.cmd.valid ## B"0"
     bus.HMASTLOCK := False
     bus.HWDATA    := RegNextWhen(this.cmd.data, bus.HREADY)
     this.cmd.ready := bus.HREADY
