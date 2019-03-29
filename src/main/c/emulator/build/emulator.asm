@@ -125,7 +125,7 @@ Disassembly of section .text:
 800001ac:	0000b7b7          	lui	a5,0xb
 800001b0:	10078793          	addi	a5,a5,256 # b100 <__stack_size+0xa900>
 800001b4:	30279073          	csrw	medeleg,a5
-800001b8:	02000793          	li	a5,32
+800001b8:	22200793          	li	a5,546
 800001bc:	30379073          	csrw	mideleg,a5
 800001c0:	14305073          	csrwi	sbadaddr,0
 800001c4:	00008067          	ret

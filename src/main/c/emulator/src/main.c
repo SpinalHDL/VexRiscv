@@ -15,7 +15,7 @@ void init() {
 	csr_write(mie, 0);
 	csr_write(mepc, OS_CALL);
 	csr_write(medeleg, MEDELEG_INSTRUCTION_PAGE_FAULT | MEDELEG_LOAD_PAGE_FAULT | MEDELEG_STORE_PAGE_FAULT | MEDELEG_USER_ENVIRONNEMENT_CALL);
-	csr_write(mideleg, MIDELEG_SUPERVISOR_TIMER);
+	csr_write(mideleg, MIDELEG_SUPERVISOR_TIMER | MIDELEG_SUPERVISOR_EXTERNAL | MIDELEG_SUPERVISOR_SOFTWARE);
 	csr_write(sbadaddr, 0); //Used to avoid simulation missmatch
 }
 
