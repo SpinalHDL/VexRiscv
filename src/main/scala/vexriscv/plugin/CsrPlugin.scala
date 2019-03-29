@@ -734,7 +734,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
       //Used to make the pipeline empty softly (for interrupts)
       val pipelineLiberator = new Area{
-        when(interrupt && decode.arbitration.isValid){
+        when(interrupt){
           decode.arbitration.haltByOther := True
         }
 
@@ -767,9 +767,6 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       }
 
       when(hadException || interruptJump){
-        //Avoid having the fetch confused by the incomming privilege switch
-        fetcher.haltIt()
-
         jumpInterface.valid         := True
         jumpInterface.payload       := (if(!xtvecModeGen) xtvec.base @@ "00" else (xtvec.mode === 0 || hadException) ? (xtvec.base @@ "00") | ((xtvec.base + trapCause) @@ "00") )
         beforeLastStage.arbitration.flushAll := True
@@ -801,6 +798,11 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
             }
           }
         }
+      }
+
+      //Avoid having the fetch confused by the incomming privilege switch
+      when(hadException){
+        fetcher.haltIt()
       }
 
       lastStage plug new Area{
