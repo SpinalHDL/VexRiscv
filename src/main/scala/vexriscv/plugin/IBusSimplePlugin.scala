@@ -309,7 +309,7 @@ class IBusSimplePlugin(resetVector : BigInt,
 
         if(catchSomething){
           decodeExceptionPort.code.assignDontCare()
-          decodeExceptionPort.badAddr := join.pc //TODO Should it be the physical address insted ?
+          decodeExceptionPort.badAddr := join.pc(31 downto 2) @@ "00"
 
           if(catchAccessFault) when(join.valid && join.rsp.error){
             decodeExceptionPort.code  := 1
