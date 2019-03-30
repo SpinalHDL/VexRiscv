@@ -14,6 +14,7 @@
 #define SBI_REMOTE_SFENCE_VMA_ASID 7
 #define SBI_SHUTDOWN 8
 
+void halInit();
 void stopSim();
 void putC(char c);
 uint32_t rdtime();

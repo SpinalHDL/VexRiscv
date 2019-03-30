@@ -7,16 +7,28 @@ extern const uint32_t _sp;
 extern void trapEntry();
 extern void emulationTrap();
 
+void putString(char* s){
+	while(*s){
+		putC(*s);
+		s++;
+	}
+}
+
 void init() {
+	halInit();
+	putString("*** VexRiscv BIOS ***\n");
 	uint32_t sp = (uint32_t) (&_sp);
 	csr_write(mtvec, trapEntry);
 	csr_write(mscratch, sp -32*4);
 	csr_write(mstatus, 0x0800 | MSTATUS_MPIE);
 	csr_write(mie, 0);
 	csr_write(mepc, OS_CALL);
+	//In future it would probably need to manage missaligned stuff, now it will stop the simulation
 	csr_write(medeleg, MEDELEG_INSTRUCTION_PAGE_FAULT | MEDELEG_LOAD_PAGE_FAULT | MEDELEG_STORE_PAGE_FAULT | MEDELEG_USER_ENVIRONNEMENT_CALL);
 	csr_write(mideleg, MIDELEG_SUPERVISOR_TIMER | MIDELEG_SUPERVISOR_EXTERNAL | MIDELEG_SUPERVISOR_SOFTWARE);
 	csr_write(sbadaddr, 0); //Used to avoid simulation missmatch
+
+	putString("*** Supervisor ***\n");
 }
 
 int readRegister(uint32_t id){
@@ -29,7 +41,7 @@ void writeRegister(uint32_t id, int value){
 }
 
 
-
+//Currently, this should not happen, unless kernel things are going wrong
 void redirectTrap(){
 	stopSim();
 	csr_write(sbadaddr, csr_read(mbadaddr));
