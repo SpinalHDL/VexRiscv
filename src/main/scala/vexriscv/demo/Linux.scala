@@ -96,6 +96,10 @@ make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DH
 
 
 
+Qemu =>
+qemu-system-riscv32 -nographic -machine virt -m 1536M -device loader,file=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin,addr=0x80000000,cpu-num=0 -device loader,file=/home/spinalvm/hdl/riscv-linux/rv32.dtb,addr=0x81000000 -device loader,file=/home/spinalvm/hdl/linux/buildroot/output/images/Image,addr=0xC0000000
+
+
 
 */
 
