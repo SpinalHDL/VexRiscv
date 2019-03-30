@@ -930,7 +930,7 @@ public:
 					trap(0, 4, address);
 				} else {
 					if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
-					if(dRead(address, 4, &data)) {
+					if(dRead(pAddr, 4, &data)) {
 					    trap(0, 5, address);
 					} else {
 					    rfWrite(i16_addr2, data); pcWrite(pc + 2);
