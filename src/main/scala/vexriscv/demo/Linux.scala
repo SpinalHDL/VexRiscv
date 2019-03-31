@@ -42,103 +42,49 @@ sbt "runMain vexriscv.demo.LinuxGen -r"
 cd src/test/cpp/regression
 make run DBUS=SIMPLE IBUS=SIMPLE DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=10 TRACE=no
 
-Run linux =>
+Run linux in simulation (Require the machime mode emulator compiled in SIM mode) =>
 sbt "runMain vexriscv.demo.LinuxGen"
 cd src/test/cpp/regression
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=???/vmlinux.bin DTB=???/rv32.dtb RAMDISK=???/initramdisk TRACE=no FLOW_INFO=yes TRACE_START=9570000099
+export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
+make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/vmlinux.bin DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
+
+Run linux with QEMU (Require the machime mode emulator compiled in QEMU mode)
+export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
+qemu-system-riscv32 -nographic -machine virt -m 1536M -device loader,file=src/main/c/emulator/build/emulator.bin,addr=0x80000000,cpu-num=0 -device loader,file=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb,addr=0xC3000000 -device loader,file=$BUILDROOT/output/images/vmlinux.bin,addr=0xC0000000  -device loader,file=$BUILDROOT/output/images/rootfs.cpio,addr=0xc2000000
 
 
+Buildroot =>
+git clone https://github.com/SpinalHDL/buildroot.git -b vexriscv
+cd buildroot
+make spinal_vexriscv_sim_defconfig
+make -j$(nproc)
+output/host/bin/riscv32-linux-objcopy  -O binary output/images/vmlinux output/images/vmlinux.bin
 
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=/home/miaou/Downloads/tmp/Image DTB=/home/miaou/Downloads/tmp/rv32.dtb RAMDISK=/home/miaou/Downloads/tmp/rootfs.cpio TRACE=no FLOW_INFO=yes TRACE_START=9570000099
+After changing a kernel config into buildroot =>
+cd buildroot
+make spinal_vexriscv_sim_defconfig
+make linux-dirclean linux-rebuild -j8
+output/host/bin/riscv32-linux-objcopy  -O binary output/images/vmlinux output/images/vmlinux.bin
 
+Compiling the machine mode emulator (check the config.h file to know the mode) =>
+cd src/main/c/emulator
+make clean all
 
-
-
-
-
-
-
-
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/riscv-linux/vmlinux.bin DTB=/home/spinalvm/hdl/riscv-linux/rv32.dtb RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/riscv-linux/vmlinux.bin DTB=/home/spinalvm/hdl/riscv-linux/rv32.dtb RAMDISK=/home/spinalvm/hdl/linux/fs/rootfs.ext2 TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
-
-
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/linux/linux-1c163f4c7b3f621efff9b28a47abb36f7378d783/vmlinux.bin DTB=/home/spinalvm/hdl/linux/linux-1c163f4c7b3f621efff9b28a47abb36f7378d783/rv32.dtb RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
-
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/linux/linux-1c163f4c7b3f621efff9b28a47abb36f7378d783/vmlinux.bin DTB=/home/spinalvm/hdl/linux/linux-1c163f4c7b3f621efff9b28a47abb36f7378d783/rv32.dtb RAMDISK=/home/spinalvm/hdl/linux/fs/rootfs.ext2 TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
-
-
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/linux/linux-1c163f4c7b3f621efff9b28a47abb36f7378d783/vmlinux.bin DTB=/home/spinalvm/hdl/linux/linux-1c163f4c7b3f621efff9b28a47abb36f7378d783/rv32.dtb RAMDISK=/home/spinalvm/hdl/linux/debug/rootfs.cpio.lzma TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
-
-
-
+Changing the emulator mode =>
+Edit the src/main/c/emulator/src/config.h file, and comment/uncomment the SIM/QEMU flags
 
 Other commands (Memo):
-cp litex_default_configuration .config
-ARCH=riscv CROSS_COMPILE=riscv64-unknown-elf- make -j`nproc`; riscv64-unknown-elf-objcopy  -O binary vmlinux vmlinux.bin
-ARCH=riscv CROSS_COMPILE=riscv32-unknown-linux-gnu- make -j`nproc`; riscv32-unknown-linux-gnu-objcopy  -O binary vmlinux vmlinux.bin
+decompile file and split it
 riscv64-unknown-elf-objdump -S -d vmlinux > vmlinux.asm; split -b 1M vmlinux.asm
-riscv32-unknown-linux-gnu-objdump -S -d vmlinux > vmlinux.asm; split -b 1M vmlinux.asm
 
-Linux =>
+Kernel compilation command =>
 ARCH=riscv CROSS_COMPILE=riscv32-unknown-linux-gnu- make menuconfig
-
 ARCH=riscv CROSS_COMPILE=riscv32-unknown-linux-gnu- make -j`nproc`; riscv32-unknown-linux-gnu-objcopy  -O binary vmlinux vmlinux.bin
 
-
-
-split -b 1M vmlinux.asm
+Generate a DTB from a DTS =>
 dtc -O dtb -o rv32.dtb rv32.dts
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LITEX=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/riscv-linux/vmlinux.bin DTB=/home/spinalvm/hdl/riscv-linux/rv32.dtb RAMDISK=/home/spinalvm/hdl/linuxDave/initramdisk_dave TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
-
 
 https://github.com/riscv/riscv-qemu/wiki#build-and-install
-
-
-buildroot =>
-make spinalhdl_vexriscv_sim_defconfig
-make -j
-
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin VMLINUX=/home/spinalvm/hdl/linux/buildroot/output/images/Image DTB=/home/spinalvm/hdl/linux/linux-1c163f4c7b3f621efff9b28a47abb36f7378d783/rv32.dtb RAMDISK=/home/spinalvm/hdl/linux/buildroot/output/images/rootfs.tar TRACE=yes0 FLOW_INFO=yes TRACE_START=9570000099
-
-
-
-Qemu =>
-qemu-system-riscv32 -nographic -machine virt -m 1536M -device loader,file=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin,addr=0x80000000,cpu-num=0 -device loader,file=/home/spinalvm/hdl/riscv-linux/rv32.dtb,addr=0x81000000 -device loader,file=/home/spinalvm/hdl/linux/buildroot/output/images/Image,addr=0xC0000000
-
-
-
-
-
-
-
-make linux-dirclean linux-rebuild riscv-pk-dirclean riscv-pk-rebuild
-
-qemu-system-riscv32 -M virt -kernel output/images/bbl -append "root=/dev/vda ro console=ttyS0" -drive file=output/images/rootfs.ext2,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -netdev user,id=net0 -device virtio-net-device,netdev=net0 -nographic
-qemu-system-riscv32 -M virt -kernel output/images/bbl -append "root=/dev/vda ro console=ttyS0" -drive file=output/images/rootfs.ext2,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -netdev user,id=net0 -device virtio-net-device,netdev=net0 -nographic -dtb virt.dtb
-
-
-Compile
-make spinal_vexriscv_sim_defconfig
-make linux-dirclean linux-rebuild -j8; output/host/bin/riscv32-linux-objcopy  -O binary output/images/vmlinux output/images/vmlinux.bin
-
-output/host/bin/riscv32-linux-objcopy  -O binary output/images/vmlinux output/images/vmlinux.bin
-output/host/bin/riscv32-linux-objdump -S -d output/images/vmlinux > output/images/vmlinux.asm; split -b 1M output/images/vmlinux.asm
-
-make clean
-make spinal_vexriscv_sim_defconfig
-make -j8; output/host/bin/riscv32-linux-objcopy  -O binary output/images/vmlinux output/images/vmlinux.bin
-
-
-Run Qemu
-qemu-system-riscv32 -nographic -machine virt -m 1536M -device loader,file=/home/miaou/pro/VexRiscv/src/main/c/emulator/build/emulator.bin,addr=0x80000000,cpu-num=0 -device loader,file=board/spinal/vexriscv_sim/rv32.dtb,addr=0xC4000000 -device loader,file=output/images/vmlinux.bin,addr=0xC0000000  -device loader,file=output/images/rootfs.cpio,addr=0xc5000000
-
-Run sim
-export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/vmlinux.bin DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=yes TRACE_START=9570000099
-
-
-
 */
 
 

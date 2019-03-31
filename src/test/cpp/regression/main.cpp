@@ -3007,11 +3007,16 @@ public:
 
 void stdinNonBuffered(){
 	static struct termios old, new1;
-    tcgetattr(0, &old); /* grab old terminal i/o settings */
+    tcgetattr(STDIN_FILENO, &old); /* grab old terminal i/o settings */
     new1 = old; /* make new settings same as old settings */
     new1.c_lflag &= ~ICANON; /* disable buffered i/o */
     new1.c_lflag &= ~ECHO;
-    tcsetattr(0, TCSANOW, &new1); /* use these new terminal i/o settings now */
+    tcsetattr(STDIN_FILENO, TCSANOW, &new1); /* use these new terminal i/o settings now */
+    setvbuf(stdin, NULL, _IONBF, 0);
+}
+
+void stdoutNonBuffered(){
+    setvbuf(stdout, NULL, _IONBF, 0);
 }
 
 bool stdinNonEmpty(){
@@ -3031,9 +3036,10 @@ public:
 
 	LinuxSoc(string name) : Workspace(name) {
 		stdinNonBuffered();
+		stdoutNonBuffered();
 	}
 	virtual bool isDBusCheckedRegion(uint32_t address){ return true;}
-	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xB0000000 || (addr & 0xE0000000) == 0xE0000000;}
+	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xF0000000 || (addr & 0xE0000000) == 0xE0000000;}
     virtual bool isMmuRegion(uint32_t addr) { return true; }
 
     virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
@@ -3053,8 +3059,10 @@ public:
 						char c;
 						read(0, &c, 1);
 						*data = c;
+						//cout << "getchar  " << c << endl;
 					} else {
 						*data = -1;
+						//cout << "getchar NONE" << endl;
 					}
 				}
 				break;
@@ -3389,8 +3397,8 @@ int main(int argc, char **argv, char **env) {
 		.withRiscvRef()
 		->loadBin(EMULATOR, 0x80000000)
 		->loadBin(VMLINUX,  0xC0000000)
-		->loadBin(DTB,      0xC4000000)
-		->loadBin(RAMDISK,  0xC5000000)
+		->loadBin(DTB,      0xC3000000)
+		->loadBin(RAMDISK,  0xC2000000)
 		->setIStall(false) //TODO It currently improve speed but should be removed later
 		->setDStall(false)
 		->bootAt(0x80000000)
