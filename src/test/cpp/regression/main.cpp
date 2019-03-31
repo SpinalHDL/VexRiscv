@@ -3001,16 +3001,40 @@ public:
 //#endif
 
 
+#include <unistd.h>
+#include <termios.h>
+#include <fcntl.h>
+
+void stdinNonBuffered(){
+	static struct termios old, new1;
+    tcgetattr(0, &old); /* grab old terminal i/o settings */
+    new1 = old; /* make new settings same as old settings */
+    new1.c_lflag &= ~ICANON; /* disable buffered i/o */
+    new1.c_lflag &= ~ECHO;
+    tcsetattr(0, TCSANOW, &new1); /* use these new terminal i/o settings now */
+}
+
+bool stdinNonEmpty(){
+  struct timeval tv;
+  fd_set fds;
+  tv.tv_sec = 0;
+  tv.tv_usec = 0;
+  FD_ZERO(&fds);
+  FD_SET(STDIN_FILENO, &fds);
+  select(STDIN_FILENO+1, &fds, NULL, NULL, &tv);
+  return (FD_ISSET(0, &fds));
+}
+
 #ifdef LINUX_SOC
 class LinuxSoc : public Workspace{
 public:
 
 	LinuxSoc(string name) : Workspace(name) {
-
+		stdinNonBuffered();
 	}
 	virtual bool isDBusCheckedRegion(uint32_t address){ return true;}
 	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xB0000000 || (addr & 0xE0000000) == 0xE0000000;}
-    virtual bool isMmuRegion(uint32_t addr) { return (addr & 0xFF000000) != 0x81000000;}
+    virtual bool isMmuRegion(uint32_t addr) { return true; }
 
     virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
         if(isPerifRegion(addr)) switch(addr){
@@ -3024,7 +3048,15 @@ public:
                     cout << (char)*data;
                     logTraces << (char)*data;
                     logTraces.flush();
-				} else fail();
+				} else {
+					if(stdinNonEmpty()){
+						char c;
+						read(0, &c, 1);
+						*data = c;
+					} else {
+						*data = -1;
+					}
+				}
 				break;
     		case 0xFFFFFFFC: fail(); break; //Simulation end
     		default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " mask=0x" << mask << " data=0x" << data << dec << endl; fail(); break;
@@ -3290,7 +3322,6 @@ static void multiThreadedExecute(queue<std::function<void()>> &lambdas){
 	}
 }
 
-
 int main(int argc, char **argv, char **env) {
     #ifdef SEED
     srand48(SEED);
@@ -3317,14 +3348,49 @@ int main(int argc, char **argv, char **env) {
 //		->run(0);
 //#endif
 
+//	{
+//		static struct termios old, new1;
+//	    tcgetattr(0, &old); /* grab old terminal i/o settings */
+//	    new1 = old; /* make new settings same as old settings */
+//	    new1.c_lflag &= ~ICANON; /* disable buffered i/o */
+//	    new1.c_lflag &= ~ECHO;
+//	    tcsetattr(0, TCSANOW, &new1); /* use these new terminal i/o settings now */
+//	}
+//
+//	   std::string initialCommand;
+//
+//	   while(true){
+//	     if(!inputAvailable()) {
+//	       std::cout << "Waiting for input (Ctrl-C to cancel)..." << std::endl;
+//	       sleep(1);
+//	     } else {
+//	     char c;
+//	     read(0, &c, 1); printf("%d\n", c);
+////	     std::getline(std::cin, initialCommand);
+//	     }
+//	   }
+//
+
+//	char c;
+//    while (1) { read(0, &c, 1); printf("%d\n", c); }
+//	while(true){
+//		char c = getchar();
+//		if(c > 0)
+//		{
+//			putchar(c);
+//		} else {
+//			putchar('*');
+//			sleep(500);
+//		}
+//	}
 
 #ifdef LINUX_SOC
 	LinuxSoc("linux")
 		.withRiscvRef()
 		->loadBin(EMULATOR, 0x80000000)
-		->loadBin(DTB,      0x81000000)
-		->loadBin(VMLINUX,  0xc0000000)
-		->loadBin(RAMDISK,  0xc2000000)
+		->loadBin(VMLINUX,  0xC0000000)
+		->loadBin(DTB,      0xC4000000)
+		->loadBin(RAMDISK,  0xC5000000)
 		->setIStall(false) //TODO It currently improve speed but should be removed later
 		->setDStall(false)
 		->bootAt(0x80000000)

@@ -17,6 +17,7 @@
 void halInit();
 void stopSim();
 void putC(char c);
+int32_t getC();
 uint32_t rdtime();
 uint32_t rdtimeh();
 void setMachineTimerCmp(uint32_t low, uint32_t high);

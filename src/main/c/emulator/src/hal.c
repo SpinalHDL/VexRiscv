@@ -4,10 +4,15 @@
 #ifdef SIM
 void stopSim(){
 	*((volatile uint32_t*) 0xFFFFFFFC) = 0;
+	while(1);
 }
 
 void putC(char c){
 	*((volatile uint32_t*) 0xFFFFFFF8) = c;
+}
+
+int32_t getC(){
+	return *((volatile int32_t*) 0xFFFFFFF8);
 }
 
 uint32_t rdtime(){
@@ -27,14 +32,20 @@ void setMachineTimerCmp(uint32_t low, uint32_t high){
 
 
 void halInit(){
-
+//	putC('*');
+//	putC('*');
+//	putC('*');
+//	while(1){
+//		int32_t c = getC();
+//		if(c > 0) putC(c);
+//	}
 }
 #endif
 
 #ifdef QEMU
 #define VIRT_CLINT 0x2000000
-#define SIFIVE_TIMECMP_BASE VIRT_CLINT + 0x4000
-#define SIFIVE_TIME_BASE VIRT_CLINT + 0xBFF8
+#define SIFIVE_TIMECMP_BASE (VIRT_CLINT + 0x4000)
+#define SIFIVE_TIME_BASE (VIRT_CLINT + 0xBFF8)
 #define NS16550A_UART0_CTRL_ADDR 0x10000000
 #define UART0_CLOCK_FREQ  32000000
 #define UART0_BAUD_RATE  115200
@@ -95,12 +106,20 @@ static void ns16550a_init()
 //}
 
 void stopSim(){
-	*((volatile uint32_t*) 0xFFFFFFFC) = 0;
+	while(1);
 }
 
 void putC(char ch){
     while ((uart[UART_LSR] & UART_LSR_RI) == 0);
     uart[UART_THR] = ch & 0xff;
+}
+
+int32_t getC(){
+	if (uart[UART_LSR] & UART_LSR_DA) {
+		return uart[UART_RBR];
+	} else {
+		return -1;
+	}
 }
 
 

@@ -54,6 +54,17 @@
 #define SSTATUS64_SD        0x8000000000000000
 
 
+#define PMP_R     0x01
+#define PMP_W     0x02
+#define PMP_X     0x04
+#define PMP_A     0x18
+#define PMP_L     0x80
+#define PMP_SHIFT 2
+
+#define PMP_TOR   0x08
+#define PMP_NA4   0x10
+#define PMP_NAPOT 0x18
+
 #define RDCYCLE 0xC00 //Read-only cycle Cycle counter for RDCYCLE instruction.
 #define RDTIME 0xC01 //Read-only time Timer for RDTIME instruction.
 #define RDINSTRET 0xC02 //Read-only instret Instructions-retired counter for RDINSTRET instruction.

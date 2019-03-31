@@ -14,7 +14,22 @@ void putString(char* s){
 	}
 }
 
+void setup_pmp(void)
+{
+  // Set up a PMP to permit access to all of memory.
+  // Ignore the illegal-instruction trap if PMPs aren't supported.
+  uintptr_t pmpc = PMP_NAPOT | PMP_R | PMP_W | PMP_X;
+  asm volatile ("la t0, 1f\n\t"
+                "csrrw t0, mtvec, t0\n\t"
+                "csrw pmpaddr0, %1\n\t"
+                "csrw pmpcfg0, %0\n\t"
+                ".align 2\n\t"
+                "1: csrw mtvec, t0"
+                : : "r" (pmpc), "r" (-1UL) : "t0");
+}
+
 void init() {
+	setup_pmp();
 	halInit();
 	putString("*** VexRiscv BIOS ***\n");
 	uint32_t sp = (uint32_t) (&_sp);
@@ -140,7 +155,27 @@ void trap(){
 		case CAUSE_ILLEGAL_INSTRUCTION:{
 			uint32_t mepc = csr_read(mepc);
 			uint32_t mstatus = csr_read(mstatus);
+#ifdef SIM
 			uint32_t instruction = csr_read(mbadaddr);
+#endif
+#ifdef QEMU
+			uint32_t instruction = 0;
+			uint32_t i;
+			if (mepc & 2) {
+				readWord(mepc - 2, &i);
+				i >>= 16;
+				if (i & 3 == 3) {
+					uint32_t u32Buf;
+					readWord(mepc+2, &u32Buf);
+					i |= u32Buf << 16;
+				}
+			} else {
+				readWord(mepc, &i);
+			}
+			instruction = i;
+			csr_write(mtvec, trapEntry); //Restore mtvec
+#endif
+
 			uint32_t opcode = instruction & 0x7F;
 			uint32_t funct3 = (instruction >> 12) & 0x7;
 			switch(opcode){
@@ -227,7 +262,7 @@ void trap(){
 				csr_write(mepc, csr_read(mepc) + 4);
 			}break;
 			case SBI_CONSOLE_GETCHAR:{
-				writeRegister(10, -1); //no char
+				writeRegister(10, getC()); //no char
 				csr_write(mepc, csr_read(mepc) + 4);
 			}break;
 			case SBI_SET_TIMER:{

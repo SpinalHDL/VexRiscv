@@ -49,6 +49,13 @@ make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DH
 
 
 
+make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=/home/miaou/Downloads/tmp/Image DTB=/home/miaou/Downloads/tmp/rv32.dtb RAMDISK=/home/miaou/Downloads/tmp/rootfs.cpio TRACE=no FLOW_INFO=yes TRACE_START=9570000099
+
+
+
+
+
+
 
 
 
@@ -98,6 +105,37 @@ make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DH
 
 Qemu =>
 qemu-system-riscv32 -nographic -machine virt -m 1536M -device loader,file=/home/spinalvm/hdl/VexRiscv/src/main/c/emulator/build/emulator.bin,addr=0x80000000,cpu-num=0 -device loader,file=/home/spinalvm/hdl/riscv-linux/rv32.dtb,addr=0x81000000 -device loader,file=/home/spinalvm/hdl/linux/buildroot/output/images/Image,addr=0xC0000000
+
+
+
+
+
+
+
+make linux-dirclean linux-rebuild riscv-pk-dirclean riscv-pk-rebuild
+
+qemu-system-riscv32 -M virt -kernel output/images/bbl -append "root=/dev/vda ro console=ttyS0" -drive file=output/images/rootfs.ext2,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -netdev user,id=net0 -device virtio-net-device,netdev=net0 -nographic
+qemu-system-riscv32 -M virt -kernel output/images/bbl -append "root=/dev/vda ro console=ttyS0" -drive file=output/images/rootfs.ext2,format=raw,id=hd0 -device virtio-blk-device,drive=hd0 -netdev user,id=net0 -device virtio-net-device,netdev=net0 -nographic -dtb virt.dtb
+
+
+Compile
+make spinal_vexriscv_sim_defconfig
+make linux-dirclean linux-rebuild -j8; output/host/bin/riscv32-linux-objcopy  -O binary output/images/vmlinux output/images/vmlinux.bin
+
+output/host/bin/riscv32-linux-objcopy  -O binary output/images/vmlinux output/images/vmlinux.bin
+output/host/bin/riscv32-linux-objdump -S -d output/images/vmlinux > output/images/vmlinux.asm; split -b 1M output/images/vmlinux.asm
+
+make clean
+make spinal_vexriscv_sim_defconfig
+make -j8; output/host/bin/riscv32-linux-objcopy  -O binary output/images/vmlinux output/images/vmlinux.bin
+
+
+Run Qemu
+qemu-system-riscv32 -nographic -machine virt -m 1536M -device loader,file=/home/miaou/pro/VexRiscv/src/main/c/emulator/build/emulator.bin,addr=0x80000000,cpu-num=0 -device loader,file=board/spinal/vexriscv_sim/rv32.dtb,addr=0xC4000000 -device loader,file=output/images/vmlinux.bin,addr=0xC0000000  -device loader,file=output/images/rootfs.cpio,addr=0xc5000000
+
+Run sim
+export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
+make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/vmlinux.bin DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=yes TRACE_START=9570000099
 
 
 
@@ -251,8 +289,8 @@ object LinuxGen {
       )
     )
     if(withMmu) config.plugins += new MmuPlugin(
-//      virtualRange = a => True,
-      virtualRange = x => x(31 downto 24) =/= 0x81, //TODO It fix the DTB kernel access (workaround)
+      virtualRange = a => True,
+     // virtualRange = x => x(31 downto 24) =/= 0x81, //TODO It fix the DTB kernel access (workaround)
       ioRange = (x => if(litex) x(31 downto 28) === 0xB || x(31 downto 28) === 0xE || x(31 downto 28) === 0xF else x(31 downto 28) === 0xF),
       allowUserIo = true
     )
