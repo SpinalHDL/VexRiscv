@@ -767,6 +767,8 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       }
 
       when(hadException || interruptJump){
+        fetcher.haltIt() //Avoid having the fetch confused by the incomming privilege switch
+
         jumpInterface.valid         := True
         jumpInterface.payload       := (if(!xtvecModeGen) xtvec.base @@ "00" else (xtvec.mode === 0 || hadException) ? (xtvec.base @@ "00") | ((xtvec.base + trapCause) @@ "00") )
         beforeLastStage.arbitration.flushAll := True
@@ -800,10 +802,6 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         }
       }
 
-      //Avoid having the fetch confused by the incomming privilege switch
-      when(hadException){
-        fetcher.haltIt()
-      }
 
       lastStage plug new Area{
         import lastStage._
