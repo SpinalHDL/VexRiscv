@@ -3005,6 +3005,7 @@ public:
 #include <termios.h>
 #include <fcntl.h>
 
+termios stdinRestoreSettings;
 void stdinNonBuffered(){
 	static struct termios old, new1;
     tcgetattr(STDIN_FILENO, &old); /* grab old terminal i/o settings */
@@ -3013,10 +3014,15 @@ void stdinNonBuffered(){
     new1.c_lflag &= ~ECHO;
     tcsetattr(STDIN_FILENO, TCSANOW, &new1); /* use these new terminal i/o settings now */
     setvbuf(stdin, NULL, _IONBF, 0);
+    stdinRestoreSettings = old;
 }
 
 void stdoutNonBuffered(){
     setvbuf(stdout, NULL, _IONBF, 0);
+}
+
+void stdinRestore(){
+    tcsetattr(STDIN_FILENO, TCSANOW, &stdinRestoreSettings); /* use these new terminal i/o settings now */
 }
 
 bool stdinNonEmpty(){
@@ -3030,6 +3036,23 @@ bool stdinNonEmpty(){
   return (FD_ISSET(0, &fds));
 }
 
+void my_handler(int s){
+   printf("Caught signal %d\n",s);
+   stdinRestore();
+   exit(1);
+}
+#include <signal.h>
+
+void captureCtrlC(){
+    struct sigaction sigIntHandler;
+
+    sigIntHandler.sa_handler = my_handler;
+    sigemptyset(&sigIntHandler.sa_mask);
+    sigIntHandler.sa_flags = 0;
+
+    sigaction(SIGINT, &sigIntHandler, NULL);
+}
+
 #ifdef LINUX_SOC
 class LinuxSoc : public Workspace{
 public:
@@ -3037,6 +3060,11 @@ public:
 	LinuxSoc(string name) : Workspace(name) {
 		stdinNonBuffered();
 		stdoutNonBuffered();
+		captureCtrlC();
+	}
+
+	virtual ~LinuxSoc(){
+	    stdinRestore();
 	}
 	virtual bool isDBusCheckedRegion(uint32_t address){ return true;}
 	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xF0000000 || (addr & 0xE0000000) == 0xE0000000;}
@@ -3399,8 +3427,8 @@ int main(int argc, char **argv, char **env) {
 		->loadBin(VMLINUX,  0xC0000000)
 		->loadBin(DTB,      0xC3000000)
 		->loadBin(RAMDISK,  0xC2000000)
-		->setIStall(false) //TODO It currently improve speed but should be removed later
-		->setDStall(false)
+		->setIStall(true) //TODO It currently improve speed but should be removed later
+		->setDStall(true)
 		->bootAt(0x80000000)
 		->run(0);
 //		->run(1173000000l );
