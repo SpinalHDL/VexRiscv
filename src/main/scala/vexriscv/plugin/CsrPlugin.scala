@@ -807,7 +807,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         import lastStage._
 
         //Manage MRET / SRET instructions
-        when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.XRET) {
+        when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.XRET) { //TODO do not allow user mode already implemented somewhere else ?
           fetcher.haltIt()
           jumpInterface.valid := True
           beforeLastStage.arbitration.flushAll := True

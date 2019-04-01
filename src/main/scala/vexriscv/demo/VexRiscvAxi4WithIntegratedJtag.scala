@@ -45,7 +45,6 @@ object VexRiscvAxi4WithIntegratedJtag{
               memDataWidth = 32,
               catchIllegalAccess = true,
               catchAccessFault = true,
-              catchMemoryTranslationMiss = true,
               asyncTagMemory = false,
               twoCycleRam = true,
               twoCycleCache = true

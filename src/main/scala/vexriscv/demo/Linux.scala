@@ -40,13 +40,13 @@ cd VexRiscv
 Run regressions =>
 sbt "runMain vexriscv.demo.LinuxGen -r"
 cd src/test/cpp/regression
-make run DBUS=SIMPLE IBUS=SIMPLE DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=10 TRACE=no
+make run  IBUS=CACHED DBUS=SIMPLE DEBUG_PLUGIN=no DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=10 TRACE=no
 
 Run linux in simulation (Require the machime mode emulator compiled in SIM mode) =>
 sbt "runMain vexriscv.demo.LinuxGen"
 cd src/test/cpp/regression
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
-make run DBUS=SIMPLE IBUS=SIMPLE SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/vmlinux.bin DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
+make run IBUS=CACHED DBUS=SIMPLE  DEBUG_PLUGIN=no SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/vmlinux.bin DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
 
 Run linux with QEMU (Require the machime mode emulator compiled in QEMU mode)
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
@@ -94,43 +94,46 @@ object LinuxGen {
     val config = VexRiscvConfig(
       plugins = List(
         new DummyFencePlugin(), //TODO should be removed for design with caches
-        new IBusSimplePlugin(
+
+        //Uncomment the whole IBusSimplePlugin and comment IBusCachedPlugin if you want uncached iBus config
+//        new IBusSimplePlugin(
+//          resetVector = 0x80000000l,
+//          cmdForkOnSecondStage = false,
+//          cmdForkPersistence = false,
+//          prediction = NONE,
+//          historyRamSizeLog2 = 10,
+//          catchAccessFault = true,
+//          compressedGen = true,
+//          busLatencyMin = 1,
+//          injectorStage = true,
+//          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
+//            portTlbSize = 4
+//          )
+//        ),
+
+        //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
+        new IBusCachedPlugin(
           resetVector = 0x80000000l,
-          cmdForkOnSecondStage = false,
-          cmdForkPersistence = false,
-          prediction = NONE,
-          historyRamSizeLog2 = 10,
-          catchAccessFault = true,
           compressedGen = true,
-          busLatencyMin = 1,
+          prediction = NONE,
           injectorStage = true,
-          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
+          config = InstructionCacheConfig(
+            cacheSize = 4096,
+            bytePerLine = 32,
+            wayCount = 1,
+            addressWidth = 32,
+            cpuDataWidth = 32,
+            memDataWidth = 32,
+            catchIllegalAccess = true,
+            catchAccessFault = true,
+            asyncTagMemory = false,
+            twoCycleRam = false,
+            twoCycleCache = true
+          ),
+          memoryTranslatorPortConfig = MmuPortConfig(
             portTlbSize = 4
           )
         ),
-        //          new IBusCachedPlugin(
-        //            resetVector = 0x80000000l,
-        //            compressedGen = false,
-        //            prediction = NONE,
-        //            injectorStage = true,
-        //            config = InstructionCacheConfig(
-        //              cacheSize = 4096,
-        //              bytePerLine = 32,
-        //              wayCount = 1,
-        //              addressWidth = 32,
-        //              cpuDataWidth = 32,
-        //              memDataWidth = 32,
-        //              catchIllegalAccess = true,
-        //              catchAccessFault = true,
-        //              catchMemoryTranslationMiss = true,
-        //              asyncTagMemory = false,
-        //              twoCycleRam = false,
-        //              twoCycleCache = true
-        //            ),
-        //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-        //              portTlbSize = 4
-        //            )
-        //          ),
         //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
         new DBusSimplePlugin(
           catchAddressMisaligned = true,
@@ -225,7 +228,7 @@ object LinuxGen {
         //            wfiGenAsNop    = true,
         //            ucycleAccess   = CsrAccess.NONE
         //          )),
-        new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
+//        new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
           earlyBranch = true,
           catchAddressMisaligned = true,

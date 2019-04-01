@@ -17,7 +17,6 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    memDataWidth : Int,
                                    catchIllegalAccess : Boolean,
                                    catchAccessFault : Boolean,
-                                   catchMemoryTranslationMiss : Boolean,
                                    asyncTagMemory : Boolean,
                                    twoCycleCache : Boolean = true,
                                    twoCycleRam : Boolean = false,
@@ -26,7 +25,7 @@ case class InstructionCacheConfig( cacheSize : Int,
   assert(!(twoCycleRam && !twoCycleCache))
 
   def burstSize = bytePerLine*8/memDataWidth
-  def catchSomething = catchAccessFault || catchMemoryTranslationMiss || catchIllegalAccess
+  def catchSomething = catchAccessFault || catchIllegalAccess
 
   def getAxi4Config() = Axi4Config(
     addressWidth = addressWidth,
@@ -86,7 +85,7 @@ trait InstructionCacheCommons{
   val pc : UInt
   val physicalAddress : UInt
   val data   : Bits
-  val cacheMiss, error, mmuMiss, illegalAccess, isUser : Bool
+  val cacheMiss, error,  mmuRefilling, mmuException, isUser : Bool
 }
 
 case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle with IMasterSlave with InstructionCacheCommons {
@@ -99,11 +98,11 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
   val dataBypass = Bits(p.cpuDataWidth bits)
   val mmuBus  = MemoryTranslatorBus()
   val physicalAddress = UInt(p.addressWidth bits)
-  val cacheMiss, error, mmuMiss, illegalAccess,isUser  = ifGen(!p.twoCycleCache)(Bool)
+  val cacheMiss, error, mmuRefilling, mmuException, isUser  = ifGen(!p.twoCycleCache)(Bool)
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved, pc)
-    inWithNull(error,mmuMiss,illegalAccess,data, cacheMiss,physicalAddress)
+    inWithNull(error,mmuRefilling,mmuException,data, cacheMiss,physicalAddress)
     outWithNull(isUser, dataBypass, dataBypassValid)
     slaveWithNull(mmuBus)
   }
@@ -116,12 +115,12 @@ case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle 
   val pc = UInt(p.addressWidth bits)
   val physicalAddress = UInt(p.addressWidth bits)
   val data  =  Bits(p.cpuDataWidth bits)
-  val cacheMiss, error, mmuMiss, illegalAccess, isUser  = ifGen(p.twoCycleCache)(Bool)
+  val cacheMiss, error, mmuRefilling, mmuException, isUser  = ifGen(p.twoCycleCache)(Bool)
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, pc)
     outWithNull(isUser)
-    inWithNull(error,mmuMiss,illegalAccess,data, cacheMiss, physicalAddress)
+    inWithNull(error, mmuRefilling, mmuException,data, cacheMiss, physicalAddress)
   }
 }
 
@@ -411,8 +410,8 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
       io.cpu.fetch.cacheMiss := !hit.valid
       io.cpu.fetch.error := hit.error
-      io.cpu.fetch.mmuMiss := ??? //TODO mmuRsp.miss
-      io.cpu.fetch.illegalAccess := !mmuRsp.allowExecute || (io.cpu.fetch.isUser && !mmuRsp.allowUser)
+      io.cpu.fetch.mmuRefilling := mmuRsp.refilling
+      io.cpu.fetch.mmuException := !mmuRsp.refilling && (mmuRsp.exception || !mmuRsp.allowExecute || (!mmuRsp.allowUser && io.cpu.fetch.isUser)) //TODO Do not allow supervisor if it's a user page ?
     })
   }
 
@@ -441,8 +440,8 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
     io.cpu.decode.cacheMiss := !hit.valid
     io.cpu.decode.error := hit.error
-    io.cpu.decode.mmuMiss := ??? //TODO mmuRsp.miss
-    io.cpu.decode.illegalAccess := !mmuRsp.allowExecute || (io.cpu.decode.isUser && !mmuRsp.allowUser)
+    io.cpu.decode.mmuRefilling := mmuRsp.refilling
+    io.cpu.decode.mmuException := !mmuRsp.refilling && (mmuRsp.exception || !mmuRsp.allowExecute || (!mmuRsp.allowUser && io.cpu.decode.isUser)) //TODO Do not allow supervisor if it's a user page ?
     io.cpu.decode.physicalAddress := mmuRsp.physicalAddress
   })
 }

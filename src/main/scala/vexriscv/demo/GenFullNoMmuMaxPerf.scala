@@ -28,7 +28,6 @@ object GenFullNoMmuMaxPerf extends App{
             memDataWidth = 32,
             catchIllegalAccess = true,
             catchAccessFault = true,
-            catchMemoryTranslationMiss = false,
             asyncTagMemory = false,
             twoCycleRam = true,
             twoCycleCache = true

@@ -232,6 +232,7 @@ class success : public std::exception { };
 class RiscvGolden {
 public:
 	int32_t pc, lastPc;
+	uint32_t lastInstruction;
 	int32_t regs[32];
 
 	uint32_t mscratch, sscratch;
@@ -706,6 +707,7 @@ public:
 				return;
 			}
 		}
+		lastInstruction = i;
 		currentInstruction = i;
 		if ((i & 0x3) == 0x3) {
 			//32 bit
@@ -1584,7 +1586,11 @@ public:
 			staticMutex.unlock();
 		} catch (const std::exception& e) {
 			staticMutex.lock();
-			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->writeBack_PC << dec << endl; //<<  " seed : " << seed <<
+
+			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->writeBack_PC << dec; //<<  " seed : " << seed <<
+			if(riscvRefEnable) cout << hex << " REF PC=" << riscvRef.lastPc << " REF I=" << riscvRef.lastInstruction << dec;
+			cout << endl;
+
 			cycles += instanceCycles;
 			staticMutex.unlock();
 			failed = true;

@@ -23,7 +23,6 @@ object GenFull extends App{
             memDataWidth = 32,
             catchIllegalAccess = true,
             catchAccessFault = true,
-            catchMemoryTranslationMiss = true,
             asyncTagMemory = false,
             twoCycleRam = true,
             twoCycleCache = true

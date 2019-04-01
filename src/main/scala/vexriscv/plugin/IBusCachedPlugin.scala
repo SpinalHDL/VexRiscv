@@ -74,11 +74,11 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
 
     super.setup(pipeline)
 
-    def MANAGEMENT  = M"-----------------100-----0001111"
+    //def MANAGEMENT  = M"-----------------100-----0001111"
 
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(FLUSH_ALL, False)
-    decoderService.add(MANAGEMENT,  List(
+    decoderService.add(FENCE_I,  List(
         FLUSH_ALL -> True
     ))
 
@@ -101,7 +101,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         val e = new BusReport()
         val c = new CacheReport()
         e.kind = "cached"
-        e.flushInstructions.add(0x400F) //invalid instruction cache
+        e.flushInstructions.add(0x100F) //FENCE.I
         e.flushInstructions.add(0x13)
         e.flushInstructions.add(0x13)
         e.flushInstructions.add(0x13)
@@ -187,7 +187,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         val cacheRspArbitration = stages(if (twoCycleCache) 2 else 1)
         var issueDetected = False
         val redoFetch = False //RegNext(False) init(False)
-        when(cacheRsp.isValid && cacheRsp.cacheMiss && !issueDetected) {
+        when(cacheRsp.isValid && (cacheRsp.cacheMiss || cacheRsp.mmuRefilling) && !issueDetected) {
           issueDetected \= True
           redoFetch := iBusRsp.readyForError
         }
@@ -201,18 +201,24 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         redoBranch.payload := (if (decodePcGen) decode.input(PC) else cacheRsp.pc)
 
         if (catchSomething) {
-          val accessFault = if (catchAccessFault) cacheRsp.error else False
-          val mmuMiss = if (catchMemoryTranslationMiss) cacheRsp.mmuMiss else False
-          val illegalAccess = if (catchIllegalAccess) cacheRsp.illegalAccess else False
-
           decodeExceptionPort.valid := False
-          decodeExceptionPort.code := mmuMiss ? U(14) | 1
+          decodeExceptionPort.code.assignDontCare()
           decodeExceptionPort.badAddr := cacheRsp.pc
-          when(cacheRsp.isValid && (accessFault || mmuMiss || illegalAccess) && !issueDetected) {
+
+          if(catchIllegalAccess) when(cacheRsp.isValid && cacheRsp.mmuException && !issueDetected) {
             issueDetected \= True
             decodeExceptionPort.valid := iBusRsp.readyForError
+            decodeExceptionPort.code := 12
+          }
+
+          if(catchAccessFault) when(cacheRsp.isValid && cacheRsp.error && !issueDetected) {
+            issueDetected \= True
+            decodeExceptionPort.valid := iBusRsp.readyForError
+            decodeExceptionPort.code := 1
           }
         }
+
+        decodeExceptionPort.valid clearWhen(fetcherHalt)
 
         cacheRspArbitration.halt setWhen (issueDetected || iBusRspOutputHalt)
         iBusRsp.output.valid := cacheRspArbitration.output.valid
@@ -223,7 +229,6 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
 
       if (mmuBus != null) {
         cache.io.cpu.fetch.mmuBus <> mmuBus
-        (if (twoCycleCache) stages(1).halt else rsp.iBusRspOutputHalt) setWhen (mmuBus.cmd.isValid && ???) //TODO !mmuBus.rsp.hit && !mmuBus.rsp.miss
       } else {
         cache.io.cpu.fetch.mmuBus.rsp.physicalAddress := cache.io.cpu.fetch.mmuBus.cmd.virtualAddress
         cache.io.cpu.fetch.mmuBus.rsp.allowExecute := True
@@ -231,9 +236,8 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         cache.io.cpu.fetch.mmuBus.rsp.allowWrite := True
         cache.io.cpu.fetch.mmuBus.rsp.allowUser := True
         cache.io.cpu.fetch.mmuBus.rsp.isIoAccess := False
-        ??? //TODO
-//        cache.io.cpu.fetch.mmuBus.rsp.miss := False
-//        cache.io.cpu.fetch.mmuBus.rsp.hit := False
+        cache.io.cpu.fetch.mmuBus.rsp.exception := False
+        cache.io.cpu.fetch.mmuBus.rsp.refilling := False
       }
 
       val flushStage = if(memory != null) memory else execute

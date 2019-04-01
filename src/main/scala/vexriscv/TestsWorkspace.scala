@@ -56,7 +56,6 @@ object TestsWorkspace {
               memDataWidth = 32,
               catchIllegalAccess = true,
               catchAccessFault = true,
-              catchMemoryTranslationMiss = true,
               asyncTagMemory = false,
               twoCycleRam = false,
               twoCycleCache = true

@@ -315,7 +315,6 @@ class IBusDimension extends VexRiscvDimension("IBus") {
               memDataWidth = 32,
               catchIllegalAccess = catchAll,
               catchAccessFault = catchAll,
-              catchMemoryTranslationMiss = catchAll,
               asyncTagMemory = false,
               twoCycleRam = twoCycleRam,
               twoCycleCache = twoCycleCache
