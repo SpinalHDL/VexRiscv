@@ -41,8 +41,7 @@ object GenFull extends App{
             memDataWidth      = 32,
             catchAccessError  = true,
             catchIllegal      = true,
-            catchUnaligned    = true,
-            catchMemoryTranslationMiss = true
+            catchUnaligned    = true
           ),
           memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
             portTlbSize = 6

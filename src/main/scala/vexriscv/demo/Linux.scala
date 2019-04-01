@@ -96,76 +96,77 @@ object LinuxGen {
         new DummyFencePlugin(), //TODO should be removed for design with caches
 
         //Uncomment the whole IBusSimplePlugin and comment IBusCachedPlugin if you want uncached iBus config
-//        new IBusSimplePlugin(
-//          resetVector = 0x80000000l,
-//          cmdForkOnSecondStage = false,
-//          cmdForkPersistence = false,
-//          prediction = NONE,
-//          historyRamSizeLog2 = 10,
-//          catchAccessFault = true,
-//          compressedGen = true,
-//          busLatencyMin = 1,
-//          injectorStage = true,
-//          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
-//            portTlbSize = 4
-//          )
-//        ),
-
-        //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
-        new IBusCachedPlugin(
+        new IBusSimplePlugin(
           resetVector = 0x80000000l,
-          compressedGen = true,
+          cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
           prediction = NONE,
-          injectorStage = true,
-          config = InstructionCacheConfig(
-            cacheSize = 4096,
-            bytePerLine = 32,
-            wayCount = 1,
-            addressWidth = 32,
-            cpuDataWidth = 32,
-            memDataWidth = 32,
-            catchIllegalAccess = true,
-            catchAccessFault = true,
-            asyncTagMemory = false,
-            twoCycleRam = false,
-            twoCycleCache = true
-          ),
-          memoryTranslatorPortConfig = MmuPortConfig(
-            portTlbSize = 4
-          )
-        ),
-        //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
-        new DBusSimplePlugin(
-          catchAddressMisaligned = true,
+          historyRamSizeLog2 = 10,
           catchAccessFault = true,
-          earlyInjection = false,
-          atomicEntriesCount = 1,
+          compressedGen = true,
+          busLatencyMin = 1,
+          injectorStage = true,
           memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
             portTlbSize = 4
           )
         ),
-        //          new DBusCachedPlugin(
-        //            config = new DataCacheConfig(
-        //              cacheSize         = 4096,
-        //              bytePerLine       = 32,
-        //              wayCount          = 1,
-        //              addressWidth      = 32,
-        //              cpuDataWidth      = 32,
-        //              memDataWidth      = 32,
-        //              catchAccessError  = true,
-        //              catchIllegal      = true,
-        //              catchUnaligned    = true,
-        //              catchMemoryTranslationMiss = true,
-        //              atomicEntriesCount = 2
-        //            ),
-        //            //            memoryTranslatorPortConfig = null
-        //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-        //              portTlbSize = 6
-        //            )
-        //          ),
-        //          new StaticMemoryTranslatorPlugin(
-        //            ioRange      = _(31 downto 28) === 0xF
-        //          ),
+
+        //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
+//        new IBusCachedPlugin(
+//          resetVector = 0x80000000l,
+//          compressedGen = true,
+//          prediction = NONE,
+//          injectorStage = true,
+//          config = InstructionCacheConfig(
+//            cacheSize = 4096,
+//            bytePerLine = 32,
+//            wayCount = 1,
+//            addressWidth = 32,
+//            cpuDataWidth = 32,
+//            memDataWidth = 32,
+//            catchIllegalAccess = true,
+//            catchAccessFault = true,
+//            asyncTagMemory = false,
+//            twoCycleRam = false,
+//            twoCycleCache = true
+//          )
+//          ),
+//          memoryTranslatorPortConfig = MmuPortConfig(
+//            portTlbSize = 4
+//          )
+//        ),
+        //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
+//        new DBusSimplePlugin(
+//          catchAddressMisaligned = true,
+//          catchAccessFault = true,
+//          earlyInjection = false,
+//          atomicEntriesCount = 1,
+//          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
+//            portTlbSize = 4
+//          )
+//        ),
+        new DBusCachedPlugin(
+          config = new DataCacheConfig(
+            cacheSize         = 4096,
+            bytePerLine       = 32,
+            wayCount          = 1,
+            addressWidth      = 32,
+            cpuDataWidth      = 32,
+            memDataWidth      = 32,
+            catchAccessError  = true,
+            catchIllegal      = true,
+            catchUnaligned    = true,
+            atomicEntriesCount = 2
+          )
+//          ),
+          //            memoryTranslatorPortConfig = null
+//          memoryTranslatorPortConfig = MmuPortConfig(
+//            portTlbSize = 4
+//          )
+        ),
+        new StaticMemoryTranslatorPlugin(
+          ioRange      = _(31 downto 28) === 0xF
+        ),
         //          new MemoryTranslatorPlugin(
         //            tlbSize = 32,
         //            virtualRange = _(31 downto 28) === 0xC,
@@ -237,12 +238,12 @@ object LinuxGen {
         new YamlPlugin("cpu0.yaml")
       )
     )
-    if(withMmu) config.plugins += new MmuPlugin(
-      virtualRange = a => True,
-     // virtualRange = x => x(31 downto 24) =/= 0x81, //TODO It fix the DTB kernel access (workaround)
-      ioRange = (x => if(litex) x(31 downto 28) === 0xB || x(31 downto 28) === 0xE || x(31 downto 28) === 0xF else x(31 downto 28) === 0xF),
-      allowUserIo = true
-    )
+//    if(withMmu) config.plugins += new MmuPlugin(
+//      virtualRange = a => True,
+//     // virtualRange = x => x(31 downto 24) =/= 0x81, //TODO It fix the DTB kernel access (workaround)
+//      ioRange = (x => if(litex) x(31 downto 28) === 0xB || x(31 downto 28) === 0xE || x(31 downto 28) === 0xF else x(31 downto 28) === 0xF),
+//      allowUserIo = true
+//    )
     config
   }
 
@@ -265,7 +266,7 @@ object LinuxGen {
 //      }
 //    }
 
-    SpinalConfig(mergeAsyncProcess = true).generateVerilog {
+    SpinalConfig(mergeAsyncProcess = true, anonymSignalPrefix = "zz").generateVerilog {
 
 
       val toplevel = new VexRiscv(configFull(

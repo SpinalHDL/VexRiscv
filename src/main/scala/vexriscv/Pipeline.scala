@@ -21,7 +21,7 @@ trait Pipeline {
 
   def service[T](clazz : Class[T]) = {
     val filtered = plugins.filter(o => clazz.isAssignableFrom(o.getClass))
-    assert(filtered.length == 1)
+    assert(filtered.length == 1, s"??? ${clazz.getName}")
     filtered.head.asInstanceOf[T]
   }
 

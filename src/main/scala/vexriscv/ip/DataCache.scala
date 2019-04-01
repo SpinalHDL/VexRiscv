@@ -8,23 +8,24 @@ import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 
-case class DataCacheConfig( cacheSize : Int,
-                            bytePerLine : Int,
-                            wayCount : Int,
-                            addressWidth : Int,
-                            cpuDataWidth : Int,
-                            memDataWidth : Int,
-                            catchAccessError : Boolean,
-                            catchIllegal : Boolean,
-                            catchUnaligned : Boolean,
-                            catchMemoryTranslationMiss : Boolean,
-                            clearTagsAfterReset : Boolean = true,
-                            waysHitRetime : Boolean = true,
-                            tagSizeShift : Int = 0, //Used to force infering ram
-                            atomicEntriesCount : Int = 0){
+case class DataCacheConfig(cacheSize : Int,
+                           bytePerLine : Int,
+                           wayCount : Int,
+                           addressWidth : Int,
+                           cpuDataWidth : Int,
+                           memDataWidth : Int,
+                           catchAccessError : Boolean,
+                           catchIllegal : Boolean,
+                           catchUnaligned : Boolean,
+                           earlyWaysHits : Boolean = true,
+                           earlyDataMux : Boolean = false,
+                           tagSizeShift : Int = 0, //Used to force infering ram
+                           atomicEntriesCount : Int = 0){
+
+  assert(!(earlyDataMux && !earlyWaysHits))
   def burstSize = bytePerLine*8/memDataWidth
   val burstLength = bytePerLine/(memDataWidth/8)
-  def catchSomething = catchUnaligned || catchMemoryTranslationMiss || catchIllegal || catchAccessError
+  def catchSomething = catchUnaligned || catchIllegal || catchAccessError
   def genAtomic = atomicEntriesCount != 0
 
   def getAxi4SharedConfig() = Axi4Config(
@@ -64,83 +65,6 @@ case class DataCacheConfig( cacheSize : Int,
   )
 }
 
-
-object Bypasser{
-
-  //shot readValid path
-  def writeFirstMemWrap[T <: Data](readValid : Bool, readLastAddress : UInt, readLastData : T,writeValid : Bool, writeAddress : UInt, writeData : T) : T = {
-    val writeSample     = readValid || (writeValid && writeAddress === readLastAddress)
-    val writeValidReg   = RegNextWhen(writeValid,writeSample)
-    val writeAddressReg = RegNextWhen(writeAddress,writeSample)
-    val writeDataReg    = RegNextWhen(writeData,writeSample)
-    (writeValidReg && writeAddressReg === readLastAddress) ? writeDataReg | readLastData
-  }
-
-
-  //short readValid path
-  def writeFirstMemWrap(readValid : Bool, readLastAddress : UInt, readLastData : Bits,writeValid : Bool, writeAddress : UInt, writeData : Bits,writeMask : Bits) : Bits = {
-    val writeHit    = writeValid && writeAddress === readLastAddress
-    val writeSample = readValid || writeHit
-    val writeValidReg   = RegNextWhen(writeValid,writeSample)
-    val writeAddressReg = RegNextWhen(writeAddress,writeSample)
-    val writeDataReg    = Reg(writeData)
-    val writeMaskReg    = Reg(Bits(widthOf(writeData)/8 bits))
-    val writeDataRegBytes = writeDataReg.subdivideIn(8 bits)
-    val writeDataBytes = writeData.subdivideIn(8 bits)
-    val ret = cloneOf(readLastData)
-    val retBytes = ret.subdivideIn(8 bits)
-    val readLastDataBytes = readLastData.subdivideIn(8 bits)
-    val writeRegHit = writeValidReg && writeAddressReg === readLastAddress
-    for(b <- writeMask.range){
-      when(writeHit && writeMask(b)){
-        writeMaskReg(b) := True
-      }
-      when(readValid) {
-        writeMaskReg(b) := writeMask(b)
-      }
-      when(readValid || (writeHit && writeMask(b))){
-        writeDataRegBytes(b) := writeDataBytes(b)
-      }
-
-      retBytes(b) := (writeRegHit && writeMaskReg(b)) ? writeDataRegBytes(b) | readLastDataBytes(b)
-    }
-    ret
-  }
-
-  //Long sample path
-  //    def writeFirstRegWrap[T <: Data](sample : Bool, sampleAddress : UInt,lastAddress : UInt, readData : T, writeValid : Bool, writeAddress : UInt, writeData : T) : (T,T) = {
-  //      val hit = writeValid && (sample ? sampleAddress | lastAddress) === writeAddress
-  //      val bypass = hit ? writeData | readData
-  //      val reg = RegNextWhen(bypass,sample || hit)
-  //      (reg,bypass)
-  //    }
-
-  //Short sample path
-  def writeFirstRegWrap[T <: Data](sample : Bool, sampleAddress : UInt,sampleLastAddress : UInt, sampleData : T, writeValid : Bool, writeAddress : UInt, writeData : T) = {
-    val bypass = (!sample || (writeValid && sampleAddress === writeAddress)) ? writeData | sampleData
-    val regEn = sample || (writeValid && sampleLastAddress === writeAddress)
-    val reg = RegNextWhen(bypass,regEn)
-    reg
-  }
-
-  def writeFirstRegWrap(sample : Bool, sampleAddress : UInt,sampleLastAddress : UInt, sampleData : Bits, writeValid : Bool, writeAddress : UInt, writeData : Bits,writeMask : Bits) = {
-    val byteCount = widthOf(writeMask)
-    val sampleWriteHit = writeValid && sampleAddress === writeAddress
-    val sampleLastHit = writeValid && sampleLastAddress === writeAddress
-    val regBytes = Vec(Bits(8 bits),byteCount)
-    for(b <- writeMask.range){
-      val bypass = Mux(!sample || (sampleWriteHit && writeMask(b)), writeData(b*8, 8 bits), sampleData(b*8, 8 bits))
-      val regEn = sample || (sampleLastHit && writeMask(b))
-      regBytes(b) := RegNextWhen(bypass,regEn)
-    }
-    regBytes.asBits
-  }
-}
-
-object DataCacheCpuCmdKind extends SpinalEnum{
-  val MEMORY,MANAGMENT = newElement()
-}
-
 object DataCacheCpuExecute{
   implicit def implArgs(that : DataCacheCpuExecute) = that.args
 }
@@ -148,23 +72,22 @@ object DataCacheCpuExecute{
 case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterSlave{
   val isValid = Bool
   val isStuck = Bool
+  val address = UInt(p.addressWidth bit)
   //  val haltIt = Bool
   val args = DataCacheCpuExecuteArgs(p)
 
   override def asMaster(): Unit = {
-    out(isValid, isStuck, args)
+    out(isValid, isStuck, args, address)
     //    in(haltIt)
   }
 }
 
 case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
-  val kind = DataCacheCpuCmdKind()
   val wr = Bool
-  val address = UInt(p.addressWidth bit)
+  //val address = UInt(p.addressWidth bit) Given on the side, as it's also part of the main pipeline
   val data = Bits(p.cpuDataWidth bit)
   val size = UInt(2 bits)
   val forceUncachedAccess = Bool
-  val clean, invalidate, way = Bool
   val isAtomic = ifGen(p.genAtomic){Bool}
   //  val all = Bool                      //Address should be zero when "all" is used
 }
@@ -173,12 +96,11 @@ case class DataCacheCpuMemory(p : DataCacheConfig) extends Bundle with IMasterSl
   val isValid = Bool
   val isStuck = Bool
   val isRemoved = Bool
-  val haltIt = Bool
+  val address = UInt(p.addressWidth bit)
   val mmuBus  = MemoryTranslatorBus()
 
   override def asMaster(): Unit = {
-    out(isValid, isStuck, isRemoved)
-    in(haltIt)
+    out(isValid, isStuck, isRemoved, address)
     slave(mmuBus)
   }
 }
@@ -190,14 +112,15 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   val isUser = Bool
   val haltIt = Bool
   val data = Bits(p.cpuDataWidth bit)
-  val mmuMiss, illegalAccess, unalignedAccess , accessError = Bool
-  val badAddr = UInt(32 bits)
+  val address = UInt(p.addressWidth bit)
+  val mmuException, unalignedAccess , accessError = Bool
   val clearAtomicEntries = ifGen(p.genAtomic) {Bool}
+
   //  val exceptionBus = if(p.catchSomething) Flow(ExceptionCause()) else null
 
   override def asMaster(): Unit = {
-    out(isValid,isStuck,isUser)
-    in(haltIt, data, mmuMiss,illegalAccess , unalignedAccess, accessError, badAddr)
+    out(isValid,isStuck,isUser, address)
+    in(haltIt, data, mmuException, unalignedAccess, accessError)
     outWithNull(clearAtomicEntries)
   }
 }
@@ -207,10 +130,13 @@ case class DataCacheCpuBus(p : DataCacheConfig) extends Bundle with IMasterSlave
   val memory    = DataCacheCpuMemory(p)
   val writeBack = DataCacheCpuWriteBack(p)
 
+  val redo = Bool()
+
   override def asMaster(): Unit = {
     master(execute)
     master(memory)
     master(writeBack)
+    in(redo)
   }
 }
 
@@ -370,7 +296,6 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
 class DataCache(p : DataCacheConfig) extends Component{
   import p._
-  import DataCacheCpuCmdKind._
   assert(wayCount == 1)
   assert(cpuDataWidth == memDataWidth)
 
@@ -379,6 +304,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     val mem = master(DataCacheMemBus(p))
     //    val flushDone = out Bool //It pulse at the same time than the manager.request.fire
   }
+
   val haltCpu = False
   val lineWidth = bytePerLine*8
   val lineCount = cacheSize/bytePerLine
@@ -397,14 +323,13 @@ class DataCache(p : DataCacheConfig) extends Component{
 
 
   class LineInfo() extends Bundle{
-    val used = Bool
-    val dirty = Bool
+    val valid, error = Bool()
     val address = UInt(tagRange.length bit)
   }
 
   val tagsReadCmd =  Flow(UInt(log2Up(wayLineCount) bits))
   val tagsWriteCmd = Flow(new Bundle{
-    //    val way = UInt(log2Up(wayCount) bits)
+    val way = Bits(wayCount bits)
     val address = UInt(log2Up(wayLineCount) bits)
     val data = new LineInfo()
   })
@@ -413,11 +338,37 @@ class DataCache(p : DataCacheConfig) extends Component{
 
   val dataReadCmd =  Flow(UInt(log2Up(wayWordCount) bits))
   val dataWriteCmd = Flow(new Bundle{
-    //    val way = UInt(log2Up(wayCount) bits)
+    val way = Bits(wayCount bits)
     val address = UInt(log2Up(wayWordCount) bits)
     val data = Bits(wordWidth bits)
     val mask = Bits(wordWidth/8 bits)
   })
+
+
+
+  io.mem.cmd.valid := False
+  io.mem.cmd.payload.assignDontCare()
+
+  val ways = for(i <- 0 until wayCount) yield new Area{
+    val tags = Mem(new LineInfo(), wayLineCount)
+    val data = Mem(Bits(wordWidth bit), wayWordCount)
+
+    //Reads
+    val tagsReadRsp = tags.readSync(tagsReadCmd.payload, tagsReadCmd.valid && !io.cpu.execute.isStuck)
+    val dataReadRsp = data.readSync(dataReadCmd.payload, dataReadCmd.valid && !io.cpu.execute.isStuck)
+
+    //Writes
+    when(tagsWriteCmd.valid && tagsWriteCmd.way(i)){
+      tags(tagsWriteCmd.address) := tagsWriteCmd.data
+    }
+    when(dataWriteCmd.valid && dataWriteCmd.way(i)){
+      data.write(
+        address = dataWriteCmd.address,
+        data = dataWriteCmd.data,
+        mask = dataWriteCmd.mask
+      )
+    }
+  }
 
 
   tagsReadCmd.valid := False
@@ -428,219 +379,74 @@ class DataCache(p : DataCacheConfig) extends Component{
   tagsWriteCmd.payload.assignDontCare()
   dataWriteCmd.valid := False
   dataWriteCmd.payload.assignDontCare()
-  io.mem.cmd.valid := False
-  io.mem.cmd.payload.assignDontCare()
-
-
-  val way = new Area{
-    val tags = Mem(new LineInfo(),wayLineCount)
-    val data = Mem(Bits(wordWidth bit),wayWordCount)
-
-    when(tagsWriteCmd.valid){
-      tags(tagsWriteCmd.address) := tagsWriteCmd.data
-    }
-    when(dataWriteCmd.valid){
-      data.write(
-        address = dataWriteCmd.address,
-        data = dataWriteCmd.data,
-        mask = dataWriteCmd.mask
-      )
-    }
-
-    val tagReadRspOneAddress = RegNextWhen(tagsReadCmd.payload, tagsReadCmd.valid)
-    val tagReadRspOne = Bypasser.writeFirstMemWrap(
-      readValid = tagsReadCmd.valid,
-      readLastAddress = tagReadRspOneAddress,
-      readLastData = tags.readSync(tagsReadCmd.payload,enable = tagsReadCmd.valid),
-      writeValid = tagsWriteCmd.valid,
-      writeAddress = tagsWriteCmd.address,
-      writeData = tagsWriteCmd.data
-    )
-
-    val dataReadRspOneKeepAddress = False
-    val dataReadRspOneAddress = RegNextWhen(dataReadCmd.payload, dataReadCmd.valid && !dataReadRspOneKeepAddress)
-    val dataReadRspOneWithoutBypass = data.readSync(dataReadCmd.payload,enable = dataReadCmd.valid)
-    val dataReadRspOne = Bypasser.writeFirstMemWrap(
-      readValid = dataReadCmd.valid,
-      readLastAddress = dataReadRspOneAddress,
-      readLastData = dataReadRspOneWithoutBypass,
-      writeValid = dataWriteCmd.valid,
-      writeAddress = dataWriteCmd.address,
-      writeData = dataWriteCmd.data,
-      writeMask = dataWriteCmd.mask
-    )
-
-    val tagReadRspTwoEnable = !io.cpu.writeBack.isStuck
-    val tagReadRspTwoRegIn = (tagsWriteCmd.valid && tagsWriteCmd.address === tagReadRspOneAddress) ? tagsWriteCmd.data | tagReadRspOne
-    val tagReadRspTwo = RegNextWhen(tagReadRspTwoRegIn ,tagReadRspTwoEnable)
-
-
-    val dataReadRspTwoEnable = !io.cpu.writeBack.isStuck
-    val dataReadRspTwo = Bypasser.writeFirstRegWrap(
-      sample = dataReadRspTwoEnable,
-      sampleAddress = dataReadRspOneAddress,
-      sampleLastAddress = RegNextWhen(dataReadRspOneAddress, dataReadRspTwoEnable),
-      sampleData = dataReadRspOne,
-      writeValid = dataWriteCmd.valid,
-      writeAddress = dataWriteCmd.address,
-      writeData = dataWriteCmd.data,
-      writeMask = dataWriteCmd.mask
-    )
-  }
 
   when(io.cpu.execute.isValid && !io.cpu.execute.isStuck){
-    tagsReadCmd.valid := True
+    tagsReadCmd.valid   := True
+    dataReadCmd.valid   := True
     tagsReadCmd.payload := io.cpu.execute.address(lineRange)
-
-    dataReadCmd.valid := True
-    dataReadCmd.payload := io.cpu.execute.address(lineRange.high downto wordRange.low)  //TODO FMAX maybe critical path could be default
+    dataReadCmd.payload := io.cpu.execute.address(lineRange.high downto wordRange.low)
   }
 
-
-  val cpuMemoryStageNeedReadData = Bool()
-
-  val victim = new Area{
-    val requestIn = Stream(cloneable(new Bundle{
-      //      val way = UInt(log2Up(wayCount) bits)
-      val address = UInt(p.addressWidth bits)
-    }))
-    requestIn.valid := False
-    requestIn.payload.assignDontCare()
-
-    val request = requestIn.halfPipe()
-    request.ready := False
-
-    val buffer = Mem(Bits(p.memDataWidth bits),memTransactionPerLine << tagSizeShift)  // WARNING << tagSizeShift could resolve cyclone II issue, //.add(new AttributeString("ramstyle","M4K"))
-
-    //Send line read commands to fill the buffer
-    val readLineCmdCounter = Reg(UInt(log2Up(memTransactionPerLine + 1) bits)) init(0)
-    val dataReadCmdOccure = False
-    val dataReadRestored = RegInit(False)
-    when(request.valid){
-      when(!readLineCmdCounter.msb) {
-        readLineCmdCounter := readLineCmdCounter + 1
-        //dataReadCmd := request.address(lineRange.high downto wordRange.low)   Done in the manager
-        dataReadCmdOccure := True
-        dataReadCmd.valid := True
-        dataReadCmd.payload := request.address(lineRange) @@ readLineCmdCounter(readLineCmdCounter.high - 1 downto 0)
-        way.dataReadRspOneKeepAddress := True
-      } otherwise {
-        when(!dataReadRestored && cpuMemoryStageNeedReadData) {
-          dataReadCmd.valid := True
-          dataReadCmd.payload := way.dataReadRspOneAddress //Restore stage one readed value
-        }
-        dataReadRestored := True
-      }
+  def collisionProcess(readAddress : UInt, readMask : Bits): Bits ={
+    val ret = Bits(wayCount bits)
+    for(i <- 0 until wayCount){
+      ret(i) := dataWriteCmd.valid && dataWriteCmd.way(i) && dataWriteCmd.address === readAddress && (readMask & dataWriteCmd.mask) =/= 0
     }
-
-    dataReadRestored clearWhen(request.ready)
-    io.cpu.memory.haltIt :=  cpuMemoryStageNeedReadData && request.valid && !dataReadRestored
-
-    //Fill the buffer with line read responses
-    val readLineRspCounter = Reg(UInt(log2Up(memTransactionPerLine + 1) bits)) init(0)
-    when(Delay(dataReadCmdOccure,1, init=False)){
-      buffer(readLineRspCounter.resized) := way.dataReadRspOneWithoutBypass
-      readLineRspCounter := readLineRspCounter + 1
-    }
-
-    //Send buffer read commands
-    val bufferReadCounter = Reg(UInt(log2Up(memTransactionPerLine + 1) bits)) init(0)
-    val bufferReadStream = Stream(buffer.addressType)
-    bufferReadStream.valid := readLineRspCounter > bufferReadCounter
-    bufferReadStream.payload := bufferReadCounter.resized
-    when(bufferReadStream.fire){
-      bufferReadCounter := bufferReadCounter + 1
-    }
-    val bufferReaded = buffer.streamReadSync(bufferReadStream).stage
-    bufferReaded.ready := False
-
-    //Send memory writes from bufffer read responses
-    val bufferReadedCounter = Reg(UInt(log2Up(memTransactionPerLine) bits)) init(0)
-    val memCmdAlreadyUsed = False
-    when(bufferReaded.valid) {
-      io.mem.cmd.valid := True
-      io.mem.cmd.wr := True
-      io.mem.cmd.address := request.address(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
-      io.mem.cmd.length := p.burstLength-1
-      io.mem.cmd.data := bufferReaded.payload
-      io.mem.cmd.mask := (1<<(wordWidth/8))-1
-      io.mem.cmd.last := bufferReadedCounter === bufferReadedCounter.maxValue
-
-      when(!memCmdAlreadyUsed && io.mem.cmd.ready){
-        bufferReaded.ready := True
-        bufferReadedCounter := bufferReadedCounter + 1
-        when(bufferReadedCounter === bufferReadedCounter.maxValue){
-          request.ready := True
-        }
-      }
-    }
-
-
-    val counter = Counter(memTransactionPerLine)
-    when(request.ready){
-      readLineCmdCounter.msb := False
-      readLineRspCounter.msb := False
-      bufferReadCounter.msb := False
-    }
+    ret
   }
 
-
-
-  val stageA = new Area{
-    val request = RegNextWhen(io.cpu.execute.args, !io.cpu.memory.isStuck)
-    io.cpu.memory.mmuBus.cmd.isValid := io.cpu.memory.isValid  && request.kind === MEMORY //TODO filter request kind
-    io.cpu.memory.mmuBus.cmd.virtualAddress := request.address
-    io.cpu.memory.mmuBus.cmd.bypassTranslation := request.way
-    io.cpu.memory.mmuBus.end := !io.cpu.memory.isStuck || io.cpu.memory.isRemoved
-    cpuMemoryStageNeedReadData := io.cpu.memory.isValid && request.kind === MEMORY && !request.wr
-  }
-
-  val stageB = new Area {
-    val request = RegNextWhen(stageA.request, !io.cpu.writeBack.isStuck)
-    val mmuRsp = RegNextWhen(io.cpu.memory.mmuBus.rsp, !io.cpu.writeBack.isStuck)
-    val waysHit = if(waysHitRetime)
-      RegNextWhen(way.tagReadRspTwoRegIn.used && io.cpu.memory.mmuBus.rsp.physicalAddress(tagRange) === way.tagReadRspTwoRegIn.address,!io.cpu.writeBack.isStuck)  //Manual retiming
-    else
-      way.tagReadRspTwo.used && mmuRsp.physicalAddress(tagRange) === way.tagReadRspTwo.address
-
-
-    //Loader interface
-    val loaderValid = False
-    val loaderReady = False
-    val loadingDone = RegNext(loaderValid && loaderReady) init(False) //one cycle pulse
-
-    //delayedXX are used to relax logic timings in flush and evict modes
-    val delayedIsStuck      = RegNext(io.cpu.writeBack.isStuck)
-    val delayedWaysHitValid = RegNext(waysHit)
-
-    val victimNotSent  = RegInit(False) clearWhen(victim.requestIn.ready) setWhen(!io.cpu.memory.isStuck)
-    val loadingNotDone = RegInit(False) clearWhen(loaderReady) setWhen(!io.cpu.memory.isStuck)
-
-    val writeMask = request.size.mux (
+  val stage0 = new Area{
+    val mask = io.cpu.execute.size.mux (
       U(0)    -> B"0001",
       U(1)    -> B"0011",
       default -> B"1111"
-    ) |<< mmuRsp.physicalAddress(1 downto 0)
+    ) |<< io.cpu.execute.address(1 downto 0)
+    val colisions = collisionProcess(io.cpu.execute.address(lineRange.high downto wordRange.low), mask)
+  }
 
-    val hadMemRspErrorReg = RegInit(False)
-    val hadMemRspError = (io.mem.rsp.valid && io.mem.rsp.error) || hadMemRspErrorReg
-    hadMemRspErrorReg := hadMemRspError && io.cpu.writeBack.haltIt
+  val stageA = new Area{
+    def stagePipe[T <: Data](that : T) = RegNextWhen(that, !io.cpu.memory.isStuck)
+    val request = stagePipe(io.cpu.execute.args)
+    val mask = stagePipe(stage0.mask)
+    io.cpu.memory.mmuBus.cmd.isValid := io.cpu.memory.isValid
+    io.cpu.memory.mmuBus.cmd.virtualAddress := io.cpu.memory.address
+    io.cpu.memory.mmuBus.cmd.bypassTranslation := False
+    io.cpu.memory.mmuBus.end := !io.cpu.memory.isStuck || io.cpu.memory.isRemoved
+
+    val wayHits = earlyWaysHits generate ways.map(way => (io.cpu.memory.mmuBus.rsp.physicalAddress(tagRange) === way.tagsReadRsp.address && way.tagsReadRsp.valid))
+    val dataMux = earlyDataMux generate MuxOH(wayHits, ways.map(_.dataReadRsp))
+    val colisions = stagePipe(stage0.colisions) | collisionProcess(io.cpu.memory.address(lineRange.high downto wordRange.low), mask) //Assume the writeback stage will never be unstall memory acces while memory stage is stalled
+  }
+
+  val stageB = new Area {
+    def stagePipe[T <: Data](that : T) = RegNextWhen(that, !io.cpu.writeBack.isStuck)
+    val request = RegNextWhen(stageA.request, !io.cpu.writeBack.isStuck)
+    val mmuRspFreeze = False
+    val mmuRsp = RegNextWhen(io.cpu.memory.mmuBus.rsp, !io.cpu.writeBack.isStuck && !mmuRspFreeze)
+    val tagsReadRsp = ways.map(w => stagePipe(w.tagsReadRsp))
+    val dataReadRsp = !earlyDataMux generate ways.map(w => stagePipe(w.dataReadRsp))
+    val waysHits = if(earlyWaysHits) stagePipe(B(stageA.wayHits)) else B(tagsReadRsp.map(tag => mmuRsp.physicalAddress(tagRange) === tag.address && tag.valid).asBits())
+    val waysHit = waysHits.orR
+    val dataMux = if(earlyDataMux) stagePipe(stageA.dataMux) else MuxOH(waysHits, dataReadRsp)
+    val mask = stagePipe(stageA.mask)
+    val colisions = stagePipe(stageA.colisions)
+
+    //Loader interface
+    val loaderValid = False
+
+
 
     io.cpu.writeBack.haltIt := io.cpu.writeBack.isValid
-    io.cpu.writeBack.mmuMiss := False
-    io.cpu.writeBack.illegalAccess := False
-    io.cpu.writeBack.unalignedAccess := False
-    io.cpu.writeBack.accessError := (if(catchAccessError) hadMemRspError && !io.cpu.writeBack.haltIt else False)
-    io.cpu.writeBack.badAddr := request.address
 
     //Evict the cache after reset logics
-    val bootEvicts = if(clearTagsAfterReset) new Area {
+    val flusher = new Area {
       val valid = RegInit(True)
       mmuRsp.physicalAddress init (0)
       when(valid) {
         tagsWriteCmd.valid := valid
         tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
-        tagsWriteCmd.data.used := False
+        tagsWriteCmd.way.setAll()
+        tagsWriteCmd.data.valid := False
         when(mmuRsp.physicalAddress(lineRange) =/= lineCount - 1) {
           mmuRsp.physicalAddress.getDrivingReg(lineRange) := mmuRsp.physicalAddress(lineRange) + 1
           io.cpu.writeBack.haltIt := True
@@ -651,7 +457,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     }
 
 
-    val atomic = if(genAtomic) new Area{
+    val atomic = genAtomic generate new Area{
       case class AtomicEntry() extends Bundle{
         val valid = Bool()
         val size = UInt(2 bits)
@@ -664,11 +470,11 @@ class DataCache(p : DataCacheConfig) extends Component{
       }
       val entries = Vec(Reg(AtomicEntry()).init, atomicEntriesCount)
       val entriesAllocCounter = Counter(atomicEntriesCount)
-      val entriesHit = entries.map(e => e.valid && e.size === request.size && e.address === request.address).orR
+      val entriesHit = entries.map(e => e.valid && e.size === request.size && e.address === io.cpu.writeBack.address).orR
       when(io.cpu.writeBack.isValid && request.isAtomic && !request.wr){
         entries(entriesAllocCounter).valid := True
-        entries(entriesAllocCounter).size := request.size
-        entries(entriesAllocCounter).address := request.address
+        entries(entriesAllocCounter).size := request.size //TODO remove size stuff
+        entries(entriesAllocCounter).address := io.cpu.writeBack.address
         when(!io.cpu.writeBack.isStuck){
           entriesAllocCounter.increment()
         }
@@ -676,128 +482,127 @@ class DataCache(p : DataCacheConfig) extends Component{
       when(io.cpu.writeBack.clearAtomicEntries){
         entries.foreach(_.valid := False)
       }
+    }
 
-      when(request.isAtomic && ! entriesHit){
-        writeMask := 0
-      }
-    } else null
+    val memCmdSent = RegInit(False) setWhen (io.mem.cmd.ready) clearWhen (!io.cpu.writeBack.isStuck)
+
+    io.cpu.redo := mmuRsp.refilling
+    io.cpu.writeBack.accessError := False
+    io.cpu.writeBack.mmuException := io.cpu.writeBack.isValid && (if(catchIllegal) mmuRsp.exception || (!mmuRsp.allowWrite && request.wr) || (!mmuRsp.allowRead && !request.wr) || (!mmuRsp.allowUser && io.cpu.writeBack.isUser) else False)
+    io.cpu.writeBack.unalignedAccess := io.cpu.writeBack.isValid && (if(catchUnaligned) ((request.size === 2 && mmuRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && mmuRsp.physicalAddress(0 downto 0) =/= 0)) else False)
+
 
     when(io.cpu.writeBack.isValid) {
-      if (catchMemoryTranslationMiss) {
-        io.cpu.writeBack.mmuMiss := ??? //TODO mmuRsp.miss
-      }
-      switch(request.kind) {
-        is(MANAGMENT) {
-          when(delayedIsStuck && ???){ //TODO!mmuRsp.miss) {
-            when(delayedWaysHitValid || (request.way && way.tagReadRspTwo.used)) {
-              io.cpu.writeBack.haltIt.clearWhen(!(victim.requestIn.valid && !victim.requestIn.ready))
-              victim.requestIn.valid  := request.clean && way.tagReadRspTwo.dirty
-              tagsWriteCmd.valid      := victim.requestIn.ready
-            } otherwise{
-              io.cpu.writeBack.haltIt := False
-            }
-          }
+      when(request.forceUncachedAccess || mmuRsp.isIoAccess) {
+        io.cpu.writeBack.haltIt.clearWhen(request.wr ? io.mem.cmd.ready | io.mem.rsp.valid)
 
-          victim.requestIn.address := way.tagReadRspTwo.address @@ mmuRsp.physicalAddress(lineRange) @@ U((lineRange.low - 1 downto 0) -> false)
-          tagsWriteCmd.address     := mmuRsp.physicalAddress(lineRange)
-          tagsWriteCmd.data.used   := !request.invalidate
-          tagsWriteCmd.data.dirty  := !request.clean
-        }
-        is(MEMORY) {
-          val illegal = if(catchIllegal) (request.wr && !mmuRsp.allowWrite) || (!request.wr && !mmuRsp.allowRead) || (io.cpu.writeBack.isUser && !mmuRsp.allowUser) else False
-          val unaligned = if(catchUnaligned) ((request.size === 2 && mmuRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && mmuRsp.physicalAddress(0 downto 0) =/= 0)) else False
-          io.cpu.writeBack.illegalAccess := illegal
-          io.cpu.writeBack.unalignedAccess := unaligned
-          when((Bool(!catchMemoryTranslationMiss) || ???) && !illegal && !unaligned) {  //TODO !mmuRsp.miss
-            when(request.forceUncachedAccess || mmuRsp.isIoAccess) {
-              val memCmdSent = RegInit(False)
-              when(!victim.request.valid) {
-                //Avoid mixing memory request while victim is pending
-                io.mem.cmd.wr := request.wr
-                io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
-                io.mem.cmd.mask := writeMask
-                io.mem.cmd.data := request.data
-                io.mem.cmd.length := 0
-                io.mem.cmd.last := True
+        io.mem.cmd.valid := !memCmdSent
+        io.mem.cmd.wr := request.wr
+        io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
+        io.mem.cmd.mask := mask
+        io.mem.cmd.data := request.data
+        io.mem.cmd.length := 0
+        io.mem.cmd.last := True
+      } otherwise {
+        when(waysHit || request.wr) {   //Do not require a cache refill ?
+          //Data cache update
+          dataWriteCmd.valid setWhen(request.wr && waysHit)
+          dataWriteCmd.address := mmuRsp.physicalAddress(lineRange.high downto wordRange.low)
+          dataWriteCmd.data := request.data
+          dataWriteCmd.mask := mask
+          dataWriteCmd.way := waysHits
 
-                when(!memCmdSent) {
-                  io.mem.cmd.valid := True
-                  memCmdSent setWhen (io.mem.cmd.ready)
-                }
+          //Write through
+          io.mem.cmd.valid setWhen(request.wr)
+          io.mem.cmd.wr := True
+          io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
+          io.mem.cmd.mask := mask
+          io.mem.cmd.data := request.data
+          io.mem.cmd.length := 0
+          io.mem.cmd.last := True
+          io.cpu.writeBack.haltIt clearWhen(!request.wr || io.mem.cmd.ready)
 
-                io.cpu.writeBack.haltIt.clearWhen(memCmdSent && (io.mem.rsp.fire || request.wr)) //Cut mem.cmd.ready path but insert one cycle stall when write
-              }
-              memCmdSent clearWhen (!io.cpu.writeBack.isStuck)
-            } otherwise {
-              when(waysHit || !loadingNotDone) {
-                io.cpu.writeBack.haltIt := False
-                dataWriteCmd.valid := request.wr
-                dataWriteCmd.address := mmuRsp.physicalAddress(lineRange.high downto wordRange.low)
-                dataWriteCmd.data := request.data
-                dataWriteCmd.mask := writeMask
+          //On write to read colisions
+          io.cpu.redo := !request.wr && (colisions & waysHits) =/= 0
+        } otherwise { //Do refill
 
-                tagsWriteCmd.valid := (!loadingNotDone) || request.wr
-                tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
-                tagsWriteCmd.data.used := True
-                tagsWriteCmd.data.dirty := request.wr
-                tagsWriteCmd.data.address := mmuRsp.physicalAddress(tagRange)
-              } otherwise {
-                val victimRequired = way.tagReadRspTwo.used && way.tagReadRspTwo.dirty
-                loaderValid := loadingNotDone && !(victimNotSent && victim.request.isStall) //Additional condition used to be sure of that all previous victim are written into the  RAM
-                victim.requestIn.valid := victimRequired && victimNotSent
-                victim.requestIn.address := way.tagReadRspTwo.address @@ mmuRsp.physicalAddress(lineRange) @@ U((lineRange.low - 1 downto 0) -> false)
-              }
-            }
-          }
+          //Emit cmd
+          io.mem.cmd.valid setWhen(!memCmdSent)
+          io.mem.cmd.wr := False
+          io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
+          io.mem.cmd.length := p.burstLength-1
+          io.mem.cmd.last := True
+
+          loaderValid setWhen(io.mem.cmd.ready)
         }
       }
     }
 
+    when(request.forceUncachedAccess || mmuRsp.isIoAccess){
+      io.cpu.writeBack.data :=  io.mem.rsp.data
+      if(catchAccessError) io.cpu.writeBack.accessError := io.mem.rsp.valid && io.mem.rsp.error
+    } otherwise {
+      io.cpu.writeBack.data :=  dataMux
+      if(catchAccessError) io.cpu.writeBack.accessError := (waysHits & B(tagsReadRsp.map(_.error))) =/= 0
+    }
+
+    //remove side effects on exceptions
+    when(mmuRsp.refilling || io.cpu.writeBack.accessError || io.cpu.writeBack.mmuException || io.cpu.writeBack.unalignedAccess){
+      io.mem.cmd.valid := False
+      tagsWriteCmd.valid := False
+      dataWriteCmd.valid := False
+      loaderValid := False
+      io.cpu.writeBack.haltIt := False
+    }
 
     assert(!(io.cpu.writeBack.isValid && !io.cpu.writeBack.haltIt && io.cpu.writeBack.isStuck), "writeBack stuck by another plugin is not allowed")
-    io.cpu.writeBack.data := (request.forceUncachedAccess || mmuRsp.isIoAccess) ? io.mem.rsp.data | way.dataReadRspTwo //not multi ways
+
     if(genAtomic){
       when(request.isAtomic && request.wr){
         io.cpu.writeBack.data := (!atomic.entriesHit).asBits.resized
       }
+      when(request.isAtomic && !atomic.entriesHit){
+        io.mem.cmd.mask := 0
+      }
     }
   }
 
-  //The whole life of a loading task, the corresponding manager request is present
   val loader = new Area{
-    val valid = RegNext(stageB.loaderValid) init(False)
+    val valid = RegInit(False) setWhen(stageB.loaderValid)
     val baseAddress =  stageB.mmuRsp.physicalAddress
 
-    val memCmdSent = RegInit(False)
-    when(valid && !memCmdSent) {
-      io.mem.cmd.valid := True
-      io.mem.cmd.wr := False
-      io.mem.cmd.address := baseAddress(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
-      io.mem.cmd.length := p.burstLength-1
-      io.mem.cmd.last := True
-    }
-
-    when(valid && io.mem.cmd.ready){
-      memCmdSent := True
-    }
-
-    when(valid && !memCmdSent) {
-      victim.memCmdAlreadyUsed := True
-    }
-
     val counter = Counter(memTransactionPerLine)
+    val waysAllocator = Reg(Bits(wayCount bits)) init(1)
+    val error = RegInit(False)
+
     when(valid && io.mem.rsp.valid){
       dataWriteCmd.valid := True
       dataWriteCmd.address := baseAddress(lineRange) @@ counter
       dataWriteCmd.data := io.mem.rsp.data
-      dataWriteCmd.mask := (1<<(wordWidth/8))-1
+      dataWriteCmd.mask.setAll()
+      dataWriteCmd.way := waysAllocator
+      error := error | io.mem.rsp.error
       counter.increment()
     }
 
+
     when(counter.willOverflow){
-      memCmdSent := False
       valid := False
-      stageB.loaderReady := True
+
+      //Update tags
+      tagsWriteCmd.valid := True
+      tagsWriteCmd.address := baseAddress(lineRange)
+      tagsWriteCmd.data.valid := True
+      tagsWriteCmd.data.address := baseAddress(tagRange)
+      tagsWriteCmd.data.error := error || io.mem.rsp.error
+      tagsWriteCmd.way := waysAllocator
+
+      waysAllocator := (waysAllocator ## waysAllocator.msb).resized
+
+      error := False
     }
+
+    io.cpu.redo setWhen(valid)
+    stageB.mmuRspFreeze setWhen(stageB.loaderValid || valid)
   }
 }

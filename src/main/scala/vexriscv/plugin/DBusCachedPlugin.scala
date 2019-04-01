@@ -26,6 +26,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
   var mmuBus : MemoryTranslatorBus = null
   var exceptionBus : Flow[ExceptionCause] = null
   var privilegeService : PrivilegeService = null
+  var redoBranch : Flow[UInt] = null
 
   object MEMORY_ENABLE extends Stageable(Bool)
   object MEMORY_MANAGMENT extends Stageable(Bool)
@@ -44,7 +45,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       SRC_USE_SUB_LESS  -> False,
       MEMORY_ENABLE     -> True,
       RS1_USE          -> True
-    ) ++ (if (catchUnaligned) List(IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB) else Nil) //Used for access fault bad address in memory stage
+    ) ++ (if (catchSomething) List(IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB) else Nil) //Used for access fault bad address in memory stage
 
     val loadActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMI,
@@ -75,13 +76,14 @@ class DBusCachedPlugin(config : DataCacheConfig,
       decoderService.add(
         key = LR,
         values = loadActions.filter(_._1 != SRC2_CTRL) ++ Seq(
-          SRC2_CTRL -> Src2CtrlEnum.RS,
+          SRC_ADD_ZERO -> True,
           MEMORY_ATOMIC -> True
         )
       )
       decoderService.add(
         key = SC,
         values = storeActions.filter(_._1 != SRC2_CTRL) ++ Seq(
+          SRC_ADD_ZERO -> True,
           REGFILE_WRITE_VALID -> True,
           BYPASSABLE_EXECUTE_STAGE -> False,
           BYPASSABLE_MEMORY_STAGE -> False,
@@ -98,6 +100,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
     ))
 
     mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA ,memoryTranslatorPortConfig)
+    redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.writeBack)
 
     if(catchSomething)
       exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(pipeline.writeBack)
@@ -141,28 +144,27 @@ class DBusCachedPlugin(config : DataCacheConfig,
       val size = input(INSTRUCTION)(13 downto 12).asUInt
       cache.io.cpu.execute.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.execute.isStuck := arbitration.isStuck
+      cache.io.cpu.execute.address := input(SRC_ADD).asUInt
       cache.io.cpu.execute.args.wr := input(MEMORY_WR)
-      cache.io.cpu.execute.args.address := input(SRC_ADD).asUInt
       cache.io.cpu.execute.args.data := size.mux(
         U(0)    -> input(RS2)( 7 downto 0) ## input(RS2)( 7 downto 0) ## input(RS2)(7 downto 0) ## input(RS2)(7 downto 0),
         U(1)    -> input(RS2)(15 downto 0) ## input(RS2)(15 downto 0),
         default -> input(RS2)(31 downto 0)
       )
       cache.io.cpu.execute.args.size := size
-      cache.io.cpu.execute.args.forceUncachedAccess := False 
-      cache.io.cpu.execute.args.kind := input(MEMORY_MANAGMENT) ? DataCacheCpuCmdKind.MANAGMENT | DataCacheCpuCmdKind.MEMORY
-      cache.io.cpu.execute.args.clean := input(INSTRUCTION)(28)
-      cache.io.cpu.execute.args.invalidate := input(INSTRUCTION)(29)
-      cache.io.cpu.execute.args.way := input(INSTRUCTION)(30)
+      cache.io.cpu.execute.args.forceUncachedAccess := False
       if(genAtomic) {
         cache.io.cpu.execute.args.isAtomic := False
         when(input(MEMORY_ATOMIC)){
           cache.io.cpu.execute.args.isAtomic := True
-          cache.io.cpu.execute.args.address := input(SRC1).asUInt
         }
       }
 
-      insert(MEMORY_ADDRESS_LOW) := cache.io.cpu.execute.args.address(1 downto 0)
+      insert(MEMORY_ADDRESS_LOW) := cache.io.cpu.execute.address(1 downto 0)
+
+      when(cache.io.cpu.redo && arbitration.isValid && input(MEMORY_ENABLE)){
+        arbitration.haltItself := True
+      }
     }
 
     memory plug new Area{
@@ -170,10 +172,9 @@ class DBusCachedPlugin(config : DataCacheConfig,
       cache.io.cpu.memory.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.memory.isStuck := arbitration.isStuck
       cache.io.cpu.memory.isRemoved := arbitration.removeIt
-      arbitration.haltItself setWhen(cache.io.cpu.memory.haltIt)
+      cache.io.cpu.memory.address := U(input(REGFILE_WRITE_DATA))
 
       cache.io.cpu.memory.mmuBus <> mmuBus
-      arbitration.haltItself setWhen (mmuBus.cmd.isValid &&  ???) //TODO !mmuBus.rsp.hit && !mmuBus.rsp.miss
     }
 
     writeBack plug new Area{
@@ -181,20 +182,36 @@ class DBusCachedPlugin(config : DataCacheConfig,
       cache.io.cpu.writeBack.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
+      cache.io.cpu.writeBack.address := U(input(REGFILE_WRITE_DATA))
       if(genAtomic) cache.io.cpu.writeBack.clearAtomicEntries := service(classOf[IContextSwitching]).isContextSwitching
 
       if(catchSomething) {
-        exceptionBus.valid := cache.io.cpu.writeBack.mmuMiss || cache.io.cpu.writeBack.accessError || cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.unalignedAccess
-        exceptionBus.badAddr := cache.io.cpu.writeBack.badAddr
+        exceptionBus.valid := False //cache.io.cpu.writeBack.mmuMiss || cache.io.cpu.writeBack.accessError || cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.unalignedAccess
+        exceptionBus.badAddr := U(input(REGFILE_WRITE_DATA))
         exceptionBus.code.assignDontCare()
-        when(cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.accessError){
-          exceptionBus.code := (input(MEMORY_WR) ? U(7) | U(5)).resized
-        }
-        when(cache.io.cpu.writeBack.unalignedAccess){
-          exceptionBus.code := (input(MEMORY_WR) ? U(6) | U(4)).resized
-        }
-        when(cache.io.cpu.writeBack.mmuMiss){
-          exceptionBus.code := 13
+
+        redoBranch.valid := False
+        redoBranch.payload := input(PC)
+        arbitration.flushAll setWhen(redoBranch.valid)
+
+        when(cache.io.cpu.writeBack.isValid) {
+          if (catchAccessError) when(cache.io.cpu.writeBack.accessError) {
+            exceptionBus.valid := True
+            exceptionBus.code := (input(MEMORY_WR) ? U(7) | U(5)).resized
+          }
+
+          if (catchUnaligned) when(cache.io.cpu.writeBack.unalignedAccess) {
+            exceptionBus.valid := True
+            exceptionBus.code := (input(MEMORY_WR) ? U(6) | U(4)).resized
+          }
+          when (cache.io.cpu.writeBack.mmuException) {
+            exceptionBus.valid := True
+            exceptionBus.code := (input(MEMORY_WR) ? U(15) | U(13)).resized
+          }
+          when(cache.io.cpu.redo) {
+            redoBranch.valid := True
+            exceptionBus.valid := False
+          }
         }
       }
       arbitration.haltItself.setWhen(cache.io.cpu.writeBack.haltIt)
