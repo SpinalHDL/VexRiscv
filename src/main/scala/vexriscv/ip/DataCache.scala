@@ -8,6 +8,8 @@ import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 
+//TODO flush
+
 case class DataCacheConfig(cacheSize : Int,
                            bytePerLine : Int,
                            wayCount : Int,
@@ -71,13 +73,12 @@ object DataCacheCpuExecute{
 
 case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterSlave{
   val isValid = Bool
-  val isStuck = Bool
   val address = UInt(p.addressWidth bit)
   //  val haltIt = Bool
   val args = DataCacheCpuExecuteArgs(p)
 
   override def asMaster(): Unit = {
-    out(isValid, isStuck, args, address)
+    out(isValid, args, address)
     //    in(haltIt)
   }
 }
@@ -111,6 +112,7 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   val isStuck = Bool
   val isUser = Bool
   val haltIt = Bool
+  val isWrite = Bool
   val data = Bits(p.cpuDataWidth bit)
   val address = UInt(p.addressWidth bit)
   val mmuException, unalignedAccess , accessError = Bool
@@ -120,7 +122,7 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
 
   override def asMaster(): Unit = {
     out(isValid,isStuck,isUser, address)
-    in(haltIt, data, mmuException, unalignedAccess, accessError)
+    in(haltIt, data, mmuException, unalignedAccess, accessError, isWrite)
     outWithNull(clearAtomicEntries)
   }
 }
@@ -354,8 +356,8 @@ class DataCache(p : DataCacheConfig) extends Component{
     val data = Mem(Bits(wordWidth bit), wayWordCount)
 
     //Reads
-    val tagsReadRsp = tags.readSync(tagsReadCmd.payload, tagsReadCmd.valid && !io.cpu.execute.isStuck)
-    val dataReadRsp = data.readSync(dataReadCmd.payload, dataReadCmd.valid && !io.cpu.execute.isStuck)
+    val tagsReadRsp = tags.readSync(tagsReadCmd.payload, tagsReadCmd.valid && !io.cpu.memory.isStuck)
+    val dataReadRsp = data.readSync(dataReadCmd.payload, dataReadCmd.valid && !io.cpu.memory.isStuck)
 
     //Writes
     when(tagsWriteCmd.valid && tagsWriteCmd.way(i)){
@@ -380,7 +382,7 @@ class DataCache(p : DataCacheConfig) extends Component{
   dataWriteCmd.valid := False
   dataWriteCmd.payload.assignDontCare()
 
-  when(io.cpu.execute.isValid && !io.cpu.execute.isStuck){
+  when(io.cpu.execute.isValid && !io.cpu.memory.isStuck){
     tagsReadCmd.valid   := True
     dataReadCmd.valid   := True
     tagsReadCmd.payload := io.cpu.execute.address(lineRange)
@@ -460,7 +462,6 @@ class DataCache(p : DataCacheConfig) extends Component{
     val atomic = genAtomic generate new Area{
       case class AtomicEntry() extends Bundle{
         val valid = Bool()
-        val size = UInt(2 bits)
         val address = UInt(addressWidth bits)
 
         def init: this.type ={
@@ -470,10 +471,9 @@ class DataCache(p : DataCacheConfig) extends Component{
       }
       val entries = Vec(Reg(AtomicEntry()).init, atomicEntriesCount)
       val entriesAllocCounter = Counter(atomicEntriesCount)
-      val entriesHit = entries.map(e => e.valid && e.size === request.size && e.address === io.cpu.writeBack.address).orR
+      val entriesHit = entries.map(e => e.valid && e.address === io.cpu.writeBack.address).orR
       when(io.cpu.writeBack.isValid && request.isAtomic && !request.wr){
         entries(entriesAllocCounter).valid := True
-        entries(entriesAllocCounter).size := request.size //TODO remove size stuff
         entries(entriesAllocCounter).address := io.cpu.writeBack.address
         when(!io.cpu.writeBack.isStuck){
           entriesAllocCounter.increment()
@@ -486,11 +486,11 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     val memCmdSent = RegInit(False) setWhen (io.mem.cmd.ready) clearWhen (!io.cpu.writeBack.isStuck)
 
-    io.cpu.redo := mmuRsp.refilling
+    io.cpu.redo := False
     io.cpu.writeBack.accessError := False
     io.cpu.writeBack.mmuException := io.cpu.writeBack.isValid && (if(catchIllegal) mmuRsp.exception || (!mmuRsp.allowWrite && request.wr) || (!mmuRsp.allowRead && !request.wr) || (!mmuRsp.allowUser && io.cpu.writeBack.isUser) else False)
     io.cpu.writeBack.unalignedAccess := io.cpu.writeBack.isValid && (if(catchUnaligned) ((request.size === 2 && mmuRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && mmuRsp.physicalAddress(0 downto 0) =/= 0)) else False)
-
+    io.cpu.writeBack.isWrite := request.wr
 
     when(io.cpu.writeBack.isValid) {
       when(request.forceUncachedAccess || mmuRsp.isIoAccess) {
@@ -503,6 +503,11 @@ class DataCache(p : DataCacheConfig) extends Component{
         io.mem.cmd.data := request.data
         io.mem.cmd.length := 0
         io.mem.cmd.last := True
+
+        if(genAtomic) when(request.isAtomic && !atomic.entriesHit){
+          io.mem.cmd.valid := False
+          io.cpu.writeBack.haltIt := False
+        }
       } otherwise {
         when(waysHit || request.wr) {   //Do not require a cache refill ?
           //Data cache update
@@ -524,6 +529,12 @@ class DataCache(p : DataCacheConfig) extends Component{
 
           //On write to read colisions
           io.cpu.redo := !request.wr && (colisions & waysHits) =/= 0
+
+          if(genAtomic) when(request.isAtomic && !atomic.entriesHit){
+            io.mem.cmd.valid := False
+            dataWriteCmd.valid := False
+            io.cpu.writeBack.haltIt := False
+          }
         } otherwise { //Do refill
 
           //Emit cmd
@@ -554,15 +565,13 @@ class DataCache(p : DataCacheConfig) extends Component{
       loaderValid := False
       io.cpu.writeBack.haltIt := False
     }
+    io.cpu.redo setWhen(io.cpu.writeBack.isValid && mmuRsp.refilling)
 
     assert(!(io.cpu.writeBack.isValid && !io.cpu.writeBack.haltIt && io.cpu.writeBack.isStuck), "writeBack stuck by another plugin is not allowed")
 
     if(genAtomic){
       when(request.isAtomic && request.wr){
         io.cpu.writeBack.data := (!atomic.entriesHit).asBits.resized
-      }
-      when(request.isAtomic && !atomic.entriesHit){
-        io.mem.cmd.mask := 0
       }
     }
   }

@@ -7,7 +7,7 @@ import spinal.lib._
 import spinal.lib.bus.amba4.axi.Axi4
 
 
-class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : Any = null) extends DBusCachedPlugin(config, memoryTranslatorPortConfig){
+class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : Any = null) extends DBusCachedPlugin(config, memoryTranslatorPortConfig) {
   var dAxi  : Axi4 = null
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -20,7 +20,7 @@ class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
 
 class DBusCachedPlugin(config : DataCacheConfig,
                        memoryTranslatorPortConfig : Any = null,
-                       csrInfo : Boolean = false)  extends Plugin[VexRiscv]{
+                       csrInfo : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService {
   import config._
   var dBus  : DataCacheMemBus = null
   var mmuBus : MemoryTranslatorBus = null
@@ -28,11 +28,19 @@ class DBusCachedPlugin(config : DataCacheConfig,
   var privilegeService : PrivilegeService = null
   var redoBranch : Flow[UInt] = null
 
+  @dontName var dBusAccess : DBusAccess = null
+  override def newDBusAccess(): DBusAccess = {
+    assert(dBusAccess == null)
+    dBusAccess = DBusAccess()
+    dBusAccess
+  }
+
   object MEMORY_ENABLE extends Stageable(Bool)
   object MEMORY_MANAGMENT extends Stageable(Bool)
   object MEMORY_WR extends Stageable(Bool)
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
   object MEMORY_ATOMIC extends Stageable(Bool)
+  object IS_DBUS_SHARING extends Stageable(Bool())
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -44,8 +52,9 @@ class DBusCachedPlugin(config : DataCacheConfig,
       SRC1_CTRL         -> Src1CtrlEnum.RS,
       SRC_USE_SUB_LESS  -> False,
       MEMORY_ENABLE     -> True,
-      RS1_USE          -> True
-    ) ++ (if (catchSomething) List(IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB) else Nil) //Used for access fault bad address in memory stage
+      RS1_USE          -> True,
+      IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB
+    )
 
     val loadActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMI,
@@ -143,7 +152,6 @@ class DBusCachedPlugin(config : DataCacheConfig,
 
       val size = input(INSTRUCTION)(13 downto 12).asUInt
       cache.io.cpu.execute.isValid := arbitration.isValid && input(MEMORY_ENABLE)
-      cache.io.cpu.execute.isStuck := arbitration.isStuck
       cache.io.cpu.execute.address := input(SRC_ADD).asUInt
       cache.io.cpu.execute.args.wr := input(MEMORY_WR)
       cache.io.cpu.execute.args.data := size.mux(
@@ -194,7 +202,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
         redoBranch.payload := input(PC)
         arbitration.flushAll setWhen(redoBranch.valid)
 
-        when(cache.io.cpu.writeBack.isValid) {
+        when(arbitration.isValid && input(MEMORY_ENABLE)) {
           if (catchAccessError) when(cache.io.cpu.writeBack.accessError) {
             exceptionBus.valid := True
             exceptionBus.code := (input(MEMORY_WR) ? U(7) | U(5)).resized
@@ -232,6 +240,45 @@ class DBusCachedPlugin(config : DataCacheConfig,
 
       when(arbitration.isValid && input(MEMORY_ENABLE)) {
         output(REGFILE_WRITE_DATA) := rspFormated
+      }
+    }
+
+    //Share access to the dBus (used by self refilled MMU)
+    val dBusSharing = (dBusAccess != null) generate pipeline plug new Area{
+      dBusAccess.cmd.ready := False
+      val forceDatapath = False
+      when(dBusAccess.cmd.valid){
+        decode.arbitration.haltByOther := True
+        when(!stagesFromExecute.map(_.arbitration.isValid).orR && !pipeline.service(classOf[ExceptionService]).isExceptionPending()){
+          when(!cache.io.cpu.redo) {
+            cache.io.cpu.execute.isValid := True
+            dBusAccess.cmd.ready := !execute.arbitration.isStuck
+          }
+          cache.io.cpu.execute.args.wr := dBusAccess.cmd.write
+          cache.io.cpu.execute.args.data := dBusAccess.cmd.data
+          cache.io.cpu.execute.args.size := dBusAccess.cmd.size
+          cache.io.cpu.execute.args.forceUncachedAccess := True //TODO Cached and redo management
+          if(genAtomic) cache.io.cpu.execute.args.isAtomic := False
+          cache.io.cpu.execute.address := dBusAccess.cmd.address  //Will only be 12 muxes
+          forceDatapath := True
+        }
+      }
+      execute.insert(IS_DBUS_SHARING) := dBusAccess.cmd.fire
+
+
+      mmuBus.cmd.bypassTranslation setWhen(memory.input(IS_DBUS_SHARING))
+      cache.io.cpu.memory.isValid setWhen(memory.input(IS_DBUS_SHARING))
+      cache.io.cpu.writeBack.isValid setWhen(writeBack.input(IS_DBUS_SHARING))
+      dBusAccess.rsp.valid := writeBack.input(IS_DBUS_SHARING) && !cache.io.cpu.writeBack.isWrite && !cache.io.cpu.writeBack.haltIt
+      dBusAccess.rsp.data := cache.io.cpu.writeBack.data
+      dBusAccess.rsp.error := cache.io.cpu.writeBack.unalignedAccess || cache.io.cpu.writeBack.accessError
+
+      component.addPrePopTask{() =>
+        when(forceDatapath){
+          execute.output(REGFILE_WRITE_DATA) := dBusAccess.cmd.address.asBits
+        }
+        memory.input(IS_DBUS_SHARING) init(False)
+        writeBack.input(IS_DBUS_SHARING) init(False)
       }
     }
 

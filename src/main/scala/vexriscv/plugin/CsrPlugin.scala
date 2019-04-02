@@ -285,6 +285,9 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
     interface
   }
 
+  var exceptionPending : Bool = null
+  override def isExceptionPending(): Bool = exceptionPending
+
   var jumpInterface : Flow[UInt] = null
   var timerInterrupt, externalInterrupt, softwareInterrupt : Bool = null
   var externalInterruptS : Bool = null
@@ -378,7 +381,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
     jumpInterface.valid := False
     jumpInterface.payload.assignDontCare()
 
-
+    exceptionPending = False
     timerInterrupt    = in Bool() setName("timerInterrupt")
     externalInterrupt = in Bool() setName("externalInterrupt")
     softwareInterrupt = in Bool() setName("softwareInterrupt")
@@ -677,7 +680,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
             else
               exceptionValidsRegs(stageId) := False
           }
-          if(stage != stages.last) when(stage.arbitration.isFlushed){
+          when(stage.arbitration.isFlushed){
             exceptionValids(stageId) := False
           }
         }
@@ -688,6 +691,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
         //Avoid the PC register of the last stage to change durring an exception handleing (Used to fill Xepc)
         stages.last.dontSample.getOrElseUpdate(PC, ArrayBuffer[Bool]()) += exceptionValids.last
+        exceptionPending setWhen(exceptionValidsRegs.orR)
       } else null
 
 

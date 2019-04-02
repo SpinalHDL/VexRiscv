@@ -1316,6 +1316,16 @@ public:
 			if(isDBusCheckedRegion(addr)){
 				CpuRef::MemWrite w;
 				w.address = addr;
+				while((mask & 1) == 0){
+				    mask >>= 1;
+				    w.address++;
+				    w.data >>= 8;
+				}
+				switch(mask){
+				case 1: size = 0; break;
+				case 3: size = min(1u, size); break;
+				case 15: size = min(2u, size); break;
+				}
 				w.size = 1 << size;
 				switch(size){
 				case 0: w.data = *data & 0xFF; break;
@@ -3446,6 +3456,7 @@ int main(int argc, char **argv, char **env) {
 //     redo(REDO,WorkspaceRegression("deleg").withRiscvRef()->loadHex("../raw/deleg/build/deleg.hex")->bootAt(0x80000000u)->run(50e3););
 //    return 0;
 
+    redo(REDO,WorkspaceRegression("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
 
 	for(int idx = 0;idx < 1;idx++){
 
