@@ -497,6 +497,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       dBusAccess.rsp.valid := False
       dBusAccess.rsp.data := dBus.rsp.data
       dBusAccess.rsp.error := dBus.rsp.error
+      dBusAccess.rsp.redo := False
 
       switch(state){
         is(0){

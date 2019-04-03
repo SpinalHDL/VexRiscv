@@ -257,7 +257,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
           cache.io.cpu.execute.args.wr := dBusAccess.cmd.write
           cache.io.cpu.execute.args.data := dBusAccess.cmd.data
           cache.io.cpu.execute.args.size := dBusAccess.cmd.size
-          cache.io.cpu.execute.args.forceUncachedAccess := True //TODO Cached and redo management
+          cache.io.cpu.execute.args.forceUncachedAccess := False
           if(genAtomic) cache.io.cpu.execute.args.isAtomic := False
           cache.io.cpu.execute.address := dBusAccess.cmd.address  //Will only be 12 muxes
           forceDatapath := True
@@ -269,16 +269,19 @@ class DBusCachedPlugin(config : DataCacheConfig,
       mmuBus.cmd.bypassTranslation setWhen(memory.input(IS_DBUS_SHARING))
       cache.io.cpu.memory.isValid setWhen(memory.input(IS_DBUS_SHARING))
       cache.io.cpu.writeBack.isValid setWhen(writeBack.input(IS_DBUS_SHARING))
-      dBusAccess.rsp.valid := writeBack.input(IS_DBUS_SHARING) && !cache.io.cpu.writeBack.isWrite && !cache.io.cpu.writeBack.haltIt
+      dBusAccess.rsp.valid := writeBack.input(IS_DBUS_SHARING) && !cache.io.cpu.writeBack.isWrite && (cache.io.cpu.redo || !cache.io.cpu.writeBack.haltIt)
       dBusAccess.rsp.data := cache.io.cpu.writeBack.data
       dBusAccess.rsp.error := cache.io.cpu.writeBack.unalignedAccess || cache.io.cpu.writeBack.accessError
-
+      dBusAccess.rsp.redo := cache.io.cpu.redo
       component.addPrePopTask{() =>
         when(forceDatapath){
           execute.output(REGFILE_WRITE_DATA) := dBusAccess.cmd.address.asBits
         }
         memory.input(IS_DBUS_SHARING) init(False)
         writeBack.input(IS_DBUS_SHARING) init(False)
+        when(dBusAccess.rsp.valid){
+          writeBack.input(IS_DBUS_SHARING).getDrivingReg := False
+        }
       }
     }
 

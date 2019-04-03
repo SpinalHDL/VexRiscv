@@ -21,6 +21,7 @@ case class DBusAccessCmd() extends Bundle {
 case class DBusAccessRsp() extends Bundle {
   val data = Bits(32 bits)
   val error = Bool()
+  val redo = Bool()
 }
 
 case class DBusAccess() extends Bundle {
@@ -161,7 +162,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
           val leaf = pte.R || pte.X
         }
 
-        val pteBuffer = RegNextWhen(dBusRsp.pte, dBusAccess.rsp.valid)
+        val pteBuffer = RegNextWhen(dBusRsp.pte, dBusAccess.rsp.valid && !dBusAccess.rsp.redo)
 
         dBusAccess.cmd.valid := False
         dBusAccess.cmd.write := False
@@ -190,10 +191,12 @@ class MmuPlugin(virtualRange : UInt => Bool,
           }
           is(State.L1_RSP){
             when(dBusAccess.rsp.valid){
+              state := State.L0_CMD
               when(dBusRsp.leaf || dBusRsp.exception){
                 state := State.IDLE
-              } otherwise {
-                state := State.L0_CMD
+              }
+              when(dBusAccess.rsp.redo){
+                state := State.L1_CMD
               }
             }
           }
@@ -207,11 +210,14 @@ class MmuPlugin(virtualRange : UInt => Bool,
           is(State.L0_RSP){
             when(dBusAccess.rsp.valid) {
               state := State.IDLE
+              when(dBusAccess.rsp.redo){
+                state := State.L0_CMD
+              }
             }
           }
         }
 
-        when(dBusAccess.rsp.valid && (dBusRsp.leaf || dBusRsp.exception)){
+        when(dBusAccess.rsp.valid && !dBusAccess.rsp.redo && (dBusRsp.leaf || dBusRsp.exception)){
           for(port <- ports){
             when(portId === port.id) {
               port.entryToReplace.increment()
