@@ -40,13 +40,13 @@ cd VexRiscv
 Run regressions =>
 sbt "runMain vexriscv.demo.LinuxGen -r"
 cd src/test/cpp/regression
-make run  IBUS=CACHED DBUS=SIMPLE DEBUG_PLUGIN=no DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=10 TRACE=no
+make run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=no DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=10 TRACE=no
 
 Run linux in simulation (Require the machime mode emulator compiled in SIM mode) =>
 sbt "runMain vexriscv.demo.LinuxGen"
 cd src/test/cpp/regression
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
-make run IBUS=CACHED DBUS=SIMPLE  DEBUG_PLUGIN=no SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/vmlinux.bin DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
+make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=no SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/vmlinux.bin DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
 
 Run linux with QEMU (Require the machime mode emulator compiled in QEMU mode)
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
@@ -118,9 +118,9 @@ object LinuxGen {
           prediction = NONE,
           injectorStage = true,
           config = InstructionCacheConfig(
-            cacheSize = 4096,
+            cacheSize = 4096*2,
             bytePerLine = 32,
-            wayCount = 1,
+            wayCount = 2,
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 32,
@@ -147,9 +147,9 @@ object LinuxGen {
 //        ),
         new DBusCachedPlugin(
           config = new DataCacheConfig(
-            cacheSize         = 4096,
+            cacheSize         = 4096*2,
             bytePerLine       = 32,
-            wayCount          = 1,
+            wayCount          = 2,
             addressWidth      = 32,
             cpuDataWidth      = 32,
             memDataWidth      = 32,
