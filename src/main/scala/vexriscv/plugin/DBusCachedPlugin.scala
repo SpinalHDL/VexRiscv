@@ -61,15 +61,13 @@ class DBusCachedPlugin(config : DataCacheConfig,
       REGFILE_WRITE_VALID -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
       BYPASSABLE_MEMORY_STAGE -> False,
-      MEMORY_WR -> False,
-      MEMORY_MANAGMENT -> False
+      MEMORY_WR -> False
     ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
 
     val storeActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMS,
       RS2_USE -> True,
-      MEMORY_WR -> True,
-      MEMORY_MANAGMENT -> False
+      MEMORY_WR -> True
     )
 
     decoderService.addDefault(MEMORY_ENABLE, False)
@@ -102,9 +100,9 @@ class DBusCachedPlugin(config : DataCacheConfig,
     }
 
     def MANAGEMENT  = M"-------00000-----101-----0001111"
-    decoderService.add(MANAGEMENT, stdActions ++ List(
-      SRC2_CTRL -> Src2CtrlEnum.RS,
-      RS2_USE -> True,
+
+    decoderService.addDefault(MEMORY_MANAGMENT, False)
+    decoderService.add(MANAGEMENT, List(
       MEMORY_MANAGMENT -> True
     ))
 
@@ -161,6 +159,10 @@ class DBusCachedPlugin(config : DataCacheConfig,
       )
       cache.io.cpu.execute.args.size := size
       cache.io.cpu.execute.args.forceUncachedAccess := False
+
+      cache.io.cpu.flush.valid := arbitration.isValid && input(MEMORY_MANAGMENT)
+      arbitration.haltItself setWhen(cache.io.cpu.flush.isStall)
+
       if(genAtomic) {
         cache.io.cpu.execute.args.isAtomic := False
         when(input(MEMORY_ATOMIC)){

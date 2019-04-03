@@ -133,11 +133,13 @@ case class DataCacheCpuBus(p : DataCacheConfig) extends Bundle with IMasterSlave
   val writeBack = DataCacheCpuWriteBack(p)
 
   val redo = Bool()
+  val flush = Event
 
   override def asMaster(): Unit = {
     master(execute)
     master(memory)
     master(writeBack)
+    master(flush)
     in(redo)
   }
 }
@@ -298,7 +300,6 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
 class DataCache(p : DataCacheConfig) extends Component{
   import p._
-  assert(wayCount == 1)
   assert(cpuDataWidth == memDataWidth)
 
   val io = new Bundle{
@@ -449,12 +450,19 @@ class DataCache(p : DataCacheConfig) extends Component{
         tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
         tagsWriteCmd.way.setAll()
         tagsWriteCmd.data.valid := False
-        when(mmuRsp.physicalAddress(lineRange) =/= lineCount - 1) {
+        when(mmuRsp.physicalAddress(lineRange) =/= wayLineCount - 1) {
           mmuRsp.physicalAddress.getDrivingReg(lineRange) := mmuRsp.physicalAddress(lineRange) + 1
           io.cpu.writeBack.haltIt := True
         } otherwise {
           valid := False
         }
+      }
+
+      io.cpu.flush.ready := False
+      when(io.cpu.flush.valid && !io.cpu.execute.isValid && !io.cpu.memory.isValid && !io.cpu.writeBack.isValid && !io.cpu.redo){
+        io.cpu.flush.ready := True
+        mmuRsp.physicalAddress.getDrivingReg(lineRange) := 0
+        valid := True
       }
     }
 
