@@ -22,13 +22,12 @@ case class DataCacheConfig(cacheSize : Int,
                            earlyWaysHits : Boolean = true,
                            earlyDataMux : Boolean = false,
                            tagSizeShift : Int = 0, //Used to force infering ram
-                           atomicEntriesCount : Int = 0){
+                           withLrSc : Boolean = false){
 
   assert(!(earlyDataMux && !earlyWaysHits))
   def burstSize = bytePerLine*8/memDataWidth
   val burstLength = bytePerLine/(memDataWidth/8)
   def catchSomething = catchUnaligned || catchIllegal || catchAccessError
-  def genAtomic = atomicEntriesCount != 0
 
   def getAxi4SharedConfig() = Axi4Config(
     addressWidth = addressWidth,
@@ -89,7 +88,7 @@ case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
   val data = Bits(p.cpuDataWidth bit)
   val size = UInt(2 bits)
   val forceUncachedAccess = Bool
-  val isAtomic = ifGen(p.genAtomic){Bool}
+  val isAtomic = ifGen(p.withLrSc){Bool}
   //  val all = Bool                      //Address should be zero when "all" is used
 }
 
@@ -116,7 +115,7 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   val data = Bits(p.cpuDataWidth bit)
   val address = UInt(p.addressWidth bit)
   val mmuException, unalignedAccess , accessError = Bool
-  val clearAtomicEntries = ifGen(p.genAtomic) {Bool}
+  val clearAtomicEntries = ifGen(p.withLrSc) {Bool}
 
   //  val exceptionBus = if(p.catchSomething) Flow(ExceptionCause()) else null
 
@@ -467,7 +466,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     }
 
 
-    val atomic = genAtomic generate new Area{
+    val atomic = withLrSc generate new Area{
       case class AtomicEntry() extends Bundle{
         val valid = Bool()
         val address = UInt(addressWidth bits)
@@ -477,18 +476,12 @@ class DataCache(p : DataCacheConfig) extends Component{
           this
         }
       }
-      val entries = Vec(Reg(AtomicEntry()).init, atomicEntriesCount)
-      val entriesAllocCounter = Counter(atomicEntriesCount)
-      val entriesHit = entries.map(e => e.valid && e.address === io.cpu.writeBack.address).orR
-      when(io.cpu.writeBack.isValid && request.isAtomic && !request.wr){
-        entries(entriesAllocCounter).valid := True
-        entries(entriesAllocCounter).address := io.cpu.writeBack.address
-        when(!io.cpu.writeBack.isStuck){
-          entriesAllocCounter.increment()
-        }
+      val reserved = RegInit(False)
+      when(io.cpu.writeBack.isValid && !io.cpu.writeBack.isStuck && !io.cpu.redo && request.isAtomic && !request.wr){
+        reserved := True
       }
       when(io.cpu.writeBack.clearAtomicEntries){
-        entries.foreach(_.valid := False)
+        reserved := False
       }
     }
 
@@ -512,7 +505,7 @@ class DataCache(p : DataCacheConfig) extends Component{
         io.mem.cmd.length := 0
         io.mem.cmd.last := True
 
-        if(genAtomic) when(request.isAtomic && !atomic.entriesHit){
+        if(withLrSc) when(request.isAtomic && !atomic.reserved){
           io.mem.cmd.valid := False
           io.cpu.writeBack.haltIt := False
         }
@@ -538,7 +531,7 @@ class DataCache(p : DataCacheConfig) extends Component{
           //On write to read colisions
           io.cpu.redo := !request.wr && (colisions & waysHits) =/= 0
 
-          if(genAtomic) when(request.isAtomic && !atomic.entriesHit){
+          if(withLrSc) when(request.isAtomic && !atomic.reserved){
             io.mem.cmd.valid := False
             dataWriteCmd.valid := False
             io.cpu.writeBack.haltIt := False
@@ -577,9 +570,9 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     assert(!(io.cpu.writeBack.isValid && !io.cpu.writeBack.haltIt && io.cpu.writeBack.isStuck), "writeBack stuck by another plugin is not allowed")
 
-    if(genAtomic){
+    if(withLrSc){
       when(request.isAtomic && request.wr){
-        io.cpu.writeBack.data := (!atomic.entriesHit).asBits.resized
+        io.cpu.writeBack.data := (!atomic.reserved).asBits.resized
       }
     }
   }

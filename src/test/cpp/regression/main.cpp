@@ -3456,7 +3456,6 @@ int main(int argc, char **argv, char **env) {
 //     redo(REDO,WorkspaceRegression("deleg").withRiscvRef()->loadHex("../raw/deleg/build/deleg.hex")->bootAt(0x80000000u)->run(50e3););
 //    return 0;
 
-    redo(REDO,WorkspaceRegression("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
 
 	for(int idx = 0;idx < 1;idx++){
 
@@ -3568,7 +3567,8 @@ int main(int argc, char **argv, char **env) {
             #endif
 
 			#ifdef DEBUG_PLUGIN
-				redo(REDO,DebugPluginTest().run(1e6););
+			//TODO
+//				redo(REDO,DebugPluginTest().run(1e6););
 			#endif
 		#endif
 

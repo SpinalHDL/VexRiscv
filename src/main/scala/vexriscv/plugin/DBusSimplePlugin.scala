@@ -205,12 +205,11 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
                        earlyInjection : Boolean = false, /*, idempotentRegions : (UInt) => Bool = (x) => False*/
                        emitCmdInMemoryStage : Boolean = false,
                        onlyLoadWords : Boolean = false,
-                       atomicEntriesCount : Int = 0,
+                       withLrSc : Boolean = false,
                        memoryTranslatorPortConfig : Any = null) extends Plugin[VexRiscv] with DBusAccessService {
 
   var dBus  : DBusSimpleBus = null
   assert(!(emitCmdInMemoryStage && earlyInjection))
-  def genAtomic = atomicEntriesCount != 0
   object MEMORY_ENABLE extends Stageable(Bool)
   object MEMORY_READ_DATA extends Stageable(Bits(32 bits))
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
@@ -269,7 +268,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     )
 
 
-    if(genAtomic){
+    if(withLrSc){
       List(LB, LH, LW, LBU, LHU, LWU, SB, SH, SW).foreach(e =>
         decoderService.add(e, Seq(MEMORY_ATOMIC -> False))
       )
@@ -373,29 +372,14 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       }
 
 
-      val atomic = genAtomic generate new Area{
-        val address = input(SRC_ADD).asUInt
-        case class AtomicEntry() extends Bundle{
-          val valid = Bool()
-          val address = UInt(32 bits)
-
-          def init: this.type ={
-            valid init(False)
-            this
-          }
-        }
-        val entries = Vec(Reg(AtomicEntry()).init, atomicEntriesCount)
-        val entriesAllocCounter = Counter(atomicEntriesCount)
-        insert(ATOMIC_HIT) := entries.map(e => e.valid && e.address === address).orR
-        when(arbitration.isValid &&  input(MEMORY_ENABLE) && input(MEMORY_ATOMIC) && !input(MEMORY_STORE)){
-          entries(entriesAllocCounter).valid := True
-          entries(entriesAllocCounter).address := address
-          when(!arbitration.isStuck){
-            entriesAllocCounter.increment()
-          }
+      val atomic = withLrSc generate new Area{
+        val reserved = RegInit(False)
+        insert(ATOMIC_HIT) := reserved
+        when(arbitration.isFiring &&  input(MEMORY_ENABLE) && input(MEMORY_ATOMIC) && !input(MEMORY_STORE)){
+          reserved := True
         }
         when(service(classOf[IContextSwitching]).isContextSwitching){
-          entries.foreach(_.valid := False)
+          reserved := False
         }
 
         when(input(MEMORY_STORE) && input(MEMORY_ATOMIC) && !input(ATOMIC_HIT)){
@@ -476,7 +460,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
       when(arbitration.isValid && input(MEMORY_ENABLE)) {
         output(REGFILE_WRITE_DATA) := (if(!onlyLoadWords) rspFormated else input(MEMORY_READ_DATA))
-        if(genAtomic){
+        if(withLrSc){
           when(input(MEMORY_ATOMIC) && input(MEMORY_STORE)){
             output(REGFILE_WRITE_DATA)  := (!input(ATOMIC_HIT)).asBits.resized
           }

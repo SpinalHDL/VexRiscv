@@ -403,6 +403,8 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
          source <- privilege.sources){
       source.cond = source.cond.pull()
     }
+
+    pipeline.update(MPP, UInt(2 bits))
   }
 
   def inhibateInterrupts() : Unit = allowInterrupts := False
@@ -503,7 +505,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       ucycleAccess(CSR.UCYCLE, mcycle(31 downto 0))
       ucycleAccess(CSR.UCYCLEH, mcycle(63 downto 32))
 
-      pipeline.update(MPP, mstatus.MPP)
+      pipeline(MPP) := mstatus.MPP
     }
 
     val supervisorCsr = ifGen(supervisorGen) {

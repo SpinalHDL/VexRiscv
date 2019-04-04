@@ -118,9 +118,9 @@ object LinuxGen {
           prediction = NONE,
           injectorStage = true,
           config = InstructionCacheConfig(
-            cacheSize = 4096*2,
+            cacheSize = 4096*1,
             bytePerLine = 32,
-            wayCount = 2,
+            wayCount = 1,
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 32,
@@ -140,32 +140,33 @@ object LinuxGen {
 //          catchAddressMisaligned = true,
 //          catchAccessFault = true,
 //          earlyInjection = false,
-//          atomicEntriesCount = 1,
+//          withLrSc = true,
 //          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
 //            portTlbSize = 4
 //          )
 //        ),
         new DBusCachedPlugin(
+          dBusCmdMasterPipe = true,
+          dBusCmdSlavePipe = true,
+          dBusRspSlavePipe = true,
           config = new DataCacheConfig(
-            cacheSize         = 4096*2,
+            cacheSize         = 4096*1,
             bytePerLine       = 32,
-            wayCount          = 2,
+            wayCount          = 1,
             addressWidth      = 32,
             cpuDataWidth      = 32,
             memDataWidth      = 32,
             catchAccessError  = true,
             catchIllegal      = true,
             catchUnaligned    = true,
-            atomicEntriesCount = 1
+            withLrSc = true
 //          )
           ),
           memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
             portTlbSize = 4
           )
         ),
-//        new StaticMemoryTranslatorPlugin(
-//          ioRange      = _(31 downto 28) === 0xF
-//        ),
+
         //          new MemoryTranslatorPlugin(
         //            tlbSize = 32,
         //            virtualRange = _(31 downto 28) === 0xC,
@@ -177,13 +178,13 @@ object LinuxGen {
         ),
         new RegFilePlugin(
           regFileReadyKind = plugin.SYNC,
-          zeroBoot = true
+          zeroBoot = false //TODO
         ),
         new IntAluPlugin,
         new SrcPlugin(
           separatedAddSub = false
         ),
-        new FullBarrelShifterPlugin(earlyInjection = true),
+        new FullBarrelShifterPlugin(earlyInjection = false),
         //        new LightShifterPlugin,
         new HazardSimplePlugin(
           bypassExecute           = true,
@@ -230,7 +231,7 @@ object LinuxGen {
         //          )),
 //        new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
-          earlyBranch = true,
+          earlyBranch = false,
           catchAddressMisaligned = true,
           fenceiGenAsAJump = true
         ),
@@ -239,10 +240,14 @@ object LinuxGen {
     )
     if(withMmu) config.plugins += new MmuPlugin(
       virtualRange = a => True,
-     // virtualRange = x => x(31 downto 24) =/= 0x81, //TODO It fix the DTB kernel access (workaround)
+     // virtualRange = x => x(31 downto 24) =/= 0x81,
       ioRange = (x => if(litex) x(31 downto 28) === 0xB || x(31 downto 28) === 0xE || x(31 downto 28) === 0xF else x(31 downto 28) === 0xF),
-      allowUserIo = true
-    )
+      allowUserIo = true //TODO ??
+    ) else {
+      config.plugins += new StaticMemoryTranslatorPlugin(
+        ioRange      = _(31 downto 28) === 0xF
+      )
+    }
     config
   }
 
@@ -375,14 +380,13 @@ object LinuxSyntesisBench extends App{
   //    val rtls = List(fullNoMmu)
 
   val targets = XilinxStdTargets(
-    vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
-  )/* ++ AlteraStdTargets(
-    quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin",
-    quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin"
-  ) ++  IcestormStdTargets().take(1)*/
+    vivadoArtix7Path = "/media/miaou/HD/linux/Xilinx/Vivado/2018.3/bin"
+  ) ++ AlteraStdTargets(
+    quartusCycloneIVPath = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin",
+    quartusCycloneVPath  = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin"
+  ) ++  IcestormStdTargets().take(1)
 
-
-  Bench(rtls, targets, "/eda/tmp")
+  Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
 }
 
 object LinuxSim extends App{

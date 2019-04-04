@@ -81,7 +81,7 @@ object TestsWorkspace {
               catchAccessError  = true,
               catchIllegal      = true,
               catchUnaligned    = true,
-              atomicEntriesCount = 2
+              withLrSc = true
             ),
             //            memoryTranslatorPortConfig = null
             memoryTranslatorPortConfig = MemoryTranslatorPortConfig(

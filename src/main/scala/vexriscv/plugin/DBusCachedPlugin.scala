@@ -20,6 +20,9 @@ class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
 
 class DBusCachedPlugin(config : DataCacheConfig,
                        memoryTranslatorPortConfig : Any = null,
+                       dBusCmdMasterPipe : Boolean = false,
+                       dBusCmdSlavePipe : Boolean = false,
+                       dBusRspSlavePipe : Boolean = false,
                        csrInfo : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService {
   import config._
 
@@ -80,7 +83,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       List(SB, SH, SW).map(_ -> storeActions)
     )
 
-    if(genAtomic){
+    if(withLrSc){
       List(LB, LH, LW, LBU, LHU, LWU, SB, SH, SW).foreach(e =>
         decoderService.add(e, Seq(MEMORY_ATOMIC -> False))
       )
@@ -147,7 +150,14 @@ class DBusCachedPlugin(config : DataCacheConfig,
     dBus = master(DataCacheMemBus(this.config)).setName("dBus")
 
     val cache = new DataCache(this.config)
-    cache.io.mem <> dBus
+
+    //Interconnect the plugin dBus with the cache dBus with some optional pipelining
+    def optionPipe[T](cond : Boolean, on : T)(f : T => T) : T = if(cond) f(on) else on
+    def cmdBuf = optionPipe(dBusCmdSlavePipe, cache.io.mem.cmd)(_.s2mPipe())
+    dBus.cmd << optionPipe(dBusCmdMasterPipe, cmdBuf)(_.m2sPipe())
+    cache.io.mem.rsp << optionPipe(dBusRspSlavePipe,dBus.rsp)(_.m2sPipe())
+
+
 
     execute plug new Area {
       import execute._
@@ -167,7 +177,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       cache.io.cpu.flush.valid := arbitration.isValid && input(MEMORY_MANAGMENT)
       arbitration.haltItself setWhen(cache.io.cpu.flush.isStall)
 
-      if(genAtomic) {
+      if(withLrSc) {
         cache.io.cpu.execute.args.isAtomic := False
         when(input(MEMORY_ATOMIC)){
           cache.io.cpu.execute.args.isAtomic := True
@@ -197,7 +207,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
       cache.io.cpu.writeBack.address := U(input(REGFILE_WRITE_DATA))
-      if(genAtomic) cache.io.cpu.writeBack.clearAtomicEntries := service(classOf[IContextSwitching]).isContextSwitching
+      if(withLrSc) cache.io.cpu.writeBack.clearAtomicEntries := service(classOf[IContextSwitching]).isContextSwitching
 
       if(catchSomething) {
         exceptionBus.valid := False //cache.io.cpu.writeBack.mmuMiss || cache.io.cpu.writeBack.accessError || cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.unalignedAccess
@@ -250,7 +260,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
     }
 
     //Share access to the dBus (used by self refilled MMU)
-    val dBusSharing = (dBusAccess != null) generate pipeline plug new Area{
+    if(dBusAccess != null) pipeline plug new Area{
       dBusAccess.cmd.ready := False
       val forceDatapath = False
       when(dBusAccess.cmd.valid){
@@ -264,7 +274,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
           cache.io.cpu.execute.args.data := dBusAccess.cmd.data
           cache.io.cpu.execute.args.size := dBusAccess.cmd.size
           cache.io.cpu.execute.args.forceUncachedAccess := False
-          if(genAtomic) cache.io.cpu.execute.args.isAtomic := False
+          if(withLrSc) cache.io.cpu.execute.args.isAtomic := False
           cache.io.cpu.execute.address := dBusAccess.cmd.address  //Will only be 12 muxes
           forceDatapath := True
         }

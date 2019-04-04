@@ -220,9 +220,9 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
             decodeExceptionPort.valid := iBusRsp.readyForError
             decodeExceptionPort.code := 1
           }
+          decodeExceptionPort.valid clearWhen(fetcherHalt)
         }
 
-        decodeExceptionPort.valid clearWhen(fetcherHalt)
 
         cacheRspArbitration.halt setWhen (issueDetected || iBusRspOutputHalt)
         iBusRsp.output.valid := cacheRspArbitration.output.valid
