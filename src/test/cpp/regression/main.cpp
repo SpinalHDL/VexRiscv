@@ -3567,8 +3567,7 @@ int main(int argc, char **argv, char **env) {
             #endif
 
 			#ifdef DEBUG_PLUGIN
-			//TODO
-//				redo(REDO,DebugPluginTest().run(1e6););
+				redo(REDO,DebugPluginTest().run(1e6););
 			#endif
 		#endif
 

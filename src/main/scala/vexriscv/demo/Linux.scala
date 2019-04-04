@@ -40,13 +40,13 @@ cd VexRiscv
 Run regressions =>
 sbt "runMain vexriscv.demo.LinuxGen -r"
 cd src/test/cpp/regression
-make run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=no DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=10 TRACE=no
+make run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=10 TRACE=no
 
 Run linux in simulation (Require the machime mode emulator compiled in SIM mode) =>
 sbt "runMain vexriscv.demo.LinuxGen"
 cd src/test/cpp/regression
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
-make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=no SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/vmlinux.bin DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
+make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/vmlinux.bin DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
 
 Run linux with QEMU (Require the machime mode emulator compiled in QEMU mode)
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
@@ -88,6 +88,7 @@ https://github.com/riscv/riscv-qemu/wiki#build-and-install
 */
 
 
+//TODO test dcache flush
 //TODO have to check, look like supervisor can't get interrupt if the machine mod didn't delegated it, have to check exactly
 object LinuxGen {
   def configFull(litex : Boolean, withMmu : Boolean) = {
@@ -178,7 +179,7 @@ object LinuxGen {
         ),
         new RegFilePlugin(
           regFileReadyKind = plugin.SYNC,
-          zeroBoot = false //TODO
+          zeroBoot = true //TODO
         ),
         new IntAluPlugin,
         new SrcPlugin(
@@ -205,7 +206,7 @@ object LinuxGen {
           divUnrollFactor = 1
         ),
         //          new DivPlugin,
-        new CsrPlugin(CsrPluginConfig.linux(0x80000020l)),
+        new CsrPlugin(CsrPluginConfig.linux(0x80000020l).copy(ebreakGen = false)),
         //          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
         //             CsrPluginConfig(
         //            catchIllegalAccess = false,
@@ -229,7 +230,7 @@ object LinuxGen {
         //            wfiGenAsNop    = true,
         //            ucycleAccess   = CsrAccess.NONE
         //          )),
-//        new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
+        new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
           earlyBranch = false,
           catchAddressMisaligned = true,
