@@ -207,7 +207,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         if (catchSomething) {
           decodeExceptionPort.valid := False
           decodeExceptionPort.code.assignDontCare()
-          decodeExceptionPort.badAddr := cacheRsp.pc
+          decodeExceptionPort.badAddr := cacheRsp.pc(31 downto 2) @@ "00"
 
           if(catchIllegalAccess) when(cacheRsp.isValid && cacheRsp.mmuException && !issueDetected) {
             issueDetected \= True
