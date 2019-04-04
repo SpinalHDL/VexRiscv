@@ -131,7 +131,7 @@ object LinuxGen {
             twoCycleCache = true
 //          )
           ),
-          memoryTranslatorPortConfig = MmuPortConfig(
+          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
             portTlbSize = 4
           )
         ),

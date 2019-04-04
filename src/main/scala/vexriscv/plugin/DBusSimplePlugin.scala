@@ -280,7 +280,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
           MEMORY_ATOMIC -> True
         )
       )
-      //TODO probably the cached implemention of SC is bugy (address calculation)
+
       decoderService.add(
         key = SC,
         values = storeActions.filter(_._1 != SRC2_CTRL) ++ Seq(
