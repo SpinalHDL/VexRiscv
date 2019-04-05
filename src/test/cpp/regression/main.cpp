@@ -3559,6 +3559,10 @@ int main(int argc, char **argv, char **env) {
 //				redo(REDO,TestX28("mmu",mmuRef, sizeof(mmuRef)/4).noInstructionReadCheck()->run(4e4);)
 //			#endif
 
+            #ifdef IBUS_CACHED
+                redo(REDO,WorkspaceRegression("icache").withRiscvRef()->loadHex("../raw/icache/build/icache.hex")->bootAt(0x80000000u)->run(50e3););
+            #endif
+
             #ifdef MMU
                 redo(REDO,WorkspaceRegression("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
             #endif
