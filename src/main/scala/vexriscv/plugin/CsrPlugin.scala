@@ -314,13 +314,15 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
   val csrMapping = new CsrMapping()
 
-  //Interruption specification data model
+  //Interruption and exception data model
   case class Delegator(var enable : Bool, privilege : Int)
-  case class InterruptSource(var cond : Bool, id : Int, privilege : Int, delegators : List[Delegator])
-  var interruptSpecs = ArrayBuffer[InterruptSource]()
+  case class InterruptSpec(var cond : Bool, id : Int, privilege : Int, delegators : List[Delegator])
+  case class ExceptionSpec(id : Int, delegators : List[Delegator])
+  var interruptSpecs = ArrayBuffer[InterruptSpec]()
+  var exceptionSpecs = ArrayBuffer[ExceptionSpec]()
 
   def addInterrupt(cond : Bool, id : Int, privilege : Int, delegators : List[Delegator]): Unit = {
-    interruptSpecs += InterruptSource(cond, id, privilege, delegators)
+    interruptSpecs += InterruptSpec(cond, id, privilege, delegators)
   }
 
   override def r(csrAddress: Int, bitOffset: Int, that: Data): Unit = csrMapping.r(csrAddress, bitOffset, that)
@@ -464,8 +466,10 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       val minstret = Reg(UInt(64 bits)) randBoot()
 
 
-
-      val medeleg = Reg(Bits(32 bits)) init(0)
+      val medeleg = supervisorGen generate new Area {
+        val IAM, IAF, II, LAM, LAF, SAM, SAF, EU, ES, IPF, LPF, SPF = RegInit(False)
+        val mapping = mutable.HashMap(0 -> IAM, 1 -> IAF, 2 -> II, 4 -> LAM, 5 -> LAF, 6 -> SAM, 7 -> SAF, 8 -> EU, 9 -> ES, 12 -> IPF, 13 -> LPF, 15 -> SPF)
+      }
       val mideleg = supervisorGen generate new Area {
         val ST, SE, SS = RegInit(False)
       }
@@ -493,7 +497,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       minstretAccess(CSR.MINSTRETH, minstret(63 downto 32))
 
       if(supervisorGen) {
-        medelegAccess(CSR.MEDELEG, medeleg)
+        for((id, enable) <- medeleg.mapping) medelegAccess(CSR.MEDELEG, id -> enable)
         midelegAccess(CSR.MIDELEG, 9 -> mideleg.SE, 5 -> mideleg.ST, 1 -> mideleg.SS)
       }
 
@@ -578,46 +582,13 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         addInterrupt(sip.STIP && sie.STIE,    id = 5, privilege = 1, delegators = List(Delegator(mideleg.ST, 3)))
         addInterrupt(sip.SSIP && sie.SSIE,    id = 1, privilege = 1, delegators = List(Delegator(mideleg.SS, 3)))
         addInterrupt(sip.SEIP_OR && sie.SEIE, id = 9, privilege = 1, delegators = List(Delegator(mideleg.SE, 3)))
+
+        for((id, enable) <- medeleg.mapping) exceptionSpecs += ExceptionSpec(id, List(Delegator(enable, 3)))
       }
 
       addInterrupt(mip.MTIP && mie.MTIE, id = 7, privilege = 3, delegators = Nil)
       addInterrupt(mip.MSIP && mie.MSIE, id = 3, privilege = 3, delegators = Nil)
       addInterrupt(mip.MEIP && mie.MEIE, id = 11, privilege = 3, delegators = Nil)
-
-      case class DelegatorModel(value : Bits, source : Int, target : Int)
-//      def solveDelegators(delegators : Seq[DelegatorModel], id : Int, lowerBound : Int): UInt = {
-//        val filtredDelegators = delegators.filter(_.target >= lowerBound)
-//        val ret = U(lowerBound, 2 bits)
-//        for(d <- filtredDelegators){
-//          when(!d.value(id)){
-//            ret := d.source
-//          }
-//        }
-//        ret
-//      }
-
-      def solveDelegators(delegators : Seq[DelegatorModel], id : UInt, lowerBound : UInt): UInt = {
-        if(delegators.isEmpty) return U"11"
-        val ret = U(delegators.last.target, 2 bits)
-        for(d <- delegators){
-          when(!d.value(id) || d.target < lowerBound){
-            ret := d.source
-          }
-        }
-        ret
-//        val ret = U"11"
-//        var continue = True
-//        for(d <- delegators){
-//          continue = continue && d.value(id)
-//          when(continue){
-//            ret := d.source
-//          }
-//        }
-//        ret.max(lowerBound)
-      }
-
-      val exceptionDelegators = ArrayBuffer[DelegatorModel]()
-      if(medelegAccess.canWrite) exceptionDelegators += DelegatorModel(medeleg,3, 1)
 
 
       val mepcCaptureStage = if(exceptionPortsInfos.nonEmpty) lastStage else decode
@@ -629,7 +600,27 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         val exceptionValids = Vec(stages.map(s => Bool().setPartialName(s.getName())))
         val exceptionValidsRegs = Vec(stages.map(s => Reg(Bool).init(False).setPartialName(s.getName()))).allowUnsetRegToAvoidLatch
         val exceptionContext = Reg(ExceptionCause())
-        val exceptionTargetPrivilege = solveDelegators(exceptionDelegators, exceptionContext.code, privilege)
+        val exceptionTargetPrivilegeUncapped = U"11"
+
+        switch(exceptionContext.code){
+          for(s <- exceptionSpecs){
+            is(s.id){
+              var exceptionPrivilegs = if (supervisorGen) List(1, 3) else List(3)
+              while(exceptionPrivilegs.length != 1){
+                val p = exceptionPrivilegs.head
+                if (exceptionPrivilegs.tail.forall(e => s.delegators.exists(_.privilege == e))) {
+                  val delegUpOn = s.delegators.filter(_.privilege > p).map(_.enable).fold(True)(_ && _)
+                  val delegDownOff = !s.delegators.filter(_.privilege <= p).map(_.enable).orR
+                  when(delegUpOn && delegDownOff) {
+                    exceptionTargetPrivilegeUncapped := p
+                  }
+                }
+                exceptionPrivilegs = exceptionPrivilegs.tail
+              }
+            }
+          }
+        }
+        val exceptionTargetPrivilege = exceptionTargetPrivilegeUncapped.max(privilege)
 
         val groupedByStage = exceptionPortsInfos.map(_.stage).distinct.map(s => {
           val stagePortsInfos = exceptionPortsInfos.filter(_.stage == s).sortWith(_.priority > _.priority)
