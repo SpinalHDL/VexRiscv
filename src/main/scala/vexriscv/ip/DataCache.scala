@@ -448,9 +448,9 @@ class DataCache(p : DataCacheConfig) extends Component{
         tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
         tagsWriteCmd.way.setAll()
         tagsWriteCmd.data.valid := False
+        io.cpu.writeBack.haltIt := True
         when(mmuRsp.physicalAddress(lineRange) =/= wayLineCount - 1) {
           mmuRsp.physicalAddress.getDrivingReg(lineRange) := mmuRsp.physicalAddress(lineRange) + 1
-          io.cpu.writeBack.haltIt := True
         } otherwise {
           valid := False
         }
