@@ -233,7 +233,7 @@ object LinuxGen {
         new BranchPlugin(
           earlyBranch = false,
           catchAddressMisaligned = true,
-          fenceiGenAsAJump = true
+          fenceiGenAsAJump = false
         ),
         new YamlPlugin("cpu0.yaml")
       )
