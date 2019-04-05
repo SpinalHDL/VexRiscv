@@ -249,7 +249,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
   import p._
   assert(cpuDataWidth == memDataWidth, "Need testing")
   val io = new Bundle{
-    val flush = slave(InstructionCacheFlushBus())
+    val flush = in Bool()
     val cpu = slave(InstructionCacheCpuBus(p))
     val mem = master(InstructionCacheMemBus(p))
   }
@@ -300,15 +300,16 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     val valid = RegInit(False) clearWhen(fire)
     val address = Reg(UInt(addressWidth bits))
     val hadError = RegInit(False) clearWhen(fire)
+    val flushPending = RegInit(True)
 
     when(io.cpu.fill.valid){
       valid := True
       address := io.cpu.fill.payload
     }
 
-    io.cpu.prefetch.haltIt setWhen(valid)
+    io.cpu.prefetch.haltIt setWhen(valid || flushPending)
 
-    val flushCounter = Reg(UInt(log2Up(wayLineCount) + 1 bit)) init(if(preResetFlush) wayLineCount else 0)
+    val flushCounter = Reg(UInt(log2Up(wayLineCount) + 1 bit))
     when(!flushCounter.msb){
       io.cpu.prefetch.haltIt := True
       flushCounter := flushCounter + 1
@@ -316,17 +317,16 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     when(!RegNext(flushCounter.msb)){
       io.cpu.prefetch.haltIt := True
     }
-    val flushFromInterface = RegInit(False)
-    io.flush.cmd.ready := !(valid || io.cpu.fetch.isValid) //io.cpu.fetch.isValid will avoid bug on first cycle miss
-    when(io.flush.cmd.valid){
+
+    when(io.flush){
       io.cpu.prefetch.haltIt := True
-      when(io.flush.cmd.ready){
-        flushCounter := 0
-        flushFromInterface := True
-      }
+      flushPending := True
     }
 
-    io.flush.rsp := flushCounter.msb.rise && flushFromInterface
+    when(flushPending && !(valid || io.cpu.fetch.isValid) ){
+      flushCounter := 0
+      flushPending := False
+    }
 
 
 

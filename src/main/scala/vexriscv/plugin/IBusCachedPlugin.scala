@@ -242,19 +242,8 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         cache.io.cpu.fetch.mmuBus.rsp.refilling := False
       }
 
-      val flushStage = if(memory != null) memory else execute
-      flushStage plug new Area {
-        import flushStage._
-
-        cache.io.flush.cmd.valid := False
-        when(arbitration.isValid && input(FLUSH_ALL)) {
-          cache.io.flush.cmd.valid := True
-
-          when(!cache.io.flush.cmd.ready) {
-            arbitration.haltItself := True
-          }
-        }
-      }
+      val flushStage = decode
+      cache.io.flush := flushStage.arbitration.isValid && flushStage.input(FLUSH_ALL)
     }
   }
 }
