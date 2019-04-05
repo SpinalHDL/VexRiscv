@@ -32,9 +32,9 @@ Disassembly of section .crt_section:
 80000048:	0000a023          	sw	zero,0(ra) # f5670000 <pass+0x7566ff3c>
 8000004c:	00012203          	lw	tp,0(sp)
 80000050:	06429463          	bne	t0,tp,800000b8 <fail>
-80000054:	fff30313          	addi	t1,t1,-1
-80000058:	00408093          	addi	ra,ra,4
-8000005c:	00410113          	addi	sp,sp,4
+80000054:	ffc30313          	addi	t1,t1,-4
+80000058:	01008093          	addi	ra,ra,16
+8000005c:	01010113          	addi	sp,sp,16
 80000060:	0000500f          	0x500f
 80000064:	fc0316e3          	bnez	t1,80000030 <test2_repeat>
 
@@ -56,9 +56,9 @@ Disassembly of section .crt_section:
 80000098:	0000500f          	0x500f
 8000009c:	00012203          	lw	tp,0(sp)
 800000a0:	00429c63          	bne	t0,tp,800000b8 <fail>
-800000a4:	fff30313          	addi	t1,t1,-1
-800000a8:	00408093          	addi	ra,ra,4
-800000ac:	00410113          	addi	sp,sp,4
+800000a4:	ffc30313          	addi	t1,t1,-4
+800000a8:	01008093          	addi	ra,ra,16
+800000ac:	01010113          	addi	sp,sp,16
 800000b0:	fc0314e3          	bnez	t1,80000078 <test3_repeat>
 800000b4:	0100006f          	j	800000c4 <pass>
 

@@ -27,9 +27,9 @@ test2_repeat:
     sw x0, 0(x1)
     lw x4, 0(x2)
     bne x5,x4, fail
-    addi x6, x6, -1
-    addi x1, x1, 4
-    addi x2, x2, 4
+    addi x6, x6, -4
+    addi x1, x1, 16
+    addi x2, x2, 16
 .word 0x000500F // dcache flush
     bnez x6, test2_repeat
 
@@ -50,9 +50,9 @@ test3_repeat:
 .word 0x000500F // dcache flush
     lw x4, 0(x2)
     bne x5,x4, fail
-    addi x6, x6, -1
-    addi x1, x1, 4
-    addi x2, x2, 4
+    addi x6, x6, -4
+    addi x1, x1, 16
+    addi x2, x2, 16
     bnez x6, test3_repeat
 
 
