@@ -488,7 +488,7 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     io.cpu.redo := False
     io.cpu.writeBack.accessError := False
-    io.cpu.writeBack.mmuException := io.cpu.writeBack.isValid && (if(catchIllegal) mmuRsp.exception || (!mmuRsp.allowWrite && request.wr) || (!mmuRsp.allowRead && !request.wr) || (!mmuRsp.allowUser && io.cpu.writeBack.isUser) else False)
+    io.cpu.writeBack.mmuException := io.cpu.writeBack.isValid && (if(catchIllegal) mmuRsp.exception || (!mmuRsp.allowWrite && request.wr) || (!mmuRsp.allowRead && !request.wr) else False)
     io.cpu.writeBack.unalignedAccess := io.cpu.writeBack.isValid && (if(catchUnaligned) ((request.size === 2 && mmuRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && mmuRsp.physicalAddress(0 downto 0) =/= 0)) else False)
     io.cpu.writeBack.isWrite := request.wr
 

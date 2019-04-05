@@ -236,7 +236,6 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         cache.io.cpu.fetch.mmuBus.rsp.allowExecute := True
         cache.io.cpu.fetch.mmuBus.rsp.allowRead := True
         cache.io.cpu.fetch.mmuBus.rsp.allowWrite := True
-        cache.io.cpu.fetch.mmuBus.rsp.allowUser := True
         cache.io.cpu.fetch.mmuBus.rsp.isIoAccess := False
         cache.io.cpu.fetch.mmuBus.rsp.exception := False
         cache.io.cpu.fetch.mmuBus.rsp.refilling := False

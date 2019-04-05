@@ -321,7 +321,7 @@ class IBusSimplePlugin(resetVector : BigInt,
           }
           if(memoryTranslatorPortConfig != null) {
             val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
-            when(stages.last.input.valid && !mmu.joinCtx.refilling && (mmu.joinCtx.exception || !mmu.joinCtx.allowExecute || (!mmu.joinCtx.allowUser && privilegeService.isUser()))){
+            when(stages.last.input.valid && !mmu.joinCtx.refilling && (mmu.joinCtx.exception || !mmu.joinCtx.allowExecute)){
               decodeExceptionPort.code  := 12
               exceptionDetected := True
             }

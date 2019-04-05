@@ -124,15 +124,13 @@ class MmuPlugin(ioRange : UInt => Bool,
           port.bus.rsp.allowRead := cacheLine.allowRead  || csr.status.mxr && cacheLine.allowExecute
           port.bus.rsp.allowWrite := cacheLine.allowWrite
           port.bus.rsp.allowExecute := cacheLine.allowExecute
-          port.bus.rsp.allowUser := cacheLine.allowUser
-          port.bus.rsp.exception := cacheHit && (cacheLine.exception || cacheLine.allowUser && privilegeService.isSupervisor() && !csr.status.sum)
+          port.bus.rsp.exception := cacheHit && (cacheLine.exception || cacheLine.allowUser && privilegeService.isSupervisor() && !csr.status.sum || !cacheLine.allowUser && privilegeService.isUser())
           port.bus.rsp.refilling := !cacheHit
         } otherwise {
           port.bus.rsp.physicalAddress := port.bus.cmd.virtualAddress
           port.bus.rsp.allowRead := True
           port.bus.rsp.allowWrite := True
           port.bus.rsp.allowExecute := True
-          port.bus.rsp.allowUser := True
           port.bus.rsp.exception := False
           port.bus.rsp.refilling := False
         }

@@ -89,7 +89,6 @@ https://github.com/riscv/riscv-qemu/wiki#build-and-install
 
 
 //TODO have to check, look like supervisor can't get interrupt if the machine mod didn't delegated it, have to check exactly
-//TODO IBus cached and uncached, do not allow supervisor if it's a user page ? io.cpu.fetch.mmuException
 object LinuxGen {
   def configFull(litex : Boolean, withMmu : Boolean) = {
     val config = VexRiscvConfig(
