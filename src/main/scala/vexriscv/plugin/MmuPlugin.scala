@@ -38,17 +38,16 @@ case class MmuPort(bus : MemoryTranslatorBus, priority : Int, args : MmuPortConf
 
 case class MmuPortConfig(portTlbSize : Int)
 
-class MmuPlugin(virtualRange : UInt => Bool,
-                ioRange : UInt => Bool,
-                allowUserIo : Boolean,
-                allowMachineModeMmu : Boolean = false) extends Plugin[VexRiscv] with MemoryTranslator {
+class MmuPlugin(ioRange : UInt => Bool,
+                virtualRange : UInt => Bool = address => True,
+//                allowUserIo : Boolean = false,
+                enableMmuInMachineMode : Boolean = false) extends Plugin[VexRiscv] with MemoryTranslator {
 
   var dBusAccess : DBusAccess = null
   val portsInfo = ArrayBuffer[MmuPort]()
 
   override def newTranslationPort(priority : Int,args : Any): MemoryTranslatorBus = {
-//    val exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(stage)
-    val port = MmuPort(MemoryTranslatorBus(),priority,args.asInstanceOf[MmuPortConfig], portsInfo.length /*,exceptionBus*/)
+    val port = MmuPort(MemoryTranslatorBus(),priority,args.asInstanceOf[MmuPortConfig], portsInfo.length)
     portsInfo += port
     port.bus
   }
@@ -96,7 +95,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
       }
 
       for(offset <- List(CSR.MSTATUS, CSR.SSTATUS)) csrService.rw(offset, 19 -> status.mxr, 18 -> status.sum, 17 -> status.mprv)
-      csrService.rw(CSR.SATP, 31 -> satp.mode, 0 -> satp.ppn)  //TODO write only ?
+      csrService.rw(CSR.SATP, 31 -> satp.mode, 0 -> satp.ppn)
     }
 
     val core = pipeline plug new Area {
@@ -109,7 +108,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
         val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
         val entryToReplace = Counter(port.args.portTlbSize)
         val requireMmuLockup = virtualRange(port.bus.cmd.virtualAddress) && !port.bus.cmd.bypassTranslation && csr.satp.mode
-        if(!allowMachineModeMmu) {
+        if(!enableMmuInMachineMode) {
           requireMmuLockup clearWhen(!csr.status.mprv && privilegeService.isMachine())
           when(privilegeService.isMachine()) {
             if (port.priority == MmuPort.PRIORITY_DATA) {
@@ -133,7 +132,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
           port.bus.rsp.allowRead := True
           port.bus.rsp.allowWrite := True
           port.bus.rsp.allowExecute := True
-          port.bus.rsp.allowUser := Bool(allowUserIo)
+          port.bus.rsp.allowUser := True
           port.bus.rsp.exception := False
           port.bus.rsp.refilling := False
         }

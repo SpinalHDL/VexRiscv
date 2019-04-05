@@ -49,8 +49,7 @@ object GenFull extends App{
         ),
         new MmuPlugin(
           virtualRange = _(31 downto 28) === 0xC,
-          ioRange      = _(31 downto 28) === 0xF,
-          allowUserIo = false
+          ioRange      = _(31 downto 28) === 0xF
         ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = true

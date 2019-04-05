@@ -78,8 +78,6 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
 
     super.setup(pipeline)
 
-    //def MANAGEMENT  = M"-----------------100-----0001111"
-
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(FLUSH_ALL, False)
     decoderService.add(FENCE_I,  List(

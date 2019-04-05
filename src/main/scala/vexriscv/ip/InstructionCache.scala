@@ -411,7 +411,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       io.cpu.fetch.cacheMiss := !hit.valid
       io.cpu.fetch.error := hit.error
       io.cpu.fetch.mmuRefilling := mmuRsp.refilling
-      io.cpu.fetch.mmuException := !mmuRsp.refilling && (mmuRsp.exception || !mmuRsp.allowExecute || (!mmuRsp.allowUser && io.cpu.fetch.isUser)) //TODO Do not allow supervisor if it's a user page ?
+      io.cpu.fetch.mmuException := !mmuRsp.refilling && (mmuRsp.exception || !mmuRsp.allowExecute || (!mmuRsp.allowUser && io.cpu.fetch.isUser))
     })
   }
 
@@ -441,7 +441,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     io.cpu.decode.cacheMiss := !hit.valid
     io.cpu.decode.error := hit.error
     io.cpu.decode.mmuRefilling := mmuRsp.refilling
-    io.cpu.decode.mmuException := !mmuRsp.refilling && (mmuRsp.exception || !mmuRsp.allowExecute || (!mmuRsp.allowUser && io.cpu.decode.isUser)) //TODO Do not allow supervisor if it's a user page ?
+    io.cpu.decode.mmuException := !mmuRsp.refilling && (mmuRsp.exception || !mmuRsp.allowExecute || (!mmuRsp.allowUser && io.cpu.decode.isUser))
     io.cpu.decode.physicalAddress := mmuRsp.physicalAddress
   })
 }

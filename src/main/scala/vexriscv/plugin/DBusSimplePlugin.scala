@@ -292,6 +292,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       )
     }
 
+    decoderService.add(FENCE, Nil)
 
     rspStage = if(stages.last == execute) execute else (if(emitCmdInMemoryStage) writeBack else memory)
     if(catchSomething) {

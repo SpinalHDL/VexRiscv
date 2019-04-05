@@ -113,6 +113,8 @@ class DBusCachedPlugin(config : DataCacheConfig,
       MEMORY_MANAGMENT -> True
     ))
 
+    decoderService.add(FENCE, Nil)
+
     mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA ,memoryTranslatorPortConfig)
     redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.writeBack)
 
@@ -284,6 +286,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
 
       mmuBus.cmd.bypassTranslation setWhen(memory.input(IS_DBUS_SHARING))
       cache.io.cpu.memory.isValid setWhen(memory.input(IS_DBUS_SHARING))
+      cache.io.cpu.memory.mmuBus.rsp.allowUser setWhen(memory.input(IS_DBUS_SHARING))
       cache.io.cpu.writeBack.isValid setWhen(writeBack.input(IS_DBUS_SHARING))
       dBusAccess.rsp.valid := writeBack.input(IS_DBUS_SHARING) && !cache.io.cpu.writeBack.isWrite && (cache.io.cpu.redo || !cache.io.cpu.writeBack.haltIt)
       dBusAccess.rsp.data := cache.io.cpu.writeBack.data

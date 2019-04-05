@@ -90,12 +90,11 @@ https://github.com/riscv/riscv-qemu/wiki#build-and-install
 
 //TODO test dcache flush
 //TODO have to check, look like supervisor can't get interrupt if the machine mod didn't delegated it, have to check exactly
+//TODO IBus cached and uncached, do not allow supervisor if it's a user page ? io.cpu.fetch.mmuException
 object LinuxGen {
   def configFull(litex : Boolean, withMmu : Boolean) = {
     val config = VexRiscvConfig(
       plugins = List(
-        new DummyFencePlugin(), //TODO should be removed for design with caches
-
         //Uncomment the whole IBusSimplePlugin and comment IBusCachedPlugin if you want uncached iBus config
 //        new IBusSimplePlugin(
 //          resetVector = 0x80000000l,
@@ -179,7 +178,7 @@ object LinuxGen {
         ),
         new RegFilePlugin(
           regFileReadyKind = plugin.SYNC,
-          zeroBoot = true //TODO
+          zeroBoot = true
         ),
         new IntAluPlugin,
         new SrcPlugin(
@@ -240,10 +239,7 @@ object LinuxGen {
       )
     )
     if(withMmu) config.plugins += new MmuPlugin(
-      virtualRange = a => True,
-     // virtualRange = x => x(31 downto 24) =/= 0x81,
-      ioRange = (x => if(litex) x(31 downto 28) === 0xB || x(31 downto 28) === 0xE || x(31 downto 28) === 0xF else x(31 downto 28) === 0xF),
-      allowUserIo = true //TODO ??
+      ioRange = (x => if(litex) x(31 downto 28) === 0xB || x(31 downto 28) === 0xE || x(31 downto 28) === 0xF else x(31 downto 28) === 0xF)
     ) else {
       config.plugins += new StaticMemoryTranslatorPlugin(
         ioRange      = _(31 downto 28) === 0xF

@@ -8,7 +8,6 @@ import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 
-//TODO flush
 
 case class DataCacheConfig(cacheSize : Int,
                            bytePerLine : Int,
