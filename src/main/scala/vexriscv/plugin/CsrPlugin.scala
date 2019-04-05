@@ -314,20 +314,14 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
   val csrMapping = new CsrMapping()
 
+  //Interruption specification data model
+  case class Delegator(var enable : Bool, privilege : Int)
+  case class InterruptSource(var cond : Bool, id : Int, privilege : Int, delegators : List[Delegator])
+  var interruptSpecs = ArrayBuffer[InterruptSource]()
 
-
-  case class InterruptSource(var cond : Bool, id : Int)
-  case class InterruptPrivilege(privilege : Int){
-    var privilegeCond : Bool = null
-    val sources = ArrayBuffer[InterruptSource]()
+  def addInterrupt(cond : Bool, id : Int, privilege : Int, delegators : List[Delegator]): Unit = {
+    interruptSpecs += InterruptSource(cond, id, privilege, delegators)
   }
-
-  def getInterruptPrivilege(privilege : Int) = customInterrupts.getOrElseUpdate(privilege, InterruptPrivilege(privilege))
-  var customInterrupts = mutable.LinkedHashMap[Int, InterruptPrivilege]()
-  def addInterrupt(cond : Bool, id : Int, privilege : Int): Unit = {
-    getInterruptPrivilege(privilege).sources += InterruptSource(cond, id)
-  }
-  def createInterrupt(id : Int, privilege : Int) : Bool = { val ret = Bool(); addInterrupt(ret, id, privilege); ret}
 
   override def r(csrAddress: Int, bitOffset: Int, that: Data): Unit = csrMapping.r(csrAddress, bitOffset, that)
   override def w(csrAddress: Int, bitOffset: Int, that: Data): Unit = csrMapping.w(csrAddress, bitOffset, that)
@@ -399,10 +393,8 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
     allowInterrupts = True
     allowException = True
 
-    for (privilege <- customInterrupts.values;
-         source <- privilege.sources){
-      source.cond = source.cond.pull()
-    }
+    for (i <- interruptSpecs) i.cond = i.cond.pull()
+
 
     pipeline.update(MPP, UInt(2 bits))
   }
@@ -474,7 +466,9 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
 
       val medeleg = Reg(Bits(32 bits)) init(0)
-      val mideleg = Reg(Bits(32 bits)) init(0)
+      val mideleg = supervisorGen generate new Area {
+        val ST, SE, SS = RegInit(False)
+      }
 
       if(mvendorid != null) READ_ONLY(CSR.MVENDORID, U(mvendorid))
       if(marchid   != null) READ_ONLY(CSR.MARCHID  , U(marchid  ))
@@ -498,8 +492,10 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       minstretAccess(CSR.MINSTRET, minstret(31 downto 0))
       minstretAccess(CSR.MINSTRETH, minstret(63 downto 32))
 
-      medelegAccess(CSR.MEDELEG, medeleg)
-      midelegAccess(CSR.MIDELEG, mideleg)
+      if(supervisorGen) {
+        medelegAccess(CSR.MEDELEG, medeleg)
+        midelegAccess(CSR.MIDELEG, 9 -> mideleg.SE, 5 -> mideleg.ST, 1 -> mideleg.SS)
+      }
 
       //User CSR
       ucycleAccess(CSR.UCYCLE, mcycle(31 downto 0))
@@ -579,20 +575,14 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
 
       if(supervisorGen) {
-        getInterruptPrivilege(1).privilegeCond = (sstatus.SIE && privilege === "01") || privilege === "00"
-        getInterruptPrivilege(1).sources ++= List(
-          InterruptSource(sip.STIP && sie.STIE,  5),
-          InterruptSource(sip.SSIP && sie.SSIE,  1),
-          InterruptSource(sip.SEIP_OR && sie.SEIE,  9)
-        )
+        addInterrupt(sip.STIP && sie.STIE,    id = 5, privilege = 1, delegators = List(Delegator(mideleg.ST, 3)))
+        addInterrupt(sip.SSIP && sie.SSIE,    id = 1, privilege = 1, delegators = List(Delegator(mideleg.SS, 3)))
+        addInterrupt(sip.SEIP_OR && sie.SEIE, id = 9, privilege = 1, delegators = List(Delegator(mideleg.SE, 3)))
       }
 
-      getInterruptPrivilege(3).privilegeCond = mstatus.MIE || privilege =/= "11"
-      getInterruptPrivilege(3).sources ++= List(
-        InterruptSource(mip.MTIP && mie.MTIE,  7),
-        InterruptSource(mip.MSIP && mie.MSIE,  3),
-        InterruptSource(mip.MEIP && mie.MEIE, 11)
-      )
+      addInterrupt(mip.MTIP && mie.MTIE, id = 7, privilege = 3, delegators = Nil)
+      addInterrupt(mip.MSIP && mie.MSIE, id = 3, privilege = 3, delegators = Nil)
+      addInterrupt(mip.MEIP && mie.MEIE, id = 11, privilege = 3, delegators = Nil)
 
       case class DelegatorModel(value : Bits, source : Int, target : Int)
 //      def solveDelegators(delegators : Seq[DelegatorModel], id : Int, lowerBound : Int): UInt = {
@@ -625,9 +615,6 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 //        }
 //        ret.max(lowerBound)
       }
-
-      val interruptDelegators = ArrayBuffer[DelegatorModel]()
-      if(midelegAccess.canWrite) interruptDelegators += DelegatorModel(mideleg,3, 1)
 
       val exceptionDelegators = ArrayBuffer[DelegatorModel]()
       if(medelegAccess.canWrite) exceptionDelegators += DelegatorModel(medeleg,3, 1)
@@ -703,32 +690,28 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       //Process interrupt request, code and privilege
       val interrupt = False
       val interruptCode = UInt(4 bits).assignDontCare().addTag(Verilator.public)
-      val interruptDelegatorHit = interruptDelegators.map(d => (d -> False)).toMap
-      for(model <- customInterrupts.values.toSeq.sortBy(_.privilege)){
-        when(model.privilegeCond){
-          when(model.sources.map(_.cond).orR){
-            interrupt := True
-          }
-          for(source <- model.sources){
-            when(source.cond){
-              interruptCode := source.id
-              for(interruptDelegator <- interruptDelegators){
-                interruptDelegatorHit(interruptDelegator) := (if(interruptDelegator.target < model.privilege){
-                  False
-                } else {
-                  interruptDelegator.value(source.id)
-                })
-              }
+      val privilegeAllowInterrupts = mutable.HashMap(
+        1 -> ((sstatus.SIE && privilege === "01") || privilege < "01"),
+        3 -> (mstatus.MIE || privilege < "11")
+      )
+      var interruptPrivilegs = if (supervisorGen) List(1, 3) else List(3)
+      val interruptTargetPrivilege = UInt(2 bits).assignDontCare()
+      while(interruptPrivilegs.nonEmpty){
+        val p = interruptPrivilegs.head
+        when(privilegeAllowInterrupts(p)){
+          for(i <- interruptSpecs
+              if i.privilege <= p //EX : Machine timer interrupt can't go into supervisor mode
+              if interruptPrivilegs.tail.forall(e => i.delegators.exists(_.privilege == e))){ // EX : Supervisor timer need to have machine mode delegator
+            val delegUpOn = i.delegators.filter(_.privilege > p).map(_.enable).fold(True)(_ && _)
+            val delegDownOff = !i.delegators.filter(_.privilege <= p).map(_.enable).orR
+            when(i.cond && delegUpOn && delegDownOff){
+              interrupt := True
+              interruptCode := i.id
+              interruptTargetPrivilege := p
             }
           }
         }
-      }
-
-      val interruptTargetPrivilege = U(if(interruptDelegators.isEmpty) 3 else interruptDelegators.last.target, 2 bits)
-      for(interruptDelegator <- interruptDelegators){
-        when(!interruptDelegatorHit(interruptDelegator)){
-          interruptTargetPrivilege := interruptDelegator.source
-        }
+        interruptPrivilegs = interruptPrivilegs.tail
       }
 
       interrupt.clearWhen(!allowInterrupts)
