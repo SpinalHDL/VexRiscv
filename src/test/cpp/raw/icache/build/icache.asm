@@ -17,7 +17,7 @@ Disassembly of section .crt_section:
 8000001c:	02209c63          	bne	ra,sp,80000054 <fail>
 
 80000020 <test2>:
-80000020:	00100e13          	li	t3,1
+80000020:	00200e13          	li	t3,2
 80000024:	01300093          	li	ra,19
 80000028:	00000117          	auipc	sp,0x0
 8000002c:	02410113          	addi	sp,sp,36 # 8000004c <test2_trigger>

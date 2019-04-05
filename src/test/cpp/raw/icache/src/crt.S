@@ -13,7 +13,7 @@ test1: //Dummy test
     bne x1, x2, fail
 
 test2:
-    li TEST_ID, 1
+    li TEST_ID, 2
     li x1, 0x13 //nop
     la x2, test2_trigger
     j test2_aligned

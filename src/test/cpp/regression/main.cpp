@@ -1676,6 +1676,15 @@ public:
 			case 0xF00FFF48u: mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data;break;
 			case 0xF00FFF4Cu: mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); break;
 			}
+			if((addr & 0xFFFFF000) == 0xF5670000){
+			    uint32_t t = 0x900FF000 | (addr & 0xFFF);
+			    uint32_t old = (*mem.get(t + 3) << 24) | (*mem.get(t + 2) << 16)  | (*mem.get(t + 1) << 8)  | (*mem.get(t + 0) << 0);
+			    old++;
+			    *mem.get(t + 0) = old & 0xFF; old >>= 8;
+			    *mem.get(t + 1) = old & 0xFF; old >>= 8;
+			    *mem.get(t + 2) = old & 0xFF; old >>= 8;
+			    *mem.get(t + 3) = old & 0xFF; old >>= 8;
+			}
 		}else{
 			switch(addr){
 			case 0xF00FFF10u:
@@ -3561,6 +3570,9 @@ int main(int argc, char **argv, char **env) {
 
             #ifdef IBUS_CACHED
                 redo(REDO,WorkspaceRegression("icache").withRiscvRef()->loadHex("../raw/icache/build/icache.hex")->bootAt(0x80000000u)->run(50e3););
+            #endif
+            #ifdef DBUS_CACHED
+                redo(REDO,WorkspaceRegression("dcache").loadHex("../raw/dcache/build/dcache.hex")->bootAt(0x80000000u)->run(500e3););
             #endif
 
             #ifdef MMU
