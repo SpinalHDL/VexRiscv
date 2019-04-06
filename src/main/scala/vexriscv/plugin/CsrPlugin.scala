@@ -620,7 +620,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
             }
           }
         }
-        val exceptionTargetPrivilege = exceptionTargetPrivilegeUncapped.max(privilege)
+        val exceptionTargetPrivilege = privilege.max(exceptionTargetPrivilegeUncapped)
 
         val groupedByStage = exceptionPortsInfos.map(_.stage).distinct.map(s => {
           val stagePortsInfos = exceptionPortsInfos.filter(_.stage == s).sortWith(_.priority > _.priority)
@@ -681,12 +681,11 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       //Process interrupt request, code and privilege
       val interrupt = False
       val interruptCode = UInt(4 bits).assignDontCare().addTag(Verilator.public)
-      val privilegeAllowInterrupts = mutable.HashMap(
-        1 -> ((sstatus.SIE && privilege === "01") || privilege < "01"),
-        3 -> (mstatus.MIE || privilege < "11")
-      )
       var interruptPrivilegs = if (supervisorGen) List(1, 3) else List(3)
       val interruptTargetPrivilege = UInt(2 bits).assignDontCare()
+      val privilegeAllowInterrupts = mutable.HashMap[Int, Bool]()
+      if(supervisorGen) privilegeAllowInterrupts += 1 -> ((sstatus.SIE && privilege === "01") || privilege < "01")
+      privilegeAllowInterrupts += 3 -> (mstatus.MIE || privilege < "11")
       while(interruptPrivilegs.nonEmpty){
         val p = interruptPrivilegs.head
         when(privilegeAllowInterrupts(p)){
