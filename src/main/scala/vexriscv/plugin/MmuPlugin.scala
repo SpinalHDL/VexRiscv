@@ -21,6 +21,7 @@ case class DBusAccessCmd() extends Bundle {
 case class DBusAccessRsp() extends Bundle {
   val data = Bits(32 bits)
   val error = Bool()
+  val redo = Bool()
 }
 
 case class DBusAccess() extends Bundle {
@@ -37,17 +38,16 @@ case class MmuPort(bus : MemoryTranslatorBus, priority : Int, args : MmuPortConf
 
 case class MmuPortConfig(portTlbSize : Int)
 
-class MmuPlugin(virtualRange : UInt => Bool,
-                ioRange : UInt => Bool,
-                allowUserIo : Boolean,
-                allowMachineModeMmu : Boolean = false) extends Plugin[VexRiscv] with MemoryTranslator {
+class MmuPlugin(ioRange : UInt => Bool,
+                virtualRange : UInt => Bool = address => True,
+//                allowUserIo : Boolean = false,
+                enableMmuInMachineMode : Boolean = false) extends Plugin[VexRiscv] with MemoryTranslator {
 
   var dBusAccess : DBusAccess = null
   val portsInfo = ArrayBuffer[MmuPort]()
 
   override def newTranslationPort(priority : Int,args : Any): MemoryTranslatorBus = {
-//    val exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(stage)
-    val port = MmuPort(MemoryTranslatorBus(),priority,args.asInstanceOf[MmuPortConfig], portsInfo.length /*,exceptionBus*/)
+    val port = MmuPort(MemoryTranslatorBus(),priority,args.asInstanceOf[MmuPortConfig], portsInfo.length)
     portsInfo += port
     port.bus
   }
@@ -95,7 +95,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
       }
 
       for(offset <- List(CSR.MSTATUS, CSR.SSTATUS)) csrService.rw(offset, 19 -> status.mxr, 18 -> status.sum, 17 -> status.mprv)
-      csrService.rw(CSR.SATP, 31 -> satp.mode, 0 -> satp.ppn)  //TODO write only ?
+      csrService.rw(CSR.SATP, 31 -> satp.mode, 0 -> satp.ppn)
     }
 
     val core = pipeline plug new Area {
@@ -108,7 +108,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
         val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
         val entryToReplace = Counter(port.args.portTlbSize)
         val requireMmuLockup = virtualRange(port.bus.cmd.virtualAddress) && !port.bus.cmd.bypassTranslation && csr.satp.mode
-        if(!allowMachineModeMmu) {
+        if(!enableMmuInMachineMode) {
           requireMmuLockup clearWhen(!csr.status.mprv && privilegeService.isMachine())
           when(privilegeService.isMachine()) {
             if (port.priority == MmuPort.PRIORITY_DATA) {
@@ -124,15 +124,13 @@ class MmuPlugin(virtualRange : UInt => Bool,
           port.bus.rsp.allowRead := cacheLine.allowRead  || csr.status.mxr && cacheLine.allowExecute
           port.bus.rsp.allowWrite := cacheLine.allowWrite
           port.bus.rsp.allowExecute := cacheLine.allowExecute
-          port.bus.rsp.allowUser := cacheLine.allowUser
-          port.bus.rsp.exception := cacheHit && (cacheLine.exception || cacheLine.allowUser && privilegeService.isSupervisor() && !csr.status.sum)
+          port.bus.rsp.exception := cacheHit && (cacheLine.exception || cacheLine.allowUser && privilegeService.isSupervisor() && !csr.status.sum || !cacheLine.allowUser && privilegeService.isUser())
           port.bus.rsp.refilling := !cacheHit
         } otherwise {
           port.bus.rsp.physicalAddress := port.bus.cmd.virtualAddress
           port.bus.rsp.allowRead := True
           port.bus.rsp.allowWrite := True
           port.bus.rsp.allowExecute := True
-          port.bus.rsp.allowUser := Bool(allowUserIo)
           port.bus.rsp.exception := False
           port.bus.rsp.refilling := False
         }
@@ -161,7 +159,7 @@ class MmuPlugin(virtualRange : UInt => Bool,
           val leaf = pte.R || pte.X
         }
 
-        val pteBuffer = RegNextWhen(dBusRsp.pte, dBusAccess.rsp.valid)
+        val pteBuffer = RegNextWhen(dBusRsp.pte, dBusAccess.rsp.valid && !dBusAccess.rsp.redo)
 
         dBusAccess.cmd.valid := False
         dBusAccess.cmd.write := False
@@ -190,10 +188,12 @@ class MmuPlugin(virtualRange : UInt => Bool,
           }
           is(State.L1_RSP){
             when(dBusAccess.rsp.valid){
+              state := State.L0_CMD
               when(dBusRsp.leaf || dBusRsp.exception){
                 state := State.IDLE
-              } otherwise {
-                state := State.L0_CMD
+              }
+              when(dBusAccess.rsp.redo){
+                state := State.L1_CMD
               }
             }
           }
@@ -207,11 +207,14 @@ class MmuPlugin(virtualRange : UInt => Bool,
           is(State.L0_RSP){
             when(dBusAccess.rsp.valid) {
               state := State.IDLE
+              when(dBusAccess.rsp.redo){
+                state := State.L0_CMD
+              }
             }
           }
         }
 
-        when(dBusAccess.rsp.valid && (dBusRsp.leaf || dBusRsp.exception)){
+        when(dBusAccess.rsp.valid && !dBusAccess.rsp.redo && (dBusRsp.leaf || dBusRsp.exception)){
           for(port <- ports){
             when(portId === port.id) {
               port.entryToReplace.increment()

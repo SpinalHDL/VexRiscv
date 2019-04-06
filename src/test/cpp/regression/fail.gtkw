@@ -1,19 +1,19 @@
 [*]
 [*] GTKWave Analyzer v3.3.100 (w)1999-2019 BSI
-[*] Sat Mar 30 09:33:33 2019
+[*] Mon Apr  1 21:53:07 2019
 [*]
-[dumpfile] "/home/miaou/pro/VexRiscv/src/test/cpp/regression/linux.vcd"
-[dumpfile_mtime] "Sat Mar 30 09:16:30 2019"
-[dumpfile_size] 249834424
+[dumpfile] "/home/miaou/pro/VexRiscv/src/test/cpp/regression/rv32ui-p-lw.vcd"
+[dumpfile_mtime] "Mon Apr  1 21:52:20 2019"
+[dumpfile_size] 1974526
 [savefile] "/home/miaou/pro/VexRiscv/src/test/cpp/regression/fail.gtkw"
-[timestart] 106663042
+[timestart] 348
 [size] 1920 1030
-[pos] -458 -215
-*-5.000000 106541900 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[pos] -1 -1
+*-2.000000 357 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.VexRiscv.
 [sst_width] 287
-[signals_width] 465
+[signals_width] 563
 [sst_expanded] 1
 [sst_vpaned_height] 279
 @28
@@ -21,43 +21,37 @@ TOP.VexRiscv.writeBack_arbitration_isFiring
 @22
 TOP.VexRiscv.writeBack_PC[31:0]
 TOP.VexRiscv.writeBack_INSTRUCTION[31:0]
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_payload_address[4:0]
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_payload_data[31:0]
 @28
-TOP.VexRiscv.CsrPlugin_exception
-TOP.VexRiscv.CsrPlugin_privilege[1:0]
+TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_valid
+[color] 1
+TOP.VexRiscv.dataCache_1_.io_mem_cmd_valid
+[color] 1
+TOP.VexRiscv.dataCache_1_.io_mem_cmd_ready
 @22
-TOP.VexRiscv.CsrPlugin_scause_exceptionCode[3:0]
+[color] 1
+TOP.VexRiscv.dataCache_1_.io_mem_cmd_payload_address[31:0]
+[color] 1
+TOP.VexRiscv.dataCache_1_.io_mem_cmd_payload_data[31:0]
 @28
-TOP.VexRiscv.CsrPlugin_scause_interrupt
+[color] 1
+TOP.VexRiscv.dataCache_1_.io_mem_cmd_payload_last
+[color] 1
+TOP.VexRiscv.dataCache_1_.io_mem_cmd_payload_length[2:0]
 @22
-TOP.VexRiscv.IBusSimplePlugin_jump_pcLoad_payload[31:0]
+[color] 1
+TOP.VexRiscv.dataCache_1_.io_mem_cmd_payload_mask[3:0]
 @28
-TOP.VexRiscv.IBusSimplePlugin_jump_pcLoad_valid
+[color] 1
+TOP.VexRiscv.dataCache_1_.io_mem_cmd_payload_wr
+[color] 1
+TOP.VexRiscv.dataCache_1_.io_mem_rsp_valid
 @22
-TOP.VexRiscv.CsrPlugin_mepc[31:0]
-TOP.VexRiscv.CsrPlugin_sepc[31:0]
+[color] 1
+TOP.VexRiscv.dataCache_1_.io_mem_rsp_payload_data[31:0]
 @28
-TOP.VexRiscv.decode_IS_RVC
-@24
-TOP.VexRiscv.CsrPlugin_mcycle[63:0]
-@28
-TOP.VexRiscv.decode_IS_RVC
-TOP.VexRiscv.decode_arbitration_isValid
-@22
-TOP.VexRiscv.RegFilePlugin_regFile(10)[31:0]
-@28
-TOP.dBus_cmd_valid
-TOP.dBus_cmd_ready
-@22
-TOP.dBus_cmd_payload_address[31:0]
-@28
-TOP.dBus_cmd_payload_wr
-@29
-TOP.dBus_cmd_payload_size[1:0]
-@22
-TOP.dBus_cmd_payload_data[31:0]
-TOP.dBus_rsp_data[31:0]
-@28
-TOP.dBus_rsp_error
-TOP.dBus_rsp_ready
+[color] 1
+TOP.VexRiscv.dataCache_1_.io_mem_rsp_payload_error
 [pattern_trace] 1
 [pattern_trace] 0

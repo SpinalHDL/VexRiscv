@@ -7,6 +7,7 @@ import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
+import vexriscv.Riscv.{FENCE, FENCE_I}
 
 
 case class IBusSimpleCmd() extends Bundle{
@@ -192,6 +193,9 @@ class IBusSimplePlugin(resetVector : BigInt,
     super.setup(pipeline)
     iBus = master(IBusSimpleBus(false)).setName("iBus")
 
+    val decoderService = pipeline.service(classOf[DecoderService])
+    decoderService.add(FENCE_I, Nil)
+
     if(catchSomething) {
       decodeExceptionPort = pipeline.service(classOf[ExceptionService]).newExceptionPort(pipeline.decode,1)
     }
@@ -317,7 +321,7 @@ class IBusSimplePlugin(resetVector : BigInt,
           }
           if(memoryTranslatorPortConfig != null) {
             val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
-            when(stages.last.input.valid && !mmu.joinCtx.refilling && (mmu.joinCtx.exception || !mmu.joinCtx.allowExecute || (!mmu.joinCtx.allowUser && privilegeService.isUser()))){
+            when(stages.last.input.valid && !mmu.joinCtx.refilling && (mmu.joinCtx.exception || !mmu.joinCtx.allowExecute)){
               decodeExceptionPort.code  := 12
               exceptionDetected := True
             }

@@ -310,7 +310,32 @@ test23: //Test software and hardware setting inettrupt
     csrs sip, x1
     csrr x3, mip
 
+    externalInterruptS(0)
 
+test24: //test supervisor software interrupt
+    li TEST_ID, 24
+    li x1, 2
+    csrs mie, x1
+    csrs mip, x1
+    csrs mstatus, x1
+
+    li TRAP_OK, 1
+    la TRAP_RET, test25
+    setPriv(1)
+test24_s:
+    wfi
+    j fail
+
+
+test25: //test undelegated supervisor interrupt in machine mode (continue test24)
+    li TEST_ID, 25
+    la TRAP_RET, test26
+    csrsi mstatus, 1 << 3 //mie
+    wfi
+    j fail
+
+
+test26:
 
     j pass
 

@@ -66,8 +66,7 @@ object VexRiscvAvalonForSim{
               memDataWidth      = 32,
               catchAccessError  = true,
               catchIllegal      = true,
-              catchUnaligned    = true,
-              catchMemoryTranslationMiss = true
+              catchUnaligned    = true
             ),
             memoryTranslatorPortConfig = null
             //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(

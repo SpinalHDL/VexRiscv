@@ -1316,6 +1316,16 @@ public:
 			if(isDBusCheckedRegion(addr)){
 				CpuRef::MemWrite w;
 				w.address = addr;
+				while((mask & 1) == 0){
+				    mask >>= 1;
+				    w.address++;
+				    w.data >>= 8;
+				}
+				switch(mask){
+				case 1: size = 0; break;
+				case 3: size = min(1u, size); break;
+				case 15: size = min(2u, size); break;
+				}
 				w.size = 1 << size;
 				switch(size){
 				case 0: w.data = *data & 0xFF; break;
@@ -1665,6 +1675,15 @@ public:
 			#endif
 			case 0xF00FFF48u: mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data;break;
 			case 0xF00FFF4Cu: mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); break;
+			}
+			if((addr & 0xFFFFF000) == 0xF5670000){
+			    uint32_t t = 0x900FF000 | (addr & 0xFFF);
+			    uint32_t old = (*mem.get(t + 3) << 24) | (*mem.get(t + 2) << 16)  | (*mem.get(t + 1) << 8)  | (*mem.get(t + 0) << 0);
+			    old++;
+			    *mem.get(t + 0) = old & 0xFF; old >>= 8;
+			    *mem.get(t + 1) = old & 0xFF; old >>= 8;
+			    *mem.get(t + 2) = old & 0xFF; old >>= 8;
+			    *mem.get(t + 3) = old & 0xFF; old >>= 8;
 			}
 		}else{
 			switch(addr){
@@ -3446,6 +3465,7 @@ int main(int argc, char **argv, char **env) {
 //     redo(REDO,WorkspaceRegression("deleg").withRiscvRef()->loadHex("../raw/deleg/build/deleg.hex")->bootAt(0x80000000u)->run(50e3););
 //    return 0;
 
+
 	for(int idx = 0;idx < 1;idx++){
 
 		#if defined(DEBUG_PLUGIN_EXTERNAL) || defined(RUN_HEX)
@@ -3547,6 +3567,13 @@ int main(int argc, char **argv, char **env) {
 //					13, 0xC4000000,0x33333333, 6,7};
 //				redo(REDO,TestX28("mmu",mmuRef, sizeof(mmuRef)/4).noInstructionReadCheck()->run(4e4);)
 //			#endif
+
+            #ifdef IBUS_CACHED
+                redo(REDO,WorkspaceRegression("icache").withRiscvRef()->loadHex("../raw/icache/build/icache.hex")->bootAt(0x80000000u)->run(50e3););
+            #endif
+            #ifdef DBUS_CACHED
+                redo(REDO,WorkspaceRegression("dcache").loadHex("../raw/dcache/build/dcache.hex")->bootAt(0x80000000u)->run(500e3););
+            #endif
 
             #ifdef MMU
                 redo(REDO,WorkspaceRegression("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););

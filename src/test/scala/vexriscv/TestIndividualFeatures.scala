@@ -366,8 +366,7 @@ class DBusDimension extends VexRiscvDimension("DBus") {
               catchAccessError = catchAll,
               catchIllegal = catchAll,
               catchUnaligned = catchAll,
-              catchMemoryTranslationMiss = catchAll,
-              atomicEntriesCount = 0
+              withLrSc = false
             ),
             memoryTranslatorPortConfig = null
           )

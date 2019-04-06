@@ -42,8 +42,7 @@ object GenFullNoMmu extends App{
             memDataWidth      = 32,
             catchAccessError  = true,
             catchIllegal      = true,
-            catchUnaligned    = true,
-            catchMemoryTranslationMiss = true
+            catchUnaligned    = true
           )
         ),
         new StaticMemoryTranslatorPlugin(

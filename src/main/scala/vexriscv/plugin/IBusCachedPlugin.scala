@@ -47,6 +47,10 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
   injectorStage = (!config.twoCycleCache && !withoutInjectorStage) || injectorStage){
   import config._
 
+  assert(isPow2(cacheSize))
+  assert(!(memoryTranslatorPortConfig != null && config.cacheSize/config.wayCount > 4096), "When the I$ is used with MMU, each way can't be bigger than a page (4096 bytes)")
+
+
   assert(!(withoutInjectorStage && injectorStage))
 
   var iBus  : InstructionCacheMemBus = null
@@ -73,8 +77,6 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
     import pipeline.config._
 
     super.setup(pipeline)
-
-    //def MANAGEMENT  = M"-----------------100-----0001111"
 
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(FLUSH_ALL, False)
@@ -203,7 +205,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         if (catchSomething) {
           decodeExceptionPort.valid := False
           decodeExceptionPort.code.assignDontCare()
-          decodeExceptionPort.badAddr := cacheRsp.pc
+          decodeExceptionPort.badAddr := cacheRsp.pc(31 downto 2) @@ "00"
 
           if(catchIllegalAccess) when(cacheRsp.isValid && cacheRsp.mmuException && !issueDetected) {
             issueDetected \= True
@@ -216,9 +218,9 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
             decodeExceptionPort.valid := iBusRsp.readyForError
             decodeExceptionPort.code := 1
           }
+          decodeExceptionPort.valid clearWhen(fetcherHalt)
         }
 
-        decodeExceptionPort.valid clearWhen(fetcherHalt)
 
         cacheRspArbitration.halt setWhen (issueDetected || iBusRspOutputHalt)
         iBusRsp.output.valid := cacheRspArbitration.output.valid
@@ -234,25 +236,13 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         cache.io.cpu.fetch.mmuBus.rsp.allowExecute := True
         cache.io.cpu.fetch.mmuBus.rsp.allowRead := True
         cache.io.cpu.fetch.mmuBus.rsp.allowWrite := True
-        cache.io.cpu.fetch.mmuBus.rsp.allowUser := True
         cache.io.cpu.fetch.mmuBus.rsp.isIoAccess := False
         cache.io.cpu.fetch.mmuBus.rsp.exception := False
         cache.io.cpu.fetch.mmuBus.rsp.refilling := False
       }
 
-      val flushStage = if(memory != null) memory else execute
-      flushStage plug new Area {
-        import flushStage._
-
-        cache.io.flush.cmd.valid := False
-        when(arbitration.isValid && input(FLUSH_ALL)) {
-          cache.io.flush.cmd.valid := True
-
-          when(!cache.io.flush.cmd.ready) {
-            arbitration.haltItself := True
-          }
-        }
-      }
+      val flushStage = decode
+      cache.io.flush := flushStage.arbitration.isValid && flushStage.input(FLUSH_ALL)
     }
   }
 }

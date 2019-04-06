@@ -27,7 +27,7 @@ object GenFull extends App{
             twoCycleRam = true,
             twoCycleCache = true
           ),
-          memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+          memoryTranslatorPortConfig = MmuPortConfig(
             portTlbSize = 4
           )
         ),
@@ -41,15 +41,13 @@ object GenFull extends App{
             memDataWidth      = 32,
             catchAccessError  = true,
             catchIllegal      = true,
-            catchUnaligned    = true,
-            catchMemoryTranslationMiss = true
+            catchUnaligned    = true
           ),
-          memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+          memoryTranslatorPortConfig = MmuPortConfig(
             portTlbSize = 6
           )
         ),
-        new MemoryTranslatorPlugin(
-          tlbSize = 32,
+        new MmuPlugin(
           virtualRange = _(31 downto 28) === 0xC,
           ioRange      = _(31 downto 28) === 0xF
         ),

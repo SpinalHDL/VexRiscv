@@ -43,8 +43,7 @@ object GenFullNoMmuMaxPerf extends App{
             memDataWidth      = 32,
             catchAccessError  = true,
             catchIllegal      = true,
-            catchUnaligned    = true,
-            catchMemoryTranslationMiss = false
+            catchUnaligned    = true
           )
         ),
         new StaticMemoryTranslatorPlugin(

@@ -33,6 +33,7 @@ case class ExceptionCause() extends Bundle{
 
 trait ExceptionService{
   def newExceptionPort(stage : Stage, priority : Int = 0) : Flow[ExceptionCause]
+  def isExceptionPending() : Bool
 }
 
 trait PrivilegeService{
@@ -68,7 +69,7 @@ case class MemoryTranslatorCmd() extends Bundle{
 case class MemoryTranslatorRsp() extends Bundle{
   val physicalAddress = UInt(32 bits)
   val isIoAccess = Bool
-  val allowRead, allowWrite, allowExecute, allowUser = Bool
+  val allowRead, allowWrite, allowExecute = Bool
   val exception = Bool
   val refilling = Bool
 }

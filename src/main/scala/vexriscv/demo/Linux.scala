@@ -40,13 +40,13 @@ cd VexRiscv
 Run regressions =>
 sbt "runMain vexriscv.demo.LinuxGen -r"
 cd src/test/cpp/regression
-make run  IBUS=CACHED DBUS=SIMPLE DEBUG_PLUGIN=no DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=10 TRACE=no
+make run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=10 TRACE=no
 
 Run linux in simulation (Require the machime mode emulator compiled in SIM mode) =>
 sbt "runMain vexriscv.demo.LinuxGen"
 cd src/test/cpp/regression
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
-make run IBUS=CACHED DBUS=SIMPLE  DEBUG_PLUGIN=no SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/vmlinux.bin DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
+make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/vmlinux.bin DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
 
 Run linux with QEMU (Require the machime mode emulator compiled in QEMU mode)
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
@@ -88,13 +88,10 @@ https://github.com/riscv/riscv-qemu/wiki#build-and-install
 */
 
 
-//TODO have to check, look like supervisor can't get interrupt if the machine mod didn't delegated it, have to check exactly
 object LinuxGen {
   def configFull(litex : Boolean, withMmu : Boolean) = {
     val config = VexRiscvConfig(
       plugins = List(
-        new DummyFencePlugin(), //TODO should be removed for design with caches
-
         //Uncomment the whole IBusSimplePlugin and comment IBusCachedPlugin if you want uncached iBus config
 //        new IBusSimplePlugin(
 //          resetVector = 0x80000000l,
@@ -118,7 +115,7 @@ object LinuxGen {
           prediction = NONE,
           injectorStage = true,
           config = InstructionCacheConfig(
-            cacheSize = 4096,
+            cacheSize = 4096*1,
             bytePerLine = 32,
             wayCount = 1,
             addressWidth = 32,
@@ -129,43 +126,44 @@ object LinuxGen {
             asyncTagMemory = false,
             twoCycleRam = false,
             twoCycleCache = true
+//          )
           ),
-          memoryTranslatorPortConfig = MmuPortConfig(
-            portTlbSize = 4
-          )
-        ),
-        //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
-        new DBusSimplePlugin(
-          catchAddressMisaligned = true,
-          catchAccessFault = true,
-          earlyInjection = false,
-          atomicEntriesCount = 1,
           memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
             portTlbSize = 4
           )
         ),
-        //          new DBusCachedPlugin(
-        //            config = new DataCacheConfig(
-        //              cacheSize         = 4096,
-        //              bytePerLine       = 32,
-        //              wayCount          = 1,
-        //              addressWidth      = 32,
-        //              cpuDataWidth      = 32,
-        //              memDataWidth      = 32,
-        //              catchAccessError  = true,
-        //              catchIllegal      = true,
-        //              catchUnaligned    = true,
-        //              catchMemoryTranslationMiss = true,
-        //              atomicEntriesCount = 2
-        //            ),
-        //            //            memoryTranslatorPortConfig = null
-        //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-        //              portTlbSize = 6
-        //            )
-        //          ),
-        //          new StaticMemoryTranslatorPlugin(
-        //            ioRange      = _(31 downto 28) === 0xF
-        //          ),
+        //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
+//        new DBusSimplePlugin(
+//          catchAddressMisaligned = true,
+//          catchAccessFault = true,
+//          earlyInjection = false,
+//          withLrSc = true,
+//          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
+//            portTlbSize = 4
+//          )
+//        ),
+        new DBusCachedPlugin(
+          dBusCmdMasterPipe = true,
+          dBusCmdSlavePipe = true,
+          dBusRspSlavePipe = true,
+          config = new DataCacheConfig(
+            cacheSize         = 4096*1,
+            bytePerLine       = 32,
+            wayCount          = 1,
+            addressWidth      = 32,
+            cpuDataWidth      = 32,
+            memDataWidth      = 32,
+            catchAccessError  = true,
+            catchIllegal      = true,
+            catchUnaligned    = true,
+            withLrSc = true
+//          )
+          ),
+          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
+            portTlbSize = 4
+          )
+        ),
+
         //          new MemoryTranslatorPlugin(
         //            tlbSize = 32,
         //            virtualRange = _(31 downto 28) === 0xC,
@@ -183,7 +181,7 @@ object LinuxGen {
         new SrcPlugin(
           separatedAddSub = false
         ),
-        new FullBarrelShifterPlugin(earlyInjection = true),
+        new FullBarrelShifterPlugin(earlyInjection = false),
         //        new LightShifterPlugin,
         new HazardSimplePlugin(
           bypassExecute           = true,
@@ -204,7 +202,7 @@ object LinuxGen {
           divUnrollFactor = 1
         ),
         //          new DivPlugin,
-        new CsrPlugin(CsrPluginConfig.linux(0x80000020l)),
+        new CsrPlugin(CsrPluginConfig.linux(0x80000020l).copy(ebreakGen = false)),
         //          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
         //             CsrPluginConfig(
         //            catchIllegalAccess = false,
@@ -228,21 +226,22 @@ object LinuxGen {
         //            wfiGenAsNop    = true,
         //            ucycleAccess   = CsrAccess.NONE
         //          )),
-//        new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
+        new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
-          earlyBranch = true,
+          earlyBranch = false,
           catchAddressMisaligned = true,
-          fenceiGenAsAJump = true
+          fenceiGenAsAJump = false
         ),
         new YamlPlugin("cpu0.yaml")
       )
     )
     if(withMmu) config.plugins += new MmuPlugin(
-      virtualRange = a => True,
-     // virtualRange = x => x(31 downto 24) =/= 0x81, //TODO It fix the DTB kernel access (workaround)
-      ioRange = (x => if(litex) x(31 downto 28) === 0xB || x(31 downto 28) === 0xE || x(31 downto 28) === 0xF else x(31 downto 28) === 0xF),
-      allowUserIo = true
-    )
+      ioRange = (x => if(litex) x(31 downto 28) === 0xB || x(31 downto 28) === 0xE || x(31 downto 28) === 0xF else x(31 downto 28) === 0xF)
+    ) else {
+      config.plugins += new StaticMemoryTranslatorPlugin(
+        ioRange      = _(31 downto 28) === 0xF
+      )
+    }
     config
   }
 
@@ -265,7 +264,7 @@ object LinuxGen {
 //      }
 //    }
 
-    SpinalConfig(mergeAsyncProcess = true).generateVerilog {
+    SpinalConfig(mergeAsyncProcess = true, anonymSignalPrefix = "zz").generateVerilog {
 
 
       val toplevel = new VexRiscv(configFull(
@@ -375,14 +374,13 @@ object LinuxSyntesisBench extends App{
   //    val rtls = List(fullNoMmu)
 
   val targets = XilinxStdTargets(
-    vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
-  )/* ++ AlteraStdTargets(
-    quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin",
-    quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin"
-  ) ++  IcestormStdTargets().take(1)*/
+    vivadoArtix7Path = "/media/miaou/HD/linux/Xilinx/Vivado/2018.3/bin"
+  ) ++ AlteraStdTargets(
+    quartusCycloneIVPath = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin",
+    quartusCycloneVPath  = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin"
+  ) ++  IcestormStdTargets().take(1)
 
-
-  Bench(rtls, targets, "/eda/tmp")
+  Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
 }
 
 object LinuxSim extends App{
