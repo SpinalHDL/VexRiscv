@@ -135,6 +135,16 @@ class MmuPlugin(ioRange : UInt => Bool,
           port.bus.rsp.refilling := False
         }
         port.bus.rsp.isIoAccess := ioRange(port.bus.rsp.physicalAddress)
+
+        // Avoid keeping any invalid line in the cache more than one memory translation.
+        // https://github.com/riscv/riscv-linux/blob/8fe28cb58bcb235034b64cbbb7550a8a43fd88be/arch/riscv/include/asm/pgtable.h#L276
+        when(port.bus.cmd.isValid && port.bus.end) {
+          for (line <- cache) {
+            when(line.valid && line.exception) {
+              line.valid := False
+            }
+          }
+        }
       }
 
       val shared = new Area {
@@ -241,7 +251,7 @@ class MmuPlugin(ioRange : UInt => Bool,
     execute plug new Area{
       import execute._
       val tlbWriteBuffer = Reg(UInt(20 bits))
-      when(arbitration.isFiring && input(IS_SFENCE_VMA)){
+      when(arbitration.isFiring && input(IS_SFENCE_VMA)){ // || csrService.isWriting(CSR.SATP)
         for(port <- core.ports; line <- port.cache) line.valid := False //Assume that the instruction already fetched into the pipeline are ok
       }
     }
