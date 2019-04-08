@@ -100,6 +100,7 @@ class MmuPlugin(ioRange : UInt => Bool,
 
     val core = pipeline plug new Area {
       val ports = for (port <- sortedPortsInfo) yield new Area {
+        val handle = port
         val id = port.id
         val cache = Vec(Reg(CacheLine()) init, port.args.portTlbSize)
         val cacheHits = cache.map(line => line.valid && line.virtualAddress(1) === port.bus.cmd.virtualAddress(31 downto 22) && (line.superPage || line.virtualAddress(0) === port.bus.cmd.virtualAddress(21 downto 12)))
@@ -222,6 +223,10 @@ class MmuPlugin(ioRange : UInt => Bool,
               }
             }
           }
+        }
+
+        for(port <- ports) {
+          port.handle.bus.busy := state =/= State.IDLE && portId === port.id
         }
 
         when(dBusAccess.rsp.valid && !dBusAccess.rsp.redo && (dBusRsp.leaf || dBusRsp.exception)){

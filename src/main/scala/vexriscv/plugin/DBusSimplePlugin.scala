@@ -312,6 +312,15 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
     dBus = master(DBusSimpleBus()).setName("dBus")
 
+
+    decode plug new Area {
+      import decode._
+
+      if(mmuBus != null) when(mmuBus.busy && arbitration.isValid && input(MEMORY_ENABLE)) {
+        arbitration.haltItself := True
+      }
+    }
+
     //Emit dBus.cmd request
     val cmdStage = if(emitCmdInMemoryStage) memory else execute
     cmdStage plug new Area{
@@ -359,6 +368,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         mmuBus.cmd.isValid := arbitration.isValid && input(MEMORY_ENABLE)
         mmuBus.cmd.virtualAddress := input(SRC_ADD).asUInt
         mmuBus.cmd.bypassTranslation := False
+        mmuBus.end := !arbitration.isStuck || arbitration.isRemoved
         dBus.cmd.address := mmuBus.rsp.physicalAddress
 
         //do not emit memory request if MMU refilling

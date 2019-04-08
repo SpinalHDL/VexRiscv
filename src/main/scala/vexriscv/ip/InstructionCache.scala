@@ -99,10 +99,11 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
   val mmuBus  = MemoryTranslatorBus()
   val physicalAddress = UInt(p.addressWidth bits)
   val cacheMiss, error, mmuRefilling, mmuException, isUser  = ifGen(!p.twoCycleCache)(Bool)
+  val haltIt  = Bool
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved, pc)
-    inWithNull(error,mmuRefilling,mmuException,data, cacheMiss,physicalAddress)
+    inWithNull(error,mmuRefilling,mmuException,data, cacheMiss,physicalAddress, haltIt)
     outWithNull(isUser, dataBypass, dataBypassValid)
     slaveWithNull(mmuBus)
   }
@@ -290,10 +291,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }
   })
 
-  io.cpu.prefetch.haltIt := False
-
-
-
+  io.cpu.fetch.haltIt := io.cpu.fetch.mmuBus.busy
 
   val lineLoader = new Area{
     val fire = False
@@ -307,7 +305,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       address := io.cpu.fill.payload
     }
 
-    io.cpu.prefetch.haltIt setWhen(valid || flushPending)
+    io.cpu.prefetch.haltIt := valid || flushPending
 
     val flushCounter = Reg(UInt(log2Up(wayLineCount) + 1 bit))
     when(!flushCounter.msb){

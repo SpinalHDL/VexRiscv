@@ -247,6 +247,8 @@ class IBusSimplePlugin(resetVector : BigInt,
         mmuBus.cmd.isValid := cmdForkStage.input.valid
         mmuBus.cmd.virtualAddress := cmdForkStage.input.payload
         mmuBus.cmd.bypassTranslation := False
+        mmuBus.end := !cmdForkStage.output.fire || flush
+
         cmd.pc := mmuBus.rsp.physicalAddress(31 downto 2) @@ "00"
 
         //do not emit memory request if MMU miss
@@ -254,6 +256,8 @@ class IBusSimplePlugin(resetVector : BigInt,
           cmdForkStage.halt := False
           cmd.valid := False
         }
+
+        cmdForkStage.halt.setWhen(mmuBus.busy)
 
         val joinCtx = stageXToIBusRsp(cmdForkStage, mmuBus.rsp)
       }

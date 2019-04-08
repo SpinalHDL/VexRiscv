@@ -78,10 +78,11 @@ case class MemoryTranslatorBus() extends Bundle with IMasterSlave{
   val cmd = MemoryTranslatorCmd()
   val rsp = MemoryTranslatorRsp()
   val end = Bool
+  val busy = Bool
 
   override def asMaster() : Unit = {
     out(cmd, end)
-    in(rsp)
+    in(rsp, busy)
   }
 }
 

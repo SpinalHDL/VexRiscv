@@ -159,7 +159,13 @@ class DBusCachedPlugin(config : DataCacheConfig,
     dBus.cmd << optionPipe(dBusCmdMasterPipe, cmdBuf)(_.m2sPipe())
     cache.io.mem.rsp << optionPipe(dBusRspSlavePipe,dBus.rsp)(_.m2sPipe())
 
+    decode plug new Area {
+      import decode._
 
+      when(mmuBus.busy && arbitration.isValid && input(MEMORY_ENABLE)) {
+        arbitration.haltItself := True
+      }
+    }
 
     execute plug new Area {
       import execute._
