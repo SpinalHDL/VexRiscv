@@ -209,11 +209,11 @@ void trap(){
 					case 0x1C: writeValue = max((unsigned int)src, (unsigned int)readValue); break;
 					default: redirectTrap(); return; break;
 					}
-					writeRegister(rd, readValue);
 					if(writeWord(addr, writeValue)){
 						emulationTrapToSupervisorTrap(mepc, mstatus);
 						return;
 					}
+					writeRegister(rd, readValue);
 					csr_write(mepc, mepc + 4);
 					csr_write(mtvec, trapEntry); //Restore mtvec
 				}break;
