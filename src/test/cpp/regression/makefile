@@ -15,6 +15,7 @@ FENCEI?=no
 MMU?=yes
 SEED?=no
 ATOMIC?=no
+AMO?=no
 NO_STALL?=no
 DEBUG_PLUGIN?=STD
 DEBUG_PLUGIN_EXTERNAL?=no
@@ -32,7 +33,7 @@ MTIME_INSTR_FACTOR?=no
 COMPRESSED?=no
 SUPERVISOR?=no
 STOP_ON_ERROR?=no
-
+COREMARK=no
 
 ADDCFLAGS += -CFLAGS -DIBUS_${IBUS}
 ADDCFLAGS += -CFLAGS -DDBUS_${DBUS}
@@ -42,7 +43,7 @@ ADDCFLAGS += -CFLAGS -pthread
 ADDCFLAGS += -CFLAGS -DTHREAD_COUNT=${THREAD_COUNT}
 
 ifeq ($(DEBUG),yes)
-	ADDCFLAGS += -CFLAGS -O0 -CFLAGS -g
+	ADDCFLAGS += -CFLAGS -Og -CFLAGS -g
 else
 	ADDCFLAGS += -CFLAGS -O3  -O3
 endif
@@ -67,6 +68,11 @@ endif
 
 ifeq ($(FLOW_INFO),yes)
 	ADDCFLAGS += -CFLAGS -DFLOW_INFO
+endif
+
+
+ifeq ($(COREMARK),yes)
+	ADDCFLAGS += -CFLAGS -DCOREMARK
 endif
 
 
@@ -139,6 +145,10 @@ endif
 
 ifeq ($(ATOMIC),yes)
 	ADDCFLAGS += -CFLAGS -DATOMIC
+endif
+
+ifeq ($(AMO),yes)
+	ADDCFLAGS += -CFLAGS -DAMO
 endif
 
 ifeq ($(CUSTOM_SIMD_ADD),yes)

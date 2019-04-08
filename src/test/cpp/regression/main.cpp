@@ -234,6 +234,7 @@ public:
 	int32_t pc, lastPc;
 	uint32_t lastInstruction;
 	int32_t regs[32];
+	uint64_t stepCounter;
 
 	uint32_t mscratch, sscratch;
 	uint32_t misa;
@@ -400,6 +401,7 @@ public:
 		satp.mode = 0;
 		ipSoft = 0;
 		ipInput = 0;
+		stepCounter = 0;
 	}
 
 	virtual void rfWrite(int32_t address, int32_t data) {
@@ -422,7 +424,7 @@ public:
 	virtual bool dRead(int32_t address, int32_t size, uint32_t *data) = 0;
 	virtual void dWrite(int32_t address, int32_t size, uint32_t data) = 0;
 
-	enum AccessKind {READ,WRITE,EXECUTE};
+	enum AccessKind {READ,WRITE,EXECUTE,READ_WRITE};
 	virtual bool isMmuRegion(uint32_t v) = 0;
 	bool v2p(uint32_t v, uint32_t *p, AccessKind kind){
 	    uint32_t effectivePrivilege = status.mprv && kind != EXECUTE ? status.mpp : privilege;
@@ -441,11 +443,10 @@ public:
 			if(!tlb.u && effectivePrivilege == 0) return true;
 			if( tlb.u && effectivePrivilege == 1 && !status.sum) return true;
 			if(superPage && tlb.ppn0 != 0) return true;
-			switch(kind){
-			case READ: if(!tlb.r && !(status.mxr && tlb.x)) return true; break;
-			case WRITE: if(!tlb.w) return true; break;
-			case EXECUTE: if(!tlb.x) return true; break;
-			}
+			if(kind == READ || kind == READ_WRITE) if(!tlb.r && !(status.mxr && tlb.x)) return true;
+			if(kind == WRITE || kind == READ_WRITE) if(!tlb.w) return true;
+			if(kind == EXECUTE) if(!tlb.x) return true;
+
 			*p = (tlb.ppn1 << 22) | (superPage ? v & 0x3FF000 : tlb.ppn0 << 12) | (v & 0xFFF);
 		}
 		return false;
@@ -654,6 +655,7 @@ public:
 
 
 	virtual void step() {
+	    stepCounter++;
 	    livenessStep = 0;
 		#define rd32 ((i >> 7) & 0x1F)
 		#define iBits(lo,  len) ((i >> lo) & ((1 << len)-1))
@@ -907,7 +909,39 @@ public:
 							pcWrite(pc + 4);
 						}
 					}	break;
-					default: ilegalInstruction(); break;
+					default: {
+                        #ifndef AMO
+                        ilegalInstruction();
+                        #else
+                        uint32_t sel = (i >> 27) & 0x1F;
+                        uint32_t addr = i32_rs1;
+                        int32_t  src = i32_rs2;
+                        int32_t readValue;
+
+                        uint32_t pAddr;
+						if(v2p(addr, &pAddr, READ_WRITE)){ trap(0, 15, addr); return; }
+                        if(dRead(pAddr, 4, (uint32_t*)&readValue)){
+                        	trap(0, 15, addr); return;
+                            return;
+                        }
+                        int writeValue;
+                        switch(sel){
+                        case 0x0:  writeValue = src + readValue; break;
+                        case 0x1:  writeValue = src; break;
+                        case 0x4:  writeValue = src ^ readValue; break;
+                        case 0xC:  writeValue = src & readValue; break;
+                        case 0x8:  writeValue = src | readValue; break;
+                        case 0x10: writeValue = min(src, readValue); break;
+                        case 0x14: writeValue = max(src, readValue); break;
+                        case 0x18: writeValue = min((unsigned int)src, (unsigned int)readValue); break;
+                        case 0x1C: writeValue = max((unsigned int)src, (unsigned int)readValue); break;
+                        default: ilegalInstruction(); return; break;
+                        }
+                        dWrite(pAddr, 4, writeValue);
+						rfWrite(rd32, readValue);
+						pcWrite(pc + 4);
+                        #endif
+					 } break;
 					}
 					break;
 				default: ilegalInstruction(); break;
@@ -1374,6 +1408,8 @@ public:
 		if(i >= TRACE_START) tfp->dump(i);
 		#endif
 	}
+
+	uint64_t privilegeCounters[4] = {0,0,0,0};
 	Workspace* run(uint64_t timeout = 5000){
 //		cout << "Start " << name << endl;
 		if(timeout == 0) timeout = 0x7FFFFFFFFFFFFFFF;
@@ -1513,6 +1549,13 @@ public:
 				#endif
                 if(top->VexRiscv->writeBack_arbitration_isFiring){
                    	if(riscvRefEnable) {
+//                        privilegeCounters[riscvRef.privilege]++;
+//                        if((riscvRef.stepCounter & 0xFFFFF) == 0){
+//                            cout << "privilege report" << endl;
+//                            cout << "- U " << privilegeCounters[0] << endl;
+//                            cout << "- S " << privilegeCounters[1] << endl;
+//                            cout << "- M " << privilegeCounters[3] << endl;
+//                        }
                    	    riscvRef.step();
                    	    bool mIntTimer = false;
                    	    bool mIntExt = false;
@@ -3456,7 +3499,8 @@ int main(int argc, char **argv, char **env) {
 		->setDStall(true)
 		->bootAt(0x80000000)
 		->run(0);
-//		->run(1173000000l );
+//		->run((496300000l + 2000000) / 2);
+//		->run(438700000l/2);
 #endif
 
 //    #ifdef MMU
@@ -3474,6 +3518,7 @@ int main(int argc, char **argv, char **env) {
 			#ifdef RUN_HEX
 			//w.loadHex("/home/spinalvm/hdl/zephyr/zephyrSpinalHdl/samples/synchronization/build/zephyr/zephyr.hex");
 			w.loadHex(RUN_HEX);
+			w.withRiscvRef();
 			#endif
 			w.noInstructionReadCheck();
 			//w.setIStall(false);
@@ -3611,18 +3656,22 @@ int main(int argc, char **argv, char **env) {
 				    Dhrystone("dhrystoneO3MC_Stall","dhrystoneO3MC",true,true).run(1.9e6);
 				#endif
 			#endif
-			Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.9e6);
 			#if defined(COMPRESSED)
 			Dhrystone("dhrystoneO3C","dhrystoneO3C",false,false).run(1.9e6);
             #endif
+			Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.9e6);
 			#if defined(MUL) && defined(DIV)
-				Dhrystone("dhrystoneO3M","dhrystoneO3M",false,false).run(1.9e6);
 				#if defined(COMPRESSED)
 				    Dhrystone("dhrystoneO3MC","dhrystoneO3MC",false,false).run(1.9e6);
 				#endif
+				Dhrystone("dhrystoneO3M","dhrystoneO3M",false,false).run(1.9e6);
 			#endif
 		#endif
 
+        #ifdef COREMARK
+            Dhrystone("coremark","/home/miaou/pro/riscv/coremark/coremark",false,false).run(1.9e6);
+
+        #endif
 
 		#ifdef FREERTOS
 		    #ifdef SEED
