@@ -380,7 +380,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
     exceptionPending = False
     timerInterrupt    = in Bool() setName("timerInterrupt")
     externalInterrupt = in Bool() setName("externalInterrupt")
-    softwareInterrupt = in Bool() setName("softwareInterrupt")
+    softwareInterrupt = in Bool() setName("softwareInterrupt") default(False)
     if(supervisorGen){
 //      timerInterruptS    = in Bool() setName("timerInterruptS")
       externalInterruptS = in Bool() setName("externalInterruptS")
@@ -714,7 +714,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       //Used to make the pipeline empty softly (for interrupts)
       val pipelineLiberator = new Area{
         when(interrupt){
-          decode.arbitration.haltByOther := True
+          decode.arbitration.haltByOther := decode.arbitration.isValid
         }
 
         val done = !stagesFromExecute.map(_.arbitration.isValid).orR && fetcher.pcValid(mepcCaptureStage)

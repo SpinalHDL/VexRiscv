@@ -3,7 +3,7 @@
 
 _start:
     la x1, fail
-    csrw mtvec, x1
+  //  csrw mtvec, x1
 
 test1: //Dummy test
     li TEST_ID, 1

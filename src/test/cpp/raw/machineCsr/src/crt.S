@@ -124,7 +124,7 @@ _start:
 
   li x28, 13
   lw x1,0(x0)
-#ifdef COMPRESSED
+#ifndef COMPRESSED
 unalignedPcA:
   j unalignedPcA+2
 #endif

@@ -217,35 +217,38 @@ class DBusCachedPlugin(config : DataCacheConfig,
       cache.io.cpu.writeBack.address := U(input(REGFILE_WRITE_DATA))
       if(withLrSc) cache.io.cpu.writeBack.clearAtomicEntries := service(classOf[IContextSwitching]).isContextSwitching
 
+      redoBranch.valid := False
+      redoBranch.payload := input(PC)
+      arbitration.flushAll setWhen(redoBranch.valid)
+
       if(catchSomething) {
         exceptionBus.valid := False //cache.io.cpu.writeBack.mmuMiss || cache.io.cpu.writeBack.accessError || cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.unalignedAccess
         exceptionBus.badAddr := U(input(REGFILE_WRITE_DATA))
         exceptionBus.code.assignDontCare()
+      }
 
-        redoBranch.valid := False
-        redoBranch.payload := input(PC)
-        arbitration.flushAll setWhen(redoBranch.valid)
 
-        when(arbitration.isValid && input(MEMORY_ENABLE)) {
-          if (catchAccessError) when(cache.io.cpu.writeBack.accessError) {
-            exceptionBus.valid := True
-            exceptionBus.code := (input(MEMORY_WR) ? U(7) | U(5)).resized
-          }
+      when(arbitration.isValid && input(MEMORY_ENABLE)) {
+        if (catchAccessError) when(cache.io.cpu.writeBack.accessError) {
+          exceptionBus.valid := True
+          exceptionBus.code := (input(MEMORY_WR) ? U(7) | U(5)).resized
+        }
 
-          if (catchUnaligned) when(cache.io.cpu.writeBack.unalignedAccess) {
-            exceptionBus.valid := True
-            exceptionBus.code := (input(MEMORY_WR) ? U(6) | U(4)).resized
-          }
-          when (cache.io.cpu.writeBack.mmuException) {
-            exceptionBus.valid := True
-            exceptionBus.code := (input(MEMORY_WR) ? U(15) | U(13)).resized
-          }
-          when(cache.io.cpu.redo) {
-            redoBranch.valid := True
-            exceptionBus.valid := False
-          }
+        if (catchUnaligned) when(cache.io.cpu.writeBack.unalignedAccess) {
+          exceptionBus.valid := True
+          exceptionBus.code := (input(MEMORY_WR) ? U(6) | U(4)).resized
+        }
+        if(catchIllegal) when (cache.io.cpu.writeBack.mmuException) {
+          exceptionBus.valid := True
+          exceptionBus.code := (input(MEMORY_WR) ? U(15) | U(13)).resized
+        }
+
+        when(cache.io.cpu.redo) {
+          redoBranch.valid := True
+          if(catchSomething) exceptionBus.valid := False
         }
       }
+
       arbitration.haltItself.setWhen(cache.io.cpu.writeBack.haltIt)
 
       val rspShifted = Bits(32 bits)

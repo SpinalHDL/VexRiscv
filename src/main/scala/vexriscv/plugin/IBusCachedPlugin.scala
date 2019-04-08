@@ -253,6 +253,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         cache.io.cpu.fetch.mmuBus.rsp.isIoAccess := False
         cache.io.cpu.fetch.mmuBus.rsp.exception := False
         cache.io.cpu.fetch.mmuBus.rsp.refilling := False
+        cache.io.cpu.fetch.mmuBus.busy := False
       }
 
       val flushStage = decode
