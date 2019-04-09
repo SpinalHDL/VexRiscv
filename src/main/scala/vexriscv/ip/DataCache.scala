@@ -86,7 +86,6 @@ case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
   val wr = Bool
   val data = Bits(p.cpuDataWidth bit)
   val size = UInt(2 bits)
-  val forceUncachedAccess = Bool()
   val isLrsc = p.withLrSc generate Bool()
   val isAmo = p.withAmo generate Bool()
   val amoCtrl = p.withAmo generate new Bundle {
@@ -99,11 +98,13 @@ case class DataCacheCpuMemory(p : DataCacheConfig) extends Bundle with IMasterSl
   val isValid = Bool
   val isStuck = Bool
   val isRemoved = Bool
+  val isWrite = Bool
   val address = UInt(p.addressWidth bit)
   val mmuBus  = MemoryTranslatorBus()
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved, address)
+    in(isWrite)
     slave(mmuBus)
   }
 }
@@ -414,6 +415,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     io.cpu.memory.mmuBus.cmd.virtualAddress := io.cpu.memory.address
     io.cpu.memory.mmuBus.cmd.bypassTranslation := False
     io.cpu.memory.mmuBus.end := !io.cpu.memory.isStuck || io.cpu.memory.isRemoved
+    io.cpu.memory.isWrite := request.wr
 
     val wayHits = earlyWaysHits generate ways.map(way => (io.cpu.memory.mmuBus.rsp.physicalAddress(tagRange) === way.tagsReadRsp.address && way.tagsReadRsp.valid))
     val dataMux = earlyDataMux generate MuxOH(wayHits, ways.map(_.dataReadRsp))
@@ -516,7 +518,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     io.mem.cmd.data := requestDataBypass
 
     when(io.cpu.writeBack.isValid) {
-      when(request.forceUncachedAccess || mmuRsp.isIoAccess) {
+      when(mmuRsp.isIoAccess) {
         io.cpu.writeBack.haltIt.clearWhen(request.wr ? io.mem.cmd.ready | io.mem.rsp.valid)
 
         io.mem.cmd.valid := !memCmdSent
@@ -576,7 +578,7 @@ class DataCache(p : DataCacheConfig) extends Component{
       }
     }
 
-    when(request.forceUncachedAccess || mmuRsp.isIoAccess){
+    when(mmuRsp.isIoAccess){
       io.cpu.writeBack.data :=  io.mem.rsp.data
       if(catchAccessError) io.cpu.writeBack.accessError := io.mem.rsp.valid && io.mem.rsp.error
     } otherwise {

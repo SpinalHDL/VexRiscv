@@ -43,6 +43,7 @@ case class VexRiscvConfig(){
   object REGFILE_WRITE_DATA extends Stageable(Bits(32 bits))
 
   object MPP extends PipelineThing[UInt]
+  object DEBUG_BYPASS_CACHE extends PipelineThing[Bool]
 
   object SRC1   extends Stageable(Bits(32 bits))
   object SRC2   extends Stageable(Bits(32 bits))

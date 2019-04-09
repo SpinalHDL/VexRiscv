@@ -150,6 +150,8 @@ class DBusCachedPlugin(config : DataCacheConfig,
 
     if(pipeline.serviceExist(classOf[PrivilegeService]))
       privilegeService = pipeline.service(classOf[PrivilegeService])
+
+    pipeline.update(DEBUG_BYPASS_CACHE, False)
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -187,7 +189,6 @@ class DBusCachedPlugin(config : DataCacheConfig,
         default -> input(RS2)(31 downto 0)
       )
       cache.io.cpu.execute.args.size := size
-      cache.io.cpu.execute.args.forceUncachedAccess := False
 
 
       cache.io.cpu.flush.valid := arbitration.isValid && input(MEMORY_MANAGMENT)
@@ -221,6 +222,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       cache.io.cpu.memory.address := U(input(REGFILE_WRITE_DATA))
 
       cache.io.cpu.memory.mmuBus <> mmuBus
+      cache.io.cpu.memory.mmuBus.rsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
     }
 
     writeBack plug new Area{
@@ -298,7 +300,6 @@ class DBusCachedPlugin(config : DataCacheConfig,
           cache.io.cpu.execute.args.wr := dBusAccess.cmd.write
           cache.io.cpu.execute.args.data := dBusAccess.cmd.data
           cache.io.cpu.execute.args.size := dBusAccess.cmd.size
-          cache.io.cpu.execute.args.forceUncachedAccess := False
           if(withLrSc) cache.io.cpu.execute.args.isLrsc := False
           if(withAmo) cache.io.cpu.execute.args.isAmo := False
           cache.io.cpu.execute.address := dBusAccess.cmd.address  //Will only be 12 muxes

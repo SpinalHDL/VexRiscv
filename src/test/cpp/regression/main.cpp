@@ -3489,18 +3489,24 @@ int main(int argc, char **argv, char **env) {
 //	}
 
 #ifdef LINUX_SOC
-	LinuxSoc("linux")
-		.withRiscvRef()
-		->loadBin(EMULATOR, 0x80000000)
-		->loadBin(VMLINUX,  0xC0000000)
-		->loadBin(DTB,      0xC3000000)
-		->loadBin(RAMDISK,  0xC2000000)
-		->setIStall(true) //TODO It currently improve speed but should be removed later
-		->setDStall(true)
-		->bootAt(0x80000000)
-		->run(0);
-//		->run((496300000l + 2000000) / 2);
-//		->run(438700000l/2);
+    {
+
+	    LinuxSoc soc("linux");
+	    #ifndef DEBUG_PLUGIN_EXTERNAL
+	    soc.withRiscvRef();
+		soc.loadBin(EMULATOR, 0x80000000);
+		soc.loadBin(VMLINUX,  0xC0000000);
+		soc.loadBin(DTB,      0xC3000000);
+		soc.loadBin(RAMDISK,  0xC2000000);
+		#endif
+		soc.setIStall(true); //TODO It currently improve speed but should be removed later
+		soc.setDStall(true);
+		soc.bootAt(0x80000000);
+		soc.run(0);
+//		soc.run((496300000l + 2000000) / 2);
+//		soc.run(438700000l/2);
+        return -1;
+    }
 #endif
 
 //    #ifdef MMU

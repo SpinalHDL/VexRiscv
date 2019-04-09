@@ -291,6 +291,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
   var jumpInterface : Flow[UInt] = null
   var timerInterrupt, externalInterrupt, softwareInterrupt : Bool = null
   var externalInterruptS : Bool = null
+  var forceMachineWire : Bool = null
   var privilege : UInt = null
   var selfException : Flow[ExceptionCause] = null
   var contextSwitching : Bool = null
@@ -387,7 +388,8 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
     }
     contextSwitching = Bool().setName("contextSwitching")
 
-    privilege = RegInit(U"11").setName("CsrPlugin_privilege")
+    privilege = UInt(2 bits).setName("CsrPlugin_privilege")
+    forceMachineWire = False
 
     if(catchIllegalAccess || ecallGen || ebreakGen)
       selfException = newExceptionPort(pipeline.execute)
@@ -407,6 +409,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
   override def isUser() : Bool = privilege === 0
   override def isSupervisor(): Bool = privilege === 1
   override def isMachine(): Bool = privilege === 3
+  override def forceMachine(): Unit = forceMachineWire := True
 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
@@ -430,6 +433,10 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       val mode = Bits(2 bits)
       val base = UInt(xlen-2 bits)
     }
+
+    val privilegeReg = RegInit(U"11")
+    privilege := privilegeReg
+    when(forceMachineWire) { privilege := 3 }
 
     val machineCsr = pipeline plug new Area{
       //Define CSR registers
@@ -752,7 +759,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         jumpInterface.payload       := (if(!xtvecModeGen) xtvec.base @@ "00" else (xtvec.mode === 0 || hadException) ? (xtvec.base @@ "00") | ((xtvec.base + trapCause) @@ "00") )
         beforeLastStage.arbitration.flushAll := True
 
-        privilege := targetPrivilege
+        privilegeReg := targetPrivilege
 
         switch(targetPrivilege){
           if(supervisorGen) is(1) {
@@ -795,14 +802,14 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
               mstatus.MPP := U"00"
               mstatus.MIE := mstatus.MPIE
               mstatus.MPIE := True
-              privilege := mstatus.MPP
+              privilegeReg := mstatus.MPP
               jumpInterface.payload := mepc
             }
             if(supervisorGen) is(1){
               sstatus.SPP := U"0"
               sstatus.SIE := sstatus.SPIE
               sstatus.SPIE := True
-              privilege := U"0" @@ sstatus.SPP
+              privilegeReg := U"0" @@ sstatus.SPP
               jumpInterface.payload := sepc
             }
           }

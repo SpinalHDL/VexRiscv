@@ -14,7 +14,7 @@ trait Pipeline {
   val plugins = ArrayBuffer[Plugin[T]]()
   var stages = ArrayBuffer[Stage]()
   var unremovableStages = mutable.Set[Stage]()
-  val configs = mutable.HashMap[PipelineThing[_], Any]()
+  val things = mutable.HashMap[PipelineThing[_], Any]()
 //  val services = ArrayBuffer[Any]()
 
   def indexOf(stage : Stage) = stages.indexOf(stage)
@@ -37,8 +37,8 @@ trait Pipeline {
     filtered.head.asInstanceOf[T]
   }
 
-  def update[T](that : PipelineThing[T], value : T) : Unit = configs(that) = value
-  def apply[T](that : PipelineThing[T]) : T = configs(that).asInstanceOf[T]
+  def update[T](that : PipelineThing[T], value : T) : Unit = things(that) = value
+  def apply[T](that : PipelineThing[T]) : T = things(that).asInstanceOf[T]
 
   def build(): Unit ={
     plugins.foreach(_.pipeline = this.asInstanceOf[T])

@@ -40,13 +40,13 @@ cd VexRiscv
 Run regressions =>
 sbt "runMain vexriscv.demo.LinuxGen -r"
 cd src/test/cpp/regression
-make run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=10 TRACE=no
+make run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes LRSC=yes AMO=yes REDO=10 TRACE=no
 
 Run linux in simulation (Require the machime mode emulator compiled in SIM mode) =>
 sbt "runMain vexriscv.demo.LinuxGen"
 cd src/test/cpp/regression
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
-make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/vmlinux.bin DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
+make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yes LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/Image DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
 
 Run linux with QEMU (Require the machime mode emulator compiled in QEMU mode)
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
@@ -85,6 +85,35 @@ Generate a DTB from a DTS =>
 dtc -O dtb -o rv32.dtb rv32.dts
 
 https://github.com/riscv/riscv-qemu/wiki#build-and-install
+
+
+memo :
+export DATA=/home/miaou/Downloads/Binaries-master
+cd src/test/cpp/regression
+rm VexRiscv.v
+cp $DATA/VexRiscv.v ../../../..
+make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=$DATA/emulator.bin VMLINUX=$DATA/vmlinux.bin DTB=$DATA/rv32.dtb RAMDISK=$DATA/rootfs.cpio TRACE=no FLOW_INFO=no
+
+
+qemu-system-riscv32 -nographic -machine virt -m 1536M -device loader,file=$DATA/emulator.bin,addr=0x80000000,cpu-num=0 -device loader,file=$DATA/rv32.dtb,addr=0xC3000000 -device loader,file=$DATA/vmlinux.bin,addr=0xC0000000  -device loader,file=$DATA/rootfs.cpio,addr=0xc2000000
+
+
+
+program ../../../main/c/emulator/build/emulator.bin  0x80000000 verify
+		soc.loadBin(EMULATOR, 0x80000000);
+		soc.loadBin(VMLINUX,  0xC0000000);
+		soc.loadBin(DTB,      0xC3000000);
+		soc.loadBin(RAMDISK,  0xC2000000);
+
+export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
+make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yes LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes
+EMULATOR=../../../main/c/emulator/build/emulator.bin
+VMLINUX=/home/miaou/pro/riscv/buildrootSpinal/output/images/Image
+DTB=/home/miaou/pro/riscv/buildrootSpinal/board/spinal/vexriscv_sim/rv32.dtb
+RAMDISK=/home/miaou/pro/riscv/buildrootSpinal/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
+
+make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yes LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes DEBUG_PLUGIN_EXTERNAL=yes
+
 */
 
 
@@ -97,7 +126,7 @@ object LinuxGen {
 //          resetVector = 0x80000000l,
 //          cmdForkOnSecondStage = false,
 //          cmdForkPersistence = false,
-//          prediction = NONE,
+//          prediction = DYNAMIC_TARGET,
 //          historyRamSizeLog2 = 10,
 //          catchAccessFault = true,
 //          compressedGen = true,
@@ -156,7 +185,8 @@ object LinuxGen {
             catchAccessError  = true,
             catchIllegal      = true,
             catchUnaligned    = true,
-            withLrSc = true
+            withLrSc = true,
+            withAmo = true
 //          )
           ),
           memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
@@ -264,7 +294,7 @@ object LinuxGen {
 //      }
 //    }
 
-    SpinalConfig(mergeAsyncProcess = true, anonymSignalPrefix = "zz").generateVerilog {
+    SpinalConfig(mergeAsyncProcess = true, anonymSignalPrefix = "_zz").generateVerilog {
 
 
       val toplevel = new VexRiscv(configFull(
@@ -359,13 +389,13 @@ object LinuxSyntesisBench extends App{
   val withoutMmu = new Rtl {
     override def getName(): String = "VexRiscv Without Mmu"
     override def getRtlPath(): String = "VexRiscvWithoutMmu.v"
-    SpinalVerilog(new VexRiscv(LinuxGen.configFull(litex = false, withMmu = false)).setDefinitionName(getRtlPath().split("\\.").head))
+    SpinalConfig(inlineRom=true).generateVerilog(new VexRiscv(LinuxGen.configFull(litex = false, withMmu = false)).setDefinitionName(getRtlPath().split("\\.").head))
   }
 
   val withMmu = new Rtl {
     override def getName(): String = "VexRiscv With Mmu"
     override def getRtlPath(): String = "VexRiscvWithMmu.v"
-    SpinalVerilog(new VexRiscv(LinuxGen.configFull(litex = false, withMmu = true)).setDefinitionName(getRtlPath().split("\\.").head))
+    SpinalConfig(inlineRom=true).generateVerilog(new VexRiscv(LinuxGen.configFull(litex = false, withMmu = true)).setDefinitionName(getRtlPath().split("\\.").head))
   }
 
   val rtls = List(withoutMmu, withMmu)
