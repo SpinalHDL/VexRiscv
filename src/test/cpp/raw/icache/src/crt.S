@@ -1,6 +1,11 @@
 .globl _star
 #define TEST_ID x28
 
+#define delay \
+   li x20, 8; \
+1: addi x20, x20, -1; \
+   bne x20, x0, 1b;
+
 _start:
     la x1, fail
   //  csrw mtvec, x1
@@ -21,7 +26,7 @@ test2:
 test2_aligned:
     sw x1, 0(x2)
     fence.i
-    j test2_trigger
+    delay
 test2_trigger:
     j fail
 
