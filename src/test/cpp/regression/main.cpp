@@ -3641,8 +3641,12 @@ int main(int argc, char **argv, char **env) {
 		#endif
 
 
-		#ifdef ATOMIC
-			redo(REDO,WorkspaceRegression("atomic").loadHex("../custom/atomic/build/atomic.hex")->bootAt(0x00000000u)->run(10e3););
+		#ifdef LRSC
+			redo(REDO,WorkspaceRegression("lrsc").loadHex("../raw/lrsc/build/lrsc.hex")->bootAt(0x00000000u)->run(10e3););
+		#endif
+
+		#ifdef AMO
+			redo(REDO,WorkspaceRegression("amo").loadHex("../raw/amo/build/amo.hex")->bootAt(0x00000000u)->run(10e3););
 		#endif
 
 		#ifdef DHRYSTONE

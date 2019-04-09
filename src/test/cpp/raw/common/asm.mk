@@ -12,8 +12,11 @@ MARCH := rv32i
 ifeq ($(MULDIV),yes)
 	MARCH := $(MARCH)m
 endif
+ifeq ($(ATOMIC),yes)
+	MARCH := $(MARCH)a
+endif
 ifeq ($(COMPRESSED),yes)
-	MARCH := $(MARCH)ac
+	MARCH := $(MARCH)c
 endif
 
 CFLAGS += -march=$(MARCH)  -mabi=$(MABI)

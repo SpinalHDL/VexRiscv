@@ -14,7 +14,7 @@ EBREAK?=no
 FENCEI?=no
 MMU?=yes
 SEED?=no
-ATOMIC?=no
+LRSC?=no
 AMO?=no
 NO_STALL?=no
 DEBUG_PLUGIN?=STD
@@ -143,8 +143,8 @@ ifeq ($(CSR),yes)
 endif
 
 
-ifeq ($(ATOMIC),yes)
-	ADDCFLAGS += -CFLAGS -DATOMIC
+ifeq ($(LRSC),yes)
+	ADDCFLAGS += -CFLAGS -DLRSC
 endif
 
 ifeq ($(AMO),yes)
