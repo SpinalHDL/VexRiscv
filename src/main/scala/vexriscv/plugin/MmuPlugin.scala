@@ -137,11 +137,11 @@ class MmuPlugin(ioRange : UInt => Bool,
         }
         port.bus.rsp.isIoAccess := ioRange(port.bus.rsp.physicalAddress)
 
-        // Avoid keeping any invalid line in the cache more than one memory translation.
+        // Avoid keeping any invalid line in the cache after an exception.
         // https://github.com/riscv/riscv-linux/blob/8fe28cb58bcb235034b64cbbb7550a8a43fd88be/arch/riscv/include/asm/pgtable.h#L276
-        when(port.bus.cmd.isValid && port.bus.end) {
+        when(service(classOf[IContextSwitching]).isContextSwitching) {
           for (line <- cache) {
-            when(line.valid && line.exception) {
+            when(line.exception) {
               line.valid := False
             }
           }
