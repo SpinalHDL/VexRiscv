@@ -1093,7 +1093,6 @@ public:
 
 	uint32_t seed;
 
-	bool withInstructionReadCheck = true;
 	Workspace* setIStall(bool enable) { iStall = enable; return this; }
 	Workspace* setDStall(bool enable) { dStall = enable; return this; }
 
@@ -1402,9 +1401,9 @@ public:
 	virtual void pass(){ throw success();}
 	virtual void fail(){ throw std::exception();}
     virtual void fillSimELements();
-    Workspace* noInstructionReadCheck(){withInstructionReadCheck = false; return this;}
 	void dump(int i){
 		#ifdef TRACE
+		if(i == TRACE_START) cout << "START TRACE" << endl;
 		if(i >= TRACE_START) tfp->dump(i);
 		#endif
 	}
@@ -1513,7 +1512,7 @@ public:
 				currentTime = i;
 
                 #ifdef FLOW_INFO
-                    if(i % 100000 == 0) cout << "PROGRESS TRACE_START=" << i << endl;
+                    if(i % 2000000 == 0) cout << "PROGRESS TRACE_START=" << i << endl;
                 #endif
 
 
@@ -1603,17 +1602,6 @@ public:
 				for(SimElement* simElement : simElements) simElement->preCycle();
 
 				dump(i + 1);
-
-                #ifndef COMPRESSED
-				if(withInstructionReadCheck){
-					if(top->VexRiscv->decode_arbitration_isValid && !top->VexRiscv->decode_arbitration_haltItself && !top->VexRiscv->decode_arbitration_flushAll){
-						uint32_t expectedData;
-						bool dummy;
-						iBusAccess(top->VexRiscv->decode_PC, &expectedData, &dummy);
-						assertEq(top->VexRiscv->decode_INSTRUCTION,expectedData);
-					}
-				}
-				#endif
 
 				checks();
 				//top->eval();
@@ -2808,7 +2796,6 @@ public:
 		loadHex("../../resources/hex/" + name + ".elf.hex");
 		out32.open (name + ".out32");
 		this->name = name;
-		if(name == "I-FENCE.I-01") withInstructionReadCheck = false;
 	}
 
 
@@ -3018,7 +3005,6 @@ public:
 	DebugPluginTest() : WorkspaceRegression("DebugPluginTest") {
 		loadHex("../../resources/hex/debugPlugin.hex");
 		 pthread_create(&clientThreadId, NULL, &clientThreadWrapper, this);
-		 noInstructionReadCheck();
 	}
 
 	virtual ~DebugPluginTest(){
@@ -3526,7 +3512,6 @@ int main(int argc, char **argv, char **env) {
 			w.loadHex(RUN_HEX);
 			w.withRiscvRef();
 			#endif
-			w.noInstructionReadCheck();
 			//w.setIStall(false);
 			//w.setDStall(false);
 
@@ -3604,11 +3589,11 @@ int main(int argc, char **argv, char **env) {
 			    #ifndef COMPRESSED
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
-				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->noInstructionReadCheck()->run(10e4);)
+				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->run(10e4);)
                 #else
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,   14,2,     15,5,16,17,1 };
-				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->noInstructionReadCheck()->run(10e4);)
+				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->run(10e4);)
                 #endif
 			#endif
 //			#ifdef MMU

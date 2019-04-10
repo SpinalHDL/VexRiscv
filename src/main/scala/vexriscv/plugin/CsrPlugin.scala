@@ -78,7 +78,46 @@ object CsrPluginConfig{
   def all : CsrPluginConfig = all(0x00000020l)
   def small : CsrPluginConfig = small(0x00000020l)
   def smallest : CsrPluginConfig = smallest(0x00000020l)
-  def linux(mtVecInit : BigInt) = CsrPluginConfig(
+  def linuxMinimal(mtVecInit : BigInt) = CsrPluginConfig(
+    catchIllegalAccess  = true,
+    mvendorid           = 1,
+    marchid             = 2,
+    mimpid              = 3,
+    mhartid             = 0,
+    misaExtensionsInit  = 0, //TODO
+    misaAccess          = CsrAccess.NONE, //Read required by some regressions
+    mtvecAccess         = CsrAccess.WRITE_ONLY, //Read required by some regressions
+    mtvecInit           = mtVecInit,
+    mepcAccess          = CsrAccess.READ_WRITE,
+    mscratchGen         = true,
+    mcauseAccess        = CsrAccess.READ_ONLY,
+    mbadaddrAccess      = CsrAccess.READ_ONLY,
+    mcycleAccess        = CsrAccess.NONE,
+    minstretAccess      = CsrAccess.NONE,
+    ucycleAccess        = CsrAccess.NONE,
+    wfiGenAsWait        = true,
+    ecallGen            = false,
+    xtvecModeGen        = false,
+    noCsrAlu            = false,
+    wfiGenAsNop         = false,
+    ebreakGen           = true,
+    supervisorGen       = true,
+    sscratchGen         = true,
+    stvecAccess         = CsrAccess.READ_WRITE,
+    sepcAccess          = CsrAccess.READ_WRITE,
+    scauseAccess        = CsrAccess.READ_WRITE,
+    sbadaddrAccess      = CsrAccess.READ_WRITE,
+    scycleAccess        = CsrAccess.NONE,
+    sinstretAccess      = CsrAccess.NONE,
+    satpAccess          = CsrAccess.NONE, //Implemented into the MMU plugin
+    medelegAccess       = CsrAccess.WRITE_ONLY,
+    midelegAccess       = CsrAccess.WRITE_ONLY,
+    pipelineCsrRead     = false,
+    deterministicInteruptionEntry  = false
+  )
+
+
+  def linuxFull(mtVecInit : BigInt) = CsrPluginConfig(
     catchIllegalAccess  = true,
     mvendorid           = 1,
     marchid             = 2,

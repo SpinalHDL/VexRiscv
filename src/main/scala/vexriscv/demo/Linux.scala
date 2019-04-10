@@ -40,13 +40,13 @@ cd VexRiscv
 Run regressions =>
 sbt "runMain vexriscv.demo.LinuxGen -r"
 cd src/test/cpp/regression
-make run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=yes LRSC=yes AMO=yes REDO=10 TRACE=no
+make run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=no LRSC=yes AMO=yes REDO=10 TRACE=no
 
 Run linux in simulation (Require the machime mode emulator compiled in SIM mode) =>
 sbt "runMain vexriscv.demo.LinuxGen"
 cd src/test/cpp/regression
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
-make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yes LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/Image DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
+make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=no LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/Image DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
 
 Run linux with QEMU (Require the machime mode emulator compiled in QEMU mode)
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
@@ -114,6 +114,12 @@ RAMDISK=/home/miaou/pro/riscv/buildrootSpinal/output/images/rootfs.cpio TRACE=no
 
 make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yes LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes DEBUG_PLUGIN_EXTERNAL=yes
 
+rm -rf cpio
+mkdir cpio
+cd cpio
+ls | cpio -ov > ../rootfs.cpio
+cpio -idv < ../rootfs.cpio
+
 */
 
 
@@ -140,9 +146,9 @@ object LinuxGen {
         //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
         new IBusCachedPlugin(
           resetVector = 0x80000000l,
-          compressedGen = true,
+          compressedGen = false,
           prediction = NONE,
-          injectorStage = true,
+          injectorStage = false,
           config = InstructionCacheConfig(
             cacheSize = 4096*1,
             bytePerLine = 32,
@@ -232,7 +238,7 @@ object LinuxGen {
           divUnrollFactor = 1
         ),
         //          new DivPlugin,
-        new CsrPlugin(CsrPluginConfig.linux(0x80000020l).copy(ebreakGen = false)),
+        new CsrPlugin(CsrPluginConfig.linuxMinimal(0x80000020l).copy(ebreakGen = false)),
         //          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
         //             CsrPluginConfig(
         //            catchIllegalAccess = false,
@@ -398,7 +404,7 @@ object LinuxSyntesisBench extends App{
     SpinalConfig(inlineRom=true).generateVerilog(new VexRiscv(LinuxGen.configFull(litex = false, withMmu = true)).setDefinitionName(getRtlPath().split("\\.").head))
   }
 
-  val rtls = List(withoutMmu, withMmu)
+  val rtls = List(/*withoutMmu, */withMmu)
   //    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache)
   //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
   //    val rtls = List(fullNoMmu)
@@ -408,7 +414,7 @@ object LinuxSyntesisBench extends App{
   ) ++ AlteraStdTargets(
     quartusCycloneIVPath = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin",
     quartusCycloneVPath  = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin"
-  ) ++  IcestormStdTargets().take(1)
+  ) //++  IcestormStdTargets().take(1)
 
   Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
 }
