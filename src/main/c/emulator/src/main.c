@@ -14,17 +14,18 @@ void putString(char* s){
 	}
 }
 
+//Affect mtvec
 void setup_pmp(void)
 {
   // Set up a PMP to permit access to all of memory.
   // Ignore the illegal-instruction trap if PMPs aren't supported.
   uintptr_t pmpc = PMP_NAPOT | PMP_R | PMP_W | PMP_X;
   asm volatile ("la t0, 1f\n\t"
-                "csrrw t0, mtvec, t0\n\t"
+                "csrw mtvec, t0\n\t"
                 "csrw pmpaddr0, %1\n\t"
                 "csrw pmpcfg0, %0\n\t"
                 ".align 2\n\t"
-                "1: csrw mtvec, t0"
+                "1:"
                 : : "r" (pmpc), "r" (-1UL) : "t0");
 }
 
@@ -233,7 +234,11 @@ void trap(){
 					uint32_t csrAddress = instruction >> 20;
 					uint32_t old;
 					switch(csrAddress){
+					case RDCYCLE :
+					case RDINSTRET:
 					case RDTIME  : old = rdtime(); break;
+					case RDCYCLEH :
+					case RDINSTRETH:
 					case RDTIMEH : old = rdtimeh(); break;
 					default: redirectTrap(); break;
 					}
