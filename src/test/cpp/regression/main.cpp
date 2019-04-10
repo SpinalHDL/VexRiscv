@@ -3499,8 +3499,8 @@ int main(int argc, char **argv, char **env) {
 		soc.loadBin(DTB,      0xC3000000);
 		soc.loadBin(RAMDISK,  0xC2000000);
 		#endif
-		soc.setIStall(true); //TODO It currently improve speed but should be removed later
-		soc.setDStall(true);
+		//soc.setIStall(true); //TODO It currently improve speed but should be removed later
+		//soc.setDStall(true);
 		soc.bootAt(0x80000000);
 		soc.run(0);
 //		soc.run((496300000l + 2000000) / 2);
@@ -3679,8 +3679,24 @@ int main(int argc, char **argv, char **env) {
 		#endif
 
         #ifdef COREMARK
-            Dhrystone("coremark","/home/miaou/pro/riscv/coremark/coremark",false,false).run(1.9e6);
-
+            for(int withStall = 1; true ;withStall--){
+                string rv = "rv32i";
+                #if defined(MUL) && defined(DIV)
+                    rv += "m";
+                #endif
+                #if defined(COMPRESSED)
+                    if(withStall == -2) break;
+                    if(withStall != -1) rv += "c";
+                #else
+                    if(withStall == -1) break;
+                #endif
+                WorkspaceRegression("coremark_" + rv + (withStall  > 0 ? "_stall" : "_nostall")).withRiscvRef()
+                ->loadBin("../../resources/bin/coremark_" + rv + ".bin", 0x80000000)
+                ->bootAt(0x80000000)
+                ->setIStall(withStall > 0)
+                ->setDStall(withStall > 0)
+                ->run(50e6);
+            }
         #endif
 
 		#ifdef FREERTOS
