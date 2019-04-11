@@ -58,13 +58,13 @@ git clone https://github.com/SpinalHDL/buildroot.git -b vexriscv
 cd buildroot
 make spinal_vexriscv_sim_defconfig
 make -j$(nproc)
-output/host/bin/riscv32-linux-objcopy  -O binary output/images/vmlinux output/images/vmlinux.bin
+output/host/bin/riscv32-linux-objcopy  -O binary output/images/vmlinux output/images/Image
 
 After changing a kernel config into buildroot =>
 cd buildroot
 make spinal_vexriscv_sim_defconfig
 make linux-dirclean linux-rebuild -j8
-output/host/bin/riscv32-linux-objcopy  -O binary output/images/vmlinux output/images/vmlinux.bin
+output/host/bin/riscv32-linux-objcopy  -O binary output/images/vmlinux output/images/Image
 
 Compiling the machine mode emulator (check the config.h file to know the mode) =>
 cd src/main/c/emulator
@@ -92,7 +92,7 @@ export DATA=/home/miaou/Downloads/Binaries-master
 cd src/test/cpp/regression
 rm VexRiscv.v
 cp $DATA/VexRiscv.v ../../../..
-make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=$DATA/emulator.bin VMLINUX=$DATA/vmlinux.bin DTB=$DATA/rv32.dtb RAMDISK=$DATA/rootfs.cpio TRACE=no FLOW_INFO=no
+make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yess LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=$DATA/emulator.bin VMLINUX=$DATA/vmlinux.bin DTB=$DATA/rv32.dtb RAMDISK=$DATA/rootfs.cpio TRACE=no FLOW_INFO=no
 
 
 qemu-system-riscv32 -nographic -machine virt -m 1536M -device loader,file=$DATA/emulator.bin,addr=0x80000000,cpu-num=0 -device loader,file=$DATA/rv32.dtb,addr=0xC3000000 -device loader,file=$DATA/vmlinux.bin,addr=0xC0000000  -device loader,file=$DATA/rootfs.cpio,addr=0xc2000000

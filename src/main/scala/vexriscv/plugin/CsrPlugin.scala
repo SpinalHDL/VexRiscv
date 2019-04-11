@@ -96,7 +96,7 @@ object CsrPluginConfig{
     minstretAccess      = CsrAccess.NONE,
     ucycleAccess        = CsrAccess.NONE,
     wfiGenAsWait        = true,
-    ecallGen            = false,
+    ecallGen            = true,
     xtvecModeGen        = false,
     noCsrAlu            = false,
     wfiGenAsNop         = false,
