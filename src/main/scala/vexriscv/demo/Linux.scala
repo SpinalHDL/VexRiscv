@@ -50,7 +50,7 @@ make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRE
 
 Run linux with QEMU (Require the machime mode emulator compiled in QEMU mode)
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
-qemu-system-riscv32 -nographic -machine virt -m 1536M -device loader,file=src/main/c/emulator/build/emulator.bin,addr=0x80000000,cpu-num=0 -device loader,file=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb,addr=0xC3000000 -device loader,file=$BUILDROOT/output/images/vmlinux.bin,addr=0xC0000000  -device loader,file=$BUILDROOT/output/images/rootfs.cpio,addr=0xc2000000
+qemu-system-riscv32 -nographic -machine virt -m 1536M -device loader,file=src/main/c/emulator/build/emulator.bin,addr=0x80000000,cpu-num=0 -device loader,file=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb,addr=0xC3000000 -device loader,file=$BUILDROOT/output/images/Image,addr=0xC0000000  -device loader,file=$BUILDROOT/output/images/rootfs.cpio,addr=0xc2000000
 
 
 Buildroot =>
@@ -92,7 +92,7 @@ export DATA=/home/miaou/Downloads/Binaries-master
 cd src/test/cpp/regression
 rm VexRiscv.v
 cp $DATA/VexRiscv.v ../../../..
-make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yess LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=$DATA/emulator.bin VMLINUX=$DATA/vmlinux.bin DTB=$DATA/rv32.dtb RAMDISK=$DATA/rootfs.cpio TRACE=no FLOW_INFO=no
+make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=no LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=$DATA/emulator.bin VMLINUX=$DATA/vmlinux.bin DTB=$DATA/rv32.dtb RAMDISK=$DATA/rootfs.cpio TRACE=no FLOW_INFO=no
 
 
 qemu-system-riscv32 -nographic -machine virt -m 1536M -device loader,file=$DATA/emulator.bin,addr=0x80000000,cpu-num=0 -device loader,file=$DATA/rv32.dtb,addr=0xC3000000 -device loader,file=$DATA/vmlinux.bin,addr=0xC0000000  -device loader,file=$DATA/rootfs.cpio,addr=0xc2000000
@@ -106,19 +106,23 @@ program ../../../main/c/emulator/build/emulator.bin  0x80000000 verify
 		soc.loadBin(RAMDISK,  0xC2000000);
 
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
-make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yes LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes
+make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=no LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes
 EMULATOR=../../../main/c/emulator/build/emulator.bin
 VMLINUX=/home/miaou/pro/riscv/buildrootSpinal/output/images/Image
 DTB=/home/miaou/pro/riscv/buildrootSpinal/board/spinal/vexriscv_sim/rv32.dtb
 RAMDISK=/home/miaou/pro/riscv/buildrootSpinal/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
 
-make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=yes LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes DEBUG_PLUGIN_EXTERNAL=yes
+make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=no LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes DEBUG_PLUGIN_EXTERNAL=yes
 
 rm -rf cpio
 mkdir cpio
 cd cpio
-ls | cpio -ov > ../rootfs.cpio
 cpio -idv < ../rootfs.cpio
+cd ..
+
+
+ls | cpio -ov > ../rootfs.cpio
+
 
 */
 
@@ -147,12 +151,12 @@ object LinuxGen {
         new IBusCachedPlugin(
           resetVector = 0x80000000l,
           compressedGen = false,
-          prediction = NONE,
+          prediction = DYNAMIC_TARGET,
           injectorStage = false,
           config = InstructionCacheConfig(
-            cacheSize = 4096*1,
+            cacheSize = 4096*4,
             bytePerLine = 32,
-            wayCount = 1,
+            wayCount = 4,
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 32,
@@ -182,9 +186,9 @@ object LinuxGen {
           dBusCmdSlavePipe = true,
           dBusRspSlavePipe = true,
           config = new DataCacheConfig(
-            cacheSize         = 4096*1,
+            cacheSize         = 4096*4,
             bytePerLine       = 32,
-            wayCount          = 1,
+            wayCount          = 4,
             addressWidth      = 32,
             cpuDataWidth      = 32,
             memDataWidth      = 32,
@@ -404,7 +408,7 @@ object LinuxSyntesisBench extends App{
     SpinalConfig(inlineRom=true).generateVerilog(new VexRiscv(LinuxGen.configFull(litex = false, withMmu = true)).setDefinitionName(getRtlPath().split("\\.").head))
   }
 
-  val rtls = List(/*withoutMmu, */withMmu)
+  val rtls = List(withoutMmu,withMmu)
   //    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache)
   //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
   //    val rtls = List(fullNoMmu)

@@ -282,9 +282,9 @@ You can find some FPGA projects which instantiate the Briey SoC here (DE1-SoC, D
 Here are some measurements of Briey SoC timings and area :
 
 ```
-  Artix 7    -> 239 Mhz 3227 LUT 3410 FF
-  Cyclone V  -> 125 Mhz 2,207 ALMs
-  Cyclone IV -> 112 Mhz 4,594 LUT 3,620
+  Artix 7    -> 233 Mhz 3035 LUT 3289 FF
+  Cyclone V  -> 114 Mhz 2,073 ALMs
+  Cyclone IV -> 101 Mhz 4,279 LUT 3,167 FF
 ```
 
 ## Murax SoC

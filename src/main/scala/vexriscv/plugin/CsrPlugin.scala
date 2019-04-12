@@ -55,6 +55,7 @@ case class CsrPluginConfig(
                             noCsrAlu            : Boolean = false,
                             wfiGenAsNop         : Boolean = false,
                             ebreakGen           : Boolean = false,
+                            userGen             : Boolean = false,
                             supervisorGen       : Boolean = false,
                             sscratchGen         : Boolean = false,
                             stvecAccess         : CsrAccess = CsrAccess.NONE,
@@ -70,7 +71,7 @@ case class CsrPluginConfig(
                             deterministicInteruptionEntry : Boolean = false //Only used for simulatation purposes
                           ){
   assert(!ucycleAccess.canWrite)
-
+  def privilegeGen = userGen || supervisorGen
   def noException = this.copy(ecallGen = false, ebreakGen = false, catchIllegalAccess = false)
 }
 
@@ -101,6 +102,7 @@ object CsrPluginConfig{
     noCsrAlu            = false,
     wfiGenAsNop         = false,
     ebreakGen           = true,
+    userGen             = true,
     supervisorGen       = true,
     sscratchGen         = true,
     stvecAccess         = CsrAccess.READ_WRITE,
@@ -140,6 +142,7 @@ object CsrPluginConfig{
     noCsrAlu            = false,
     wfiGenAsNop         = false,
     ebreakGen           = true,
+    userGen             = true,
     supervisorGen       = true,
     sscratchGen         = true,
     stvecAccess         = CsrAccess.READ_WRITE,
@@ -473,8 +476,9 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       val base = UInt(xlen-2 bits)
     }
 
-    val privilegeReg = RegInit(U"11")
-    privilege := privilegeReg
+    val privilegeReg = privilegeGen generate RegInit(U"11")
+    privilege := (if(privilegeGen) privilegeReg else U"11")
+
     when(forceMachineWire) { privilege := 3 }
 
     val machineCsr = pipeline plug new Area{
@@ -798,7 +802,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         jumpInterface.payload       := (if(!xtvecModeGen) xtvec.base @@ "00" else (xtvec.mode === 0 || hadException) ? (xtvec.base @@ "00") | ((xtvec.base + trapCause) @@ "00") )
         beforeLastStage.arbitration.flushAll := True
 
-        privilegeReg := targetPrivilege
+        if(privilegeGen) privilegeReg := targetPrivilege
 
         switch(targetPrivilege){
           if(supervisorGen) is(1) {
@@ -841,15 +845,15 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
               mstatus.MPP := U"00"
               mstatus.MIE := mstatus.MPIE
               mstatus.MPIE := True
-              privilegeReg := mstatus.MPP
               jumpInterface.payload := mepc
+              if(privilegeGen) privilegeReg := mstatus.MPP
             }
             if(supervisorGen) is(1){
               sstatus.SPP := U"0"
               sstatus.SIE := sstatus.SPIE
               sstatus.SPIE := True
-              privilegeReg := U"0" @@ sstatus.SPP
               jumpInterface.payload := sepc
+              if(privilegeGen) privilegeReg := U"0" @@ sstatus.SPP
             }
           }
         }
