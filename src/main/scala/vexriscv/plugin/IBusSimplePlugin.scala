@@ -172,7 +172,8 @@ class IBusSimplePlugin(resetVector : BigInt,
                        pendingMax : Int = 7,
                        injectorStage : Boolean = true,
                        rspHoldValue : Boolean = false,
-                       singleInstructionPipeline : Boolean = false
+                       singleInstructionPipeline : Boolean = false,
+                       relaxPredictorAddress : Boolean = true
                       ) extends IBusFetcherImpl(
     resetVector = resetVector,
     keepPcPlus4 = keepPcPlus4,
@@ -183,7 +184,8 @@ class IBusSimplePlugin(resetVector : BigInt,
     injectorReadyCutGen = false,
     prediction = prediction,
     historyRamSizeLog2 = historyRamSizeLog2,
-    injectorStage = injectorStage){
+    injectorStage = injectorStage,
+  relaxPredictorAddress = relaxPredictorAddress){
 
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
