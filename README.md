@@ -223,7 +223,19 @@ continue
 
 ## Using Eclipse to run the software and debug it
 
-### By using Zylin plugin
+### By using gnu-mcu-eclipse
+
+You can download releases of the IDE here : https://github.com/gnu-mcu-eclipse/org.eclipse.epp.packages/releases
+
+In the IDE, you can import a makefile project by :
+- file -> import -> C/C++ -> existing Code as Makefile Project
+- Select the folder which contain the makefile, select Cross GCC
+
+To create a new debug configuration :
+- run -> Debug Configurations -> GDB OpenOCD Debugging double click
+- Look at https://drive.google.com/open?id=1c46tyEV0xLwOsk76b0y2qqs8CYy7Zq3f for a configuration example
+
+### By using Zylin plugin (old)
 You can use the Eclipse + Zylin embedded CDT plugin to do it (http://opensource.zylin.com/embeddedcdt.html). Tested with Helios Service Release 2 (http://www.Eclipse.org/downloads/download.php?file=/technology/epp/downloads/release/helios/SR2/Eclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz) and the corresponding zylin plugin.
 
 To following commands will download Eclipse and install the plugin.
@@ -237,13 +249,6 @@ cd eclipse
 See https://drive.google.com/drive/folders/1NseNHH05B6lmIXqQFVwK8xRjWE4ydeG-?usp=sharing to import a makefile project and create a debug configuration.
 
 Note that sometime this Eclipse need to be restarted in order to be able to place new breakpoints.
-
-### By using FreedomStudio
-
-You can get FreedomStudio (which is package with Eclipse and some plugins) here: https://www.sifive.com/products/tools/
-
-See https://drive.google.com/drive/folders/1a7FyMOYgFc9UDhfsWUSCjyqDCvOrts2J?usp=sharing to import a makefile project and create a debug configuration.
-
 
 ## Briey SoC
 As a demonstrator, a SoC named Briey is implemented in `src/main/scala/vexriscv/demo/Briey.scala`. This SoC is very similar to
