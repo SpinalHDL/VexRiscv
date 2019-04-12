@@ -490,7 +490,6 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
         val noPredictionOnMissaligned = (!pipeline(RVC_GEN)) generate new Area{
           val missaligned = decode.input(BRANCH_CTRL).mux(
-            BranchCtrlEnum.JALR -> (imm.i_sext(1) ^ decode.input(RS1)(1)),
             BranchCtrlEnum.JAL  ->  imm.j_sext(1),
             default             ->  imm.b_sext(1)
           )
