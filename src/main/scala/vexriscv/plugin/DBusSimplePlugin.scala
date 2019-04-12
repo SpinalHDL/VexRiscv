@@ -65,6 +65,12 @@ object DBusSimpleBus{
     useBTE = true,
     useCTI = true
   )
+
+  def getPipelinedMemoryBusConfig() = PipelinedMemoryBusConfig(
+    addressWidth = 32,
+    dataWidth = 32
+  )
+
 }
 
 case class DBusSimpleBus() extends Bundle with IMasterSlave{
@@ -180,7 +186,8 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
   }
 
   def toPipelinedMemoryBus() : PipelinedMemoryBus = {
-    val bus = PipelinedMemoryBus(32,32)
+    val pipelinedMemoryBusConfig = DBusSimpleBus.getPipelinedMemoryBusConfig()
+    val bus = PipelinedMemoryBus(pipelinedMemoryBusConfig)
     bus.cmd.valid := cmd.valid
     bus.cmd.write := cmd.wr
     bus.cmd.address := cmd.address.resized

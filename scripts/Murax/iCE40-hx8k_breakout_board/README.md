@@ -2,7 +2,8 @@ This example is for the
 [Lattice iCE40HX-8K Breakout Board](http://www.latticesemi.com/Products/DevelopmentBoardsAndKits/iCE40HX8KBreakoutBoard.aspx).
 
 An image of this board is shown below;
-![img/iCE40HX8K-breakout-revA.png]
+
+![`iCE40HX8K breakout revA`](img/iCE40HX8K-breakout-revA.png)
 
 This board can be purchased for ~$USD 49 directly from Lattice and is supported
 by the IceStorm
@@ -20,7 +21,8 @@ mode. This requires removing jumper `J7` and putting the pair of jumpers on
 This is shown in **Figure 5** of the
 [iCE40HX-8K Breakout Board User Guide](http://www.latticesemi.com/view_document?document_id=50373).
 which is also reproduced below;
-![img/cram-programming-config.png]
+
+![CRAM Programming Config](img/cram-programming-config.png)
 
 Once your board is ready, you should follow the setup instructions at the
 [top level](../../../README.md).

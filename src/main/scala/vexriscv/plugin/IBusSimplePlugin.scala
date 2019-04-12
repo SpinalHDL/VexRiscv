@@ -60,6 +60,11 @@ object IBusSimpleBus{
     useBTE = true,
     useCTI = true
   )
+
+  def getPipelinedMemoryBusConfig() = PipelinedMemoryBusConfig(
+    addressWidth = 32,
+    dataWidth = 32
+  )
 }
 
 
@@ -137,7 +142,8 @@ case class IBusSimpleBus(interfaceKeepData : Boolean = false) extends Bundle wit
   }
 
   def toPipelinedMemoryBus(): PipelinedMemoryBus = {
-    val bus = PipelinedMemoryBus(32,32)
+    val pipelinedMemoryBusConfig = IBusSimpleBus.getPipelinedMemoryBusConfig()
+    val bus = PipelinedMemoryBus(pipelinedMemoryBusConfig)
     bus.cmd.arbitrationFrom(cmd)
     bus.cmd.address := cmd.pc.resized
     bus.cmd.write := False
@@ -168,7 +174,8 @@ class IBusSimplePlugin(resetVector : BigInt,
                        injectorStage : Boolean = true,
                        rspHoldValue : Boolean = false,
                        singleInstructionPipeline : Boolean = false,
-                       memoryTranslatorPortConfig : Any = null
+                       memoryTranslatorPortConfig : Any = null,
+                       relaxPredictorAddress : Boolean = true
                       ) extends IBusFetcherImpl(
     resetVector = resetVector,
     keepPcPlus4 = keepPcPlus4,
@@ -179,7 +186,8 @@ class IBusSimplePlugin(resetVector : BigInt,
     injectorReadyCutGen = false,
     prediction = prediction,
     historyRamSizeLog2 = historyRamSizeLog2,
-    injectorStage = injectorStage){
+    injectorStage = injectorStage,
+  relaxPredictorAddress = relaxPredictorAddress){
 
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null

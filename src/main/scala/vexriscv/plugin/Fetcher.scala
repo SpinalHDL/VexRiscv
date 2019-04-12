@@ -20,7 +20,8 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
                                val injectorReadyCutGen : Boolean,
                                val prediction : BranchPrediction,
                                val historyRamSizeLog2 : Int,
-                               val injectorStage : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
+                               val injectorStage : Boolean,
+                               val relaxPredictorAddress : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
   var prefetchExceptionPort : Flow[ExceptionCause] = null
   var decodePrediction : DecodePredictionBus = null
   var fetchPrediction : FetchPredictionBus = null
@@ -488,8 +489,17 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
         decodePrediction.cmd.hadBranch := decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL || (decode.input(BRANCH_CTRL) === BranchCtrlEnum.B && conditionalBranchPrediction)
 
+        val noPredictionOnMissaligned = (!pipeline(RVC_GEN)) generate new Area{
+          val missaligned = decode.input(BRANCH_CTRL).mux(
+            BranchCtrlEnum.JAL  ->  imm.j_sext(1),
+            default             ->  imm.b_sext(1)
+          )
+          decodePrediction.cmd.hadBranch clearWhen(missaligned)
+        }
+
         predictionJumpInterface.valid := decodePrediction.cmd.hadBranch && decode.arbitration.isFiring //TODO OH Doublon de priorité
         predictionJumpInterface.payload := decode.input(PC) + ((decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
+        if(relaxPredictorAddress) KeepAttribute(predictionJumpInterface.payload)
 
 //        when(predictionJumpInterface.payload((if(pipeline(RVC_GEN)) 0 else 1) downto 0) =/= 0){
 //          decodePrediction.cmd.hadBranch := False

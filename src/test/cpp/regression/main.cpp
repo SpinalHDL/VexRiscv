@@ -3238,6 +3238,7 @@ string freeRtosTests[] = {
 //		"flop"
 //		 "flop", "sp_flop" // <- Simple test
 		 // "AltBlckQ" ???
+
 };
 
 
@@ -3696,15 +3697,15 @@ int main(int argc, char **argv, char **env) {
                     tasks.push_back([=]() { WorkspaceRegression(name + "_rv32i_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     tasks.push_back([=]() { WorkspaceRegression(name + "_rv32i_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #ifdef COMPRESSED
-                        tasks.push_back([=]() { WorkspaceRegression(name + "_rv32ic_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
-                        tasks.push_back([=]() { WorkspaceRegression(name + "_rv32ic_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
+                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #endif
                     #if defined(MUL) && defined(DIV)
-                        #ifdef COMPRESSED
-                            tasks.push_back([=]() { WorkspaceRegression(name + "_rv32imac_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
-                        #else
-                            tasks.push_back([=]() { WorkspaceRegression(name + "_rv32im_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
-                        #endif
+//                        #ifdef COMPRESSED
+//                            tasks.push_back([=]() { Workspace(name + "_rv32imac_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                        #else
+                            tasks.push_back([=]() { Workspace(name + "_rv32im_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                        #endif
                     #endif
                 }
 			}
