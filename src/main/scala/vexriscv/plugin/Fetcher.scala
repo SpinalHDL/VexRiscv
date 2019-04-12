@@ -488,6 +488,15 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
         decodePrediction.cmd.hadBranch := decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL || (decode.input(BRANCH_CTRL) === BranchCtrlEnum.B && conditionalBranchPrediction)
 
+        val noPredictionOnMissaligned = (!pipeline(RVC_GEN)) generate new Area{
+          val missaligned = decode.input(BRANCH_CTRL).mux(
+            BranchCtrlEnum.JALR -> (imm.i_sext(1) ^ decode.input(RS1)(1)),
+            BranchCtrlEnum.JAL  ->  imm.j_sext(1),
+            default             ->  imm.b_sext(1)
+          )
+          decodePrediction.cmd.hadBranch clearWhen(missaligned)
+        }
+
         predictionJumpInterface.valid := decodePrediction.cmd.hadBranch && decode.arbitration.isFiring //TODO OH Doublon de priorité
         predictionJumpInterface.payload := decode.input(PC) + ((decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
 

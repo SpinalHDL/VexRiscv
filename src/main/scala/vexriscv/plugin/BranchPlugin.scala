@@ -268,7 +268,7 @@ class BranchPlugin(earlyBranch : Boolean,
         default{
           branch_src1 := input(PC)
           branch_src2 := ((input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
-          when(input(PREDICTION_HAD_BRANCHED) && ! missAlignedTarget){
+          when(input(PREDICTION_HAD_BRANCHED)){ //Assume the predictor never predict missaligned stuff, this avoid the need to know if the instruction should branch or not
             branch_src2 := (if(pipeline(RVC_GEN)) Mux(input(IS_RVC), B(2), B(4)) else B(4)).asUInt.resized
           }
         }
