@@ -958,6 +958,7 @@ public:
 			}
 		} else {
 			#ifndef COMPRESSED
+			cout << "ERROR : RiscvGolden got a RVC instruction while the CPU isn't RVC ready" << endl;
 	        ilegalInstruction(); return;
 			#endif
 			switch((iBits(0, 2) << 3) + iBits(13, 3)){
