@@ -957,6 +957,9 @@ public:
 			default: ilegalInstruction(); break;
 			}
 		} else {
+			#ifndef COMPRESSED
+	        ilegalInstruction(); return;
+			#endif
 			switch((iBits(0, 2) << 3) + iBits(13, 3)){
 			case 0: rfWrite(i16_addr2, rf_sp + i16_addi4spn_imm); pcWrite(pc + 2); break;
 			case 2:  {
