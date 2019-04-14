@@ -163,3 +163,29 @@ class MuraxApb3Timer extends Component{
   interruptCtrl.io.inputs(1) := timerB.io.full
   io.interrupt := interruptCtrl.io.pendings.orR
 }
+
+case class Apb3Axis(apb3Config: Apb3Config) extends Component {
+  val io = new Bundle {
+    val apb  = slave(Apb3(apb3Config))
+    val input = slave(Stream(Bits(32 bits)))
+    val output = master(Stream(Bits(32 bits)))
+  }
+
+  val ctrl = Apb3SlaveFactory(io.apb)
+
+  val ififo = StreamFifo( dataType = Bits(32 bits), depth    = 128 )
+  ififo.io.push << io.input
+
+  ctrl.read(ififo.io.pop.payload, address = 0);
+  val ififoPopReady = ctrl.drive(ififo.io.pop.ready, address = 4)
+  ctrl.read(ififo.io.pop.valid, address = 8);
+  when(ififo.io.pop.valid){ ififoPopReady := False }
+
+  val ofifo = StreamFifo( dataType = Bits(32 bits), depth    = 128 )
+  ofifo.io.pop >> io.output
+
+  ctrl.drive(ofifo.io.push.payload, address = 12)
+  val ofifoPushValid = ctrl.drive(ofifo.io.push.valid, address = 16)
+  ctrl.read(ofifo.io.push.ready, address = 20)
+  when(ofifo.io.push.ready){ ofifoPushValid := False }
+}
