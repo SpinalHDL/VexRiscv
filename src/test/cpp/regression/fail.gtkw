@@ -1,14 +1,14 @@
 [*]
 [*] GTKWave Analyzer v3.3.100 (w)1999-2019 BSI
-[*] Mon Apr  1 21:53:07 2019
+[*] Sun Apr 14 19:28:23 2019
 [*]
-[dumpfile] "/home/miaou/pro/VexRiscv/src/test/cpp/regression/rv32ui-p-lw.vcd"
-[dumpfile_mtime] "Mon Apr  1 21:52:20 2019"
-[dumpfile_size] 1974526
+[dumpfile] "/home/miaou/pro/VexRiscv/src/test/cpp/regression/mmu.vcd"
+[dumpfile_mtime] "Sun Apr 14 19:27:24 2019"
+[dumpfile_size] 1551340
 [savefile] "/home/miaou/pro/VexRiscv/src/test/cpp/regression/fail.gtkw"
 [timestart] 348
 [size] 1920 1030
-[pos] -1 -1
+[pos] -458 -215
 *-2.000000 357 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
 [treeopen] TOP.VexRiscv.
@@ -25,33 +25,15 @@ TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_payload_address[4:0]
 TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_payload_data[31:0]
 @28
 TOP.VexRiscv.writeBack_RegFilePlugin_regFileWrite_valid
-[color] 1
-TOP.VexRiscv.dataCache_1_.io_mem_cmd_valid
-[color] 1
-TOP.VexRiscv.dataCache_1_.io_mem_cmd_ready
-@22
-[color] 1
-TOP.VexRiscv.dataCache_1_.io_mem_cmd_payload_address[31:0]
-[color] 1
-TOP.VexRiscv.dataCache_1_.io_mem_cmd_payload_data[31:0]
+@29
+TOP.VexRiscv.CsrPlugin_interrupt
 @28
-[color] 1
-TOP.VexRiscv.dataCache_1_.io_mem_cmd_payload_last
-[color] 1
-TOP.VexRiscv.dataCache_1_.io_mem_cmd_payload_length[2:0]
+TOP.VexRiscv.CsrPlugin_exception
 @22
-[color] 1
-TOP.VexRiscv.dataCache_1_.io_mem_cmd_payload_mask[3:0]
+TOP.VexRiscv.CsrPlugin_mcause_exceptionCode[3:0]
 @28
-[color] 1
-TOP.VexRiscv.dataCache_1_.io_mem_cmd_payload_wr
-[color] 1
-TOP.VexRiscv.dataCache_1_.io_mem_rsp_valid
+TOP.VexRiscv.CsrPlugin_mcause_interrupt
 @22
-[color] 1
-TOP.VexRiscv.dataCache_1_.io_mem_rsp_payload_data[31:0]
-@28
-[color] 1
-TOP.VexRiscv.dataCache_1_.io_mem_rsp_payload_error
+TOP.VexRiscv.CsrPlugin_mepc[31:0]
 [pattern_trace] 1
 [pattern_trace] 0

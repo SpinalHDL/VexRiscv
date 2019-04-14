@@ -229,7 +229,7 @@ You can download releases of the IDE here : https://github.com/gnu-mcu-eclipse/o
 
 In the IDE, you can import a makefile project by :
 - file -> import -> C/C++ -> existing Code as Makefile Project
-- Select the folder which contain the makefile, select Cross GCC
+- Select the folder which contain the makefile, select "Cross GCC" (not "RISC-V Cross GCC")
 
 To create a new debug configuration :
 - run -> Debug Configurations -> GDB OpenOCD Debugging double click

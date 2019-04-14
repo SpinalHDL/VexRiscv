@@ -121,8 +121,6 @@ cpio -idv < ../rootfs.cpio
 cd ..
 
 
-ls | cpio -ov > ../rootfs.cpio
-
 
 */
 

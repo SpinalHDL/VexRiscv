@@ -141,7 +141,7 @@ object CsrPluginConfig{
     xtvecModeGen        = false,
     noCsrAlu            = false,
     wfiGenAsNop         = false,
-    ebreakGen           = true,
+    ebreakGen           = false,
     userGen             = true,
     supervisorGen       = true,
     sscratchGen         = true,
