@@ -285,7 +285,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         bufferData := input.rsp.inst(31 downto 16)
       }
       bufferValid.clearWhen(flush)
-      iBusRsp.readyForError.clearWhen(bufferValid && isRvc)
+      iBusRsp.readyForError.clearWhen(bufferValid && isRvc) //Can't emit error, as there is a earlier instruction pending
       incomingInstruction setWhen(bufferValid && bufferData(1 downto 0) =/= 3)
     })
 
@@ -294,18 +294,20 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
     val injector = new Area {
       val inputBeforeStage = condApply(if (decodePcGen) decompressor.output else iBusRsp.output, injectorReadyCutGen)(_.s2mPipe(flush))
       if (injectorReadyCutGen) {
-        iBusRsp.readyForError.clearWhen(inputBeforeStage.valid)
+        iBusRsp.readyForError.clearWhen(inputBeforeStage.valid) //Can't emit error if there is a instruction pending in the s2mPipe
         incomingInstruction setWhen (inputBeforeStage.valid)
       }
       val decodeInput = (if (injectorStage) {
         val decodeInput = inputBeforeStage.m2sPipeWithFlush(flush, collapsBubble = false)
         decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), inputBeforeStage.rsp.inst)
-        iBusRsp.readyForError.clearWhen(decodeInput.valid)
+        iBusRsp.readyForError.clearWhen(decodeInput.valid) //Can't emit error when there is a instruction pending in the injector stage buffer
         incomingInstruction setWhen (decodeInput.valid)
         decodeInput
       } else {
         inputBeforeStage
       })
+
+      if(!decodePcGen) iBusRsp.readyForError.clearWhen(!pcValid(decode)) //Need to wait a valid PC on the decode stage, as it is use to fill CSR xEPC
 
 
       def pcUpdatedGen(input : Bool, stucks : Seq[Bool], relaxedInput : Boolean) : Seq[Bool] = {
