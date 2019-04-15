@@ -1,8 +1,10 @@
 package vexriscv.demo
 
+
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.avalon.AvalonMM
+import spinal.lib.com.jtag.Jtag
 import spinal.lib.eda.altera.{InterruptReceiverTag, QSysify, ResetEmitterTag}
 import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import vexriscv.plugin._
@@ -15,11 +17,11 @@ import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
 //
 //}
 
-//make clean run DBUS=CACHED_AVALON IBUS=CACHED_AVALON MMU=no CSR=no DEBUG_PLUGIN=AVALON
+//make clean run DBUS=SIMPLE_AHBLITE3 IBUS=SIMPLE_AHBLITE3 MMU=no CSR=no DEBUG_PLUGIN=STD
 
-object VexRiscvAhbLite3ForSim{
+object VexRiscvAhbLite3{
   def main(args: Array[String]) {
-    val report = SpinalVerilog{
+    val report = SpinalConfig(mode = if(args.contains("--vhdl")) VHDL else Verilog).generate{
 
       //CPU configuration
       val cpuConfig = VexRiscvConfig(
@@ -157,16 +159,11 @@ object VexRiscvAhbLite3ForSim{
 //              .setName("dBusAvalon")
 //              .addTag(ClockDomainTag(ClockDomain.current))
 //          }
-//          case plugin: DebugPlugin =>  plugin.debugClockDomain {
-//            plugin.io.bus.setAsDirectionLess()
-//            slave(plugin.io.bus.fromAvalon())
-//              .setName("debugBusAvalon")
-//              .addTag(ClockDomainTag(plugin.debugClockDomain))
-//              .parent = null  //Avoid the io bundle to be interpreted as a QSys conduit
-//            plugin.io.resetOut
-//              .addTag(ResetEmitterTag(plugin.debugClockDomain))
-//              .parent = null //Avoid the io bundle to be interpreted as a QSys conduit
-//          }
+          case plugin: DebugPlugin if args.contains("--jtag")=> plugin.debugClockDomain {
+            plugin.io.bus.setAsDirectionLess()
+            val jtag = slave(new Jtag()).setName("jtag")
+            jtag <> plugin.io.bus.fromJtag()
+          }
           case _ =>
         }
       }
