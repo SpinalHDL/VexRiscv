@@ -253,10 +253,9 @@ class MmuPlugin(ioRange : UInt => Bool,
       }
     }
 
-    execute plug new Area{
-      import execute._
-      val tlbWriteBuffer = Reg(UInt(20 bits))
-      when(arbitration.isFiring && input(IS_SFENCE_VMA)){ // || csrService.isWriting(CSR.SATP)
+    writeBack plug new Area{
+      import writeBack._
+      when(arbitration.isValid && input(IS_SFENCE_VMA)){ // || csrService.isWriting(CSR.SATP)
         for(port <- core.ports; line <- port.cache) line.valid := False //Assume that the instruction already fetched into the pipeline are ok
       }
     }
