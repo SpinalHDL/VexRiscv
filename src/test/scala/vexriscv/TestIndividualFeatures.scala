@@ -331,7 +331,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
               twoCycleCache = twoCycleCache
             )
           )
-          if(tighlyCoupled) p.newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5)))
+          if(tighlyCoupled) p.newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0))
           config.plugins += p
         }
         override def instructionAnticipatedOk() = !twoCycleCache || ((!twoCycleRam || wayCount == 1) && !compressed)

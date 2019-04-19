@@ -1821,7 +1821,7 @@ public:
 
 	virtual void preCycle(){
 		if (top->iBusTc_enable) {
-		    if((top->iBusTc_address & 0x70000000) != 0 || (top->iBusTc_address & 0x20) == 0){
+		    if((top->iBusTc_address & 0x70000000) != 0){
 		        printf("IBusTc access out of range\n");
 		        ws->fail();
 		    }
@@ -1921,7 +1921,7 @@ public:
 		top->iBus_rsp_valid = 0;
 		if(pendingCount != 0 && (!ws->iStall || VL_RANDOM_I(7) < 100)){
 		    #ifdef IBUS_TC
-            if((address & 0x70000000) == 0 && (address & 0x20) != 0){
+            if((address & 0x70000000) == 0){
                 printf("IBUS_CACHED access out of range\n");
                 ws->fail();
             }
