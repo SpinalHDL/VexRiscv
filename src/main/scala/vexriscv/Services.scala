@@ -33,7 +33,7 @@ case class ExceptionCause() extends Bundle{
 
 trait ExceptionService{
   def newExceptionPort(stage : Stage, priority : Int = 0) : Flow[ExceptionCause]
-  def isExceptionPending() : Bool
+  def isExceptionPending(stage : Stage) : Bool
 }
 
 trait PrivilegeService{

@@ -1634,6 +1634,7 @@ public:
 
 			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->writeBack_PC << dec; //<<  " seed : " << seed <<
 			if(riscvRefEnable) cout << hex << " REF PC=" << riscvRef.lastPc << " REF I=" << riscvRef.lastInstruction << dec;
+			cout << " time=" << i;
 			cout << endl;
 
 			cycles += instanceCycles;
@@ -3059,29 +3060,22 @@ public:
 //#endif
 
 
+
 #include <unistd.h>
 #include <termios.h>
 #include <fcntl.h>
-
 termios stdinRestoreSettings;
 void stdinNonBuffered(){
 	static struct termios old, new1;
-    tcgetattr(STDIN_FILENO, &old); /* grab old terminal i/o settings */
-    new1 = old; /* make new settings same as old settings */
-    new1.c_lflag &= ~ICANON; /* disable buffered i/o */
+    tcgetattr(STDIN_FILENO, &old); // grab old terminal i/o settings
+    new1 = old; // make new settings same as old settings
+    new1.c_lflag &= ~ICANON; // disable buffered i/o
     new1.c_lflag &= ~ECHO;
-    tcsetattr(STDIN_FILENO, TCSANOW, &new1); /* use these new terminal i/o settings now */
+    tcsetattr(STDIN_FILENO, TCSANOW, &new1); // use these new terminal i/o settings now
     setvbuf(stdin, NULL, _IONBF, 0);
     stdinRestoreSettings = old;
 }
 
-void stdoutNonBuffered(){
-    setvbuf(stdout, NULL, _IONBF, 0);
-}
-
-void stdinRestore(){
-    tcsetattr(STDIN_FILENO, TCSANOW, &stdinRestoreSettings); /* use these new terminal i/o settings now */
-}
 
 bool stdinNonEmpty(){
   struct timeval tv;
@@ -3093,6 +3087,17 @@ bool stdinNonEmpty(){
   select(STDIN_FILENO+1, &fds, NULL, NULL, &tv);
   return (FD_ISSET(0, &fds));
 }
+
+
+void stdoutNonBuffered(){
+    setvbuf(stdout, NULL, _IONBF, 0);
+}
+
+void stdinRestore(){
+    tcsetattr(STDIN_FILENO, TCSANOW, &stdinRestoreSettings);
+}
+
+
 
 void my_handler(int s){
    printf("Caught signal %d\n",s);
@@ -3111,22 +3116,38 @@ void captureCtrlC(){
     sigaction(SIGINT, &sigIntHandler, NULL);
 }
 
-#ifdef LINUX_SOC
+
+
+
+#if defined(LINUX_SOC) || defined(LINUX_REGRESSION)
+#include <queue>
 class LinuxSoc : public Workspace{
 public:
+    queue <char> customCin;
+    void pushCin(string m){
+        for(char& c : m) {
+            customCin.push(c);
+        }
+    }
 
 	LinuxSoc(string name) : Workspace(name) {
+	    #ifdef WITH_USER_IO
 		stdinNonBuffered();
-		stdoutNonBuffered();
 		captureCtrlC();
+	    #endif
+		stdoutNonBuffered();
 	}
 
 	virtual ~LinuxSoc(){
+	    #ifdef WITH_USER_IO
 	    stdinRestore();
+	    #endif
 	}
 	virtual bool isDBusCheckedRegion(uint32_t address){ return true;}
 	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xF0000000 || (addr & 0xE0000000) == 0xE0000000;}
     virtual bool isMmuRegion(uint32_t addr) { return true; }
+
+
 
     virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
         if(isPerifRegion(addr)) switch(addr){
@@ -3137,18 +3158,24 @@ public:
     		case 0xFFFFFFEC: if(wr) mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); else *data = mTimeCmp >> 32; break;
     		case 0xFFFFFFF8:
     		    if(wr){
-                    cout << (char)*data;
-                    logTraces << (char)*data;
+    		        char c = (char)*data;
+                    cout << c;
+                    logTraces << c;
                     logTraces.flush();
+                    onStdout(c);
 				} else {
+				    #ifdef WITH_USER_IO
 					if(stdinNonEmpty()){
 						char c;
 						read(0, &c, 1);
 						*data = c;
-						//cout << "getchar  " << c << endl;
+					} else
+					#endif
+					if(!customCin.empty()){
+					    *data = customCin.front();
+                        customCin.pop();
 					} else {
 						*data = -1;
-						//cout << "getchar NONE" << endl;
 					}
 				}
 				break;
@@ -3158,7 +3185,43 @@ public:
 
     	Workspace::dBusAccess(addr,wr,size,mask,data,error);
     }
+
+    virtual void onStdout(char c){
+
+    }
 };
+
+
+class LinuxRegression: public LinuxSoc{
+public:
+    string pendingLine = "";
+    bool pendingLineContain(string m) {
+        return strstr(pendingLine.c_str(), m.c_str()) != NULL;
+    }
+
+    enum State{LOGIN, ECHO_FILE, HEXDUMP, HEXDUMP_CHECK, PASS};
+    State state = LOGIN;
+	LinuxRegression(string name) : LinuxSoc(name) {
+
+	}
+
+    ~LinuxRegression() {
+    }
+
+
+    virtual void onStdout(char c){
+        pendingLine += c;
+        switch(state){
+        case LOGIN: if (pendingLineContain("buildroot login:")) { pushCin("root\n"); state = ECHO_FILE; } break;
+        case ECHO_FILE: if (pendingLineContain("# ")) { pushCin("echo \"miaou\" > test.txt\n"); state = HEXDUMP; pendingLine = "";} break;
+        case HEXDUMP: if (pendingLineContain("# ")) { pushCin("hexdump -C test.txt\n"); state = HEXDUMP_CHECK; pendingLine = "";} break;
+        case HEXDUMP_CHECK: if (pendingLineContain("00000000  6d 69 61 6f 75 0a  ")) { pushCin(""); state = PASS; pendingLine = "";} break;
+        case PASS: if (pendingLineContain("# ")) { pass(); } break;
+        }
+        if(c == '\n' || pendingLine.length() > 200) pendingLine = "";
+    }
+};
+
 #endif
 
 string riscvTestMain[] = {
@@ -3490,7 +3553,7 @@ int main(int argc, char **argv, char **env) {
 		soc.loadBin(DTB,      0xC3000000);
 		soc.loadBin(RAMDISK,  0xC2000000);
 		#endif
-		//soc.setIStall(true); //TODO It currently improve speed but should be removed later
+		//soc.setIStall(true);
 		//soc.setDStall(true);
 		soc.bootAt(0x80000000);
 		soc.run(0);
@@ -3499,6 +3562,10 @@ int main(int argc, char **argv, char **env) {
         return -1;
     }
 #endif
+
+
+
+
 
 //    #ifdef MMU
 //        redo(REDO,WorkspaceRegression("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
@@ -3722,15 +3789,36 @@ int main(int argc, char **argv, char **env) {
             queue <std::function<void()>> tasksSelected(std::deque<std::function<void()>>(tasks.begin(), tasks.end()));
 			multiThreadedExecute(tasksSelected);
 		#endif
+
+		#if defined(LINUX_REGRESSION)
+            {
+
+        	    LinuxRegression soc("linux");
+        	    #ifndef DEBUG_PLUGIN_EXTERNAL
+        	    soc.withRiscvRef();
+        		soc.loadBin(EMULATOR, 0x80000000);
+        		soc.loadBin(VMLINUX,  0xC0000000);
+        		soc.loadBin(DTB,      0xC3000000);
+        		soc.loadBin(RAMDISK,  0xC2000000);
+        		#endif
+        		//soc.setIStall(true);
+        		//soc.setDStall(true);
+        		soc.bootAt(0x80000000);
+        		soc.run(153995602l*6);
+//        		soc.run((470000000l + 2000000) / 2);
+//        		soc.run(438700000l/2);
+            }
+        #endif
+
 	}
 
 	uint64_t duration = timer_end(startedAt);
 	cout << endl << "****************************************************************" << endl;
 	cout << "Had simulate " << Workspace::cycles << " clock cycles in " << duration*1e-9 << " s (" << Workspace::cycles / (duration*1e-6) << " Khz)" << endl;
 	if(Workspace::successCounter == Workspace::testsCounter)
-		cout << "SUCCESS " << Workspace::successCounter << "/" << Workspace::testsCounter << endl;
+		cout << "REGRESSION SUCCESS " << Workspace::successCounter << "/" << Workspace::testsCounter << endl;
 	else
-		cout<< "FAILURE " << Workspace::testsCounter - Workspace::successCounter << "/"  << Workspace::testsCounter << endl;
+		cout<< "REGRESSION FAILURE " << Workspace::testsCounter - Workspace::successCounter << "/"  << Workspace::testsCounter << endl;
 	cout << "****************************************************************" << endl << endl;
 
 

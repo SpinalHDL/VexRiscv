@@ -292,7 +292,8 @@ class DBusCachedPlugin(config : DataCacheConfig,
       val forceDatapath = False
       when(dBusAccess.cmd.valid){
         decode.arbitration.haltByOther := True
-        when(!stagesFromExecute.map(_.arbitration.isValid).orR && !pipeline.service(classOf[ExceptionService]).isExceptionPending()){
+        val exceptionService = pipeline.service(classOf[ExceptionService])
+        when(!stagesFromExecute.map(s => s.arbitration.isValid || exceptionService.isExceptionPending(s)).orR){
           when(!cache.io.cpu.redo) {
             cache.io.cpu.execute.isValid := True
             dBusAccess.cmd.ready := !execute.arbitration.isStuck

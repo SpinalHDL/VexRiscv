@@ -149,8 +149,6 @@ class MmuPlugin(ioRange : UInt => Bool,
       }
 
       val shared = new Area {
-        val busy = Reg(Bool) init(False)
-
         val State = new SpinalEnum{
           val IDLE, L1_CMD, L1_RSP, L0_CMD, L0_RSP = newElement()
         }
@@ -182,7 +180,6 @@ class MmuPlugin(ioRange : UInt => Bool,
           is(State.IDLE){
             for(port <- portsInfo.sortBy(_.priority)){
               when(port.bus.cmd.isValid && port.bus.rsp.refilling){
-                busy := True
                 vpn(1) := port.bus.cmd.virtualAddress(31 downto 22)
                 vpn(0) := port.bus.cmd.virtualAddress(21 downto 12)
                 portId := port.id

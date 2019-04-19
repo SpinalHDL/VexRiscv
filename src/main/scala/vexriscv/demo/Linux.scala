@@ -40,13 +40,13 @@ cd VexRiscv
 Run regressions =>
 sbt "runMain vexriscv.demo.LinuxGen -r"
 cd src/test/cpp/regression
-make run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yes SUPERVISOR=yes CSR=yes COMPRESSED=no LRSC=yes AMO=yes REDO=10 TRACE=no
+make clean run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yes SUPERVISOR=yes MMU=yes CSR=yes COMPRESSED=no MUL=yes DIV=yes LRSC=yes AMO=yes REDO=10 TRACE=no COREMARK=yes LINUX_REGRESSION=yes
 
 Run linux in simulation (Require the machime mode emulator compiled in SIM mode) =>
 sbt "runMain vexriscv.demo.LinuxGen"
 cd src/test/cpp/regression
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
-make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=no LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/Image DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio TRACE=no FLOW_INFO=no
+make clean run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=no LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=../../../main/c/emulator/build/emulator.bin VMLINUX=$BUILDROOT/output/images/Image DTB=$BUILDROOT/board/spinal/vexriscv_sim/rv32.dtb RAMDISK=$BUILDROOT/output/images/rootfs.cpio WITH_USER_IO=yes TRACE=no FLOW_INFO=no
 
 Run linux with QEMU (Require the machime mode emulator compiled in QEMU mode)
 export BUILDROOT=/home/miaou/pro/riscv/buildrootSpinal
@@ -94,10 +94,12 @@ rm VexRiscv.v
 cp $DATA/VexRiscv.v ../../../..
 make run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes COMPRESSED=no LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes EMULATOR=$DATA/emulator.bin VMLINUX=$DATA/vmlinux.bin DTB=$DATA/rv32.dtb RAMDISK=$DATA/rootfs.cpio TRACE=no FLOW_INFO=no
 
+make clean run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=no SUPERVISOR=yes CSR=yes COMPRESSED=no MUL=yes DIV=yes LRSC=yes AMO=yes MMU=yes  REDO=1 TRACE=no LINUX_REGRESSION=yes
 
 qemu-system-riscv32 -nographic -machine virt -m 1536M -device loader,file=$DATA/emulator.bin,addr=0x80000000,cpu-num=0 -device loader,file=$DATA/rv32.dtb,addr=0xC3000000 -device loader,file=$DATA/vmlinux.bin,addr=0xC0000000  -device loader,file=$DATA/rootfs.cpio,addr=0xc2000000
 
 
+make run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yess SUPERVISOR=yes CSR=yes COMPRESSED=yes MUL=yes DIV=yes LRSC=yes AMO=yes REDO=1 TRACE=no LINUX_REGRESSION=yes
 
 program ../../../main/c/emulator/build/emulator.bin  0x80000000 verify
 		soc.loadBin(EMULATOR, 0x80000000);
@@ -149,12 +151,12 @@ object LinuxGen {
         new IBusCachedPlugin(
           resetVector = 0x80000000l,
           compressedGen = false,
-          prediction = DYNAMIC_TARGET,
+          prediction = NONE,
           injectorStage = false,
           config = InstructionCacheConfig(
-            cacheSize = 4096*4,
+            cacheSize = 4096*1,
             bytePerLine = 32,
-            wayCount = 4,
+            wayCount = 1,
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 32,
@@ -184,9 +186,9 @@ object LinuxGen {
           dBusCmdSlavePipe = true,
           dBusRspSlavePipe = true,
           config = new DataCacheConfig(
-            cacheSize         = 4096*4,
+            cacheSize         = 4096*1,
             bytePerLine       = 32,
-            wayCount          = 4,
+            wayCount          = 1,
             addressWidth      = 32,
             cpuDataWidth      = 32,
             memDataWidth      = 32,
