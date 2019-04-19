@@ -72,10 +72,12 @@ void emulationTrapToSupervisorTrap(uint32_t sepc, uint32_t mstatus){
 	csr_write(scause, csr_read(mcause));
 	csr_write(sepc, sepc);
 	csr_write(mepc,	csr_read(stvec));
-	csr_clear(sstatus, MSTATUS_SPP);
-	csr_set(sstatus, (mstatus >> 3) & MSTATUS_SPP);
-	csr_clear(mstatus, MSTATUS_MPP);
-	csr_set(mstatus, 0x0800 | MSTATUS_MPIE);
+	csr_write(mstatus,
+			  (mstatus & ~(MSTATUS_SPP | MSTATUS_MPP | MSTATUS_SIE | MSTATUS_SPIE))
+			| ((mstatus >> 3) & MSTATUS_SPP)
+			| (0x0800 | MSTATUS_MPIE)
+			| ((mstatus & MSTATUS_SIE) << 4)
+	);
 }
 
 #define max(a,b) \
