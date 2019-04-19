@@ -40,8 +40,7 @@ before_install:
   - sudo apt-get install git make autoconf g++ flex bison -y  # First time prerequisites
   - wget https://www.veripool.org/ftp/verilator-4.012.tgz
   - tar xvzf verilator*.t*gz
-  - cd verilator
-  - autoconf        # Create ./configure script
+  - cd verilator*
   - ./configure
   - make -j$(nproc)
   - sudo make install
