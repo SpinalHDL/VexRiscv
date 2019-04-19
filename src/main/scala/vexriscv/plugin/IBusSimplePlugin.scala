@@ -60,6 +60,11 @@ object IBusSimpleBus{
     useBTE = true,
     useCTI = true
   )
+
+  def getPipelinedMemoryBusConfig() = PipelinedMemoryBusConfig(
+    addressWidth = 32,
+    dataWidth = 32
+  )
 }
 
 
@@ -137,7 +142,8 @@ case class IBusSimpleBus(interfaceKeepData : Boolean = false) extends Bundle wit
   }
 
   def toPipelinedMemoryBus(): PipelinedMemoryBus = {
-    val bus = PipelinedMemoryBus(32,32)
+    val pipelinedMemoryBusConfig = IBusSimpleBus.getPipelinedMemoryBusConfig()
+    val bus = PipelinedMemoryBus(pipelinedMemoryBusConfig)
     bus.cmd.arbitrationFrom(cmd)
     bus.cmd.address := cmd.pc.resized
     bus.cmd.write := False
@@ -168,7 +174,8 @@ class IBusSimplePlugin(resetVector : BigInt,
                        injectorStage : Boolean = true,
                        rspHoldValue : Boolean = false,
                        singleInstructionPipeline : Boolean = false,
-                       memoryTranslatorPortConfig : Any = null
+                       memoryTranslatorPortConfig : Any = null,
+                       relaxPredictorAddress : Boolean = true
                       ) extends IBusFetcherImpl(
     resetVector = resetVector,
     keepPcPlus4 = keepPcPlus4,
@@ -179,7 +186,8 @@ class IBusSimplePlugin(resetVector : BigInt,
     injectorReadyCutGen = false,
     prediction = prediction,
     historyRamSizeLog2 = historyRamSizeLog2,
-    injectorStage = injectorStage){
+    injectorStage = injectorStage,
+  relaxPredictorAddress = relaxPredictorAddress){
 
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
@@ -212,17 +220,18 @@ class IBusSimplePlugin(resetVector : BigInt,
 
     pipeline plug new FetchArea(pipeline) {
       var cmd = Stream(IBusSimpleCmd())
-      iBus.cmd << (if(cmdForkPersistence && !cmdForkOnSecondStage) cmd.s2mPipe() else cmd)
+      val cmdWithS2mPipe = cmdForkPersistence && (!cmdForkOnSecondStage || mmuBus != null)
+      iBus.cmd << (if(cmdWithS2mPipe) cmd.s2mPipe() else cmd)
 
       //Avoid sending to many iBus cmd
       val pendingCmd = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
       val pendingCmdNext = pendingCmd + cmd.fire.asUInt - iBus.rsp.fire.asUInt
       pendingCmd := pendingCmdNext
 
-      def cmdForkStage = if(!cmdForkPersistence || !cmdForkOnSecondStage) iBusRsp.stages(if(cmdForkOnSecondStage) 1 else 0) else iBusRsp.stages(1)
+      val secondStagePersistence = cmdForkPersistence && cmdForkOnSecondStage && !cmdWithS2mPipe
+      def cmdForkStage = if(!secondStagePersistence) iBusRsp.stages(if(cmdForkOnSecondStage) 1 else 0) else iBusRsp.stages(1)
 
-
-      val cmdFork = if(!cmdForkPersistence || !cmdForkOnSecondStage) new Area {
+      val cmdFork = if(!secondStagePersistence) new Area {
         //This implementation keep the cmd on the bus until it's executed or the the pipeline is flushed
         def stage = cmdForkStage
         stage.halt setWhen(stage.input.valid && (!cmd.valid || !cmd.ready))
@@ -247,12 +256,19 @@ class IBusSimplePlugin(resetVector : BigInt,
         mmuBus.cmd.isValid := cmdForkStage.input.valid
         mmuBus.cmd.virtualAddress := cmdForkStage.input.payload
         mmuBus.cmd.bypassTranslation := False
+        mmuBus.end := cmdForkStage.output.fire || flush
+
         cmd.pc := mmuBus.rsp.physicalAddress(31 downto 2) @@ "00"
 
         //do not emit memory request if MMU miss
         when(mmuBus.rsp.exception || mmuBus.rsp.refilling){
           cmdForkStage.halt := False
           cmd.valid := False
+        }
+
+        when(mmuBus.busy){
+          cmdForkStage.input.valid := False
+          cmdForkStage.input.ready := False
         }
 
         val joinCtx = stageXToIBusRsp(cmdForkStage, mmuBus.rsp)
@@ -268,7 +284,7 @@ class IBusSimplePlugin(resetVector : BigInt,
         val discardCounter = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
         discardCounter := discardCounter - (iBus.rsp.fire && discardCounter =/= 0).asUInt
         when(flush) {
-          if(cmdForkOnSecondStage && cmdForkPersistence)
+          if(secondStagePersistence)
             discardCounter := pendingCmd + cmd.valid.asUInt - iBus.rsp.fire.asUInt
           else
             discardCounter := (if(cmdForkOnSecondStage) pendingCmdNext else pendingCmd - iBus.rsp.fire.asUInt)
@@ -306,7 +322,7 @@ class IBusSimplePlugin(resetVector : BigInt,
         if(memoryTranslatorPortConfig != null){
           redoRequired setWhen( stages.last.input.valid && mmu.joinCtx.refilling)
           redoBranch.valid := redoRequired && iBusRsp.readyForError
-          redoBranch.payload := stages.last.input.payload
+          redoBranch.payload := decode.input(PC)
           decode.arbitration.flushAll setWhen(redoBranch.valid)
         }
 

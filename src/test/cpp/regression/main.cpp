@@ -234,6 +234,7 @@ public:
 	int32_t pc, lastPc;
 	uint32_t lastInstruction;
 	int32_t regs[32];
+	uint64_t stepCounter;
 
 	uint32_t mscratch, sscratch;
 	uint32_t misa;
@@ -400,6 +401,7 @@ public:
 		satp.mode = 0;
 		ipSoft = 0;
 		ipInput = 0;
+		stepCounter = 0;
 	}
 
 	virtual void rfWrite(int32_t address, int32_t data) {
@@ -422,7 +424,7 @@ public:
 	virtual bool dRead(int32_t address, int32_t size, uint32_t *data) = 0;
 	virtual void dWrite(int32_t address, int32_t size, uint32_t data) = 0;
 
-	enum AccessKind {READ,WRITE,EXECUTE};
+	enum AccessKind {READ,WRITE,EXECUTE,READ_WRITE};
 	virtual bool isMmuRegion(uint32_t v) = 0;
 	bool v2p(uint32_t v, uint32_t *p, AccessKind kind){
 	    uint32_t effectivePrivilege = status.mprv && kind != EXECUTE ? status.mpp : privilege;
@@ -441,11 +443,10 @@ public:
 			if(!tlb.u && effectivePrivilege == 0) return true;
 			if( tlb.u && effectivePrivilege == 1 && !status.sum) return true;
 			if(superPage && tlb.ppn0 != 0) return true;
-			switch(kind){
-			case READ: if(!tlb.r && !(status.mxr && tlb.x)) return true; break;
-			case WRITE: if(!tlb.w) return true; break;
-			case EXECUTE: if(!tlb.x) return true; break;
-			}
+			if(kind == READ || kind == READ_WRITE) if(!tlb.r && !(status.mxr && tlb.x)) return true;
+			if(kind == WRITE || kind == READ_WRITE) if(!tlb.w) return true;
+			if(kind == EXECUTE) if(!tlb.x) return true;
+
 			*p = (tlb.ppn1 << 22) | (superPage ? v & 0x3FF000 : tlb.ppn0 << 12) | (v & 0xFFF);
 		}
 		return false;
@@ -654,6 +655,7 @@ public:
 
 
 	virtual void step() {
+	    stepCounter++;
 	    livenessStep = 0;
 		#define rd32 ((i >> 7) & 0x1F)
 		#define iBits(lo,  len) ((i >> lo) & ((1 << len)-1))
@@ -907,7 +909,39 @@ public:
 							pcWrite(pc + 4);
 						}
 					}	break;
-					default: ilegalInstruction(); break;
+					default: {
+                        #ifndef AMO
+                        ilegalInstruction();
+                        #else
+                        uint32_t sel = (i >> 27) & 0x1F;
+                        uint32_t addr = i32_rs1;
+                        int32_t  src = i32_rs2;
+                        int32_t readValue;
+
+                        uint32_t pAddr;
+						if(v2p(addr, &pAddr, READ_WRITE)){ trap(0, 15, addr); return; }
+                        if(dRead(pAddr, 4, (uint32_t*)&readValue)){
+                        	trap(0, 15, addr); return;
+                            return;
+                        }
+                        int writeValue;
+                        switch(sel){
+                        case 0x0:  writeValue = src + readValue; break;
+                        case 0x1:  writeValue = src; break;
+                        case 0x4:  writeValue = src ^ readValue; break;
+                        case 0xC:  writeValue = src & readValue; break;
+                        case 0x8:  writeValue = src | readValue; break;
+                        case 0x10: writeValue = min(src, readValue); break;
+                        case 0x14: writeValue = max(src, readValue); break;
+                        case 0x18: writeValue = min((unsigned int)src, (unsigned int)readValue); break;
+                        case 0x1C: writeValue = max((unsigned int)src, (unsigned int)readValue); break;
+                        default: ilegalInstruction(); return; break;
+                        }
+                        dWrite(pAddr, 4, writeValue);
+						rfWrite(rd32, readValue);
+						pcWrite(pc + 4);
+                        #endif
+					 } break;
 					}
 					break;
 				default: ilegalInstruction(); break;
@@ -923,6 +957,10 @@ public:
 			default: ilegalInstruction(); break;
 			}
 		} else {
+			#ifndef COMPRESSED
+			cout << "ERROR : RiscvGolden got a RVC instruction while the CPU isn't RVC ready" << endl;
+	        ilegalInstruction(); return;
+			#endif
 			switch((iBits(0, 2) << 3) + iBits(13, 3)){
 			case 0: rfWrite(i16_addr2, rf_sp + i16_addi4spn_imm); pcWrite(pc + 2); break;
 			case 2:  {
@@ -1059,7 +1097,6 @@ public:
 
 	uint32_t seed;
 
-	bool withInstructionReadCheck = true;
 	Workspace* setIStall(bool enable) { iStall = enable; return this; }
 	Workspace* setDStall(bool enable) { dStall = enable; return this; }
 
@@ -1368,12 +1405,14 @@ public:
 	virtual void pass(){ throw success();}
 	virtual void fail(){ throw std::exception();}
     virtual void fillSimELements();
-    Workspace* noInstructionReadCheck(){withInstructionReadCheck = false; return this;}
 	void dump(int i){
 		#ifdef TRACE
+		if(i == TRACE_START) cout << "START TRACE" << endl;
 		if(i >= TRACE_START) tfp->dump(i);
 		#endif
 	}
+
+	uint64_t privilegeCounters[4] = {0,0,0,0};
 	Workspace* run(uint64_t timeout = 5000){
 //		cout << "Start " << name << endl;
 		if(timeout == 0) timeout = 0x7FFFFFFFFFFFFFFF;
@@ -1477,7 +1516,7 @@ public:
 				currentTime = i;
 
                 #ifdef FLOW_INFO
-                    if(i % 100000 == 0) cout << "PROGRESS TRACE_START=" << i << endl;
+                    if(i % 2000000 == 0) cout << "PROGRESS TRACE_START=" << i << endl;
                 #endif
 
 
@@ -1513,6 +1552,13 @@ public:
 				#endif
                 if(top->VexRiscv->writeBack_arbitration_isFiring){
                    	if(riscvRefEnable) {
+//                        privilegeCounters[riscvRef.privilege]++;
+//                        if((riscvRef.stepCounter & 0xFFFFF) == 0){
+//                            cout << "privilege report" << endl;
+//                            cout << "- U " << privilegeCounters[0] << endl;
+//                            cout << "- S " << privilegeCounters[1] << endl;
+//                            cout << "- M " << privilegeCounters[3] << endl;
+//                        }
                    	    riscvRef.step();
                    	    bool mIntTimer = false;
                    	    bool mIntExt = false;
@@ -1561,17 +1607,6 @@ public:
 
 				dump(i + 1);
 
-                #ifndef COMPRESSED
-				if(withInstructionReadCheck){
-					if(top->VexRiscv->decode_arbitration_isValid && !top->VexRiscv->decode_arbitration_haltItself && !top->VexRiscv->decode_arbitration_flushAll){
-						uint32_t expectedData;
-						bool dummy;
-						iBusAccess(top->VexRiscv->decode_PC, &expectedData, &dummy);
-						assertEq(top->VexRiscv->decode_INSTRUCTION,expectedData);
-					}
-				}
-				#endif
-
 				checks();
 				//top->eval();
 				top->clk = 1;
@@ -1599,6 +1634,7 @@ public:
 
 			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->writeBack_PC << dec; //<<  " seed : " << seed <<
 			if(riscvRefEnable) cout << hex << " REF PC=" << riscvRef.lastPc << " REF I=" << riscvRef.lastInstruction << dec;
+			cout << " time=" << i;
 			cout << endl;
 
 			cycles += instanceCycles;
@@ -1785,7 +1821,7 @@ public:
 
 	virtual void preCycle(){
 		if (top->iBusTc_enable) {
-		    if((top->iBusTc_address & 0x70000000) != 0 || (top->iBusTc_address & 0x20) == 0){
+		    if((top->iBusTc_address & 0x70000000) != 0){
 		        printf("IBusTc access out of range\n");
 		        ws->fail();
 		    }
@@ -1885,7 +1921,7 @@ public:
 		top->iBus_rsp_valid = 0;
 		if(pendingCount != 0 && (!ws->iStall || VL_RANDOM_I(7) < 100)){
 		    #ifdef IBUS_TC
-            if((address & 0x70000000) == 0 && (address & 0x20) != 0){
+            if((address & 0x70000000) == 0){
                 printf("IBUS_CACHED access out of range\n");
                 ws->fail();
             }
@@ -2765,7 +2801,6 @@ public:
 		loadHex("../../resources/hex/" + name + ".elf.hex");
 		out32.open (name + ".out32");
 		this->name = name;
-		if(name == "I-FENCE.I-01") withInstructionReadCheck = false;
 	}
 
 
@@ -2975,7 +3010,6 @@ public:
 	DebugPluginTest() : WorkspaceRegression("DebugPluginTest") {
 		loadHex("../../resources/hex/debugPlugin.hex");
 		 pthread_create(&clientThreadId, NULL, &clientThreadWrapper, this);
-		 noInstructionReadCheck();
 	}
 
 	virtual ~DebugPluginTest(){
@@ -3026,29 +3060,22 @@ public:
 //#endif
 
 
+
 #include <unistd.h>
 #include <termios.h>
 #include <fcntl.h>
-
 termios stdinRestoreSettings;
 void stdinNonBuffered(){
 	static struct termios old, new1;
-    tcgetattr(STDIN_FILENO, &old); /* grab old terminal i/o settings */
-    new1 = old; /* make new settings same as old settings */
-    new1.c_lflag &= ~ICANON; /* disable buffered i/o */
+    tcgetattr(STDIN_FILENO, &old); // grab old terminal i/o settings
+    new1 = old; // make new settings same as old settings
+    new1.c_lflag &= ~ICANON; // disable buffered i/o
     new1.c_lflag &= ~ECHO;
-    tcsetattr(STDIN_FILENO, TCSANOW, &new1); /* use these new terminal i/o settings now */
+    tcsetattr(STDIN_FILENO, TCSANOW, &new1); // use these new terminal i/o settings now
     setvbuf(stdin, NULL, _IONBF, 0);
     stdinRestoreSettings = old;
 }
 
-void stdoutNonBuffered(){
-    setvbuf(stdout, NULL, _IONBF, 0);
-}
-
-void stdinRestore(){
-    tcsetattr(STDIN_FILENO, TCSANOW, &stdinRestoreSettings); /* use these new terminal i/o settings now */
-}
 
 bool stdinNonEmpty(){
   struct timeval tv;
@@ -3060,6 +3087,17 @@ bool stdinNonEmpty(){
   select(STDIN_FILENO+1, &fds, NULL, NULL, &tv);
   return (FD_ISSET(0, &fds));
 }
+
+
+void stdoutNonBuffered(){
+    setvbuf(stdout, NULL, _IONBF, 0);
+}
+
+void stdinRestore(){
+    tcsetattr(STDIN_FILENO, TCSANOW, &stdinRestoreSettings);
+}
+
+
 
 void my_handler(int s){
    printf("Caught signal %d\n",s);
@@ -3078,22 +3116,38 @@ void captureCtrlC(){
     sigaction(SIGINT, &sigIntHandler, NULL);
 }
 
-#ifdef LINUX_SOC
+
+
+
+#if defined(LINUX_SOC) || defined(LINUX_REGRESSION)
+#include <queue>
 class LinuxSoc : public Workspace{
 public:
+    queue <char> customCin;
+    void pushCin(string m){
+        for(char& c : m) {
+            customCin.push(c);
+        }
+    }
 
 	LinuxSoc(string name) : Workspace(name) {
+	    #ifdef WITH_USER_IO
 		stdinNonBuffered();
-		stdoutNonBuffered();
 		captureCtrlC();
+	    #endif
+		stdoutNonBuffered();
 	}
 
 	virtual ~LinuxSoc(){
+	    #ifdef WITH_USER_IO
 	    stdinRestore();
+	    #endif
 	}
 	virtual bool isDBusCheckedRegion(uint32_t address){ return true;}
 	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xF0000000 || (addr & 0xE0000000) == 0xE0000000;}
     virtual bool isMmuRegion(uint32_t addr) { return true; }
+
+
 
     virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
         if(isPerifRegion(addr)) switch(addr){
@@ -3104,18 +3158,24 @@ public:
     		case 0xFFFFFFEC: if(wr) mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); else *data = mTimeCmp >> 32; break;
     		case 0xFFFFFFF8:
     		    if(wr){
-                    cout << (char)*data;
-                    logTraces << (char)*data;
+    		        char c = (char)*data;
+                    cout << c;
+                    logTraces << c;
                     logTraces.flush();
+                    onStdout(c);
 				} else {
+				    #ifdef WITH_USER_IO
 					if(stdinNonEmpty()){
 						char c;
 						read(0, &c, 1);
 						*data = c;
-						//cout << "getchar  " << c << endl;
+					} else
+					#endif
+					if(!customCin.empty()){
+					    *data = customCin.front();
+                        customCin.pop();
 					} else {
 						*data = -1;
-						//cout << "getchar NONE" << endl;
 					}
 				}
 				break;
@@ -3125,7 +3185,43 @@ public:
 
     	Workspace::dBusAccess(addr,wr,size,mask,data,error);
     }
+
+    virtual void onStdout(char c){
+
+    }
 };
+
+
+class LinuxRegression: public LinuxSoc{
+public:
+    string pendingLine = "";
+    bool pendingLineContain(string m) {
+        return strstr(pendingLine.c_str(), m.c_str()) != NULL;
+    }
+
+    enum State{LOGIN, ECHO_FILE, HEXDUMP, HEXDUMP_CHECK, PASS};
+    State state = LOGIN;
+	LinuxRegression(string name) : LinuxSoc(name) {
+
+	}
+
+    ~LinuxRegression() {
+    }
+
+
+    virtual void onStdout(char c){
+        pendingLine += c;
+        switch(state){
+        case LOGIN: if (pendingLineContain("buildroot login:")) { pushCin("root\n"); state = ECHO_FILE; } break;
+        case ECHO_FILE: if (pendingLineContain("# ")) { pushCin("echo \"miaou\" > test.txt\n"); state = HEXDUMP; pendingLine = "";} break;
+        case HEXDUMP: if (pendingLineContain("# ")) { pushCin("hexdump -C test.txt\n"); state = HEXDUMP_CHECK; pendingLine = "";} break;
+        case HEXDUMP_CHECK: if (pendingLineContain("00000000  6d 69 61 6f 75 0a  ")) { pushCin(""); state = PASS; pendingLine = "";} break;
+        case PASS: if (pendingLineContain("# ")) { pass(); } break;
+        }
+        if(c == '\n' || pendingLine.length() > 200) pendingLine = "";
+    }
+};
+
 #endif
 
 string riscvTestMain[] = {
@@ -3209,6 +3305,7 @@ string freeRtosTests[] = {
 //		"flop"
 //		 "flop", "sp_flop" // <- Simple test
 		 // "AltBlckQ" ???
+
 };
 
 
@@ -3446,18 +3543,29 @@ int main(int argc, char **argv, char **env) {
 //	}
 
 #ifdef LINUX_SOC
-	LinuxSoc("linux")
-		.withRiscvRef()
-		->loadBin(EMULATOR, 0x80000000)
-		->loadBin(VMLINUX,  0xC0000000)
-		->loadBin(DTB,      0xC3000000)
-		->loadBin(RAMDISK,  0xC2000000)
-		->setIStall(true) //TODO It currently improve speed but should be removed later
-		->setDStall(true)
-		->bootAt(0x80000000)
-		->run(0);
-//		->run(1173000000l );
+    {
+
+	    LinuxSoc soc("linux");
+	    #ifndef DEBUG_PLUGIN_EXTERNAL
+	    soc.withRiscvRef();
+		soc.loadBin(EMULATOR, 0x80000000);
+		soc.loadBin(VMLINUX,  0xC0000000);
+		soc.loadBin(DTB,      0xC3000000);
+		soc.loadBin(RAMDISK,  0xC2000000);
+		#endif
+		//soc.setIStall(true);
+		//soc.setDStall(true);
+		soc.bootAt(0x80000000);
+		soc.run(0);
+//		soc.run((496300000l + 2000000) / 2);
+//		soc.run(438700000l/2);
+        return -1;
+    }
 #endif
+
+
+
+
 
 //    #ifdef MMU
 //        redo(REDO,WorkspaceRegression("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
@@ -3474,8 +3582,8 @@ int main(int argc, char **argv, char **env) {
 			#ifdef RUN_HEX
 			//w.loadHex("/home/spinalvm/hdl/zephyr/zephyrSpinalHdl/samples/synchronization/build/zephyr/zephyr.hex");
 			w.loadHex(RUN_HEX);
+			w.withRiscvRef();
 			#endif
-			w.noInstructionReadCheck();
 			//w.setIStall(false);
 			//w.setDStall(false);
 
@@ -3553,11 +3661,11 @@ int main(int argc, char **argv, char **env) {
 			    #ifndef COMPRESSED
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
-				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->noInstructionReadCheck()->run(10e4);)
+				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->run(10e4);)
                 #else
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,   14,2,     15,5,16,17,1 };
-				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->noInstructionReadCheck()->run(10e4);)
+				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->run(10e4);)
                 #endif
 			#endif
 //			#ifdef MMU
@@ -3596,8 +3704,12 @@ int main(int argc, char **argv, char **env) {
 		#endif
 
 
-		#ifdef ATOMIC
-			redo(REDO,WorkspaceRegression("atomic").loadHex("../custom/atomic/build/atomic.hex")->bootAt(0x00000000u)->run(10e3););
+		#ifdef LRSC
+			redo(REDO,WorkspaceRegression("lrsc").loadHex("../raw/lrsc/build/lrsc.hex")->bootAt(0x00000000u)->run(10e3););
+		#endif
+
+		#ifdef AMO
+			redo(REDO,WorkspaceRegression("amo").loadHex("../raw/amo/build/amo.hex")->bootAt(0x00000000u)->run(10e3););
 		#endif
 
 		#ifdef DHRYSTONE
@@ -3611,18 +3723,38 @@ int main(int argc, char **argv, char **env) {
 				    Dhrystone("dhrystoneO3MC_Stall","dhrystoneO3MC",true,true).run(1.9e6);
 				#endif
 			#endif
-			Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.9e6);
 			#if defined(COMPRESSED)
 			Dhrystone("dhrystoneO3C","dhrystoneO3C",false,false).run(1.9e6);
             #endif
+			Dhrystone("dhrystoneO3","dhrystoneO3",false,false).run(1.9e6);
 			#if defined(MUL) && defined(DIV)
-				Dhrystone("dhrystoneO3M","dhrystoneO3M",false,false).run(1.9e6);
 				#if defined(COMPRESSED)
 				    Dhrystone("dhrystoneO3MC","dhrystoneO3MC",false,false).run(1.9e6);
 				#endif
+				Dhrystone("dhrystoneO3M","dhrystoneO3M",false,false).run(1.9e6);
 			#endif
 		#endif
 
+        #ifdef COREMARK
+            for(int withStall = 1; true ;withStall--){
+                string rv = "rv32i";
+                #if defined(MUL) && defined(DIV)
+                    rv += "m";
+                #endif
+                #if defined(COMPRESSED)
+                    if(withStall == -2) break;
+                    if(withStall != -1) rv += "c";
+                #else
+                    if(withStall == -1) break;
+                #endif
+                WorkspaceRegression("coremark_" + rv + (withStall  > 0 ? "_stall" : "_nostall")).withRiscvRef()
+                ->loadBin("../../resources/bin/coremark_" + rv + ".bin", 0x80000000)
+                ->bootAt(0x80000000)
+                ->setIStall(withStall > 0)
+                ->setDStall(withStall > 0)
+                ->run(50e6);
+            }
+        #endif
 
 		#ifdef FREERTOS
 		    #ifdef SEED
@@ -3636,15 +3768,15 @@ int main(int argc, char **argv, char **env) {
                     tasks.push_back([=]() { WorkspaceRegression(name + "_rv32i_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     tasks.push_back([=]() { WorkspaceRegression(name + "_rv32i_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #ifdef COMPRESSED
-                        tasks.push_back([=]() { WorkspaceRegression(name + "_rv32ic_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
-                        tasks.push_back([=]() { WorkspaceRegression(name + "_rv32ic_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
+                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #endif
                     #if defined(MUL) && defined(DIV)
-                        #ifdef COMPRESSED
-                            tasks.push_back([=]() { WorkspaceRegression(name + "_rv32imac_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
-                        #else
-                            tasks.push_back([=]() { WorkspaceRegression(name + "_rv32im_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
-                        #endif
+//                        #ifdef COMPRESSED
+//                            tasks.push_back([=]() { Workspace(name + "_rv32imac_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                        #else
+                            tasks.push_back([=]() { Workspace(name + "_rv32im_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                        #endif
                     #endif
                 }
 			}
@@ -3657,15 +3789,36 @@ int main(int argc, char **argv, char **env) {
             queue <std::function<void()>> tasksSelected(std::deque<std::function<void()>>(tasks.begin(), tasks.end()));
 			multiThreadedExecute(tasksSelected);
 		#endif
+
+		#if defined(LINUX_REGRESSION)
+            {
+
+        	    LinuxRegression soc("linux");
+        	    #ifndef DEBUG_PLUGIN_EXTERNAL
+        	    soc.withRiscvRef();
+        		soc.loadBin(EMULATOR, 0x80000000);
+        		soc.loadBin(VMLINUX,  0xC0000000);
+        		soc.loadBin(DTB,      0xC3000000);
+        		soc.loadBin(RAMDISK,  0xC2000000);
+        		#endif
+        		//soc.setIStall(true);
+        		//soc.setDStall(true);
+        		soc.bootAt(0x80000000);
+        		soc.run(153995602l*6);
+//        		soc.run((470000000l + 2000000) / 2);
+//        		soc.run(438700000l/2);
+            }
+        #endif
+
 	}
 
 	uint64_t duration = timer_end(startedAt);
 	cout << endl << "****************************************************************" << endl;
 	cout << "Had simulate " << Workspace::cycles << " clock cycles in " << duration*1e-9 << " s (" << Workspace::cycles / (duration*1e-6) << " Khz)" << endl;
 	if(Workspace::successCounter == Workspace::testsCounter)
-		cout << "SUCCESS " << Workspace::successCounter << "/" << Workspace::testsCounter << endl;
+		cout << "REGRESSION SUCCESS " << Workspace::successCounter << "/" << Workspace::testsCounter << endl;
 	else
-		cout<< "FAILURE " << Workspace::testsCounter - Workspace::successCounter << "/"  << Workspace::testsCounter << endl;
+		cout<< "REGRESSION FAILURE " << Workspace::testsCounter - Workspace::successCounter << "/"  << Workspace::testsCounter << endl;
 	cout << "****************************************************************" << endl << endl;
 
 

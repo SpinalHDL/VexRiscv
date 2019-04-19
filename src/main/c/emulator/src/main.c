@@ -14,17 +14,18 @@ void putString(char* s){
 	}
 }
 
+//Affect mtvec
 void setup_pmp(void)
 {
   // Set up a PMP to permit access to all of memory.
   // Ignore the illegal-instruction trap if PMPs aren't supported.
   uintptr_t pmpc = PMP_NAPOT | PMP_R | PMP_W | PMP_X;
   asm volatile ("la t0, 1f\n\t"
-                "csrrw t0, mtvec, t0\n\t"
+                "csrw mtvec, t0\n\t"
                 "csrw pmpaddr0, %1\n\t"
                 "csrw pmpcfg0, %0\n\t"
                 ".align 2\n\t"
-                "1: csrw mtvec, t0"
+                "1:"
                 : : "r" (pmpc), "r" (-1UL) : "t0");
 }
 
@@ -71,10 +72,12 @@ void emulationTrapToSupervisorTrap(uint32_t sepc, uint32_t mstatus){
 	csr_write(scause, csr_read(mcause));
 	csr_write(sepc, sepc);
 	csr_write(mepc,	csr_read(stvec));
-	csr_clear(sstatus, MSTATUS_SPP);
-	csr_set(sstatus, (mstatus >> 3) & MSTATUS_SPP);
-	csr_clear(mstatus, MSTATUS_MPP);
-	csr_set(mstatus, 0x0800 | MSTATUS_MPIE);
+	csr_write(mstatus,
+			  (mstatus & ~(MSTATUS_SPP | MSTATUS_MPP | MSTATUS_SIE | MSTATUS_SPIE))
+			| ((mstatus >> 3) & MSTATUS_SPP)
+			| (0x0800 | MSTATUS_MPIE)
+			| ((mstatus & MSTATUS_SIE) << 4)
+	);
 }
 
 #define max(a,b) \
@@ -209,11 +212,11 @@ void trap(){
 					case 0x1C: writeValue = max((unsigned int)src, (unsigned int)readValue); break;
 					default: redirectTrap(); return; break;
 					}
-					writeRegister(rd, readValue);
 					if(writeWord(addr, writeValue)){
 						emulationTrapToSupervisorTrap(mepc, mstatus);
 						return;
 					}
+					writeRegister(rd, readValue);
 					csr_write(mepc, mepc + 4);
 					csr_write(mtvec, trapEntry); //Restore mtvec
 				}break;
@@ -233,7 +236,11 @@ void trap(){
 					uint32_t csrAddress = instruction >> 20;
 					uint32_t old;
 					switch(csrAddress){
+					case RDCYCLE :
+					case RDINSTRET:
 					case RDTIME  : old = rdtime(); break;
+					case RDCYCLEH :
+					case RDINSTRETH:
 					case RDTIMEH : old = rdtimeh(); break;
 					default: redirectTrap(); break;
 					}

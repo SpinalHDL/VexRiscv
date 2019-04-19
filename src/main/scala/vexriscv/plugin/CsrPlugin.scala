@@ -55,6 +55,7 @@ case class CsrPluginConfig(
                             noCsrAlu            : Boolean = false,
                             wfiGenAsNop         : Boolean = false,
                             ebreakGen           : Boolean = false,
+                            userGen             : Boolean = false,
                             supervisorGen       : Boolean = false,
                             sscratchGen         : Boolean = false,
                             stvecAccess         : CsrAccess = CsrAccess.NONE,
@@ -70,7 +71,7 @@ case class CsrPluginConfig(
                             deterministicInteruptionEntry : Boolean = false //Only used for simulatation purposes
                           ){
   assert(!ucycleAccess.canWrite)
-
+  def privilegeGen = userGen || supervisorGen
   def noException = this.copy(ecallGen = false, ebreakGen = false, catchIllegalAccess = false)
 }
 
@@ -78,7 +79,47 @@ object CsrPluginConfig{
   def all : CsrPluginConfig = all(0x00000020l)
   def small : CsrPluginConfig = small(0x00000020l)
   def smallest : CsrPluginConfig = smallest(0x00000020l)
-  def linux(mtVecInit : BigInt) = CsrPluginConfig(
+  def linuxMinimal(mtVecInit : BigInt) = CsrPluginConfig(
+    catchIllegalAccess  = true,
+    mvendorid           = 1,
+    marchid             = 2,
+    mimpid              = 3,
+    mhartid             = 0,
+    misaExtensionsInit  = 0, //TODO
+    misaAccess          = CsrAccess.NONE, //Read required by some regressions
+    mtvecAccess         = CsrAccess.WRITE_ONLY, //Read required by some regressions
+    mtvecInit           = mtVecInit,
+    mepcAccess          = CsrAccess.READ_WRITE,
+    mscratchGen         = true,
+    mcauseAccess        = CsrAccess.READ_ONLY,
+    mbadaddrAccess      = CsrAccess.READ_ONLY,
+    mcycleAccess        = CsrAccess.NONE,
+    minstretAccess      = CsrAccess.NONE,
+    ucycleAccess        = CsrAccess.NONE,
+    wfiGenAsWait        = true,
+    ecallGen            = true,
+    xtvecModeGen        = false,
+    noCsrAlu            = false,
+    wfiGenAsNop         = false,
+    ebreakGen           = true,
+    userGen             = true,
+    supervisorGen       = true,
+    sscratchGen         = true,
+    stvecAccess         = CsrAccess.READ_WRITE,
+    sepcAccess          = CsrAccess.READ_WRITE,
+    scauseAccess        = CsrAccess.READ_WRITE,
+    sbadaddrAccess      = CsrAccess.READ_WRITE,
+    scycleAccess        = CsrAccess.NONE,
+    sinstretAccess      = CsrAccess.NONE,
+    satpAccess          = CsrAccess.NONE, //Implemented into the MMU plugin
+    medelegAccess       = CsrAccess.WRITE_ONLY,
+    midelegAccess       = CsrAccess.WRITE_ONLY,
+    pipelineCsrRead     = false,
+    deterministicInteruptionEntry  = false
+  )
+
+
+  def linuxFull(mtVecInit : BigInt) = CsrPluginConfig(
     catchIllegalAccess  = true,
     mvendorid           = 1,
     marchid             = 2,
@@ -100,7 +141,8 @@ object CsrPluginConfig{
     xtvecModeGen        = false,
     noCsrAlu            = false,
     wfiGenAsNop         = false,
-    ebreakGen           = true,
+    ebreakGen           = false,
+    userGen             = true,
     supervisorGen       = true,
     sscratchGen         = true,
     stvecAccess         = CsrAccess.READ_WRITE,
@@ -285,12 +327,13 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
     interface
   }
 
-  var exceptionPending : Bool = null
-  override def isExceptionPending(): Bool = exceptionPending
+  var exceptionPendings : Vec[Bool] = null
+  override def isExceptionPending(stage : Stage): Bool = exceptionPendings(pipeline.stages.indexOf(stage))
 
   var jumpInterface : Flow[UInt] = null
   var timerInterrupt, externalInterrupt, softwareInterrupt : Bool = null
   var externalInterruptS : Bool = null
+  var forceMachineWire : Bool = null
   var privilege : UInt = null
   var selfException : Flow[ExceptionCause] = null
   var contextSwitching : Bool = null
@@ -377,17 +420,18 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
     jumpInterface.valid := False
     jumpInterface.payload.assignDontCare()
 
-    exceptionPending = False
+    exceptionPendings = Vec(Bool, pipeline.stages.length)
     timerInterrupt    = in Bool() setName("timerInterrupt")
     externalInterrupt = in Bool() setName("externalInterrupt")
-    softwareInterrupt = in Bool() setName("softwareInterrupt")
+    softwareInterrupt = in Bool() setName("softwareInterrupt") default(False)
     if(supervisorGen){
 //      timerInterruptS    = in Bool() setName("timerInterruptS")
       externalInterruptS = in Bool() setName("externalInterruptS")
     }
     contextSwitching = Bool().setName("contextSwitching")
 
-    privilege = RegInit(U"11").setName("CsrPlugin_privilege")
+    privilege = UInt(2 bits).setName("CsrPlugin_privilege")
+    forceMachineWire = False
 
     if(catchIllegalAccess || ecallGen || ebreakGen)
       selfException = newExceptionPort(pipeline.execute)
@@ -407,6 +451,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
   override def isUser() : Bool = privilege === 0
   override def isSupervisor(): Bool = privilege === 1
   override def isMachine(): Bool = privilege === 3
+  override def forceMachine(): Unit = forceMachineWire := True
 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
@@ -430,6 +475,11 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       val mode = Bits(2 bits)
       val base = UInt(xlen-2 bits)
     }
+
+    val privilegeReg = privilegeGen generate RegInit(U"11")
+    privilege := (if(privilegeGen) privilegeReg else U"11")
+
+    when(forceMachineWire) { privilege := 3 }
 
     val machineCsr = pipeline plug new Area{
       //Define CSR registers
@@ -671,7 +721,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
         //Avoid the PC register of the last stage to change durring an exception handleing (Used to fill Xepc)
         stages.last.dontSample.getOrElseUpdate(PC, ArrayBuffer[Bool]()) += exceptionValids.last
-        exceptionPending setWhen(exceptionValidsRegs.orR)
+        exceptionPendings := exceptionValidsRegs
       } else null
 
 
@@ -714,7 +764,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
       //Used to make the pipeline empty softly (for interrupts)
       val pipelineLiberator = new Area{
         when(interrupt){
-          decode.arbitration.haltByOther := True
+          decode.arbitration.haltByOther := decode.arbitration.isValid
         }
 
         val done = !stagesFromExecute.map(_.arbitration.isValid).orR && fetcher.pcValid(mepcCaptureStage)
@@ -752,7 +802,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         jumpInterface.payload       := (if(!xtvecModeGen) xtvec.base @@ "00" else (xtvec.mode === 0 || hadException) ? (xtvec.base @@ "00") | ((xtvec.base + trapCause) @@ "00") )
         beforeLastStage.arbitration.flushAll := True
 
-        privilege := targetPrivilege
+        if(privilegeGen) privilegeReg := targetPrivilege
 
         switch(targetPrivilege){
           if(supervisorGen) is(1) {
@@ -795,15 +845,15 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
               mstatus.MPP := U"00"
               mstatus.MIE := mstatus.MPIE
               mstatus.MPIE := True
-              privilege := mstatus.MPP
               jumpInterface.payload := mepc
+              if(privilegeGen) privilegeReg := mstatus.MPP
             }
             if(supervisorGen) is(1){
               sstatus.SPP := U"0"
               sstatus.SIE := sstatus.SPIE
               sstatus.SPIE := True
-              privilege := U"0" @@ sstatus.SPP
               jumpInterface.payload := sepc
+              if(privilegeGen) privilegeReg := U"0" @@ sstatus.SPP
             }
           }
         }

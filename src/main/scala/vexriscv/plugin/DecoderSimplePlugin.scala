@@ -66,8 +66,8 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false, forceLegalI
     }
   }
 
-  val defaults = mutable.HashMap[Stageable[_ <: BaseType], BaseType]()
-  val encodings = mutable.HashMap[MaskedLiteral,ArrayBuffer[(Stageable[_ <: BaseType], BaseType)]]()
+  val defaults = mutable.LinkedHashMap[Stageable[_ <: BaseType], BaseType]()
+  val encodings = mutable.LinkedHashMap[MaskedLiteral,ArrayBuffer[(Stageable[_ <: BaseType], BaseType)]]()
   var decodeExceptionPort : Flow[ExceptionCause] = null
 
 
@@ -105,7 +105,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false, forceLegalI
     } else {
       var offset = 0
       var defaultValue, defaultCare = BigInt(0)
-      val offsetOf = mutable.HashMap[Stageable[_ <: BaseType], Int]()
+      val offsetOf = mutable.LinkedHashMap[Stageable[_ <: BaseType], Int]()
 
       //Build defaults value and field offset map
       stageables.foreach(e => {
@@ -191,8 +191,8 @@ object DecodingBench extends App{
 
 
 object Symplify{
-  val cache = mutable.HashMap[Bits,mutable.HashMap[Masked,Bool]]()
-  def getCache(addr : Bits) = cache.getOrElseUpdate(addr,mutable.HashMap[Masked,Bool]())
+  val cache = mutable.LinkedHashMap[Bits,mutable.LinkedHashMap[Masked,Bool]]()
+  def getCache(addr : Bits) = cache.getOrElseUpdate(addr,mutable.LinkedHashMap[Masked,Bool]())
 
   //Generate terms logic for the given input
   def logicOf(input : Bits,terms : Seq[Masked]) = terms.map(t => getCache(input).getOrElseUpdate(t,t === input)).asBits.orR

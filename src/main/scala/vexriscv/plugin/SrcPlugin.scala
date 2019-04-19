@@ -64,7 +64,7 @@ class SrcPlugin(separatedAddSub : Boolean = false, executeInsertion : Boolean = 
         import addSubStage._
 
         // ADD, SUB
-        val addSub = (input(SRC1).asSInt + Mux(input(SRC_USE_SUB_LESS), ~input(SRC2), input(SRC2)).asSInt + Mux(input(SRC_USE_SUB_LESS), S(1), S(0))).asBits
+        val addSub = (input(SRC1).asSInt + Mux(input(SRC_USE_SUB_LESS), ~input(SRC2), input(SRC2)).asSInt + Mux(input(SRC_USE_SUB_LESS), S(1, 32 bits), S(0, 32 bits))).asBits
         when(input(SRC2_FORCE_ZERO)){ addSub := input(SRC1) }
 
 

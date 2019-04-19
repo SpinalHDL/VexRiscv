@@ -46,7 +46,8 @@ class DBusCachedPlugin(config : DataCacheConfig,
   object MEMORY_MANAGMENT extends Stageable(Bool)
   object MEMORY_WR extends Stageable(Bool)
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
-  object MEMORY_ATOMIC extends Stageable(Bool)
+  object MEMORY_LRSC extends Stageable(Bool)
+  object MEMORY_AMO extends Stageable(Bool)
   object IS_DBUS_SHARING extends Stageable(Bool())
 
   override def setup(pipeline: VexRiscv): Unit = {
@@ -85,13 +86,13 @@ class DBusCachedPlugin(config : DataCacheConfig,
 
     if(withLrSc){
       List(LB, LH, LW, LBU, LHU, LWU, SB, SH, SW).foreach(e =>
-        decoderService.add(e, Seq(MEMORY_ATOMIC -> False))
+        decoderService.add(e, Seq(MEMORY_LRSC -> False))
       )
       decoderService.add(
         key = LR,
         values = loadActions.filter(_._1 != SRC2_CTRL) ++ Seq(
           SRC_ADD_ZERO -> True,
-          MEMORY_ATOMIC -> True
+          MEMORY_LRSC -> True
         )
       )
       decoderService.add(
@@ -101,9 +102,35 @@ class DBusCachedPlugin(config : DataCacheConfig,
           REGFILE_WRITE_VALID -> True,
           BYPASSABLE_EXECUTE_STAGE -> False,
           BYPASSABLE_MEMORY_STAGE -> False,
-          MEMORY_ATOMIC -> True
+          MEMORY_LRSC -> True
         )
       )
+    }
+
+    if(withAmo){
+      List(LB, LH, LW, LBU, LHU, LWU, SB, SH, SW).foreach(e =>
+        decoderService.add(e, Seq(MEMORY_AMO -> False))
+      )
+      val amoActions = storeActions.filter(_._1 != SRC2_CTRL) ++ Seq(
+        SRC_ADD_ZERO -> True,
+        REGFILE_WRITE_VALID -> True,
+        BYPASSABLE_EXECUTE_STAGE -> False,
+        BYPASSABLE_MEMORY_STAGE -> False,
+        MEMORY_AMO -> True
+      )
+
+      for(i <- List(AMOSWAP, AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN, AMOMAX, AMOMINU, AMOMAXU)){
+        decoderService.add(i, amoActions)
+      }
+    }
+
+    if(withAmo && withLrSc){
+      for(i <- List(AMOSWAP, AMOADD, AMOXOR, AMOAND, AMOOR, AMOMIN, AMOMAX, AMOMINU, AMOMAXU)){
+        decoderService.add(i, List(MEMORY_LRSC -> False))
+      }
+      for(i <- List(LR, SC)){
+        decoderService.add(i, List(MEMORY_AMO -> False))
+      }
     }
 
     def MANAGEMENT  = M"-------00000-----101-----0001111"
@@ -124,25 +151,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
     if(pipeline.serviceExist(classOf[PrivilegeService]))
       privilegeService = pipeline.service(classOf[PrivilegeService])
 
-//    if(pipeline.serviceExist(classOf[ReportService])){
-//      val report = pipeline.service(classOf[ReportService])
-//      report.add("dBus" -> {
-//        val e = new BusReport()
-//        val c = new CacheReport()
-//        e.kind = "cached"
-//        e.flushInstructions.add(0x13 | (1 << 7)) ////ADDI x1, x0, 0
-//        for(idx <- 0 until cacheSize by bytePerLine){
-//          e.flushInstructions.add(0x7000500F + (1 << 15)) //Clean invalid data cache way x1
-//          e.flushInstructions.add(0x13 + (1 << 7)  + (1 << 15) + (bytePerLine << 20)) //ADDI x1, x1, 32
-//        }
-//
-//        e.info = c
-//        c.size = cacheSize
-//        c.bytePerLine = bytePerLine
-//
-//        e
-//      })
-//    }
+    pipeline.update(DEBUG_BYPASS_CACHE, False)
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -159,7 +168,13 @@ class DBusCachedPlugin(config : DataCacheConfig,
     dBus.cmd << optionPipe(dBusCmdMasterPipe, cmdBuf)(_.m2sPipe())
     cache.io.mem.rsp << optionPipe(dBusRspSlavePipe,dBus.rsp)(_.m2sPipe())
 
+    decode plug new Area {
+      import decode._
 
+      when(mmuBus.busy && arbitration.isValid && input(MEMORY_ENABLE)) {
+        arbitration.haltItself := True
+      }
+    }
 
     execute plug new Area {
       import execute._
@@ -174,16 +189,22 @@ class DBusCachedPlugin(config : DataCacheConfig,
         default -> input(RS2)(31 downto 0)
       )
       cache.io.cpu.execute.args.size := size
-      cache.io.cpu.execute.args.forceUncachedAccess := False
+
 
       cache.io.cpu.flush.valid := arbitration.isValid && input(MEMORY_MANAGMENT)
       arbitration.haltItself setWhen(cache.io.cpu.flush.isStall)
 
       if(withLrSc) {
-        cache.io.cpu.execute.args.isAtomic := False
-        when(input(MEMORY_ATOMIC)){
-          cache.io.cpu.execute.args.isAtomic := True
+        cache.io.cpu.execute.args.isLrsc := False
+        when(input(MEMORY_LRSC)){
+          cache.io.cpu.execute.args.isLrsc := True
         }
+      }
+
+      if(withAmo){
+        cache.io.cpu.execute.isAmo := input(MEMORY_AMO)
+        cache.io.cpu.execute.amoCtrl.alu := input(INSTRUCTION)(31 downto 29)
+        cache.io.cpu.execute.amoCtrl.swap := input(INSTRUCTION)(27)
       }
 
       insert(MEMORY_ADDRESS_LOW) := cache.io.cpu.execute.address(1 downto 0)
@@ -201,6 +222,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       cache.io.cpu.memory.address := U(input(REGFILE_WRITE_DATA))
 
       cache.io.cpu.memory.mmuBus <> mmuBus
+      cache.io.cpu.memory.mmuBus.rsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
     }
 
     writeBack plug new Area{
@@ -209,37 +231,40 @@ class DBusCachedPlugin(config : DataCacheConfig,
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
       cache.io.cpu.writeBack.address := U(input(REGFILE_WRITE_DATA))
-      if(withLrSc) cache.io.cpu.writeBack.clearAtomicEntries := service(classOf[IContextSwitching]).isContextSwitching
+      if(withLrSc) cache.io.cpu.writeBack.clearLrsc := service(classOf[IContextSwitching]).isContextSwitching
+
+      redoBranch.valid := False
+      redoBranch.payload := input(PC)
+      arbitration.flushAll setWhen(redoBranch.valid)
 
       if(catchSomething) {
         exceptionBus.valid := False //cache.io.cpu.writeBack.mmuMiss || cache.io.cpu.writeBack.accessError || cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.unalignedAccess
         exceptionBus.badAddr := U(input(REGFILE_WRITE_DATA))
         exceptionBus.code.assignDontCare()
+      }
 
-        redoBranch.valid := False
-        redoBranch.payload := input(PC)
-        arbitration.flushAll setWhen(redoBranch.valid)
 
-        when(arbitration.isValid && input(MEMORY_ENABLE)) {
-          if (catchAccessError) when(cache.io.cpu.writeBack.accessError) {
-            exceptionBus.valid := True
-            exceptionBus.code := (input(MEMORY_WR) ? U(7) | U(5)).resized
-          }
+      when(arbitration.isValid && input(MEMORY_ENABLE)) {
+        if (catchAccessError) when(cache.io.cpu.writeBack.accessError) {
+          exceptionBus.valid := True
+          exceptionBus.code := (input(MEMORY_WR) ? U(7) | U(5)).resized
+        }
 
-          if (catchUnaligned) when(cache.io.cpu.writeBack.unalignedAccess) {
-            exceptionBus.valid := True
-            exceptionBus.code := (input(MEMORY_WR) ? U(6) | U(4)).resized
-          }
-          when (cache.io.cpu.writeBack.mmuException) {
-            exceptionBus.valid := True
-            exceptionBus.code := (input(MEMORY_WR) ? U(15) | U(13)).resized
-          }
-          when(cache.io.cpu.redo) {
-            redoBranch.valid := True
-            exceptionBus.valid := False
-          }
+        if (catchUnaligned) when(cache.io.cpu.writeBack.unalignedAccess) {
+          exceptionBus.valid := True
+          exceptionBus.code := (input(MEMORY_WR) ? U(6) | U(4)).resized
+        }
+        if(catchIllegal) when (cache.io.cpu.writeBack.mmuException) {
+          exceptionBus.valid := True
+          exceptionBus.code := (input(MEMORY_WR) ? U(15) | U(13)).resized
+        }
+
+        when(cache.io.cpu.redo) {
+          redoBranch.valid := True
+          if(catchSomething) exceptionBus.valid := False
         }
       }
+
       arbitration.haltItself.setWhen(cache.io.cpu.writeBack.haltIt)
 
       val rspShifted = Bits(32 bits)
@@ -267,7 +292,8 @@ class DBusCachedPlugin(config : DataCacheConfig,
       val forceDatapath = False
       when(dBusAccess.cmd.valid){
         decode.arbitration.haltByOther := True
-        when(!stagesFromExecute.map(_.arbitration.isValid).orR && !pipeline.service(classOf[ExceptionService]).isExceptionPending()){
+        val exceptionService = pipeline.service(classOf[ExceptionService])
+        when(!stagesFromExecute.map(s => s.arbitration.isValid || exceptionService.isExceptionPending(s)).orR){
           when(!cache.io.cpu.redo) {
             cache.io.cpu.execute.isValid := True
             dBusAccess.cmd.ready := !execute.arbitration.isStuck
@@ -275,8 +301,8 @@ class DBusCachedPlugin(config : DataCacheConfig,
           cache.io.cpu.execute.args.wr := dBusAccess.cmd.write
           cache.io.cpu.execute.args.data := dBusAccess.cmd.data
           cache.io.cpu.execute.args.size := dBusAccess.cmd.size
-          cache.io.cpu.execute.args.forceUncachedAccess := False
-          if(withLrSc) cache.io.cpu.execute.args.isAtomic := False
+          if(withLrSc) cache.io.cpu.execute.args.isLrsc := False
+          if(withAmo) cache.io.cpu.execute.args.isAmo := False
           cache.io.cpu.execute.address := dBusAccess.cmd.address  //Will only be 12 muxes
           forceDatapath := True
         }

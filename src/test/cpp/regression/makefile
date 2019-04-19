@@ -14,7 +14,8 @@ EBREAK?=no
 FENCEI?=no
 MMU?=yes
 SEED?=no
-ATOMIC?=no
+LRSC?=no
+AMO?=no
 NO_STALL?=no
 DEBUG_PLUGIN?=STD
 DEBUG_PLUGIN_EXTERNAL?=no
@@ -32,7 +33,8 @@ MTIME_INSTR_FACTOR?=no
 COMPRESSED?=no
 SUPERVISOR?=no
 STOP_ON_ERROR?=no
-
+COREMARK=no
+WITH_USER_IO?=no
 
 ADDCFLAGS += -CFLAGS -DIBUS_${IBUS}
 ADDCFLAGS += -CFLAGS -DDBUS_${DBUS}
@@ -65,8 +67,38 @@ ifeq ($(LINUX_SOC),yes)
 	ADDCFLAGS += -CFLAGS -DEMULATOR='\"$(EMULATOR)\"'
 endif
 
+ARCH_LINUX=rv32i
+ifeq ($(MUL),yes)
+ifeq ($(DIV),yes)
+ARCH_LINUX:=$(ARCH_LINUX)m
+endif
+endif
+ARCH_LINUX:=$(ARCH_LINUX)a
+ifeq ($(COMPRESSED),yes)
+ARCH_LINUX:=$(ARCH_LINUX)c
+endif
+
+ifeq ($(LINUX_REGRESSION),yes)
+ifneq ($(ARCH_LINUX),rv32iac)
+ifneq ($(ARCH_LINUX),rv32ia)
+	ADDCFLAGS += -CFLAGS -DLINUX_REGRESSION
+	ADDCFLAGS += -CFLAGS -DARCH_LINUX='\"$(ARCH_LINUX)\"'
+	ADDCFLAGS += -CFLAGS -DVMLINUX='\"../../resources/VexRiscvRegressionData/sim/linux/$(ARCH_LINUX)/Image\"'
+	ADDCFLAGS += -CFLAGS -DDTB='\"../../resources/VexRiscvRegressionData/sim/linux/$(ARCH_LINUX)/rv32.dtb\"'
+	ADDCFLAGS += -CFLAGS -DRAMDISK='\"../../resources/VexRiscvRegressionData/sim/linux/$(ARCH_LINUX)/rootfs.cpio\"'
+	ADDCFLAGS += -CFLAGS -DEMULATOR='\"../../resources/VexRiscvRegressionData/sim/linux/emulator/emulator.bin\"'
+endif
+endif
+endif
+
+
 ifeq ($(FLOW_INFO),yes)
 	ADDCFLAGS += -CFLAGS -DFLOW_INFO
+endif
+
+
+ifeq ($(COREMARK),yes)
+	ADDCFLAGS += -CFLAGS -DCOREMARK
 endif
 
 
@@ -87,6 +119,10 @@ endif
 ifeq ($(IBUS_TC),yes)
 	ADDCFLAGS += -CFLAGS -DIBUS_TC=yes
 endif
+ifeq ($(WITH_USER_IO),yes)
+	ADDCFLAGS += -CFLAGS -DWITH_USER_IO=yes
+endif
+
 
 ifeq ($(COMPRESSED),yes)
 	ADDCFLAGS += -CFLAGS -DCOMPRESSED
@@ -137,8 +173,12 @@ ifeq ($(CSR),yes)
 endif
 
 
-ifeq ($(ATOMIC),yes)
-	ADDCFLAGS += -CFLAGS -DATOMIC
+ifeq ($(LRSC),yes)
+	ADDCFLAGS += -CFLAGS -DLRSC
+endif
+
+ifeq ($(AMO),yes)
+	ADDCFLAGS += -CFLAGS -DAMO
 endif
 
 ifeq ($(CUSTOM_SIMD_ADD),yes)

@@ -100,6 +100,7 @@ class MmuPlugin(ioRange : UInt => Bool,
 
     val core = pipeline plug new Area {
       val ports = for (port <- sortedPortsInfo) yield new Area {
+        val handle = port
         val id = port.id
         val cache = Vec(Reg(CacheLine()) init, port.args.portTlbSize)
         val cacheHits = cache.map(line => line.valid && line.virtualAddress(1) === port.bus.cmd.virtualAddress(31 downto 22) && (line.superPage || line.virtualAddress(0) === port.bus.cmd.virtualAddress(21 downto 12)))
@@ -135,11 +136,19 @@ class MmuPlugin(ioRange : UInt => Bool,
           port.bus.rsp.refilling := False
         }
         port.bus.rsp.isIoAccess := ioRange(port.bus.rsp.physicalAddress)
+
+        // Avoid keeping any invalid line in the cache after an exception.
+        // https://github.com/riscv/riscv-linux/blob/8fe28cb58bcb235034b64cbbb7550a8a43fd88be/arch/riscv/include/asm/pgtable.h#L276
+        when(service(classOf[IContextSwitching]).isContextSwitching) {
+          for (line <- cache) {
+            when(line.exception) {
+              line.valid := False
+            }
+          }
+        }
       }
 
       val shared = new Area {
-        val busy = Reg(Bool) init(False)
-
         val State = new SpinalEnum{
           val IDLE, L1_CMD, L1_RSP, L0_CMD, L0_RSP = newElement()
         }
@@ -171,7 +180,6 @@ class MmuPlugin(ioRange : UInt => Bool,
           is(State.IDLE){
             for(port <- portsInfo.sortBy(_.priority)){
               when(port.bus.cmd.isValid && port.bus.rsp.refilling){
-                busy := True
                 vpn(1) := port.bus.cmd.virtualAddress(31 downto 22)
                 vpn(0) := port.bus.cmd.virtualAddress(21 downto 12)
                 portId := port.id
@@ -214,6 +222,10 @@ class MmuPlugin(ioRange : UInt => Bool,
           }
         }
 
+        for(port <- ports) {
+          port.handle.bus.busy := state =/= State.IDLE && portId === port.id
+        }
+
         when(dBusAccess.rsp.valid && !dBusAccess.rsp.redo && (dBusRsp.leaf || dBusRsp.exception)){
           for(port <- ports){
             when(portId === port.id) {
@@ -238,10 +250,9 @@ class MmuPlugin(ioRange : UInt => Bool,
       }
     }
 
-    execute plug new Area{
-      import execute._
-      val tlbWriteBuffer = Reg(UInt(20 bits))
-      when(arbitration.isFiring && input(IS_SFENCE_VMA)){
+    writeBack plug new Area{
+      import writeBack._
+      when(arbitration.isValid && input(IS_SFENCE_VMA)){ // || csrService.isWriting(CSR.SATP)
         for(port <- core.ports; line <- port.cache) line.valid := False //Assume that the instruction already fetched into the pipeline are ok
       }
     }

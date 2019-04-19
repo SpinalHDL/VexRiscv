@@ -163,3 +163,8 @@ class MuraxApb3Timer extends Component{
   interruptCtrl.io.inputs(1) := timerB.io.full
   io.interrupt := interruptCtrl.io.pendings.orR
 }
+
+
+object MuraxApb3TimerGen extends App{
+  SpinalVhdl(new MuraxApb3Timer())
+}

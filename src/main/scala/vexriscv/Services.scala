@@ -33,19 +33,21 @@ case class ExceptionCause() extends Bundle{
 
 trait ExceptionService{
   def newExceptionPort(stage : Stage, priority : Int = 0) : Flow[ExceptionCause]
-  def isExceptionPending() : Bool
+  def isExceptionPending(stage : Stage) : Bool
 }
 
 trait PrivilegeService{
   def isUser() : Bool
   def isSupervisor() : Bool
   def isMachine() : Bool
+  def forceMachine() : Unit
 }
 
 case class PrivilegeServiceDefault() extends PrivilegeService{
   override def isUser(): Bool = False
   override def isSupervisor(): Bool = False
   override def isMachine(): Bool = True
+  override def forceMachine(): Unit = {}
 }
 
 trait InterruptionInhibitor{
@@ -55,6 +57,7 @@ trait InterruptionInhibitor{
 trait ExceptionInhibitor{
   def inhibateException() : Unit
 }
+
 
 trait RegFileService{
   def readStage() : Stage
@@ -78,10 +81,11 @@ case class MemoryTranslatorBus() extends Bundle with IMasterSlave{
   val cmd = MemoryTranslatorCmd()
   val rsp = MemoryTranslatorRsp()
   val end = Bool
+  val busy = Bool
 
   override def asMaster() : Unit = {
     out(cmd, end)
-    in(rsp)
+    in(rsp, busy)
   }
 }
 
