@@ -585,10 +585,11 @@ class TestIndividualFeatures extends FunSuite {
   println(s"Seed=$seed")
   for(i <- 0 until sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "100").toInt){
     var positions : List[VexRiscvPosition] = null
-    val universe = VexRiscvUniverse.universes.filter(e => rand.nextBoolean())
+    var universe = mutable.HashSet[VexRiscvUniverse]()
+    if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_LINUX_RATE", "0.5").toDouble > Math.random()) universe += VexRiscvUniverse.CATCH_ALL
 
     do{
-      positions = dimensions.map(d => d.randomPosition(universe, rand))
+      positions = dimensions.map(d => d.randomPosition(universe.toList, rand))
     }while(!positions.forall(_.isCompatibleWith(positions)))
 
     val testSeed = rand.nextInt()
