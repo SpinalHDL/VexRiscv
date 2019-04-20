@@ -1,67 +1,84 @@
 language: scala
 
+dist: xenial
+
 notifications:
   email:
     on_success: never
 
-# See 'project/Version.scala'
 scala:
-   - 2.11.6
+   - 2.11.12
 
 sbt_args: -no-colors -J-Xss2m
 
-script:
-  - export VEXRISCV_REGRESSION_FREERTOS_COUNT=no
-  - export VEXRISCV_REGRESSION_THREAD_COUNT=1
-  - sbt -jvm-opts travis/jvmopts.compile compile
-  - sbt -jvm-opts travis/jvmopts.test test
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - git 
+      - make 
+      - autoconf 
+      - g++ 
+      - flex 
+      - bison
 
 jdk:
-  - oraclejdk8
-#  - oraclejdk7
-#  - openjdk7
+  - openjdk10
 
-env:
-  - VEXRISCV_REGRESSION_CONFIG_COUNT=0
-  - VEXRISCV_REGRESSION_CONFIG_COUNT=5
-  - VEXRISCV_REGRESSION_CONFIG_COUNT=5
-  - VEXRISCV_REGRESSION_CONFIG_COUNT=5
-  - VEXRISCV_REGRESSION_CONFIG_COUNT=5
+jobs:
+  include:
+    - stage: prepare cache-verilator
+      script:
+        - cp scripts/regression/verilator.mk $HOME/makefile
+        - cd $HOME
+        - make verilator_binary
+    - &test
+      stage: Test
+      name: TEST_DHRYSTONE
+      script:
+        - make regression_dhrystone -C scripts/regression
+    - <<: *test
+      stage: Test
+      name: TEST_BAREMETAL
+      script:
+        - make regression_random_baremetal -C scripts/regression
+    - <<: *test
+      stage: Test
+      name: TEST_BAREMETAL
+      script:
+        - make regression_random_baremetal -C scripts/regression
+    - <<: *test
+      stage: Test
+      name: TEST_MIXED
+      script:
+        - make regression_random -C scripts/regression
+    - <<: *test
+      stage: Test
+      name: TEST_LINUX
+      script:
+        - make regression_random_linux -C scripts/regression
+    - <<: *test
+      stage: Test
+      name: TEST_LINUX
+      script:
+        - make regression_random_linux -C scripts/regression
 
 before_install:
-  # JDK fix
-  - cat /etc/hosts # optionally check the content *before*
-  - sudo hostname "$(hostname | cut -c1-63)"
-  - sed -e "s/^\\(127\\.0\\.0\\.1.*\\)/\\1 $(hostname | cut -c1-63)/" /etc/hosts | sudo tee /etc/hosts
-  - cat /etc/hosts # optionally check the content *after*
   - cd ..
-
-  # Verilator
-  - sudo apt-get install git make autoconf g++ flex bison -y  # First time prerequisites
-  - wget https://www.veripool.org/ftp/verilator-4.012.tgz
-  - tar xvzf verilator*.t*gz
-  - cd verilator*
-  - ./configure
-  - make -j$(nproc)
-  - sudo make install
-  - cd ..
-
   - git clone https://github.com/SpinalHDL/SpinalHDL.git -b dev
-  
   - cd VexRiscv
-  - git submodule update --init --recursive
-  #- curl -T README.md -udolu1990:$BINTRAY_KEY https://api.bintray.com/content/spinalhdl/VexRiscv/test/0.0.4/README.md
-  #- curl -X POST -udolu1990:$BINTRAY_KEY https://api.bintray.com/content/spinalhdl/VexRiscv/test/0.0.4/publish
-  #- sbt compile
-
+  - export VERILATOR_ROOT=$HOME/verilator
+  - export PATH=$VERILATOR_ROOT/bin:$PATH
 
 before_cache:
-  # Tricks to avoid unnecessary cache updates
-  - find $HOME/.ivy2 -name "ivydata-*.properties" -delete
-  - find $HOME/.sbt -name "*.lock" -delete
+  - rm -fv $HOME/.ivy2/.sbt.ivy.lock
+  - find $HOME/.ivy2/cache -name "ivydata-*.properties" -print -delete
+  - find $HOME/.sbt        -name "*.lock"               -print -delete
 
 cache:
   directories:
     - $HOME/.ivy2/cache
-    - $HOME/.sbt/boot/
-    - verilator-4.012
+    - $HOME/.sbt
+    - $HOME/verilator
+

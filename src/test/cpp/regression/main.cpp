@@ -3680,7 +3680,7 @@ int main(int argc, char **argv, char **env) {
                 redo(REDO,WorkspaceRegression("icache").withRiscvRef()->loadHex("../raw/icache/build/icache.hex")->bootAt(0x80000000u)->run(50e3););
             #endif
             #ifdef DBUS_CACHED
-                redo(REDO,WorkspaceRegression("dcache").loadHex("../raw/dcache/build/dcache.hex")->bootAt(0x80000000u)->run(500e3););
+                redo(REDO,WorkspaceRegression("dcache").loadHex("../raw/dcache/build/dcache.hex")->bootAt(0x80000000u)->run(2500e3););
             #endif
 
             #ifdef MMU
