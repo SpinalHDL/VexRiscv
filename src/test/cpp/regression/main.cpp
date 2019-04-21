@@ -614,7 +614,7 @@ public:
         if(pendingInterrupt) livenessInterrupt++; else livenessInterrupt = 0;
         if(!inWfi) livenessStep++; else livenessStep = 0;
 
-        if(livenessStep > 1000){
+        if(livenessStep > 10000){
             cout << "Liveness step failure" << endl;
             fail();
         }
