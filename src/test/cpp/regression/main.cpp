@@ -3369,7 +3369,7 @@ string zephyrTests[] = {
 //    "tests_kernel_critical",  //Too long
     "tests_kernel_fifo_fifo_api",
     "tests_kernel_mbox_mbox_usage",
-//    "tests_kernel_mem_pool_mem_pool_threadsafe", //Lock like it's a zephyr issue ?
+//    "tests_kernel_mem_pool_mem_pool_threadsafe", //Too long
     "tests_kernel_sleep",
     "tests_kernel_timer_timer_api"
 };
