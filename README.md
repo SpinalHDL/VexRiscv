@@ -12,6 +12,7 @@
   * [By using FreedomStudio](#by-using-freedomstudio)
 - [Briey SoC](#briey-soc)
 - [Murax SoC](#murax-soc)
+- [Running Linux](#running-linux)
 - [Build the RISC-V GCC](#build-the-risc-v-gcc)
 - [CPU parametrization and instantiation example](#cpu-parametrization-and-instantiation-example)
 - [Add a custom instruction to the CPU via the plugin system](#add-a-custom-instruction-to-the-cpu-via-the-plugin-system)
@@ -33,11 +34,12 @@ This repository hosts a RISC-V implementation written in SpinalHDL. Here are som
 - AXI4 and Avalon ready
 - Optional MUL/DIV extensions
 - Optional instruction and data caches
-- Optional MMU
+- Optional hardware refilled MMU
 - Optional debug extension allowing Eclipse debugging via a GDB >> openOCD >> JTAG connection
 - Optional interrupts and exception handling with Machine and User modes as defined in the [RISC-V Privileged ISA Specification v1.9](https://riscv.org/specifications/privileged-isa/).
 - Two implementations of shift instructions: Single cycle and shiftNumber cycles
 - Each stage can have optional bypass or interlock hazard logic
+- Compatible with the mainstream RISC-V linux port
 - Zephyr RISC-V port compatible
 - [FreeRTOS port](https://github.com/Dolu1990/FreeRTOS-RISCV)
 - The data cache supports atomic LR/SC
@@ -177,6 +179,9 @@ NOTES:
    do a "sbt clean compile publish-local" in it as described in the dependencies chapter.
 
 ## Regression tests
+
+[![Build Status](https://travis-ci.org/SpinalHDL/VexRiscv.svg?branch=master)](https://travis-ci.org/SpinalHDL/VexRiscv)
+
 To run tests (need the verilator simulator), go in the src/test/cpp/regression folder and run :
 
 ```sh
@@ -366,6 +371,18 @@ To run it :
 # This will generate the Murax RTL + run its testbench. You need Verilator 3.9xx installated.
 sbt "test:runMain vexriscv.MuraxSim"
 ```
+
+## Running Linux
+
+A default configuration is located in src/main/scala/vexriscv/demo/Linux.scala
+
+This file also contains 
+- The commands to compile the buildroot image
+- How to run the Verilator simulation in interative mode
+
+There is currently no SoC to run it on hardware, it is WIP. But the CPU simulation can already boot linux and run user space application (even python).
+
+Note that VexRiscv can run Linux on both cache full and cache less design.
 
 ## Build the RISC-V GCC
 
@@ -860,7 +877,7 @@ The down side is that this predictor has a long combinatorial path coming from t
 
 #### DBusSimplePlugin
 
-This plugin implements the load and store instructions (LB/LH/LW/LBU/LHU/LWU/SB/SH/SW) via a simple and neutral memory bus going out of the CPU.
+This plugin implements the load and store instructions (LB/LH/LW/LBU/LHU/LWU/SB/SH/SW) via a simple memory bus going out of the CPU.
 
 | Parameters | type | description |
 | ------ | ----------- | ------ |
@@ -906,7 +923,7 @@ There is at least one cycle latency between a cmd and the corresponding rsp. The
 
 #### DBusCachedPlugin
 
-Single way cache implementation with a victim buffer. (Documentation is WIP)
+Multi way cache implementation with writh-through and allocate on read strategy. (Documentation is WIP)
 
 #### MulPlugin
 
@@ -975,10 +992,10 @@ stage before jumping to mtvec.
 
 Static memory translator plugin which allows one to specify which range of the memory addresses is IO mapped and shouldn't be cached.
 
-#### MemoryTranslatorPlugin
+#### MmuPlugin
 
-Simple software refilled MMU implementation. Allows others plugins such as DBusCachedPlugin/IBusCachedPlugin to instanciate memory address translation ports. Each port has a small dedicated
-fully associative TLB cache which is refilled from a larger software filled TLB cache via a query which looks up one entry per cycle.
+Hardware refilled MMU implementation. Allows others plugins such as DBusCachedPlugin/IBusCachedPlugin to instanciate memory address translation ports. Each port has a small dedicated
+fully associative TLB cache which is refilled automaticaly via a dbus access sharing.
 
 #### DebugPlugin
 
