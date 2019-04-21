@@ -3896,7 +3896,7 @@ int main(int argc, char **argv, char **env) {
         		//soc.setIStall(true);
         		//soc.setDStall(true);
         		soc.bootAt(0x80000000);
-        		soc.run(153995602l*6);
+        		soc.run(153995602l*9);
 //        		soc.run((470000000l + 2000000) / 2);
 //        		soc.run(438700000l/2);
             }
