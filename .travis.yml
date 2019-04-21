@@ -50,6 +50,11 @@ jobs:
         - make regression_random_machine_os -C scripts/regression
     - <<: *test
       stage: Test
+      name: Machine OS
+      script:
+        - make regression_random_machine_os -C scripts/regression
+    - <<: *test
+      stage: Test
       name: Mixed
       script:
         - make regression_random -C scripts/regression
