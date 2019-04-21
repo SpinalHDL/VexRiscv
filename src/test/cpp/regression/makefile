@@ -10,6 +10,7 @@ ISA_TEST?=yes
 MUL?=yes
 DIV?=yes
 CSR?=yes
+CSR_SKIP_TEST?=no
 EBREAK?=no
 FENCEI?=no
 MMU?=yes
@@ -171,6 +172,10 @@ endif
 
 ifeq ($(CSR),yes)
 	ADDCFLAGS += -CFLAGS -DCSR
+endif
+
+ifeq ($(CSR_SKIP_TEST),yes)
+	ADDCFLAGS += -CFLAGS -DCSR_SKIP_TEST
 endif
 
 

@@ -35,32 +35,32 @@ jobs:
         - make verilator_binary
     - &test
       stage: Test
-      name: TEST_DHRYSTONE
+      name: Dhrystone
       script:
         - make regression_dhrystone -C scripts/regression
     - <<: *test
       stage: Test
-      name: TEST_BAREMETAL
+      name: Baremetal
       script:
         - make regression_random_baremetal -C scripts/regression
     - <<: *test
       stage: Test
-      name: TEST_BAREMETAL
+      name: Machine OS
       script:
-        - make regression_random_baremetal -C scripts/regression
+        - make regression_random_machine_os -C scripts/regression
     - <<: *test
       stage: Test
-      name: TEST_MIXED
+      name: Mixed
       script:
         - make regression_random -C scripts/regression
     - <<: *test
       stage: Test
-      name: TEST_LINUX
+      name: Linux
       script:
         - make regression_random_linux -C scripts/regression
     - <<: *test
       stage: Test
-      name: TEST_LINUX
+      name: Linux
       script:
         - make regression_random_linux -C scripts/regression
 

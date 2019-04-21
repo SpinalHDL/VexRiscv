@@ -229,6 +229,13 @@ class success : public std::exception { };
 #define SSTATUS_SPIE        0x00000020
 #define SSTATUS_SPP         0x00000100
 
+#ifdef SUPERVISOR
+#define MSTATUS_READ_MASK 0xFFFFFFFF
+#else
+#define MSTATUS_READ_MASK 0x1888
+#endif
+
+
 class RiscvGolden {
 public:
 	int32_t pc, lastPc;
@@ -528,7 +535,7 @@ public:
 	virtual bool csrRead(int32_t csr, uint32_t *value){
 		if(((csr >> 8) & 0x3) > privilege) return true;
 		switch(csr){
-		case MSTATUS: *value = status.raw; break;
+		case MSTATUS: *value = status.raw & MSTATUS_READ_MASK; break;
 		case MIP: *value = getIp().raw; break;
 		case MIE: *value = ie.raw; break;
 		case MTVEC: *value = mtvec.raw; break;
@@ -3502,7 +3509,7 @@ static void multiThreading(queue<std::function<void()>> *lambdas, std::mutex *mu
             uint32_t seed = SEED + counter;
             counter++;
             srand48(seed);
-            printf("FREERTOS_SEED=%d \n", seed);
+            printf("MT_SEED=%d \n", seed);
         #endif
 		std::function<void()> lambda = lambdas->front();
 		lambdas->pop();
@@ -3667,7 +3674,7 @@ int main(int argc, char **argv, char **env) {
 				redo(REDO, Compliance(name).run();)
 			}
 			#endif
-			#ifdef CSR
+			#if defined(CSR) && !defined(CSR_SKIP_TEST)
 			for(const string &name : complianceTestCsr){
 				redo(REDO, Compliance(name).run();)
 			}
@@ -3702,7 +3709,7 @@ int main(int argc, char **argv, char **env) {
             redo(REDO,RiscvTest("rv32uc-p-rvc").bootAt(0x800000FCu)->run());
             #endif
 
-			#ifdef CSR
+			#if defined(CSR) && !defined(CSR_SKIP_TEST)
 			    #ifndef COMPRESSED
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };

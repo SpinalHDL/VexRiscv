@@ -45,8 +45,8 @@ class VexRiscvUniverse extends ConfigUniverse
 object VexRiscvUniverse{
   val CATCH_ALL = new VexRiscvUniverse
   val MMU = new VexRiscvUniverse
-
-  val universes = List(CATCH_ALL, MMU)
+  val FORCE_MULDIV = new VexRiscvUniverse
+  val SUPERVISOR = new VexRiscvUniverse
 }
 
 
@@ -86,57 +86,62 @@ class BranchDimension extends VexRiscvDimension("Branch") {
 
 class MulDivDimension extends VexRiscvDimension("MulDiv") {
 
-  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = random(r, List(
-    new VexRiscvPosition("NoMulDiv") {
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    var l = List(
+      new VexRiscvPosition("MulDivFpga") {
+        override def testParam = "MUL=yes DIV=yes"
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new MulPlugin
+          config.plugins += new MulDivIterativePlugin(
+            genMul = false,
+            genDiv = true,
+            mulUnrollFactor = 32,
+            divUnrollFactor = 1
+          )
+        }
+      },
+      new VexRiscvPosition("MulDivAsic") {
+        override def testParam = "MUL=yes DIV=yes"
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new MulDivIterativePlugin(
+            genMul = true,
+            genDiv = true,
+            mulUnrollFactor = 32,
+            divUnrollFactor = 4
+          )
+        }
+      },
+      new VexRiscvPosition("MulDivFpgaNoDsp") {
+        override def testParam = "MUL=yes DIV=yes"
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new MulDivIterativePlugin(
+            genMul = true,
+            genDiv = true,
+            mulUnrollFactor = 1,
+            divUnrollFactor = 1
+          )
+        }
+      },
+      new VexRiscvPosition("MulDivFpgaNoDspFastMul") {
+        override def testParam = "MUL=yes DIV=yes"
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new MulDivIterativePlugin(
+            genMul = true,
+            genDiv = true,
+            mulUnrollFactor = 8,
+            divUnrollFactor = 1
+          )
+        }
+      }
+    )
+
+    if(!universes.contains(VexRiscvUniverse.FORCE_MULDIV)) l = new VexRiscvPosition("NoMulDiv") {
       override def applyOn(config: VexRiscvConfig): Unit = {}
       override def testParam = "MUL=no DIV=no"
-    },
-    new VexRiscvPosition("MulDivFpga") {
-      override def testParam = "MUL=yes DIV=yes"
-      override def applyOn(config: VexRiscvConfig): Unit = {
-        config.plugins += new MulPlugin
-        config.plugins += new MulDivIterativePlugin(
-          genMul = false,
-          genDiv = true,
-          mulUnrollFactor = 32,
-          divUnrollFactor = 1
-        )
-      }
-    },
-    new VexRiscvPosition("MulDivAsic") {
-      override def testParam = "MUL=yes DIV=yes"
-      override def applyOn(config: VexRiscvConfig): Unit = {
-        config.plugins += new MulDivIterativePlugin(
-          genMul = true,
-          genDiv = true,
-          mulUnrollFactor = 32,
-          divUnrollFactor = 4
-        )
-      }
-    },
-    new VexRiscvPosition("MulDivFpgaNoDsp") {
-      override def testParam = "MUL=yes DIV=yes"
-      override def applyOn(config: VexRiscvConfig): Unit = {
-        config.plugins += new MulDivIterativePlugin(
-          genMul = true,
-          genDiv = true,
-          mulUnrollFactor = 1,
-          divUnrollFactor = 1
-        )
-      }
-    },
-    new VexRiscvPosition("MulDivFpgaNoDspFastMul") {
-      override def testParam = "MUL=yes DIV=yes"
-      override def applyOn(config: VexRiscvConfig): Unit = {
-        config.plugins += new MulDivIterativePlugin(
-          genMul = true,
-          genDiv = true,
-          mulUnrollFactor = 8,
-          divUnrollFactor = 1
-        )
-      }
-    }
-  ))
+    } :: l
+
+    random(r, l)
+  }
 }
 
 trait InstructionAnticipatedPosition{
@@ -266,7 +271,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-    val mmuConfig = if(catchAll) MmuPortConfig( portTlbSize = 4) else null
+    val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
 
     if(r.nextDouble() < 0.5){
       val latency = r.nextInt(5) + 1
@@ -347,7 +352,7 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-    val mmuConfig = if(catchAll) MmuPortConfig( portTlbSize = 4) else null
+    val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
 
     if(r.nextDouble() < 0.4){
       val withLrSc = catchAll
@@ -403,9 +408,7 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 class MmuDimension extends VexRiscvDimension("DBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
-
-      val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-    if(catchAll) {
+    if(universes.contains(VexRiscvUniverse.MMU)) {
       new VexRiscvPosition("WithMmu") {
         override def testParam = "MMU=yes"
 
@@ -437,15 +440,21 @@ trait CatchAllPosition
 class CsrDimension(freertos : String, zephyr : String) extends VexRiscvDimension("Csr") {
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-    if(catchAll){
-      new VexRiscvPosition("All") with CatchAllPosition{
+    val supervisor = universes.contains(VexRiscvUniverse.SUPERVISOR)
+    if(supervisor){
+      new VexRiscvPosition("Supervisor") with CatchAllPosition{
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.linuxFull(0x80000020l))
         override def testParam = s"FREERTOS=$freertos ZEPHYR=$zephyr LINUX_REGRESSION=yes SUPERVISOR=yes"
       }
-    } else if(r.nextDouble() < 0.2){
+    } else if(catchAll){
+      new VexRiscvPosition("MachineOs") with CatchAllPosition{
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l))
+        override def testParam = s"CSR=yes FREERTOS=$freertos ZEPHYR=$zephyr"
+      }
+    } else if(r.nextDouble() < 0.3){
       new VexRiscvPosition("AllNoException") with CatchAllPosition{
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l).noException)
-        override def testParam = "CSR=no FREERTOS=no"
+        override def testParam = s"CSR=yes CSR_SKIP_TEST=yes FREERTOS=$freertos"
       }
     } else {
       new VexRiscvPosition("None") {
@@ -516,7 +525,7 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension("no", sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")),//sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "4")), TODO
+    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "1"), sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")),
     new DecoderDimension,
     new DebugDimension,
     new MmuDimension
@@ -572,9 +581,9 @@ class TestIndividualFeatures extends FunSuite {
   val seed = Random.nextLong()
 
 //  val testId = Some(mutable.HashSet(18,34,77,85,118,129,132,134,152,167,175,188,191,198,199)) //37/29 sp_flop_rv32i_O3
-//val testId = Some(mutable.HashSet(18))
+//val testId = Some(mutable.HashSet(3))
 //  val testId = Some(mutable.HashSet(129, 134))
-//  val seed = -2412372746600605141l
+//  val seed = -1580866821569084523l
 
 
   val rand = new Random(seed)
@@ -586,7 +595,15 @@ class TestIndividualFeatures extends FunSuite {
   for(i <- 0 until sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "100").toInt){
     var positions : List[VexRiscvPosition] = null
     var universe = mutable.HashSet[VexRiscvUniverse]()
-    if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_LINUX_RATE", "0.5").toDouble > Math.random()) universe += VexRiscvUniverse.CATCH_ALL
+    if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_LINUX_RATE", "0.3").toDouble > Math.random()) {
+      universe += VexRiscvUniverse.CATCH_ALL
+      universe += VexRiscvUniverse.MMU
+      universe += VexRiscvUniverse.FORCE_MULDIV
+      universe += VexRiscvUniverse.SUPERVISOR
+    }
+    if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_MACHINE_OS_RATE", "0.5").toDouble > Math.random()) {
+      universe += VexRiscvUniverse.CATCH_ALL
+    }
 
     do{
       positions = dimensions.map(d => d.randomPosition(universe.toList, rand))
