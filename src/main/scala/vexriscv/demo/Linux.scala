@@ -122,6 +122,7 @@ cd cpio
 cpio -idv < ../rootfs.cpio
 cd ..
 
+make clean run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yes SUPERVISOR=yes MMU=yes CSR=yes COMPRESSED=no MUL=yes DIV=yes LRSC=yes AMO=yes REDO=10 TRACE=no COREMARK=yes LINUX_REGRESSION=yes RUN_HEX=~/pro/riscv/zephyr/samples/synchronization/build/zephyr/zephyr.hex
 
 
 */

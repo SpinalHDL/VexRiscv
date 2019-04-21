@@ -434,13 +434,13 @@ class MmuDimension extends VexRiscvDimension("DBus") {
 trait CatchAllPosition
 
 
-class CsrDimension(freertos : String) extends VexRiscvDimension("Csr") {
+class CsrDimension(freertos : String, zephyr : String) extends VexRiscvDimension("Csr") {
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
     if(catchAll){
       new VexRiscvPosition("All") with CatchAllPosition{
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.linuxFull(0x80000020l))
-        override def testParam = s"FREERTOS=$freertos LINUX_REGRESSION=yes SUPERVISOR=yes"
+        override def testParam = s"FREERTOS=$freertos ZEPHYR=$zephyr LINUX_REGRESSION=yes SUPERVISOR=yes"
       }
     } else if(r.nextDouble() < 0.2){
       new VexRiscvPosition("AllNoException") with CatchAllPosition{
@@ -516,7 +516,7 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension("no"),//sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "4")), TODO
+    new CsrDimension("no", sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")),//sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "4")), TODO
     new DecoderDimension,
     new DebugDimension,
     new MmuDimension
@@ -554,7 +554,7 @@ class TestIndividualFeatures extends FunSuite {
 
     test(prefix + name + "_test") {
       val debug = true
-      val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=9999924910246l FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=yes THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", Runtime.getRuntime().availableProcessors().toString)} ") + s" SEED=${testSeed} "
+      val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=9999924910246l FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=yes THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", 1)} ") + s" SEED=${testSeed} "
 //      val stdCmd = "make clean run REDO=40 DHRYSTONE=no STOP_ON_ERROR=yes TRACE=yess "
 
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")

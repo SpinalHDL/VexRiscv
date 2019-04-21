@@ -1675,12 +1675,15 @@ public:
 		*error = addr == 0xF00FFF60u;
 	}
 
+	virtual void dutPutChar(char c){}
+
 	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
 		if(wr){
 			switch(addr){
 			case 0xF0010000u: {
 				cout << (char)*data;
 				logTraces << (char)*data;
+				dutPutChar((char)*data);
 				break;
 			}
 #ifdef EXTERNAL_INTERRUPT
@@ -1695,6 +1698,7 @@ public:
 			case 0xF00FFF00u: {
 				cout << (char)*data;
 				logTraces << (char)*data;
+				dutPutChar((char)*data);
 				break;
 			}
 			#ifndef DEBUG_PLUGIN_EXTERNAL
@@ -1753,6 +1757,34 @@ public:
 
 
 };
+
+
+
+class ZephyrRegression : public WorkspaceRegression{
+public:
+
+
+	uint32_t regFileWriteRefIndex = 0;
+	char *target = "PROJECT EXECUTION SUCCESSFUL", *hit = target;
+
+	ZephyrRegression(string name) : WorkspaceRegression(name) {
+            cout << endl << endl;
+
+	}
+
+    virtual void dutPutChar(char c){
+        if(*hit == c) hit++; else hit = target;
+        if(*hit == NULL) {
+            cout  << endl << "T=" << i <<endl;
+            cout << endl;
+            pass();
+        }
+    }
+};
+
+
+
+
 
 
 #ifdef IBUS_SIMPLE
@@ -3309,6 +3341,19 @@ string freeRtosTests[] = {
 };
 
 
+string zephyrTests[] = {
+    "tests_kernel_stack_stack_api",
+//    "tests_kernel_mutex_mutex",  //Too long
+    "tests_kernel_context",
+//    "tests_kernel_critical",  //Too long
+    "tests_kernel_fifo_fifo_api",
+    "tests_kernel_mbox_mbox_usage",
+    "tests_kernel_mem_pool_mem_pool_threadsafe",
+    "tests_kernel_sleep",
+    "tests_kernel_timer_timer_api"
+};
+
+
 
 string riscvComplianceMain[] = {
     "I-IO",
@@ -3756,7 +3801,10 @@ int main(int argc, char **argv, char **env) {
             }
         #endif
 
+
+
 		#ifdef FREERTOS
+		{
 		    #ifdef SEED
             srand48(SEED);
             #endif
@@ -3768,14 +3816,14 @@ int main(int argc, char **argv, char **env) {
                     tasks.push_back([=]() { WorkspaceRegression(name + "_rv32i_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     tasks.push_back([=]() { WorkspaceRegression(name + "_rv32i_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #ifdef COMPRESSED
-//                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
-                        tasks.push_back([=]() { Workspace(name + "_rv32ic_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                        tasks.push_back([=]() { WorkspaceRegression(name + "_rv32ic_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
+                        tasks.push_back([=]() { WorkspaceRegression(name + "_rv32ic_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #endif
                     #if defined(MUL) && defined(DIV)
 //                        #ifdef COMPRESSED
-//                            tasks.push_back([=]() { Workspace(name + "_rv32imac_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                            tasks.push_back([=]() { WorkspaceRegression(name + "_rv32imac_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
 //                        #else
-                            tasks.push_back([=]() { Workspace(name + "_rv32im_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                            tasks.push_back([=]() { WorkspaceRegression(name + "_rv32im_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
 //                        #endif
                     #endif
                 }
@@ -3788,7 +3836,39 @@ int main(int argc, char **argv, char **env) {
 
             queue <std::function<void()>> tasksSelected(std::deque<std::function<void()>>(tasks.begin(), tasks.end()));
 			multiThreadedExecute(tasksSelected);
+        }
 		#endif
+
+        #ifdef ZEPHYR
+        {
+            #ifdef SEED
+            srand48(SEED);
+            #endif
+            //redo(1,WorkspaceRegression("freeRTOS_demo").loadHex("../../resources/hex/freeRTOS_demo.hex")->bootAt(0x80000000u)->run(100e6);)
+            vector <std::function<void()>> tasks;
+
+            /*for(int redo = 0;redo < 4;redo++)*/{
+                for(const string &name : zephyrTests){
+                    #ifdef COMPRESSED
+                        tasks.push_back([=]() { ZephyrRegression(name + "_rv32ic").withRiscvRef()->loadHex("../../resources/VexRiscvRegressionData/sim/zephyr/" + name + "_rv32ic.hex")->bootAt(0x80000000u)->run(180e6);});
+                    #else
+                        tasks.push_back([=]() { ZephyrRegression(name + "_rv32i").withRiscvRef()->loadHex("../../resources/VexRiscvRegressionData/sim/zephyr/" + name + "_rv32i.hex")->bootAt(0x80000000u)->run(180e6);});
+                    #endif
+                    #if defined(MUL) && defined(DIV)
+                            tasks.push_back([=]() { ZephyrRegression(name + "_rv32im").withRiscvRef()->loadHex("../../resources/VexRiscvRegressionData/sim/zephyr/" + name + "_rv32im.hex")->bootAt(0x80000000u)->run(180e6);});
+                    #endif
+                }
+            }
+
+            while(tasks.size() > ZEPHYR_COUNT){
+                tasks.erase(tasks.begin() + (VL_RANDOM_I(32)%tasks.size()));
+            }
+
+
+            queue <std::function<void()>> tasksSelected(std::deque<std::function<void()>>(tasks.begin(), tasks.end()));
+            multiThreadedExecute(tasksSelected);
+        }
+        #endif
 
 		#if defined(LINUX_REGRESSION)
             {
