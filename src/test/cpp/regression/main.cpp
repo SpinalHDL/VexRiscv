@@ -637,15 +637,19 @@ public:
 			masked = getIp().raw & mideleg & -sEnabled & ie.raw & 0x333;
 
 		if (masked) {
-			if (masked & (MIP_MEIP | MIP_SEIP))
-				masked &= (MIP_MEIP | MIP_SEIP);
-			// software interrupts have next-highest priority
-			else if (masked & (MIP_MSIP | MIP_SSIP))
-				masked &= (MIP_MSIP | MIP_SSIP);
-			// timer interrupts have next-highest priority
-			else if (masked & (MIP_MTIP | MIP_STIP))
-				masked &= (MIP_MTIP | MIP_STIP);
-			else
+			if (masked & MIP_MEIP)
+				masked &= MIP_MEIP;
+			else if (masked & MIP_MSIP)
+				masked &= MIP_MSIP;
+			else if (masked & MIP_MTIP)
+				masked &= MIP_MTIP;
+			else if (masked & MIP_SEIP)
+                masked &= MIP_SEIP;
+            else if (masked & MIP_SSIP)
+                masked &= MIP_SSIP;
+            else if (masked & MIP_STIP)
+                masked &= MIP_STIP;
+            else
 			  fail();
 		}
 
