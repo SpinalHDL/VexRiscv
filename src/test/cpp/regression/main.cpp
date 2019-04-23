@@ -374,23 +374,14 @@ public:
 		};
 	};
 
-#define RESERVED_ENTRY_COUNT 1
-	struct ReservedEntry{
-		bool valid;
-		uint32_t address;
-	};
 
-	ReservedEntry reservedEntries[RESERVED_ENTRY_COUNT];
-	int reservedEntriesPtr = 0;
+	bool lrscReserved;
 
 	RiscvGolden() {
 		pc = 0x80000000;
 		regs[0] = 0;
 		for (int i = 0; i < 32; i++)
 			regs[i] = 0;
-
-		for(int i = 0;i < RESERVED_ENTRY_COUNT;i++) reservedEntries[i].valid = false;
-
 
 		status.raw = 0;
 		ie.raw = 0;
@@ -409,6 +400,7 @@ public:
 		ipSoft = 0;
 		ipInput = 0;
 		stepCounter = 0;
+		lrscReserved = false;
 	}
 
 	virtual void rfWrite(int32_t address, int32_t data) {
@@ -472,7 +464,7 @@ public:
 	        cout << hex <<  " a7=0x" << regs[17] << " a0=0x" << regs[10] << " a1=0x" << regs[11] << " a2=0x" << regs[12] << dec << endl;
 	    }
 #endif
-	    for(int i = 0;i < RESERVED_ENTRY_COUNT;i++) reservedEntries[i].valid = false;
+	    lrscReserved = false;
 		//Check leguality of the interrupt
 		if(interrupt) {
 			bool hit = false;
@@ -843,6 +835,7 @@ public:
 						status.mpie = 1;
 						status.mpp = 0;
 						pcWrite(mepc);
+						lrscReserved = false;
 					}break;
 					case 0x10200073:{ //SRET
 						if(privilege < 1){ ilegalInstruction(); return;}
@@ -851,6 +844,7 @@ public:
 						status.spie = 1;
 						status.spp = 0;
 						pcWrite(sepc);
+						lrscReserved = false;
 					}break;
 					case 0x00000073:{ //ECALL
 						trap(0, 8+privilege, 0x00000073); //To follow the VexRiscv area saving implementation
@@ -899,9 +893,7 @@ public:
 							if(dRead(pAddr, 4, &data)){
 							    trap(0, 5, address);
 							} else {
-								reservedEntries[reservedEntriesPtr].valid = true;
-								reservedEntries[reservedEntriesPtr].address = address;
-								reservedEntriesPtr = (reservedEntriesPtr + 1) % RESERVED_ENTRY_COUNT;
+								lrscReserved = true;
 								rfWrite(rd32, data);
 								pcWrite(pc + 4);
 							}
@@ -913,8 +905,7 @@ public:
 							trap(0, 6, address);
 						} else {
 							if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
-							bool hit = false;
-							for(int i = 0;i < RESERVED_ENTRY_COUNT;i++) hit |= reservedEntries[i].valid && reservedEntries[i].address == address;
+							bool hit = lrscReserved;
 							if(hit){
 								dWrite(pAddr, 4, i32_rs2);
 							}
@@ -3762,11 +3753,11 @@ int main(int argc, char **argv, char **env) {
 
 
 		#ifdef LRSC
-			redo(REDO,WorkspaceRegression("lrsc").loadHex("../raw/lrsc/build/lrsc.hex")->bootAt(0x00000000u)->run(10e3););
+			redo(REDO,WorkspaceRegression("lrsc").withRiscvRef()->loadHex("../raw/lrsc/build/lrsc.hex")->bootAt(0x00000000u)->run(10e3););
 		#endif
 
 		#ifdef AMO
-			redo(REDO,WorkspaceRegression("amo").loadHex("../raw/amo/build/amo.hex")->bootAt(0x00000000u)->run(10e3););
+			redo(REDO,WorkspaceRegression("amo").withRiscvRef()->loadHex("../raw/amo/build/amo.hex")->bootAt(0x00000000u)->run(10e3););
 		#endif
 
 		#ifdef DHRYSTONE
