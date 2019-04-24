@@ -101,10 +101,16 @@ object VexRiscvSynthesisBench {
     }
 
 
-    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full)
+    val linuxBalanced = new Rtl {
+      override def getName(): String = "VexRiscv linux balanced"
+      override def getRtlPath(): String = "VexRiscvLinuxBalanced.v"
+      SpinalConfig(inlineRom = true).generateVerilog(wrap(new VexRiscv(LinuxGen.configFull(false, true))).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
+    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced)
 //    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache)
     //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
-//    val rtls = List(fullNoMmu)
+//    val rtls = List(smallAndProductive)
 
     val targets = XilinxStdTargets(
       vivadoArtix7Path = "/media/miaou/HD/linux/Xilinx/Vivado/2018.3/bin"
