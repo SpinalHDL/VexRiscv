@@ -70,6 +70,9 @@ class Stage() extends Area{
 
   val dontSample      = mutable.HashMap[Stageable[_], ArrayBuffer[Bool]]()
 
+  def dontSampleStageable(s : Stageable[_], cond : Bool): Unit ={
+    dontSample.getOrElseUpdate(s, ArrayBuffer[Bool]()) += cond
+  }
   def inputInit[T <: BaseType](stageable : Stageable[T],initValue : T) =
     Component.current.addPrePopTask(() => inputsDefault(stageable.asInstanceOf[Stageable[Data]]).asInstanceOf[T].getDrivingReg.init(initValue))
 }

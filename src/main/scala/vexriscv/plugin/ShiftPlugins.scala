@@ -69,12 +69,14 @@ class FullBarrelShifterPlugin(earlyInjection : Boolean = false) extends Plugin[V
     val injectionStage = if(earlyInjection) execute else memory
     injectionStage plug new Area{
       import injectionStage._
-      switch(input(SHIFT_CTRL)){
-        is(ShiftCtrlEnum.SLL){
-          output(REGFILE_WRITE_DATA) := Reverse(input(SHIFT_RIGHT))
-        }
-        is(ShiftCtrlEnum.SRL,ShiftCtrlEnum.SRA){
-          output(REGFILE_WRITE_DATA) := input(SHIFT_RIGHT)
+      when(arbitration.isValid){
+        switch(input(SHIFT_CTRL)) {
+          is(ShiftCtrlEnum.SLL) {
+            output(REGFILE_WRITE_DATA) := Reverse(input(SHIFT_RIGHT))
+          }
+          is(ShiftCtrlEnum.SRL, ShiftCtrlEnum.SRA) {
+            output(REGFILE_WRITE_DATA) := input(SHIFT_RIGHT)
+          }
         }
       }
     }
@@ -162,6 +164,7 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
       val shiftInput = isActive ? (if(withMemoryStage) memory.input(REGFILE_WRITE_DATA) else shiftReg) | input(SRC1)
       val done = amplitude(4 downto 1) === 0
 
+      if(withMemoryStage) memory.dontSampleStageable(REGFILE_WRITE_DATA, arbitration.isStuckByOthers)
 
       when(arbitration.isValid && isShift && input(SRC2)(4 downto 0) =/= 0){
         output(REGFILE_WRITE_DATA) := input(SHIFT_CTRL).mux(

@@ -99,18 +99,13 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   plugins ++= config.plugins
 
   //regression usage
-  decode.input(config.INSTRUCTION).addAttribute(Verilator.public)
-  decode.input(config.PC).addAttribute(Verilator.public)
-  decode.arbitration.isValid.addAttribute(Verilator.public)
-  decode.arbitration.flushAll.addAttribute(Verilator.public)
-  decode.arbitration.haltItself.addAttribute(Verilator.public)
-  if(withWriteBackStage) {
-    writeBack.input(config.INSTRUCTION) keep() addAttribute (Verilator.public)
-    writeBack.input(config.PC) keep() addAttribute (Verilator.public)
-    writeBack.arbitration.isValid keep() addAttribute (Verilator.public)
-    writeBack.arbitration.isFiring keep() addAttribute (Verilator.public)
-  }
-  decode.arbitration.removeIt.noBackendCombMerge //Verilator perf
+  val lastStageInstruction = CombInit(stages.last.input(config.INSTRUCTION)) keep() addAttribute (Verilator.public)
+  val lastStagePc = CombInit(stages.last.input(config.PC)) keep() addAttribute (Verilator.public)
+  val lastStageIsValid = CombInit(stages.last.arbitration.isValid) keep() addAttribute (Verilator.public)
+  val lastStageIsFiring = CombInit(stages.last.arbitration.isFiring) keep() addAttribute (Verilator.public)
+
+  //Verilator perf
+  decode.arbitration.removeIt.noBackendCombMerge
   if(withMemoryStage){
     memory.arbitration.removeIt.noBackendCombMerge
   }

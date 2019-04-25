@@ -329,12 +329,12 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     }
 
     //Emit dBus.cmd request
+    val cmdSent =  if(rspStage == execute) RegInit(False) setWhen(dBus.cmd.fire) clearWhen(!execute.arbitration.isStuck) else False
     val cmdStage = if(emitCmdInMemoryStage) memory else execute
     cmdStage plug new Area{
       import cmdStage._
       val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
 
-      val cmdSent =  if(rspStage == execute) RegInit(False) setWhen(dBus.cmd.fire) clearWhen(!execute.arbitration.isStuck) else False
 
       if (catchAddressMisaligned)
         insert(ALIGNEMENT_FAULT) := (dBus.cmd.size === 2 && dBus.cmd.address(1 downto 0) =/= 0) || (dBus.cmd.size === 1 && dBus.cmd.address(0 downto 0) =/= 0)
@@ -413,7 +413,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
       insert(MEMORY_READ_DATA) := dBus.rsp.data
 
-      arbitration.haltItself setWhen(arbitration.isValid && input(MEMORY_ENABLE) && !input(MEMORY_STORE) && !dBus.rsp.ready)
+      arbitration.haltItself setWhen(arbitration.isValid && input(MEMORY_ENABLE) && !input(MEMORY_STORE) && (!dBus.rsp.ready || (if(rspStage == execute) !cmdSent else False)))
 
       if(catchSomething) {
         memoryExceptionPort.valid := False

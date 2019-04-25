@@ -1411,7 +1411,7 @@ public:
     virtual void fillSimELements();
 	void dump(int i){
 		#ifdef TRACE
-		if(i == TRACE_START) cout << "START TRACE" << endl;
+		if(i == TRACE_START && i != 0) cout << "START TRACE" << endl;
 		if(i >= TRACE_START) tfp->dump(i);
 		#endif
 	}
@@ -1509,7 +1509,7 @@ public:
                 #ifndef MTIME_INSTR_FACTOR
                 mTime = i/2;
                 #else
-				mTime += top->VexRiscv->writeBack_arbitration_isFiring*MTIME_INSTR_FACTOR;
+				mTime += top->VexRiscv->lastStageIsFiring*MTIME_INSTR_FACTOR;
                 #endif
 				#endif
 				#ifdef TIMER_INTERRUPT
@@ -1554,7 +1554,7 @@ public:
                         }
                     }
 				#endif
-                if(top->VexRiscv->writeBack_arbitration_isFiring){
+                if(top->VexRiscv->lastStageIsFiring){
                    	if(riscvRefEnable) {
 //                        privilegeCounters[riscvRef.privilege]++;
 //                        if((riscvRef.stepCounter & 0xFFFFF) == 0){
@@ -1568,8 +1568,8 @@ public:
                    	    bool mIntExt = false;
                    	}
 
-                   	if(riscvRefEnable && top->VexRiscv->writeBack_PC != riscvRef.lastPc){
-						cout << hex << " pc missmatch " << top->VexRiscv->writeBack_PC << " should be " << riscvRef.lastPc << dec << endl;
+                   	if(riscvRefEnable && top->VexRiscv->lastStagePc != riscvRef.lastPc){
+						cout << hex << " pc missmatch " << top->VexRiscv->lastStagePc << " should be " << riscvRef.lastPc << dec << endl;
 						fail();
 					}
 
@@ -1578,16 +1578,16 @@ public:
                 	int32_t rfWriteAddress;
                 	int32_t rfWriteData;
 
-                    if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
+                    if(top->VexRiscv->lastStageRegFileWrite_valid == 1 && top->VexRiscv->lastStageRegFileWrite_payload_address != 0){
                     	rfWriteValid = true;
-                    	rfWriteAddress = top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address;
-                    	rfWriteData = top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data;
+                    	rfWriteAddress = top->VexRiscv->lastStageRegFileWrite_payload_address;
+                    	rfWriteData = top->VexRiscv->lastStageRegFileWrite_payload_data;
                     	#ifdef TRACE_ACCESS
                         regTraces <<
                             #ifdef TRACE_WITH_TIME
                             currentTime <<
                              #endif
-                             " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data <<  dec << endl;
+                             " PC " << hex << setw(8) <<  top->VexRiscv->lastStagePc << " : reg[" << dec << setw(2) << (uint32_t)top->VexRiscv->lastStageRegFileWrite_payload_address << "] = " << hex << setw(8) << top->VexRiscv->lastStageRegFileWrite_payload_data <<  dec << endl;
                         #endif
                     } else {
                         #ifdef TRACE_ACCESS
@@ -1595,7 +1595,7 @@ public:
                                 #ifdef TRACE_WITH_TIME
                                 currentTime <<
                                  #endif
-                                 " PC " << hex << setw(8) <<  top->VexRiscv->writeBack_PC << dec << endl;
+                                 " PC " << hex << setw(8) <<  top->VexRiscv->lastStagePc << dec << endl;
                         #endif
                     }
 					if(riscvRefEnable) if(rfWriteValid != riscvRef.rfWriteValid ||
@@ -1636,7 +1636,7 @@ public:
 		} catch (const std::exception& e) {
 			staticMutex.lock();
 
-			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->writeBack_PC << dec; //<<  " seed : " << seed <<
+			cout << "FAIL " <<  name << " at PC=" << hex << setw(8) << top->VexRiscv->lastStagePc << dec; //<<  " seed : " << seed <<
 			if(riscvRefEnable) cout << hex << " REF PC=" << riscvRef.lastPc << " REF I=" << riscvRef.lastInstruction << dec;
 			cout << " time=" << i;
 			cout << endl;
@@ -2701,9 +2701,9 @@ public:
 	}
 
 	virtual void checks(){
-		if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address != 0){
-			assertEq(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address, regFileWriteRefArray[regFileWriteRefIndex][0]);
-			assertEq(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data, regFileWriteRefArray[regFileWriteRefIndex][1]);
+		if(top->VexRiscv->lastStageRegFileWrite_valid == 1 && top->VexRiscv->lastStageRegFileWrite_payload_address != 0){
+			assertEq(top->VexRiscv->lastStageRegFileWrite_payload_address, regFileWriteRefArray[regFileWriteRefIndex][0]);
+			assertEq(top->VexRiscv->lastStageRegFileWrite_payload_data, regFileWriteRefArray[regFileWriteRefIndex][1]);
 			//printf("%d\n",i);
 
 			regFileWriteRefIndex++;
@@ -2727,8 +2727,8 @@ public:
 	}
 
 	virtual void checks(){
-		if(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_valid == 1 && top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_address == 28){
-			assertEq(top->VexRiscv->writeBack_RegFilePlugin_regFileWrite_payload_data, ref[refIndex]);
+		if(top->VexRiscv->lastStageRegFileWrite_valid == 1 && top->VexRiscv->lastStageRegFileWrite_payload_address == 28){
+			assertEq(top->VexRiscv->lastStageRegFileWrite_payload_data, ref[refIndex]);
 			//printf("%d\n",i);
 
 			refIndex++;
@@ -2755,11 +2755,11 @@ public:
 	}
 
 	virtual void checks(){
-		if(top->VexRiscv->writeBack_arbitration_isFiring && top->VexRiscv->writeBack_INSTRUCTION == 0x00000013){
+		if(top->VexRiscv->lastStageIsFiring && top->VexRiscv->lastStageInstruction == 0x00000013){
 			uint32_t instruction;
 			bool error;
-			Workspace::mem.read(top->VexRiscv->writeBack_PC, 4, (uint8_t*)&instruction);
-			//printf("%x => %x\n", top->VexRiscv->writeBack_PC, instruction );
+			Workspace::mem.read(top->VexRiscv->lastStagePc, 4, (uint8_t*)&instruction);
+			//printf("%x => %x\n", top->VexRiscv->lastStagePc, instruction );
 			if(instruction == 0x00000073){
 				uint32_t code = top->VexRiscv->RegFilePlugin_regFile[28];
 				uint32_t code2 = top->VexRiscv->RegFilePlugin_regFile[3];
