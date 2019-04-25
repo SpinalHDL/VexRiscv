@@ -27,23 +27,21 @@
 
 This repository hosts a RISC-V implementation written in SpinalHDL. Here are some specs :
 
-- RV32I[M][C] instruction set
-- Pipelined with 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
+- RV32I[M][C][A] instruction set (Atomic only inside a single core)
+- Pipelined from 2 to 5+ stages ([Fetch*X], Decode, Execute, [Memory], [WriteBack])
 - 1.44 DMIPS/Mhz --no-inline when nearly all features are enabled (1.57 DMIPS/Mhz when the divider lookup table is enabled)
-- Optimized for FPGA, fully portable
-- AXI4 and Avalon ready
+- Optimized for FPGA, do not use any vendor specific IP block / primitive
+- AXI4, Avalon, wishbone ready
 - Optional MUL/DIV extensions
 - Optional instruction and data caches
 - Optional hardware refilled MMU
 - Optional debug extension allowing Eclipse debugging via a GDB >> openOCD >> JTAG connection
-- Optional interrupts and exception handling with Machine and User modes as defined in the [RISC-V Privileged ISA Specification v1.9](https://riscv.org/specifications/privileged-isa/).
+- Optional interrupts and exception handling with Machine, [Supervisor] and [User] modes as defined in the [RISC-V Privileged ISA Specification v1.10](https://riscv.org/specifications/privileged-isa/).
 - Two implementations of shift instructions: Single cycle and shiftNumber cycles
 - Each stage can have optional bypass or interlock hazard logic
-- Compatible with the mainstream RISC-V linux port
-- Zephyr RISC-V port compatible
+- Linux compatible
+- Zephyr compatible
 - [FreeRTOS port](https://github.com/Dolu1990/FreeRTOS-RISCV)
-- The data cache supports atomic LR/SC
-- Optional RV32 compressed instruction support in the reworkFetch branch for configurations without instruction cache (will be merge in master, WIP)
 
 The hardware description of this CPU is done by using a very software oriented approach
 (without any overhead in the generated hardware). Here is a list of software concepts used:
