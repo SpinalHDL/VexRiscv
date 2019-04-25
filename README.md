@@ -12,6 +12,7 @@
   * [By using FreedomStudio](#by-using-freedomstudio)
 - [Briey SoC](#briey-soc)
 - [Murax SoC](#murax-soc)
+- [Running Linux](#running-linux)
 - [Build the RISC-V GCC](#build-the-risc-v-gcc)
 - [CPU parametrization and instantiation example](#cpu-parametrization-and-instantiation-example)
 - [Add a custom instruction to the CPU via the plugin system](#add-a-custom-instruction-to-the-cpu-via-the-plugin-system)
@@ -26,22 +27,21 @@
 
 This repository hosts a RISC-V implementation written in SpinalHDL. Here are some specs :
 
-- RV32I[M][C] instruction set
-- Pipelined with 5 stages (Fetch, Decode, Execute, Memory, WriteBack)
+- RV32I[M][C][A] instruction set (Atomic only inside a single core)
+- Pipelined from 2 to 5+ stages ([Fetch*X], Decode, Execute, [Memory], [WriteBack])
 - 1.44 DMIPS/Mhz --no-inline when nearly all features are enabled (1.57 DMIPS/Mhz when the divider lookup table is enabled)
-- Optimized for FPGA, fully portable
-- AXI4 and Avalon ready
+- Optimized for FPGA, do not use any vendor specific IP block / primitive
+- AXI4, Avalon, wishbone ready
 - Optional MUL/DIV extensions
 - Optional instruction and data caches
-- Optional MMU
+- Optional hardware refilled MMU
 - Optional debug extension allowing Eclipse debugging via a GDB >> openOCD >> JTAG connection
-- Optional interrupts and exception handling with Machine and User modes as defined in the [RISC-V Privileged ISA Specification v1.9](https://riscv.org/specifications/privileged-isa/).
+- Optional interrupts and exception handling with Machine, [Supervisor] and [User] modes as defined in the [RISC-V Privileged ISA Specification v1.10](https://riscv.org/specifications/privileged-isa/).
 - Two implementations of shift instructions: Single cycle and shiftNumber cycles
 - Each stage can have optional bypass or interlock hazard logic
-- Zephyr RISC-V port compatible
+- Linux compatible
+- Zephyr compatible
 - [FreeRTOS port](https://github.com/Dolu1990/FreeRTOS-RISCV)
-- The data cache supports atomic LR/SC
-- Optional RV32 compressed instruction support in the reworkFetch branch for configurations without instruction cache (will be merge in master, WIP)
 
 The hardware description of this CPU is done by using a very software oriented approach
 (without any overhead in the generated hardware). Here is a list of software concepts used:
@@ -66,48 +66,54 @@ The CPU configurations used below can be found in the `src/scala/vexriscv/demo` 
 
 ```
 VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass, no interrupt) ->
-  Artix 7    -> 346 Mhz 481 LUT 539 FF
-  Cyclone V  -> 201 Mhz 347 ALMs
-  Cyclone IV -> 190 Mhz 673 LUT 529 FF
-  iCE40      -> 81 Mhz 1130 LC
+  Artix 7    -> 366 Mhz 488 LUT 505 FF
+  Cyclone V  -> 181 Mhz 350 ALMs
+  Cyclone IV -> 177 Mhz 732 LUT 494 FF
+  iCE40       -> 85 Mhz 1131 LC
 
 VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass) ->
-  Artix 7    -> 340 Mhz 562 LUT 589 FF
-  Cyclone V  -> 202 Mhz 387 ALMs
-  Cyclone IV -> 180 Mhz 780 LUT 579 FF
-  iCE40      -> 71 Mhz 1278 LC
+  Artix 7    -> 317 Mhz 539 LUT 559 FF
+  Cyclone V  -> 191 Mhz 393 ALMs
+  Cyclone IV -> 171 Mhz 826 LUT 547 FF
+  iCE40      -> 72 Mhz 1284 LC
 
 VexRiscv small and productive (RV32I, 0.82 DMIPS/Mhz)  ->
-  Artix 7    -> 327 Mhz 698 LUT 558 FF
-  Cyclone V  -> 158 Mhz 524 ALMs
-  Cyclone IV -> 146 Mhz 1,061 LUT 552 FF
-  iCE40      -> 55 Mhz 1541 LC
+  Artix 7    -> 338 Mhz 697 LUT 527 FF
+  Cyclone V  -> 149 Mhz 495 ALMs
+  Cyclone IV -> 137 Mhz 1,103 LUT 522 FF
+  iCE40      -> 65 Mhz 1593 LC
 
-VexRiscv small and productive with I$ (RV32I, 0.72 DMIPS/Mhz, 4KB-I$)  ->
-  Artix 7    -> 331 Mhz 727 LUT 600 FF
-  Cyclone V  -> 152 Mhz 536 ALMs
-  Cyclone IV -> 156 Mhz 1,075 LUT 565 FF
-  iCE40      -> 54 Mhz 1686 LC
+VexRiscv small and productive with I$ (RV32I, 0.70 DMIPS/Mhz, 4KB-I$)  ->
+  Artix 7    -> 314 Mhz 721 LUT 562 FF
+  Cyclone V  -> 152 Mhz 504 ALMs
+  Cyclone IV -> 142 Mhz 1,146 LUT 528 FF
+  iCE40      -> 69 Mhz 1661 LC
 
-VexRiscv full no cache (RV32IM, 1.22 DMIPS/Mhz, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
-  Artix 7    -> 295 Mhz 1399 LUT 971 FF
-  Cyclone V  -> 151 Mhz 922 ALMs
-  Cyclone IV -> 136 Mhz 1,859 LUT 992 FF
+VexRiscv full no cache (RV32IM, 1.21 DMIPS/Mhz 2.30 Coremark/Mhz, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
+  Artix 7    -> 325 Mhz 1448 LUT 976 FF
+  Cyclone V  -> 141 Mhz 957 ALMs
+  Cyclone IV -> 139 Mhz 2,001 LUT 966 FF
 
-VexRiscv full (RV32IM, 1.21 DMIPS/Mhz with cache trashing, 4KB-I$,4KB-D$, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
-  Artix 7    -> 253 Mhz 1840 LUT 1394 FF
-  Cyclone V  -> 126 Mhz 1,172 ALMs
-  Cyclone IV -> 117 Mhz 2,548 LUT 1,703 FF
+VexRiscv full (RV32IM, 1.21 DMIPS/Mhz 2.30 Coremark/Mhz with cache trashing, 4KB-I$,4KB-D$, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
+  Artix 7    -> 241 Mhz 1692 LUT 1202 FF
+  Cyclone V  -> 132 Mhz 1,127 ALMs
+  Cyclone IV -> 124 Mhz 2,296 LUT 1,115 FF
 
-VexRiscv full max perf -> (RV32IM, 1.44 DMIPS/Mhz, 16KB-I$,16KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch prediction in the fetch stage, branch and shift operations done in the Execute stage) ->
-  Artix 7    -> 183 Mhz 1813 LUT 1424 FF
-  Cyclone V  -> 93 Mhz 1,253 ALMs
-  Cyclone IV -> 84 Mhz 2,642 LUT 1,711 FF
+VexRiscv full max dmips/mhz -> (RV32IM, 1.44 DMIPS/Mhz 2.70 Coremark/Mhz,, 16KB-I$,16KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch prediction in the fetch stage, branch and shift operations done in the Execute stage) ->
+  Artix 7    -> 195 Mhz 1824 LUT 1110 FF
+  Cyclone V  -> 83 Mhz 1,067 ALMs
+  Cyclone IV -> 78 Mhz 2,335 LUT 1,045 FF
 
-VexRiscv full with MMU (RV32IM, 1.26 DMIPS/Mhz with cache trashing, 4KB-I$, 4KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, MMU) ->
-  Artix 7    -> 214 Mhz 2070 LUT 1913 FF
-  Cyclone V  -> 108 Mhz 1,430 ALMs
-  Cyclone IV -> 100 Mhz 2,976 LUT 2,201 FF
+VexRiscv full with MMU (RV32IM, 1.24 DMIPS/Mhz 2.35 Coremark/Mhz, with cache trashing, 4KB-I$, 4KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, MMU) ->
+  Artix 7    -> 218 Mhz 1966 LUT 1551 FF
+  Cyclone V  -> 123 Mhz 1,298 ALMs
+  Cyclone IV -> 109 Mhz 2,703 LUT 1,498 FF
+
+VexRiscv linux balanced (RV32IMA, 1.21 DMIPS/Mhz 2.27 Coremark/Mhz, with cache trashing, 4KB-I$, 4KB-D$, single cycle barrel shifter, catch exceptions, static branch, MMU, Supervisor, Compatible with mainstream linux) ->
+  Artix 7    -> 239 Mhz 2483 LUT 2134 FF
+  Cyclone V  -> 130 Mhz 1,636 ALMs
+  Cyclone IV -> 116 Mhz 3,324 LUT 2,010 FF
+
 ```
 
 The following configuration results in 1.44 DMIPS/MHz:
@@ -177,6 +183,9 @@ NOTES:
    do a "sbt clean compile publish-local" in it as described in the dependencies chapter.
 
 ## Regression tests
+
+[![Build Status](https://travis-ci.org/SpinalHDL/VexRiscv.svg?branch=master)](https://travis-ci.org/SpinalHDL/VexRiscv)
+
 To run tests (need the verilator simulator), go in the src/test/cpp/regression folder and run :
 
 ```sh
@@ -223,7 +232,19 @@ continue
 
 ## Using Eclipse to run the software and debug it
 
-### By using Zylin plugin
+### By using gnu-mcu-eclipse
+
+You can download releases of the IDE here : https://github.com/gnu-mcu-eclipse/org.eclipse.epp.packages/releases
+
+In the IDE, you can import a makefile project by :
+- file -> import -> C/C++ -> existing Code as Makefile Project
+- Select the folder which contain the makefile, select "Cross GCC" (not "RISC-V Cross GCC")
+
+To create a new debug configuration :
+- run -> Debug Configurations -> GDB OpenOCD Debugging double click
+- Look at https://drive.google.com/open?id=1c46tyEV0xLwOsk76b0y2qqs8CYy7Zq3f for a configuration example
+
+### By using Zylin plugin (old)
 You can use the Eclipse + Zylin embedded CDT plugin to do it (http://opensource.zylin.com/embeddedcdt.html). Tested with Helios Service Release 2 (http://www.Eclipse.org/downloads/download.php?file=/technology/epp/downloads/release/helios/SR2/Eclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz) and the corresponding zylin plugin.
 
 To following commands will download Eclipse and install the plugin.
@@ -237,13 +258,6 @@ cd eclipse
 See https://drive.google.com/drive/folders/1NseNHH05B6lmIXqQFVwK8xRjWE4ydeG-?usp=sharing to import a makefile project and create a debug configuration.
 
 Note that sometime this Eclipse need to be restarted in order to be able to place new breakpoints.
-
-### By using FreedomStudio
-
-You can get FreedomStudio (which is package with Eclipse and some plugins) here: https://www.sifive.com/products/tools/
-
-See https://drive.google.com/drive/folders/1a7FyMOYgFc9UDhfsWUSCjyqDCvOrts2J?usp=sharing to import a makefile project and create a debug configuration.
-
 
 ## Briey SoC
 As a demonstrator, a SoC named Briey is implemented in `src/main/scala/vexriscv/demo/Briey.scala`. This SoC is very similar to
@@ -282,9 +296,9 @@ You can find some FPGA projects which instantiate the Briey SoC here (DE1-SoC, D
 Here are some measurements of Briey SoC timings and area :
 
 ```
-  Artix 7    -> 239 Mhz 3227 LUT 3410 FF
-  Cyclone V  -> 125 Mhz 2,207 ALMs
-  Cyclone IV -> 112 Mhz 4,594 LUT 3,620
+  Artix 7    -> 232 Mhz 3042 LUT 3281 FF
+  Cyclone V  -> 138 Mhz 2,179 ALMs
+  Cyclone IV -> 120 Mhz 4,333 LUT 3,167 FF
 ```
 
 ## Murax SoC
@@ -337,18 +351,16 @@ Here are some timing and area measurements of the Murax SoC:
 
 ```
 Murax interlocked stages (0.45 DMIPS/Mhz, 8 bits GPIO) ->
-  Artix 7    -> 299 Mhz 984 LUT 1186 FF
-  Cyclone V  -> 175 Mhz 710 ALMs
-  Cyclone IV -> 137 Mhz 1,436 LUT 1,193 FF
-  iCE40      -> 48 Mhz 2337 LC (icestorm)
-  iCE40Ultra -> 20 Mhz 2337 LC (icestorm)
+  Artix 7 -   > 301 Mhz 1032 LUT 1199 FF
+  Cyclone V  -> 183 Mhz 736 ALMs
+  Cyclone IV -> 148 Mhz 1,481 LUT 1,204 FF
+  iCE40      ->  69 Mhz 2403 LC (nextpnr)
 
 MuraxFast bypassed stages (0.65 DMIPS/Mhz, 8 bits GPIO) ->
-  Artix 7    -> 294 Mhz 1128 LUT 1219 FF
-  Cyclone V  -> 165 Mhz 840 ALMs
-  Cyclone IV -> 141 Mhz 1,680 LUT 1,227 FF
-  iCE40      -> 48 Mhz 2702 LC (icestorm)
-  iCE40Ultra -> 22 Mhz 2702 LC (icestorm)
+  Artix 7    -> 321 Mhz 1198 LUT 1298 FF
+  Cyclone V  -> 165 Mhz 873 ALMs
+  Cyclone IV -> 145 Mhz 1,691 LUT 1,239 FF
+  iCE40      ->  61 Mhz 2778 LC (nextpnr)
 ```
 
 Some scripts to generate the SoC and call the icestorm toolchain can be found here: `scripts/Murax/`
@@ -361,6 +373,18 @@ To run it :
 # This will generate the Murax RTL + run its testbench. You need Verilator 3.9xx installated.
 sbt "test:runMain vexriscv.MuraxSim"
 ```
+
+## Running Linux
+
+A default configuration is located in src/main/scala/vexriscv/demo/Linux.scala
+
+This file also contains 
+- The commands to compile the buildroot image
+- How to run the Verilator simulation in interative mode
+
+There is currently no SoC to run it on hardware, it is WIP. But the CPU simulation can already boot linux and run user space application (even python).
+
+Note that VexRiscv can run Linux on both cache full and cache less design.
 
 ## Build the RISC-V GCC
 
@@ -855,7 +879,7 @@ The down side is that this predictor has a long combinatorial path coming from t
 
 #### DBusSimplePlugin
 
-This plugin implements the load and store instructions (LB/LH/LW/LBU/LHU/LWU/SB/SH/SW) via a simple and neutral memory bus going out of the CPU.
+This plugin implements the load and store instructions (LB/LH/LW/LBU/LHU/LWU/SB/SH/SW) via a simple memory bus going out of the CPU.
 
 | Parameters | type | description |
 | ------ | ----------- | ------ |
@@ -901,7 +925,7 @@ There is at least one cycle latency between a cmd and the corresponding rsp. The
 
 #### DBusCachedPlugin
 
-Single way cache implementation with a victim buffer. (Documentation is WIP)
+Multi way cache implementation with writh-through and allocate on read strategy. (Documentation is WIP)
 
 #### MulPlugin
 
@@ -970,10 +994,10 @@ stage before jumping to mtvec.
 
 Static memory translator plugin which allows one to specify which range of the memory addresses is IO mapped and shouldn't be cached.
 
-#### MemoryTranslatorPlugin
+#### MmuPlugin
 
-Simple software refilled MMU implementation. Allows others plugins such as DBusCachedPlugin/IBusCachedPlugin to instanciate memory address translation ports. Each port has a small dedicated
-fully associative TLB cache which is refilled from a larger software filled TLB cache via a query which looks up one entry per cycle.
+Hardware refilled MMU implementation. Allows others plugins such as DBusCachedPlugin/IBusCachedPlugin to instanciate memory address translation ports. Each port has a small dedicated
+fully associative TLB cache which is refilled automaticaly via a dbus access sharing.
 
 #### DebugPlugin
 

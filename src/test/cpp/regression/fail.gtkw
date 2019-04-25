@@ -1,56 +1,29 @@
 [*]
-[*] GTKWave Analyzer v3.3.58 (w)1999-2014 BSI
-[*] Tue Jul 25 21:44:42 2017
+[*] GTKWave Analyzer v3.3.100 (w)1999-2019 BSI
+[*] Thu Apr 25 14:41:35 2019
 [*]
-[dumpfile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/regression/debugPluginExternal.vcd"
-[dumpfile_mtime] "Tue Jul 25 21:44:34 2017"
-[dumpfile_size] 961355289
-[savefile] "/home/spinalvm/Spinal/VexRiscv/src/test/cpp/regression/fail.gtkw"
-[timestart] 3644000
-[size] 1776 953
-[pos] -775 -353
-*-19.000000 4619595 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
+[dumpfile] "/home/miaou/pro/VexRiscv/src/test/cpp/regression/C.SLLI.vcd"
+[dumpfile_mtime] "Thu Apr 25 14:39:03 2019"
+[dumpfile_size] 295925
+[savefile] "/home/miaou/pro/VexRiscv/src/test/cpp/regression/fail.gtkw"
+[timestart] 0
+[size] 1920 1030
+[pos] -458 -215
+*-2.000000 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1 -1
 [treeopen] TOP.
-[treeopen] TOP.VexRiscv.
-[treeopen] TOP.VexRiscv.mixedDivider_1.
-[sst_width] 201
-[signals_width] 418
+[sst_width] 196
+[signals_width] 366
 [sst_expanded] 1
-[sst_vpaned_height] 279
+[sst_vpaned_height] 299
 @28
-TOP.VexRiscv.DebugPlugin_haltIt
+TOP.VexRiscv.lastStageIsValid
+TOP.VexRiscv.lastStageIsFiring
 @22
-TOP.VexRiscv.debug_bus_cmd_payload_address[7:0]
-TOP.VexRiscv.debug_bus_cmd_payload_data[31:0]
+TOP.VexRiscv.lastStageInstruction[31:0]
+TOP.VexRiscv.lastStagePc[31:0]
+TOP.VexRiscv.lastStageRegFileWrite_payload_address[4:0]
+TOP.VexRiscv.lastStageRegFileWrite_payload_data[31:0]
 @28
-TOP.VexRiscv.debug_bus_cmd_payload_wr
-TOP.VexRiscv.debug_bus_cmd_ready
-@29
-TOP.VexRiscv.debug_bus_cmd_valid
-@22
-TOP.VexRiscv.debug_bus_rsp_data[31:0]
-[color] 2
-TOP.VexRiscv.dBus_cmd_payload_address[31:0]
-[color] 2
-TOP.VexRiscv.dBus_cmd_payload_data[31:0]
-@28
-[color] 2
-TOP.VexRiscv.dBus_cmd_payload_size[1:0]
-[color] 2
-TOP.VexRiscv.dBus_cmd_payload_wr
-[color] 2
-TOP.VexRiscv.dBus_cmd_ready
-[color] 2
-TOP.VexRiscv.dBus_cmd_valid
-@22
-[color] 2
-TOP.VexRiscv.dBus_rsp_data[31:0]
-@28
-[color] 2
-TOP.VexRiscv.dBus_rsp_error
-[color] 2
-TOP.VexRiscv.dBus_rsp_ready
-@22
-TOP.VexRiscv.DebugPlugin_busReadDataReg[31:0]
+TOP.VexRiscv.lastStageRegFileWrite_valid
 [pattern_trace] 1
 [pattern_trace] 0

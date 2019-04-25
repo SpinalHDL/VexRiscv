@@ -4,7 +4,7 @@ import vexriscv._
 import spinal.core._
 object IntAluPlugin{
   object AluBitwiseCtrlEnum extends SpinalEnum(binarySequential){
-    val XOR, OR, AND, SRC1 = newElement()
+    val XOR, OR, AND = newElement()
   }
   object AluCtrlEnum extends SpinalEnum(binarySequential){
     val ADD_SUB, SLT_SLTU, BITWISE = newElement()
@@ -70,7 +70,7 @@ class IntAluPlugin extends Plugin[VexRiscv]{
     ))
 
     decoderService.add(List(
-      LUI   -> (otherAction ++ List(ALU_CTRL -> AluCtrlEnum.BITWISE, ALU_BITWISE_CTRL -> AluBitwiseCtrlEnum.SRC1, SRC1_CTRL -> Src1CtrlEnum.IMU)),
+      LUI   -> (otherAction ++ List(ALU_CTRL -> AluCtrlEnum.ADD_SUB, SRC1_CTRL -> Src1CtrlEnum.IMU, SRC_USE_SUB_LESS -> False, SRC_ADD_ZERO -> True)),
       AUIPC -> (otherAction ++ List(ALU_CTRL -> AluCtrlEnum.ADD_SUB, SRC_USE_SUB_LESS -> False, SRC1_CTRL -> Src1CtrlEnum.IMU, SRC2_CTRL -> Src2CtrlEnum.PC))
     ))
   }
@@ -86,8 +86,7 @@ class IntAluPlugin extends Plugin[VexRiscv]{
       val bitwise = input(ALU_BITWISE_CTRL).mux(
         AluBitwiseCtrlEnum.AND  -> (input(SRC1) & input(SRC2)),
         AluBitwiseCtrlEnum.OR   -> (input(SRC1) | input(SRC2)),
-        AluBitwiseCtrlEnum.XOR  -> (input(SRC1) ^ input(SRC2)),
-        AluBitwiseCtrlEnum.SRC1 ->  input(SRC1)
+        AluBitwiseCtrlEnum.XOR  -> (input(SRC1) ^ input(SRC2))
       )
 
       // mux results

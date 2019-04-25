@@ -10,11 +10,13 @@ ISA_TEST?=yes
 MUL?=yes
 DIV?=yes
 CSR?=yes
+CSR_SKIP_TEST?=no
 EBREAK?=no
 FENCEI?=no
 MMU?=yes
 SEED?=no
-ATOMIC?=no
+LRSC?=no
+AMO?=no
 NO_STALL?=no
 DEBUG_PLUGIN?=STD
 DEBUG_PLUGIN_EXTERNAL?=no
@@ -22,16 +24,19 @@ RUN_HEX=no
 CUSTOM_SIMD_ADD?=no
 CUSTOM_CSR?=no
 DHRYSTONE=yes
-FREERTOS=no
+FREERTOS?=no
+ZEPHYR?=no
 REDO?=10
 REF=no
 TRACE_WITH_TIME=no
 REF_TIME=no
-THREAD_COUNT?=4
+THREAD_COUNT?=$(shell nproc)
 MTIME_INSTR_FACTOR?=no
 COMPRESSED?=no
+SUPERVISOR?=no
 STOP_ON_ERROR?=no
-
+COREMARK=no
+WITH_USER_IO?=no
 
 ADDCFLAGS += -CFLAGS -DIBUS_${IBUS}
 ADDCFLAGS += -CFLAGS -DDBUS_${DBUS}
@@ -45,6 +50,59 @@ ifeq ($(DEBUG),yes)
 else
 	ADDCFLAGS += -CFLAGS -O3  -O3
 endif
+
+
+
+ifeq ($(LITEX),yes)
+	ADDCFLAGS += -CFLAGS -DLITEX
+	ADDCFLAGS += -CFLAGS -DVMLINUX='\"$(VMLINUX)\"'
+	ADDCFLAGS += -CFLAGS -DDTB='\"$(DTB)\"'
+	ADDCFLAGS += -CFLAGS -DRAMDISK='\"$(RAMDISK)\"'
+	ADDCFLAGS += -CFLAGS -DEMULATOR='\"$(EMULATOR)\"'
+endif
+
+ifeq ($(LINUX_SOC),yes)
+	ADDCFLAGS += -CFLAGS -DLINUX_SOC
+	ADDCFLAGS += -CFLAGS -DVMLINUX='\"$(VMLINUX)\"'
+	ADDCFLAGS += -CFLAGS -DDTB='\"$(DTB)\"'
+	ADDCFLAGS += -CFLAGS -DRAMDISK='\"$(RAMDISK)\"'
+	ADDCFLAGS += -CFLAGS -DEMULATOR='\"$(EMULATOR)\"'
+endif
+
+ARCH_LINUX=rv32i
+ifeq ($(MUL),yes)
+ifeq ($(DIV),yes)
+ARCH_LINUX:=$(ARCH_LINUX)m
+endif
+endif
+ARCH_LINUX:=$(ARCH_LINUX)a
+ifeq ($(COMPRESSED),yes)
+ARCH_LINUX:=$(ARCH_LINUX)c
+endif
+
+ifeq ($(LINUX_REGRESSION),yes)
+ifneq ($(ARCH_LINUX),rv32iac)
+ifneq ($(ARCH_LINUX),rv32ia)
+	ADDCFLAGS += -CFLAGS -DLINUX_REGRESSION
+	ADDCFLAGS += -CFLAGS -DARCH_LINUX='\"$(ARCH_LINUX)\"'
+	ADDCFLAGS += -CFLAGS -DVMLINUX='\"../../resources/VexRiscvRegressionData/sim/linux/$(ARCH_LINUX)/Image\"'
+	ADDCFLAGS += -CFLAGS -DDTB='\"../../resources/VexRiscvRegressionData/sim/linux/$(ARCH_LINUX)/rv32.dtb\"'
+	ADDCFLAGS += -CFLAGS -DRAMDISK='\"../../resources/VexRiscvRegressionData/sim/linux/$(ARCH_LINUX)/rootfs.cpio\"'
+	ADDCFLAGS += -CFLAGS -DEMULATOR='\"../../resources/VexRiscvRegressionData/sim/linux/emulator/emulator.bin\"'
+endif
+endif
+endif
+
+
+ifeq ($(FLOW_INFO),yes)
+	ADDCFLAGS += -CFLAGS -DFLOW_INFO
+endif
+
+
+ifeq ($(COREMARK),yes)
+	ADDCFLAGS += -CFLAGS -DCOREMARK
+endif
+
 
 
 ifneq ($(shell grep timerInterrupt ../../../../VexRiscv.v -w),)
@@ -63,11 +121,17 @@ endif
 ifeq ($(IBUS_TC),yes)
 	ADDCFLAGS += -CFLAGS -DIBUS_TC=yes
 endif
+ifeq ($(WITH_USER_IO),yes)
+	ADDCFLAGS += -CFLAGS -DWITH_USER_IO=yes
+endif
+
 
 ifeq ($(COMPRESSED),yes)
 	ADDCFLAGS += -CFLAGS -DCOMPRESSED
 endif
-
+ifeq ($(SUPERVISOR),yes)
+	ADDCFLAGS += -CFLAGS -DSUPERVISOR
+endif
 ifeq ($(FENCEI),yes)
 	ADDCFLAGS += -CFLAGS -DFENCEI
 endif
@@ -110,9 +174,17 @@ ifeq ($(CSR),yes)
 	ADDCFLAGS += -CFLAGS -DCSR
 endif
 
+ifeq ($(CSR_SKIP_TEST),yes)
+	ADDCFLAGS += -CFLAGS -DCSR_SKIP_TEST
+endif
 
-ifeq ($(ATOMIC),yes)
-	ADDCFLAGS += -CFLAGS -DATOMIC
+
+ifeq ($(LRSC),yes)
+	ADDCFLAGS += -CFLAGS -DLRSC
+endif
+
+ifeq ($(AMO),yes)
+	ADDCFLAGS += -CFLAGS -DAMO
 endif
 
 ifeq ($(CUSTOM_SIMD_ADD),yes)
@@ -175,6 +247,17 @@ ifneq ($(FREERTOS),no)
 endif
 endif
 
+
+ifeq ($(ZEPHYR),yes)
+	ADDCFLAGS += -CFLAGS -DZEPHYR
+	ADDCFLAGS += -CFLAGS -DZEPHYR_COUNT=99999
+else
+ifneq ($(ZEPHYR),no)
+    ADDCFLAGS += -CFLAGS -DZEPHYR
+    ADDCFLAGS += -CFLAGS -DZEPHYR_COUNT=$(ZEPHYR)
+endif
+endif
+
 all: clean run
 
 run: compile
@@ -183,7 +266,7 @@ run: compile
 verilate: ../../../../VexRiscv.v
 	rm -f VexRiscv.v*.bin
 	cp ../../../../VexRiscv.v*.bin . | true
-	verilator -cc  ../../../../VexRiscv.v  -O3 -CFLAGS -std=c++11 -LDFLAGS -pthread  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-UNOPTFLAT -Wno-WIDTH --x-assign 0 --exe main.cpp
+	verilator -cc  ../../../../VexRiscv.v  -O3 -CFLAGS -std=c++11 -LDFLAGS -pthread  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-UNOPTFLAT -Wno-WIDTH --x-assign unique --exe main.cpp
  	
 compile: verilate
 	make  -j${THREAD_COUNT} -C obj_dir/ -f VVexRiscv.mk VVexRiscv

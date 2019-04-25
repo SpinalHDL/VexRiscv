@@ -1,0 +1,16 @@
+OUTPUT_ARCH( "riscv" )
+
+MEMORY {
+  onChipRam (W!RX)/*(RX)*/ : ORIGIN = 0x80000000, LENGTH = 128K
+}
+
+SECTIONS
+{
+
+   .crt_section :
+   {
+    . = ALIGN(4);
+    *crt.o(.text)
+   } > onChipRam
+
+}
