@@ -143,7 +143,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
     decoderService.add(FENCE, Nil)
 
     mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA ,memoryTranslatorPortConfig)
-    redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.writeBack)
+    redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(if(pipeline.writeBack != null) pipeline.writeBack else pipeline.execute)
 
     if(catchSomething)
       exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(pipeline.writeBack)

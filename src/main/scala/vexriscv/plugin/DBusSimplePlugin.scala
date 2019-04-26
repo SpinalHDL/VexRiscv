@@ -309,7 +309,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
     if(memoryTranslatorPortConfig != null) {
       mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA, memoryTranslatorPortConfig)
-      redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.memory)
+      redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(if(pipeline.memory != null) pipeline.memory else pipeline.execute)
     }
   }
 
