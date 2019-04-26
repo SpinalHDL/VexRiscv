@@ -250,8 +250,9 @@ class MmuPlugin(ioRange : UInt => Bool,
       }
     }
 
-    writeBack plug new Area{
-      import writeBack._
+    val fenceStage = stages.last
+    fenceStage plug new Area{
+      import fenceStage._
       when(arbitration.isValid && input(IS_SFENCE_VMA)){ // || csrService.isWriting(CSR.SATP)
         for(port <- core.ports; line <- port.cache) line.valid := False //Assume that the instruction already fetched into the pipeline are ok
       }
