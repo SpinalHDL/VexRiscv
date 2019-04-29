@@ -141,8 +141,8 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
       val haltIt = RegInit(False)
       val stepIt = RegInit(False)
 
-      val isPipActive = RegNext(stages.map(_.arbitration.isValid).orR)
-      val isPipBusy = isPipActive || RegNext(isPipActive)
+      val isPipBusy = RegNext(stages.map(_.arbitration.isValid).orR || iBusFetcher.incoming())
+      val godmode = RegInit(False) setWhen(haltIt && !isPipBusy)
       val haltedByBreak = RegInit(False)
 
       val hardwareBreakpoints = Vec(Reg(new Bundle{
@@ -176,6 +176,7 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
               resetIt setWhen (io.bus.cmd.data(16)) clearWhen (io.bus.cmd.data(24))
               haltIt setWhen (io.bus.cmd.data(17)) clearWhen (io.bus.cmd.data(25))
               haltedByBreak clearWhen (io.bus.cmd.data(25))
+              godmode clearWhen(io.bus.cmd.data(25))
             }
           }
           is(0x1) {
@@ -219,10 +220,6 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
         }
       }
 
-      when(stepIt && Cat(pipeline.stages.map(_.arbitration.redoIt)).asBits.orR) {
-        haltIt := False
-      }
-
       //Avoid having two C instruction executed in a single step
       if(pipeline(RVC_GEN)){
         val cleanStep = RegNext(stepIt && decode.arbitration.isFiring) init(False)
@@ -236,10 +233,17 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
           service(classOf[InterruptionInhibitor]).inhibateInterrupts()
         }
       }
-      if(serviceExist(classOf[ExceptionInhibitor])) {
-        when(haltIt) {
-          service(classOf[ExceptionInhibitor]).inhibateException()
+
+      when(godmode) {
+        pipeline.plugins.foreach{
+          case p : ExceptionInhibitor => p.inhibateException()
+          case _ =>
         }
+        pipeline.plugins.foreach{
+          case p : PrivilegeService => p.forceMachine()
+          case _ =>
+        }
+        if(pipeline.things.contains(DEBUG_BYPASS_CACHE)) pipeline(DEBUG_BYPASS_CACHE) := True
       }
     }}
   }

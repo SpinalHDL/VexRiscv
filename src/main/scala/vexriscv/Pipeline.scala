@@ -7,21 +7,21 @@ import spinal.lib._
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 
-trait PipelineConfig[T]
+trait PipelineThing[T]
 
 trait Pipeline {
   type T <: Pipeline
   val plugins = ArrayBuffer[Plugin[T]]()
   var stages = ArrayBuffer[Stage]()
   var unremovableStages = mutable.Set[Stage]()
-  val configs = mutable.HashMap[PipelineConfig[_], Any]()
+  val things = mutable.HashMap[PipelineThing[_], Any]()
 //  val services = ArrayBuffer[Any]()
 
   def indexOf(stage : Stage) = stages.indexOf(stage)
 
   def service[T](clazz : Class[T]) = {
     val filtered = plugins.filter(o => clazz.isAssignableFrom(o.getClass))
-    assert(filtered.length == 1)
+    assert(filtered.length == 1, s"??? ${clazz.getName}")
     filtered.head.asInstanceOf[T]
   }
 
@@ -37,15 +37,22 @@ trait Pipeline {
     filtered.head.asInstanceOf[T]
   }
 
-  def update[T](that : PipelineConfig[T], value : T) : Unit = configs(that) = value
-  def apply[T](that : PipelineConfig[T]) : T = configs(that).asInstanceOf[T]
+  def update[T](that : PipelineThing[T], value : T) : Unit = things(that) = value
+  def apply[T](that : PipelineThing[T]) : T = things(that).asInstanceOf[T]
 
   def build(): Unit ={
     plugins.foreach(_.pipeline = this.asInstanceOf[T])
     plugins.foreach(_.setup(this.asInstanceOf[T]))
 
+    plugins.foreach{ p =>
+      p.parentScope = Component.current.dslBody //Put the given plugin as a child of the current component
+      p.reflectNames()
+    }
+
     //Build plugins
     plugins.foreach(_.build(this.asInstanceOf[T]))
+
+
 
     //Interconnect stages
     class KeyInfo{
@@ -112,7 +119,7 @@ trait Pipeline {
             inputDefault := stage.inserts(key)
           } else {
             val stageBefore = stages(stageIndex - 1)
-            inputDefault := RegNextWhen(stageBefore.output(key), !stage.arbitration.isStuck).setName(s"${stageBefore.getName()}_to_${stage.getName()}_${key.getName()}")
+            inputDefault := RegNextWhen(stageBefore.output(key), stage.dontSample.getOrElse(key, Nil).foldLeft(!stage.arbitration.isStuck)(_ && !_)).setName(s"${stageBefore.getName()}_to_${stage.getName()}_${key.getName()}")
           }
         }
       }

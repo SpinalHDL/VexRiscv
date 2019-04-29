@@ -45,29 +45,42 @@ class VexRiscvUniverse extends ConfigUniverse
 object VexRiscvUniverse{
   val CATCH_ALL = new VexRiscvUniverse
   val MMU = new VexRiscvUniverse
+  val FORCE_MULDIV = new VexRiscvUniverse
+  val SUPERVISOR = new VexRiscvUniverse
+  val NO_WRITEBACK = new VexRiscvUniverse
+  val NO_MEMORY = new VexRiscvUniverse
+  val EXECUTE_RF = new VexRiscvUniverse
+}
 
-  val universes = List(CATCH_ALL, MMU)
+
+object Hack{
+  var dCounter = 0
 }
 
 class ShiftDimension extends VexRiscvDimension("Shift") {
-  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = random(r, List(
-    new VexRiscvPosition("FullLate") {
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    var l = List(
+      new VexRiscvPosition("FullEarly") {
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new FullBarrelShifterPlugin(earlyInjection = true)
+      },
+      new VexRiscvPosition("Light") {
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new LightShifterPlugin
+      }
+    )
+
+    if(!universes.contains(VexRiscvUniverse.NO_MEMORY)) l = new VexRiscvPosition("FullLate") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new FullBarrelShifterPlugin(earlyInjection = false)
-    },
-    new VexRiscvPosition("FullEarly") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new FullBarrelShifterPlugin(earlyInjection = true)
-    },
-    new VexRiscvPosition("Light") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new LightShifterPlugin
-    }
-  ))
+    } :: l
+
+    random(r, l)
+  }
 }
 
 class BranchDimension extends VexRiscvDimension("Branch") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-    val early = r.nextBoolean()
+    val early = r.nextBoolean() || universes.contains(VexRiscvUniverse.NO_MEMORY)
     new VexRiscvPosition(if(early) "Early" else "Late") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new BranchPlugin(
         earlyBranch = early,
@@ -81,57 +94,67 @@ class BranchDimension extends VexRiscvDimension("Branch") {
 
 class MulDivDimension extends VexRiscvDimension("MulDiv") {
 
-  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = random(r, List(
-    new VexRiscvPosition("NoMulDiv") {
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
+    val noWriteBack = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
+
+    var l = List[VexRiscvPosition]()
+    if(!noMemory) {
+      l =  new VexRiscvPosition("MulDivAsic") {
+        override def testParam = "MUL=yes DIV=yes"
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new MulDivIterativePlugin(
+            genMul = true,
+            genDiv = true,
+            mulUnrollFactor = 32,
+            divUnrollFactor = 4
+          )
+        }
+      } :: new VexRiscvPosition("MulDivFpgaNoDsp") {
+        override def testParam = "MUL=yes DIV=yes"
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new MulDivIterativePlugin(
+            genMul = true,
+            genDiv = true,
+            mulUnrollFactor = 1,
+            divUnrollFactor = 1
+          )
+        }
+      } :: new VexRiscvPosition("MulDivFpgaNoDspFastMul") {
+        override def testParam = "MUL=yes DIV=yes"
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new MulDivIterativePlugin(
+            genMul = true,
+            genDiv = true,
+            mulUnrollFactor = 8,
+            divUnrollFactor = 1
+          )
+        }
+      } :: l
+    }
+
+    if(!universes.contains(VexRiscvUniverse.FORCE_MULDIV)) l = new VexRiscvPosition("NoMulDiv") {
       override def applyOn(config: VexRiscvConfig): Unit = {}
       override def testParam = "MUL=no DIV=no"
-    },
-    new VexRiscvPosition("MulDivFpga") {
-      override def testParam = "MUL=yes DIV=yes"
-      override def applyOn(config: VexRiscvConfig): Unit = {
-        config.plugins += new MulPlugin
-        config.plugins += new MulDivIterativePlugin(
-          genMul = false,
-          genDiv = true,
-          mulUnrollFactor = 32,
-          divUnrollFactor = 1
-        )
-      }
-    },
-    new VexRiscvPosition("MulDivAsic") {
-      override def testParam = "MUL=yes DIV=yes"
-      override def applyOn(config: VexRiscvConfig): Unit = {
-        config.plugins += new MulDivIterativePlugin(
-          genMul = true,
-          genDiv = true,
-          mulUnrollFactor = 32,
-          divUnrollFactor = 4
-        )
-      }
-    },
-    new VexRiscvPosition("MulDivFpgaNoDsp") {
-      override def testParam = "MUL=yes DIV=yes"
-      override def applyOn(config: VexRiscvConfig): Unit = {
-        config.plugins += new MulDivIterativePlugin(
-          genMul = true,
-          genDiv = true,
-          mulUnrollFactor = 1,
-          divUnrollFactor = 1
-        )
-      }
-    },
-    new VexRiscvPosition("MulDivFpgaNoDspFastMul") {
-      override def testParam = "MUL=yes DIV=yes"
-      override def applyOn(config: VexRiscvConfig): Unit = {
-        config.plugins += new MulDivIterativePlugin(
-          genMul = true,
-          genDiv = true,
-          mulUnrollFactor = 8,
-          divUnrollFactor = 1
-        )
-      }
-    }
-  ))
+    } :: l
+
+
+    if(!noMemory && !noWriteBack) l =
+      new VexRiscvPosition("MulDivFpga") {
+        override def testParam = "MUL=yes DIV=yes"
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new MulPlugin
+          config.plugins += new MulDivIterativePlugin(
+            genMul = false,
+            genDiv = true,
+            mulUnrollFactor = 32,
+            divUnrollFactor = 1
+          )
+        }
+      } :: l
+
+    random(r, l)
+  }
 }
 
 trait InstructionAnticipatedPosition{
@@ -139,26 +162,30 @@ trait InstructionAnticipatedPosition{
 }
 
 class RegFileDimension extends VexRiscvDimension("RegFile") {
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    val executeRf = universes.contains(VexRiscvUniverse.EXECUTE_RF)
+    random(r, List(
+      new VexRiscvPosition("Async" + (if(executeRf) "ER" else "DR")) {
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new RegFilePlugin(
+          regFileReadyKind = plugin.ASYNC,
+          zeroBoot = true,
+          readInExecute = executeRf
+        )
+      },
+      new VexRiscvPosition("Sync" + (if(executeRf) "ER" else "DR")) {
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new RegFilePlugin(
+          regFileReadyKind = plugin.SYNC,
+          zeroBoot = true,
+          readInExecute = executeRf
+        )
 
-  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = random(r, List(
-    new VexRiscvPosition("Async") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new RegFilePlugin(
-        regFileReadyKind = plugin.ASYNC,
-        zeroBoot = true
-      )
-    },
-    new VexRiscvPosition("Sync") {
-      override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new RegFilePlugin(
-        regFileReadyKind = plugin.SYNC,
-        zeroBoot = true
-      )
-
-      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = positions.exists{
-        case p : InstructionAnticipatedPosition => p.instructionAnticipatedOk()
-        case _ => false
+        override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = executeRf || positions.exists{
+          case p : InstructionAnticipatedPosition => p.instructionAnticipatedOk()
+          case _ => false
+        }
       }
-    }
-  ))
+    ))
+  }
 }
 
 
@@ -245,7 +272,8 @@ class HazardDimension extends VexRiscvDimension("Hazard") {
 class SrcDimension extends VexRiscvDimension("Src") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
-    val separatedAddSub, executeInsertion = r.nextBoolean()
+    val separatedAddSub = r.nextBoolean()
+    val executeInsertion = universes.contains(VexRiscvUniverse.EXECUTE_RF) || r.nextBoolean()
     new VexRiscvPosition((if (separatedAddSub) "AddSub" else "") + (if (executeInsertion) "Execute" else "")) {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new SrcPlugin(
         separatedAddSub = separatedAddSub,
@@ -260,6 +288,9 @@ class IBusDimension extends VexRiscvDimension("IBus") {
 
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
+    val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
+
     if(r.nextDouble() < 0.5){
       val latency = r.nextInt(5) + 1
       val compressed = r.nextBoolean()
@@ -278,26 +309,28 @@ class IBusDimension extends VexRiscvDimension("IBus") {
           catchAccessFault = catchAll,
           compressedGen = compressed,
           busLatencyMin = latency,
-          injectorStage = injectorStage
+          injectorStage = injectorStage,
+          memoryTranslatorPortConfig = mmuConfig
         )
         override def instructionAnticipatedOk() = injectorStage
       }
     } else {
+      val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
       val compressed = r.nextBoolean()
-      val tighlyCoupled = r.nextBoolean()
+      val tighlyCoupled = r.nextBoolean() && !catchAll
 //      val tighlyCoupled = false
       val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
-      val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
       val relaxedPcCalculation, twoCycleCache, injectorStage = r.nextBoolean()
       val twoCycleRam = r.nextBoolean() && twoCycleCache
+      val bytePerLine = List(8,16,32,64)(r.nextInt(4))
       var cacheSize = 0
       var wayCount = 0
       do{
         cacheSize = 512 << r.nextInt(5)
         wayCount = 1 << r.nextInt(3)
-      }while(cacheSize/wayCount < 512)
+      }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
 
-      new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")+ (if(tighlyCoupled)"Tc" else "")) with InstructionAnticipatedPosition{
+      new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")+ (if(tighlyCoupled)"Tc" else "")) with InstructionAnticipatedPosition{
         override def testParam = "IBUS=CACHED" + (if(compressed) " COMPRESSED=yes" else "") + (if(tighlyCoupled)" IBUS_TC=yes" else "")
         override def applyOn(config: VexRiscvConfig): Unit = {
           val p = new IBusCachedPlugin(
@@ -306,22 +339,22 @@ class IBusDimension extends VexRiscvDimension("IBus") {
             prediction = prediction,
             relaxedPcCalculation = relaxedPcCalculation,
             injectorStage = injectorStage,
+            memoryTranslatorPortConfig = mmuConfig,
             config = InstructionCacheConfig(
               cacheSize = cacheSize,
-              bytePerLine = 32,
+              bytePerLine = bytePerLine,
               wayCount = wayCount,
               addressWidth = 32,
               cpuDataWidth = 32,
               memDataWidth = 32,
               catchIllegalAccess = catchAll,
               catchAccessFault = catchAll,
-              catchMemoryTranslationMiss = catchAll,
               asyncTagMemory = false,
               twoCycleRam = twoCycleRam,
               twoCycleCache = twoCycleCache
             )
           )
-          if(tighlyCoupled) p.newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5)))
+          if(tighlyCoupled) p.newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0))
           config.plugins += p
         }
         override def instructionAnticipatedOk() = !twoCycleCache || ((!twoCycleRam || wayCount == 1) && !compressed)
@@ -336,30 +369,45 @@ class IBusDimension extends VexRiscvDimension("IBus") {
 class DBusDimension extends VexRiscvDimension("DBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
-    if(r.nextDouble() < 0.4){
-      val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-      val earlyInjection = r.nextBoolean()
+    val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
+    val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
+    val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
+    val noWriteBack = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
+
+
+
+    if(r.nextDouble() < 0.4 || noMemory || noWriteBack){
+      val withLrSc = catchAll
+      val earlyInjection = r.nextBoolean() && !universes.contains(VexRiscvUniverse.NO_WRITEBACK)
       new VexRiscvPosition("Simple" + (if(earlyInjection) "Early" else "Late")) {
-        override def testParam = "DBUS=SIMPLE"
+        override def testParam = "DBUS=SIMPLE " + (if(withLrSc) "LRSC=yes " else "")
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DBusSimplePlugin(
           catchAddressMisaligned = catchAll,
           catchAccessFault = catchAll,
-          earlyInjection = earlyInjection
+          earlyInjection = earlyInjection,
+          memoryTranslatorPortConfig = mmuConfig,
+          withLrSc = withLrSc
         )
 //        override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
       }
     } else {
-      val cacheSize = 512 << r.nextInt(5)
-      val wayCount = 1
-      val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount) {
-        override def testParam = "DBUS=CACHED"
+      val bytePerLine = List(8,16,32,64)(r.nextInt(4))
+      var cacheSize = 0
+      var wayCount = 0
+      val withLrSc = catchAll
+      val withAmo = catchAll && r.nextBoolean()
+      do{
+        cacheSize = 512 << r.nextInt(5)
+        wayCount = 1 << r.nextInt(3)
+      }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
+      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine) {
+        override def testParam = "DBUS=CACHED " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")
 
         override def applyOn(config: VexRiscvConfig): Unit = {
           config.plugins += new DBusCachedPlugin(
             config = new DataCacheConfig(
               cacheSize = cacheSize,
-              bytePerLine = 32,
+              bytePerLine = bytePerLine,
               wayCount = wayCount,
               addressWidth = 32,
               cpuDataWidth = 32,
@@ -367,11 +415,36 @@ class DBusDimension extends VexRiscvDimension("DBus") {
               catchAccessError = catchAll,
               catchIllegal = catchAll,
               catchUnaligned = catchAll,
-              catchMemoryTranslationMiss = catchAll,
-              atomicEntriesCount = 0
+              withLrSc = withLrSc,
+              withAmo = withAmo
             ),
-            memoryTranslatorPortConfig = null
+            memoryTranslatorPortConfig = mmuConfig
           )
+        }
+      }
+    }
+  }
+}
+
+
+class MmuDimension extends VexRiscvDimension("DBus") {
+
+  override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    if(universes.contains(VexRiscvUniverse.MMU)) {
+      new VexRiscvPosition("WithMmu") {
+        override def testParam = "MMU=yes"
+
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new MmuPlugin(
+            ioRange = (x => x(31 downto 28) === 0xF)
+          )
+        }
+      }
+    } else {
+      new VexRiscvPosition("NoMmu") {
+        override def testParam = "MMU=no"
+
+        override def applyOn(config: VexRiscvConfig): Unit = {
           config.plugins += new StaticMemoryTranslatorPlugin(
             ioRange = _ (31 downto 28) === 0xF
           )
@@ -385,19 +458,25 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 
 trait CatchAllPosition
 
-//TODO CSR without exception
-class CsrDimension(freertos : String) extends VexRiscvDimension("Csr") {
+
+class CsrDimension(freertos : String, zephyr : String) extends VexRiscvDimension("Csr") {
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-    if(catchAll){
-      new VexRiscvPosition("All") with CatchAllPosition{
-        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l))
-        override def testParam = s"FREERTOS=$freertos"
+    val supervisor = universes.contains(VexRiscvUniverse.SUPERVISOR)
+    if(supervisor){
+      new VexRiscvPosition("Supervisor") with CatchAllPosition{
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.linuxFull(0x80000020l))
+        override def testParam = s"FREERTOS=$freertos ZEPHYR=$zephyr LINUX_REGRESSION=yes SUPERVISOR=yes"
       }
-    } else if(r.nextDouble() < 0.2){
+    } else if(catchAll){
+      new VexRiscvPosition("MachineOs") with CatchAllPosition{
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l))
+        override def testParam = s"CSR=yes FREERTOS=$freertos ZEPHYR=$zephyr"
+      }
+    } else if(r.nextDouble() < 0.3){
       new VexRiscvPosition("AllNoException") with CatchAllPosition{
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l).noException)
-        override def testParam = "CSR=no FREERTOS=no"
+        override def testParam = s"CSR=yes CSR_SKIP_TEST=yes FREERTOS=$freertos"
       }
     } else {
       new VexRiscvPosition("None") {
@@ -468,9 +547,10 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "yes")),
+    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "1"), sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")),
     new DecoderDimension,
-    new DebugDimension
+    new DebugDimension,
+    new MmuDimension
   )
 
 
@@ -482,12 +562,16 @@ class TestIndividualFeatures extends FunSuite {
 //  val usedPositions = mutable.HashSet[VexRiscvPosition]();
 //  val positionsCount = dimensions.map(d => d.positions.length).sum
 
-  def doTest(positionsToApply : List[VexRiscvPosition], prefix : String = "", testSeed : Int): Unit ={
+  def doTest(positionsToApply : List[VexRiscvPosition], prefix : String = "", testSeed : Int, universes : mutable.HashSet[VexRiscvUniverse]): Unit ={
 //    usedPositions ++= positionsToApply
+    val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
+    val noWriteback = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
     def gen = {
       FileUtils.deleteQuietly(new File("VexRiscv.v"))
       SpinalVerilog{
         val config = VexRiscvConfig(
+          withMemoryStage = !noMemory,
+          withWriteBackStage = !noWriteback,
           plugins = List(
             new IntAluPlugin,
             new YamlPlugin("cpu0.yaml")
@@ -497,23 +581,20 @@ class TestIndividualFeatures extends FunSuite {
         new VexRiscv(config)
       }
     }
-    val name = positionsToApply.map(d => d.dimension.name + "_" + d.name).mkString("_")
+
+    val name = (if(noMemory) "noMemoryStage_" else "") + (if(noWriteback) "noWritebackStage_" else "") + positionsToApply.map(d => d.dimension.name + "_" + d.name).mkString("_")
     test(prefix + name + "_gen") {
       gen
     }
 
 
     test(prefix + name + "_test") {
-      val debug = false
-      val stdCmd = (if(debug) "make clean run REDO=1 TRACE=yes TRACE_ACCESS=yes MMU=no STOP_ON_ERROR=yes DHRYSTONE=no THREAD_COUNT=1 TRACE_START=0 " else s"make clean run REDO=10 TRACE=no MMU=no THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", Runtime.getRuntime().availableProcessors().toString)} ") + s" SEED=${testSeed} "
-//      val stdCmd = "make clean run REDO=40 DHRYSTONE=no STOP_ON_ERROR=yes TRACE=yess MMU=no"
-
+      val debug = true
+      val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=9999924910246l FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=yes THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", 1)} ") + s" SEED=${testSeed} "
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
       println(testCmd)
       val str = doCmd(testCmd)
-      assert(!str.contains("FAIL"))
-//      val intFind = "(\\d+\\.?)+".r
-//      val dmips = intFind.findFirstIn("DMIPS per Mhz\\:                              (\\d+.?)+".r.findAllIn(str).toList.last).get.toDouble
+      assert(str.contains("REGRESSION SUCCESS") && !str.contains("Broken pipe"))
     }
   }
 
@@ -523,15 +604,9 @@ class TestIndividualFeatures extends FunSuite {
   val seed = Random.nextLong()
 
 //  val testId = Some(mutable.HashSet(18,34,77,85,118,129,132,134,152,167,175,188,191,198,199)) //37/29 sp_flop_rv32i_O3
-//val testId = Some(mutable.HashSet(18))
-//  val testId = Some(mutable.HashSet(129, 134))
-//  val seed = -2412372746600605141l
-
-
-//  val testId = Some(mutable.HashSet[Int](0,28,45,93))
-//  val testId = Some(mutable.HashSet[Int](31))
-//  val seed = -7716775349351274630l
-
+//val testId = Some(mutable.HashSet(0))
+//  val testId = Some(mutable.HashSet(4))
+//  val seed = -8309068850561113754l
 
 
   val rand = new Random(seed)
@@ -542,15 +617,35 @@ class TestIndividualFeatures extends FunSuite {
   println(s"Seed=$seed")
   for(i <- 0 until sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "100").toInt){
     var positions : List[VexRiscvPosition] = null
-    val universe = VexRiscvUniverse.universes.filter(e => rand.nextBoolean())
+    var universe = mutable.HashSet[VexRiscvUniverse]()
+    if(rand.nextDouble() < 0.5) universe += VexRiscvUniverse.EXECUTE_RF
+    if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_LINUX_RATE", "0.3").toDouble > rand.nextDouble()) {
+      universe += VexRiscvUniverse.CATCH_ALL
+      universe += VexRiscvUniverse.MMU
+      universe += VexRiscvUniverse.FORCE_MULDIV
+      universe += VexRiscvUniverse.SUPERVISOR
+    } else {
+      if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_MACHINE_OS_RATE", "0.5").toDouble > rand.nextDouble()) {
+        universe += VexRiscvUniverse.CATCH_ALL
+      }
+      var tmp = rand.nextDouble()
+      if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEMW_RATE", "0.6").toDouble > rand.nextDouble()){
+      }else if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEM_RATE", "0.5").toDouble > rand.nextDouble()){
+        universe += VexRiscvUniverse.NO_WRITEBACK
+      } else {
+        universe += VexRiscvUniverse.NO_WRITEBACK
+        universe += VexRiscvUniverse.NO_MEMORY
+      }
+    }
 
     do{
-      positions = dimensions.map(d => d.randomPosition(universe, rand))
+      positions = dimensions.map(d => d.randomPosition(universe.toList, rand))
     }while(!positions.forall(_.isCompatibleWith(positions)))
 
     val testSeed = rand.nextInt()
     if(testId.isEmpty || testId.get.contains(i))
-      doTest(positions," random_" + i + "_", testSeed)
+      doTest(positions," random_" + i + "_", testSeed, universe)
+    Hack.dCounter += 1
   }
 
 //  println(s"${usedPositions.size}/$positionsCount positions")

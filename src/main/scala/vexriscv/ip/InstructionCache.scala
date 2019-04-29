@@ -17,7 +17,6 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    memDataWidth : Int,
                                    catchIllegalAccess : Boolean,
                                    catchAccessFault : Boolean,
-                                   catchMemoryTranslationMiss : Boolean,
                                    asyncTagMemory : Boolean,
                                    twoCycleCache : Boolean = true,
                                    twoCycleRam : Boolean = false,
@@ -26,7 +25,7 @@ case class InstructionCacheConfig( cacheSize : Int,
   assert(!(twoCycleRam && !twoCycleCache))
 
   def burstSize = bytePerLine*8/memDataWidth
-  def catchSomething = catchAccessFault || catchMemoryTranslationMiss || catchIllegalAccess
+  def catchSomething = catchAccessFault || catchIllegalAccess
 
   def getAxi4Config() = Axi4Config(
     addressWidth = addressWidth,
@@ -86,7 +85,7 @@ trait InstructionCacheCommons{
   val pc : UInt
   val physicalAddress : UInt
   val data   : Bits
-  val cacheMiss, error, mmuMiss, illegalAccess, isUser : Bool
+  val cacheMiss, error,  mmuRefilling, mmuException, isUser : Bool
 }
 
 case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle with IMasterSlave with InstructionCacheCommons {
@@ -99,11 +98,12 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
   val dataBypass = Bits(p.cpuDataWidth bits)
   val mmuBus  = MemoryTranslatorBus()
   val physicalAddress = UInt(p.addressWidth bits)
-  val cacheMiss, error, mmuMiss, illegalAccess,isUser  = ifGen(!p.twoCycleCache)(Bool)
+  val cacheMiss, error, mmuRefilling, mmuException, isUser  = ifGen(!p.twoCycleCache)(Bool)
+  val haltIt  = Bool
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved, pc)
-    inWithNull(error,mmuMiss,illegalAccess,data, cacheMiss,physicalAddress)
+    inWithNull(error,mmuRefilling,mmuException,data, cacheMiss,physicalAddress, haltIt)
     outWithNull(isUser, dataBypass, dataBypassValid)
     slaveWithNull(mmuBus)
   }
@@ -116,12 +116,12 @@ case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle 
   val pc = UInt(p.addressWidth bits)
   val physicalAddress = UInt(p.addressWidth bits)
   val data  =  Bits(p.cpuDataWidth bits)
-  val cacheMiss, error, mmuMiss, illegalAccess, isUser  = ifGen(p.twoCycleCache)(Bool)
+  val cacheMiss, error, mmuRefilling, mmuException, isUser  = ifGen(p.twoCycleCache)(Bool)
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, pc)
     outWithNull(isUser)
-    inWithNull(error,mmuMiss,illegalAccess,data, cacheMiss, physicalAddress)
+    inWithNull(error, mmuRefilling, mmuException,data, cacheMiss, physicalAddress)
   }
 }
 
@@ -250,7 +250,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
   import p._
   assert(cpuDataWidth == memDataWidth, "Need testing")
   val io = new Bundle{
-    val flush = slave(InstructionCacheFlushBus())
+    val flush = in Bool()
     val cpu = slave(InstructionCacheCpuBus(p))
     val mem = master(InstructionCacheMemBus(p))
   }
@@ -291,25 +291,23 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }
   })
 
-  io.cpu.prefetch.haltIt := False
-
-
-
+  io.cpu.fetch.haltIt := io.cpu.fetch.mmuBus.busy
 
   val lineLoader = new Area{
     val fire = False
     val valid = RegInit(False) clearWhen(fire)
     val address = Reg(UInt(addressWidth bits))
     val hadError = RegInit(False) clearWhen(fire)
+    val flushPending = RegInit(True)
 
     when(io.cpu.fill.valid){
       valid := True
       address := io.cpu.fill.payload
     }
 
-    io.cpu.prefetch.haltIt setWhen(valid)
+    io.cpu.prefetch.haltIt := valid || flushPending
 
-    val flushCounter = Reg(UInt(log2Up(wayLineCount) + 1 bit)) init(if(preResetFlush) wayLineCount else 0)
+    val flushCounter = Reg(UInt(log2Up(wayLineCount) + 1 bit))
     when(!flushCounter.msb){
       io.cpu.prefetch.haltIt := True
       flushCounter := flushCounter + 1
@@ -317,17 +315,16 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     when(!RegNext(flushCounter.msb)){
       io.cpu.prefetch.haltIt := True
     }
-    val flushFromInterface = RegInit(False)
-    io.flush.cmd.ready := !(valid || io.cpu.fetch.isValid) //io.cpu.fetch.isValid will avoid bug on first cycle miss
-    when(io.flush.cmd.valid){
+
+    when(io.flush){
       io.cpu.prefetch.haltIt := True
-      when(io.flush.cmd.ready){
-        flushCounter := 0
-        flushFromInterface := True
-      }
+      flushPending := True
     }
 
-    io.flush.rsp := flushCounter.msb.rise && flushFromInterface
+    when(flushPending && !(valid || io.cpu.fetch.isValid) ){
+      flushCounter := 0
+      flushPending := False
+    }
 
 
 
@@ -411,8 +408,8 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
       io.cpu.fetch.cacheMiss := !hit.valid
       io.cpu.fetch.error := hit.error
-      io.cpu.fetch.mmuMiss := mmuRsp.miss
-      io.cpu.fetch.illegalAccess := !mmuRsp.allowExecute || (io.cpu.fetch.isUser && !mmuRsp.allowUser)
+      io.cpu.fetch.mmuRefilling := mmuRsp.refilling
+      io.cpu.fetch.mmuException := !mmuRsp.refilling && (mmuRsp.exception || !mmuRsp.allowExecute)
     })
   }
 
@@ -441,8 +438,8 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
     io.cpu.decode.cacheMiss := !hit.valid
     io.cpu.decode.error := hit.error
-    io.cpu.decode.mmuMiss := mmuRsp.miss
-    io.cpu.decode.illegalAccess := !mmuRsp.allowExecute || (io.cpu.decode.isUser && !mmuRsp.allowUser)
+    io.cpu.decode.mmuRefilling := mmuRsp.refilling
+    io.cpu.decode.mmuException := !mmuRsp.refilling && (mmuRsp.exception || !mmuRsp.allowExecute)
     io.cpu.decode.physicalAddress := mmuRsp.physicalAddress
   })
 }

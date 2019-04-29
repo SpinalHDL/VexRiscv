@@ -21,6 +21,8 @@ class HaltOnExceptionPlugin() extends Plugin[VexRiscv] with ExceptionService {
     exceptionPortsInfos += ExceptionPortInfo(interface,stage,priority)
     interface
   }
+  override def isExceptionPending(stage : Stage): Bool = False
+
 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._

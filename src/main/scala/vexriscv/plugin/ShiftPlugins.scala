@@ -69,12 +69,14 @@ class FullBarrelShifterPlugin(earlyInjection : Boolean = false) extends Plugin[V
     val injectionStage = if(earlyInjection) execute else memory
     injectionStage plug new Area{
       import injectionStage._
-      switch(input(SHIFT_CTRL)){
-        is(ShiftCtrlEnum.SLL){
-          output(REGFILE_WRITE_DATA) := Reverse(input(SHIFT_RIGHT))
-        }
-        is(ShiftCtrlEnum.SRL,ShiftCtrlEnum.SRA){
-          output(REGFILE_WRITE_DATA) := input(SHIFT_RIGHT)
+      when(arbitration.isValid){
+        switch(input(SHIFT_CTRL)) {
+          is(ShiftCtrlEnum.SLL) {
+            output(REGFILE_WRITE_DATA) := Reverse(input(SHIFT_RIGHT))
+          }
+          is(ShiftCtrlEnum.SRL, ShiftCtrlEnum.SRA) {
+            output(REGFILE_WRITE_DATA) := input(SHIFT_RIGHT)
+          }
         }
       }
     }
@@ -105,24 +107,30 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
     val immediateActions = List[(Stageable[_ <: BaseType],Any)](
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.IMI,
-      ALU_CTRL                 -> AluCtrlEnum.BITWISE,
-      ALU_BITWISE_CTRL         -> AluBitwiseCtrlEnum.SRC1,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,
-      RS1_USE                 -> True
+      RS1_USE                 -> True,
+
+      //Get SRC1 through the MMU to the RF write path
+      ALU_CTRL                 -> AluCtrlEnum.ADD_SUB,
+      SRC_USE_SUB_LESS         -> False,
+      SRC_ADD_ZERO             -> True
     )
 
     val nonImmediateActions = List[(Stageable[_ <: BaseType],Any)](
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
-      ALU_CTRL                 -> AluCtrlEnum.BITWISE,
-      ALU_BITWISE_CTRL         -> AluBitwiseCtrlEnum.SRC1,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> True,
       BYPASSABLE_MEMORY_STAGE  -> True,
       RS1_USE                 -> True,
-      RS2_USE                 -> True
+      RS2_USE                 -> True,
+
+      //Get SRC1 through the MMU to the RF write path
+      ALU_CTRL                 -> AluCtrlEnum.ADD_SUB,
+      SRC_USE_SUB_LESS         -> False,
+      SRC_ADD_ZERO             -> True
     )
 
     val decoderService = pipeline.service(classOf[DecoderService])
@@ -156,6 +164,7 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
       val shiftInput = isActive ? (if(withMemoryStage) memory.input(REGFILE_WRITE_DATA) else shiftReg) | input(SRC1)
       val done = amplitude(4 downto 1) === 0
 
+      if(withMemoryStage) memory.dontSampleStageable(REGFILE_WRITE_DATA, arbitration.isStuckByOthers)
 
       when(arbitration.isValid && isShift && input(SRC2)(4 downto 0) =/= 0){
         output(REGFILE_WRITE_DATA) := input(SHIFT_CTRL).mux(

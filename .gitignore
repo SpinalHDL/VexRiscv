@@ -1,6 +1,7 @@
 *.class
 *.log
 *.bak
+.*.swp
 
 # sbt specific
 .cache/
@@ -24,6 +25,7 @@ out
 bin/
 .classpath
 .project
+.cproject
 .settings
 .cache-main
 
@@ -39,6 +41,7 @@ obj_dir
 *.yaml
 *.memTrace
 *.regTrace
+*.debugTrace
 *.tcl
 *.o
 *.bin

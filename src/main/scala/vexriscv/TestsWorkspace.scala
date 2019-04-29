@@ -56,7 +56,6 @@ object TestsWorkspace {
               memDataWidth = 32,
               catchIllegalAccess = true,
               catchAccessFault = true,
-              catchMemoryTranslationMiss = true,
               asyncTagMemory = false,
               twoCycleRam = false,
               twoCycleCache = true
@@ -82,8 +81,7 @@ object TestsWorkspace {
               catchAccessError  = true,
               catchIllegal      = true,
               catchUnaligned    = true,
-              catchMemoryTranslationMiss = true,
-              atomicEntriesCount = 2
+              withLrSc = true
             ),
             //            memoryTranslatorPortConfig = null
             memoryTranslatorPortConfig = MemoryTranslatorPortConfig(

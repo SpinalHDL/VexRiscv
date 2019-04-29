@@ -1,64 +1,89 @@
 language: scala
 
+dist: xenial
+
 notifications:
   email:
     on_success: never
 
-# See 'project/Version.scala'
 scala:
-   - 2.11.6
+   - 2.11.12
 
 sbt_args: -no-colors -J-Xss2m
 
-script:
-  - export VEXRISCV_REGRESSION_CONFIG_COUNT=100
-  - export VEXRISCV_REGRESSION_FREERTOS_COUNT=no
-  - sbt -jvm-opts travis/jvmopts.compile compile
-  - sbt -jvm-opts travis/jvmopts.test test
+addons:
+  apt:
+    sources:
+      - ubuntu-toolchain-r-test
+    packages:
+      - git 
+      - make 
+      - autoconf 
+      - g++ 
+      - flex 
+      - bison
 
 jdk:
-  - oraclejdk8
-#  - oraclejdk7
-#  - openjdk7
+  - openjdk10
 
-env:
-  - secure: "v7FHP8yK/zixpv1ML05qcRhZfDVDFdTmTPjfMZHL7gmrJveVDgze22x4tY4tB1+JEXhKuVTYvimOrX/Ok+rOOT5gVKLowv4PUQwCR+HgWVIbqjcfZNLsa369v03/p4K/zbjJSiXFahZYOXa0ApED2KWHcVfCrNsPv0UF7YZGiIa1Q/lPBwfmpN1rLih2Mpgn4KVaJky22t7JXJyVrNdGVmIA51slVbyFwFAE8Ww/0tkC+i2PUcWWRMIxtXP4iyq/9Npcq5VdqOatKfWHqAElLfKSPNMYLMlcyxyNpNx4paq8cL6fQxFcBLi9M2msz2i/qpKv30a0tzNo5bQQgucAXOQJB2Buks728upLuqsr+k25hwcqrtjyMOr9UQkt7qXAJH/0kimW7aW1yoMxbm/6mNG98X9D1EzNRewHAKatwJeFy1bw5qIuSQxPBwQMGloManrHOHGotmHKk7Y+dgM/z1UlaAdxSQuKWGXBc8QlQvif8puPYEdJMoInJNRxiWfYu06XnmzTXgMketK7RdULM9DVYzw8hzS2EIWKu8Oa0zn0PTevD2YeJNd4G8mDqO0vz5hloIc7pFsq/exQUB/kFozfCsnvhW8P+MPN0LpuSpptBQTsLWbM5BH0hd46HoWcneDdlMvVrUcgsTPmmSroIkLIEUo+Y2iN5eQHPPp85Cw="
+jobs:
+  include:
+    - stage: prepare cache-verilator
+      script:
+        - cp scripts/regression/verilator.mk $HOME/makefile
+        - cd $HOME
+        - make verilator_binary
+    - &test
+      stage: Test
+      name: Dhrystone
+      script:
+        - make regression_dhrystone -C scripts/regression
+    - <<: *test
+      stage: Test
+      name: Baremetal
+      script:
+        - make regression_random_baremetal -C scripts/regression
+    - <<: *test
+      stage: Test
+      name: Machine OS
+      script:
+        - make regression_random_machine_os -C scripts/regression
+    - <<: *test
+      stage: Test
+      name: Machine OS
+      script:
+        - make regression_random_machine_os -C scripts/regression
+    - <<: *test
+      stage: Test
+      name: Mixed
+      script:
+        - make regression_random -C scripts/regression
+    - <<: *test
+      stage: Test
+      name: Linux
+      script:
+        - make regression_random_linux -C scripts/regression
+    - <<: *test
+      stage: Test
+      name: Linux
+      script:
+        - make regression_random_linux -C scripts/regression
 
 before_install:
-  # JDK fix
-  - cat /etc/hosts # optionally check the content *before*
-  - sudo hostname "$(hostname | cut -c1-63)"
-  - sed -e "s/^\\(127\\.0\\.0\\.1.*\\)/\\1 $(hostname | cut -c1-63)/" /etc/hosts | sudo tee /etc/hosts
-  - cat /etc/hosts # optionally check the content *after*
   - cd ..
-
-  # Verilator
-  - sudo apt-get install git make autoconf g++ flex bison -y  # First time prerequisites
-  - git clone http://git.veripool.org/git/verilator   # Only first time
-  - unset VERILATOR_ROOT  # For bash
-  - cd verilator
-  - git pull        # Make sure we're up-to-date
-  - git checkout verilator_3_916
-  - autoconf        # Create ./configure script
-  - ./configure
-  - make -j$(nproc)
-  - sudo make install
-  - cd ..
-
   - git clone https://github.com/SpinalHDL/SpinalHDL.git -b dev
-  
   - cd VexRiscv
-  #- curl -T README.md -udolu1990:$BINTRAY_KEY https://api.bintray.com/content/spinalhdl/VexRiscv/test/0.0.4/README.md
-  #- curl -X POST -udolu1990:$BINTRAY_KEY https://api.bintray.com/content/spinalhdl/VexRiscv/test/0.0.4/publish
-  #- sbt compile
-
+  - export VERILATOR_ROOT=$HOME/verilator
+  - export PATH=$VERILATOR_ROOT/bin:$PATH
 
 before_cache:
-  # Tricks to avoid unnecessary cache updates
-  - find $HOME/.ivy2 -name "ivydata-*.properties" -delete
-  - find $HOME/.sbt -name "*.lock" -delete
+  - rm -fv $HOME/.ivy2/.sbt.ivy.lock
+  - find $HOME/.ivy2/cache -name "ivydata-*.properties" -print -delete
+  - find $HOME/.sbt        -name "*.lock"               -print -delete
 
 cache:
   directories:
     - $HOME/.ivy2/cache
-    - $HOME/.sbt/boot/
+    - $HOME/.sbt
+    - $HOME/verilator
+
