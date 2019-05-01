@@ -82,7 +82,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     slave(rsp)
   }
 
-  def toAxi4Shared(stageCmd : Boolean = true): Axi4Shared = {
+  def toAxi4Shared(stageCmd : Boolean = false): Axi4Shared = {
     val axi = Axi4Shared(DBusSimpleBus.getAxi4Config())
     val pendingWritesMax = 7
     val pendingWrites = CounterUpDown(
@@ -92,7 +92,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     )
 
     val cmdPreFork = if (stageCmd) cmd.stage.stage().s2mPipe() else cmd
-    val (cmdFork, dataFork) = StreamFork2(cmdPreFork.haltWhen((pendingWrites =/= 0 && !cmdPreFork.wr) || pendingWrites === pendingWritesMax))
+    val (cmdFork, dataFork) = StreamFork2(cmdPreFork.haltWhen((pendingWrites =/= 0 && cmdPreFork.valid && !cmdPreFork.wr) || pendingWrites === pendingWritesMax))
     axi.sharedCmd.arbitrationFrom(cmdFork)
     axi.sharedCmd.write := cmdFork.wr
     axi.sharedCmd.prot := "010"
@@ -117,16 +117,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
 
     axi.r.ready := True
     axi.b.ready := True
-
-
-    //TODO remove
-    val axi2 = Axi4Shared(DBusSimpleBus.getAxi4Config())
-    axi.arw >-> axi2.arw
-    axi.w >> axi2.w
-    axi.r << axi2.r
-    axi.b << axi2.b
-//    axi2 << axi
-    axi2
+    axi
   }
 
   def toAxi4(stageCmd : Boolean = true) = this.toAxi4Shared(stageCmd).toAxi4()
