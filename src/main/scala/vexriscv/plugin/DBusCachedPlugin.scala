@@ -23,7 +23,6 @@ class DBusCachedPlugin(config : DataCacheConfig,
                        dBusCmdMasterPipe : Boolean = false,
                        dBusCmdSlavePipe : Boolean = false,
                        dBusRspSlavePipe : Boolean = false,
-                       relaxedMemoryTranslationRegister : Boolean = false,
                        csrInfo : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService {
   import config._
 
@@ -50,7 +49,6 @@ class DBusCachedPlugin(config : DataCacheConfig,
   object MEMORY_LRSC extends Stageable(Bool)
   object MEMORY_AMO extends Stageable(Bool)
   object IS_DBUS_SHARING extends Stageable(Bool())
-  object MEMORY_VIRTUAL_ADDRESS extends Stageable(UInt(32 bits))
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -214,8 +212,6 @@ class DBusCachedPlugin(config : DataCacheConfig,
       when(cache.io.cpu.redo && arbitration.isValid && input(MEMORY_ENABLE)){
         arbitration.haltItself := True
       }
-
-      if(relaxedMemoryTranslationRegister) insert(MEMORY_VIRTUAL_ADDRESS) := cache.io.cpu.execute.address
     }
 
     memory plug new Area{
@@ -223,7 +219,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       cache.io.cpu.memory.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.memory.isStuck := arbitration.isStuck
       cache.io.cpu.memory.isRemoved := arbitration.removeIt
-      cache.io.cpu.memory.address := (if(relaxedMemoryTranslationRegister) input(MEMORY_VIRTUAL_ADDRESS) else U(input(REGFILE_WRITE_DATA)))
+      cache.io.cpu.memory.address := U(input(REGFILE_WRITE_DATA))
 
       cache.io.cpu.memory.mmuBus <> mmuBus
       cache.io.cpu.memory.mmuBus.rsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
