@@ -396,11 +396,13 @@ class DBusDimension extends VexRiscvDimension("DBus") {
       var wayCount = 0
       val withLrSc = catchAll
       val withAmo = catchAll && r.nextBoolean()
+      val dBusCmdMasterPipe, dBusCmdSlavePipe, dBusRspSlavePipe, relaxedMemoryTranslationRegister = r.nextBoolean()
+
       do{
         cacheSize = 512 << r.nextInt(5)
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
-      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine) {
+      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "")) {
         override def testParam = "DBUS=CACHED " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")
 
         override def applyOn(config: VexRiscvConfig): Unit = {
@@ -418,6 +420,10 @@ class DBusDimension extends VexRiscvDimension("DBus") {
               withLrSc = withLrSc,
               withAmo = withAmo
             ),
+            dBusCmdMasterPipe = dBusCmdMasterPipe,
+            dBusCmdSlavePipe = dBusCmdSlavePipe,
+            dBusRspSlavePipe = dBusRspSlavePipe,
+            relaxedMemoryTranslationRegister = relaxedMemoryTranslationRegister,
             memoryTranslatorPortConfig = mmuConfig
           )
         }
