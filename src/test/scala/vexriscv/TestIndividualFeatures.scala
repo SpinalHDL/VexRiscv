@@ -396,7 +396,8 @@ class DBusDimension extends VexRiscvDimension("DBus") {
       var wayCount = 0
       val withLrSc = catchAll
       val withAmo = catchAll && r.nextBoolean()
-      val dBusCmdMasterPipe, dBusCmdSlavePipe, dBusRspSlavePipe, relaxedMemoryTranslationRegister = r.nextBoolean()
+      val dBusRspSlavePipe, relaxedMemoryTranslationRegister = r.nextBoolean()
+      val dBusCmdMasterPipe, dBusCmdSlavePipe = false //As it create test bench issues
 
       do{
         cacheSize = 512 << r.nextInt(5)
