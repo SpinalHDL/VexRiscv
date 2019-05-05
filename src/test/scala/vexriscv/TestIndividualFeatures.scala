@@ -396,14 +396,14 @@ class DBusDimension extends VexRiscvDimension("DBus") {
       var wayCount = 0
       val withLrSc = catchAll
       val withAmo = catchAll && r.nextBoolean()
-      val dBusRspSlavePipe, relaxedMemoryTranslationRegister = r.nextBoolean()
+      val dBusRspSlavePipe, relaxedMemoryTranslationRegister, earlyWaysHits = r.nextBoolean()
       val dBusCmdMasterPipe, dBusCmdSlavePipe = false //As it create test bench issues
 
       do{
         cacheSize = 512 << r.nextInt(5)
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
-      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "")) {
+      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "")) {
         override def testParam = "DBUS=CACHED " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")
 
         override def applyOn(config: VexRiscvConfig): Unit = {
@@ -419,7 +419,8 @@ class DBusDimension extends VexRiscvDimension("DBus") {
               catchIllegal = catchAll,
               catchUnaligned = catchAll,
               withLrSc = withLrSc,
-              withAmo = withAmo
+              withAmo = withAmo,
+              earlyWaysHits = earlyWaysHits
             ),
             dBusCmdMasterPipe = dBusCmdMasterPipe,
             dBusCmdSlavePipe = dBusCmdSlavePipe,
