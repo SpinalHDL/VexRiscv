@@ -20,7 +20,7 @@ object VexRiscvConfig{
 
 case class VexRiscvConfig(){
   var withMemoryStage = true
-  var withMemory2Stage = true
+  var withMemory2Stage = false
   var withWriteBackStage = true
   val plugins = ArrayBuffer[Plugin[VexRiscv]]()
 
