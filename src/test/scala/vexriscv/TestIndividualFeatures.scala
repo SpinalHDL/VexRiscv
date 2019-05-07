@@ -579,6 +579,7 @@ class TestIndividualFeatures extends FunSuite {
       SpinalVerilog{
         val config = VexRiscvConfig(
           withMemoryStage = !noMemory,
+          withMemory2Stage = false,
           withWriteBackStage = !noWriteback,
           plugins = List(
             new IntAluPlugin,
