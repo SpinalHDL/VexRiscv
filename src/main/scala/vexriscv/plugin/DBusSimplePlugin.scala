@@ -3,6 +3,7 @@ package vexriscv.plugin
 import vexriscv._
 import spinal.core._
 import spinal.lib._
+import spinal.lib.bus.amba3.ahblite.{AhbLite3Config, AhbLite3Master}
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
@@ -71,6 +72,10 @@ object DBusSimpleBus{
     dataWidth = 32
   )
 
+  def getAhbLite3Config() = AhbLite3Config(
+    addressWidth = 32,
+    dataWidth = 32
+  )
 }
 
 case class DBusSimpleBus() extends Bundle with IMasterSlave{
@@ -80,6 +85,13 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
   override def asMaster(): Unit = {
     master(cmd)
     slave(rsp)
+  }
+
+  def cmdS2mPipe() : DBusSimpleBus = {
+    val s = DBusSimpleBus()
+    s.cmd    << this.cmd.s2mPipe()
+    this.rsp := s.rsp
+    s
   }
 
   def toAxi4Shared(stageCmd : Boolean = false): Axi4Shared = {
@@ -192,6 +204,37 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
 
     rsp.ready := bus.rsp.valid
     rsp.data := bus.rsp.data
+
+    bus
+  }
+
+
+
+  def toAhbLite3Master(avoidWriteToReadHazard : Boolean): AhbLite3Master = {
+    val bus = AhbLite3Master(DBusSimpleBus.getAhbLite3Config())
+    bus.HADDR     := this.cmd.address
+    bus.HWRITE    := this.cmd.wr
+    bus.HSIZE     := B(this.cmd.size, 3 bits)
+    bus.HBURST    := 0
+    bus.HPROT     := "1111"
+    bus.HTRANS    := this.cmd.valid ## B"0"
+    bus.HMASTLOCK := False
+    bus.HWDATA    := RegNextWhen(this.cmd.data, bus.HREADY)
+    this.cmd.ready := bus.HREADY
+
+    val pending = RegInit(False) clearWhen(bus.HREADY) setWhen(this.cmd.fire && !this.cmd.wr)
+    this.rsp.ready := bus.HREADY && pending
+    this.rsp.data := bus.HRDATA
+    this.rsp.error := bus.HRESP
+
+    if(avoidWriteToReadHazard) {
+      val writeDataPhase = RegNextWhen(bus.HTRANS === 2 && bus.HWRITE, bus.HREADY) init (False)
+      val potentialHazard = this.cmd.valid && !this.cmd.wr && writeDataPhase
+      when(potentialHazard) {
+        bus.HTRANS := 0
+        this.cmd.ready := False
+      }
+    }
 
     bus
   }
