@@ -43,14 +43,30 @@ object IcestormFlow {
   def apply(workspacePath : String,toplevelPath : String,family : String,device : String, pack : String) : Report = {
     val projectName = toplevelPath.split("/").last.split("[.]").head
 
-
+//ifeq ($(NEXTPNR),yes)
+//%.json: ${VERILOGS}
+//	rm -f ${TOPLEVEL}.v*.bin
+//	cp -f  ${ROOT}/hardware/netlist/${TOPLEVEL}.v*.bin . | true
+//	yosys -p 'synth_ice40 -top $(TOPLEVEL) -json $@' $<
+//
+//%.asc: $(PIN_DEF) %.json constraint.py
+//	nextpnr-ice40 --$(DEVICE) --json $(TOPLEVEL).json --pcf $(PIN_DEF) --asc $(TOPLEVEL).asc --pre-pack constraint.py $(NEXTPNR_ARG)
+//else
+//%.blif: ${VERILOGS}
+//	rm -f ${TOPLEVEL}.v*.bin
+//	cp -f  ${ROOT}/hardware/netlist/${TOPLEVEL}.v*.bin . | true
+//	yosys -p 'synth_ice40 -top ${TOPLEVEL} -blif $@' $<
+//
+//%.asc: $(PIN_DEF) %.blif
+//	arachne-pnr -d $(subst up,,$(subst hx,,$(subst lp,,$(DEVICE)))) -o $@ -p $^
+//endif
 
     val workspacePathFile = new File(workspacePath)
     FileUtils.deleteDirectory(workspacePathFile)
     workspacePathFile.mkdir()
     FileUtils.copyFileToDirectory(new File(toplevelPath), workspacePathFile)
-    doCmd(List("yosys", "-v3", "-p", s"synth_ice40 -top $projectName -blif ${projectName}.blif", s"$projectName.v" ), workspacePath)
-    val arachne = doCmd(List("arachne-pnr", "-d", device.replace("hx","").replace("up",""), "--max-passes", "600", "-P", pack, s"$projectName.blif" ,"-o", s"$projectName.asc"), workspacePath)
+    doCmd(List("yosys", "-v3", "-p", s"synth_ice40 -top $projectName -json ${projectName}.json", s"$projectName.v" ), workspacePath)
+    val arachne = doCmd(List("nextpnr-ice40", s"--$device", "--json", s"${projectName}.json","--asc", s"$projectName.asc"), workspacePath)
     doCmd(List("icepack", s"$projectName.asc", s"$projectName.bin"), workspacePath)
     val icetime = doCmd(List("icetime", "-tmd", device, s"${projectName}.asc"), workspacePath)
     new Report{
@@ -65,7 +81,7 @@ object IcestormFlow {
       }
       override def getArea() = {
         try {
-          intFind.findFirstIn("LCs[^\\n]*\\/".r.findFirstIn(arachne).get).get.toString() + " LC"
+          intFind.findFirstIn("ICESTORM_LC\\:[^\\n]*\\/".r.findFirstIn(arachne).get).get.toString() + " LC"
         } catch {
           case e : Throwable => "error"
         }
@@ -151,7 +167,7 @@ object IcestormFlow {
 //  }
     SpinalVerilog(StreamFifo(Bits(8 bits), 64))
     val report = IcestormFlow(
-      workspacePath="/home/spinalvm/tmp",
+      workspacePath="/media/miaou/HD/linux/tmp",
       toplevelPath="StreamFifo.v",
       family="iCE40",
       device="up5k",

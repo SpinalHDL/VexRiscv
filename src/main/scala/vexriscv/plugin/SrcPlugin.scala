@@ -1,13 +1,26 @@
 package vexriscv.plugin
 
-import vexriscv.{RVC_GEN, Riscv, VexRiscv}
+import vexriscv._
 import spinal.core._
 
 
 class SrcPlugin(separatedAddSub : Boolean = false, executeInsertion : Boolean = false, decodeAddSub : Boolean = false) extends Plugin[VexRiscv]{
+  object SRC2_FORCE_ZERO extends Stageable(Bool)
+
+
+  override def setup(pipeline: VexRiscv): Unit = {
+    import pipeline.config._
+
+    val decoderService = pipeline.service(classOf[DecoderService])
+    decoderService.addDefault(SRC_ADD_ZERO, False) //TODO avoid this default to simplify decoding ?
+  }
+
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
+
+    decode.insert(SRC2_FORCE_ZERO) := decode.input(SRC_ADD_ZERO) && !decode.input(SRC_USE_SUB_LESS)
+
     val insertionStage = if(executeInsertion) execute else decode
     insertionStage plug new Area{
       import insertionStage._
@@ -33,8 +46,9 @@ class SrcPlugin(separatedAddSub : Boolean = false, executeInsertion : Boolean = 
         import addSubStage._
 
         // ADD, SUB
-        val add = (input(SRC1).asUInt + input(SRC2).asUInt).asBits.addAttribute("keep")
-        val sub = (input(SRC1).asUInt - input(SRC2).asUInt).asBits.addAttribute("keep")
+        val add = (U(input(SRC1)) + U(input(SRC2))).asBits.addAttribute("keep")
+        val sub = (U(input(SRC1)) - U(input(SRC2))).asBits.addAttribute("keep")
+        when(input(SRC_ADD_ZERO)){ add := input(SRC1) }
 
         // SLT, SLTU
         val less = Mux(input(SRC1).msb === input(SRC2).msb, sub.msb,
@@ -50,7 +64,9 @@ class SrcPlugin(separatedAddSub : Boolean = false, executeInsertion : Boolean = 
         import addSubStage._
 
         // ADD, SUB
-        val addSub = (input(SRC1).asSInt + Mux(input(SRC_USE_SUB_LESS), ~input(SRC2), input(SRC2)).asSInt + Mux(input(SRC_USE_SUB_LESS), S(1), S(0))).asBits
+        val addSub = (input(SRC1).asSInt + Mux(input(SRC_USE_SUB_LESS), ~input(SRC2), input(SRC2)).asSInt + Mux(input(SRC_USE_SUB_LESS), S(1, 32 bits), S(0, 32 bits))).asBits
+        when(input(SRC2_FORCE_ZERO)){ addSub := input(SRC1) }
+
 
         // SLT, SLTU
         val less = Mux(input(SRC1).msb === input(SRC2).msb, addSub.msb,

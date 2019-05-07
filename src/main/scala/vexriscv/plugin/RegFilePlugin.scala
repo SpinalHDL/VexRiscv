@@ -91,7 +91,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
       import writeStage._
 
       def shadowPrefix(that : Bits) = if(withShadow) global.shadow.write ## that else that
-      val regFileWrite = global.regFile.writePort.addAttribute(Verilator.public)
+      val regFileWrite = global.regFile.writePort.addAttribute(Verilator.public).setName("lastStageRegFileWrite")
       regFileWrite.valid := output(REGFILE_WRITE_VALID) && arbitration.isFiring
       regFileWrite.address := U(shadowPrefix(output(INSTRUCTION)(rdRange)))
       regFileWrite.data := output(REGFILE_WRITE_DATA)

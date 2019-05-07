@@ -55,6 +55,7 @@ class BranchPlugin(earlyBranch : Boolean,
                    fenceiGenAsAJump : Boolean = false,
                    fenceiGenAsANop : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
 
+
   def catchAddressMisalignedForReal = catchAddressMisaligned && !pipeline(RVC_GEN)
   lazy val branchStage = if(earlyBranch) pipeline.execute else pipeline.memory
 
@@ -87,6 +88,8 @@ class BranchPlugin(earlyBranch : Boolean,
     import Riscv._
     import pipeline.config._
     import IntAluPlugin._
+
+    assert(earlyBranch || withMemoryStage, "earlyBranch must be true when memory stage is disabled!")
 
     val bActions = List[(Stageable[_ <: BaseType],Any)](
       SRC1_CTRL         -> Src1CtrlEnum.RS,
@@ -265,7 +268,7 @@ class BranchPlugin(earlyBranch : Boolean,
         default{
           branch_src1 := input(PC)
           branch_src2 := ((input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
-          when(input(PREDICTION_HAD_BRANCHED) && ! missAlignedTarget){
+          when(input(PREDICTION_HAD_BRANCHED)){ //Assume the predictor never predict missaligned stuff, this avoid the need to know if the instruction should branch or not
             branch_src2 := (if(pipeline(RVC_GEN)) Mux(input(IS_RVC), B(2), B(4)) else B(4)).asUInt.resized
           }
         }

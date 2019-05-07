@@ -20,7 +20,8 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
                                val injectorReadyCutGen : Boolean,
                                val prediction : BranchPrediction,
                                val historyRamSizeLog2 : Int,
-                               val injectorStage : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
+                               val injectorStage : Boolean,
+                               val relaxPredictorAddress : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
   var prefetchExceptionPort : Flow[ExceptionCause] = null
   var decodePrediction : DecodePredictionBus = null
   var fetchPrediction : FetchPredictionBus = null
@@ -284,7 +285,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         bufferData := input.rsp.inst(31 downto 16)
       }
       bufferValid.clearWhen(flush)
-      iBusRsp.readyForError.clearWhen(bufferValid && isRvc)
+      iBusRsp.readyForError.clearWhen(bufferValid && isRvc) //Can't emit error, as there is a earlier instruction pending
       incomingInstruction setWhen(bufferValid && bufferData(1 downto 0) =/= 3)
     })
 
@@ -293,18 +294,20 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
     val injector = new Area {
       val inputBeforeStage = condApply(if (decodePcGen) decompressor.output else iBusRsp.output, injectorReadyCutGen)(_.s2mPipe(flush))
       if (injectorReadyCutGen) {
-        iBusRsp.readyForError.clearWhen(inputBeforeStage.valid)
+        iBusRsp.readyForError.clearWhen(inputBeforeStage.valid) //Can't emit error if there is a instruction pending in the s2mPipe
         incomingInstruction setWhen (inputBeforeStage.valid)
       }
       val decodeInput = (if (injectorStage) {
         val decodeInput = inputBeforeStage.m2sPipeWithFlush(flush, collapsBubble = false)
         decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), inputBeforeStage.rsp.inst)
-        iBusRsp.readyForError.clearWhen(decodeInput.valid)
+        iBusRsp.readyForError.clearWhen(decodeInput.valid) //Can't emit error when there is a instruction pending in the injector stage buffer
         incomingInstruction setWhen (decodeInput.valid)
         decodeInput
       } else {
         inputBeforeStage
       })
+
+      if(!decodePcGen) iBusRsp.readyForError.clearWhen(!pcValid(decode)) //Need to wait a valid PC on the decode stage, as it is use to fill CSR xEPC
 
 
       def pcUpdatedGen(input : Bool, stucks : Seq[Bool], relaxedInput : Boolean) : Seq[Bool] = {
@@ -488,8 +491,17 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
         decodePrediction.cmd.hadBranch := decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL || (decode.input(BRANCH_CTRL) === BranchCtrlEnum.B && conditionalBranchPrediction)
 
+        val noPredictionOnMissaligned = (!pipeline(RVC_GEN)) generate new Area{
+          val missaligned = decode.input(BRANCH_CTRL).mux(
+            BranchCtrlEnum.JAL  ->  imm.j_sext(1),
+            default             ->  imm.b_sext(1)
+          )
+          decodePrediction.cmd.hadBranch clearWhen(missaligned)
+        }
+
         predictionJumpInterface.valid := decodePrediction.cmd.hadBranch && decode.arbitration.isFiring //TODO OH Doublon de priorité
         predictionJumpInterface.payload := decode.input(PC) + ((decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
+        if(relaxPredictorAddress) KeepAttribute(predictionJumpInterface.payload)
 
 //        when(predictionJumpInterface.payload((if(pipeline(RVC_GEN)) 0 else 1) downto 0) =/= 0){
 //          decodePrediction.cmd.hadBranch := False
@@ -605,5 +617,10 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         })
       }
     }
+
+    def stageXToIBusRsp[T <: Data](stage : Any, input : T): (T) ={
+      iBusRsp.stages.dropWhile(_ != stage).tail.foldLeft(input)((data,stage) => RegNextWhen(data, stage.output.ready))
+    }
+
   }
 }

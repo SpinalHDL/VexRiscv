@@ -112,19 +112,20 @@ class MemoryTranslatorPlugin(tlbSize : Int,
           port.bus.rsp.allowRead := cacheLine.allowRead
           port.bus.rsp.allowWrite := cacheLine.allowWrite
           port.bus.rsp.allowExecute := cacheLine.allowExecute
-          port.bus.rsp.allowUser := cacheLine.allowUser
-          port.bus.rsp.hit := cacheHit
+          ???
+//          port.bus.rsp.hit := cacheHit
 //          port.stage.arbitration.haltItself setWhen (port.bus.cmd.isValid && !cacheHit && !sharedMiss)
         } otherwise {
           port.bus.rsp.physicalAddress := port.bus.cmd.virtualAddress
           port.bus.rsp.allowRead := True
           port.bus.rsp.allowWrite := True
           port.bus.rsp.allowExecute := True
-          port.bus.rsp.allowUser := True
-          port.bus.rsp.hit := True
+          ???
+//          port.bus.rsp.hit := True
         }
         port.bus.rsp.isIoAccess := ioRange(port.bus.rsp.physicalAddress)
-        port.bus.rsp.miss := sharedMiss
+        ???
+//        port.bus.rsp.miss := sharedMiss
       }
     }
 

@@ -101,31 +101,26 @@ object VexRiscvSynthesisBench {
     }
 
 
-    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full)
+    val linuxBalanced = new Rtl {
+      override def getName(): String = "VexRiscv linux balanced"
+      override def getRtlPath(): String = "VexRiscvLinuxBalanced.v"
+      SpinalConfig(inlineRom = true).generateVerilog(wrap(new VexRiscv(LinuxGen.configFull(false, true))).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
+    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced)
 //    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache)
     //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
-//    val rtls = List(fullNoMmu)
+//    val rtls = List(smallAndProductive)
 
     val targets = XilinxStdTargets(
-      vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
+      vivadoArtix7Path = "/media/miaou/HD/linux/Xilinx/Vivado/2018.3/bin"
     ) ++ AlteraStdTargets(
-      quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin",
-      quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin"
+      quartusCycloneIVPath = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin",
+      quartusCycloneVPath  = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin"
     ) ++  IcestormStdTargets().take(1)
 
-
-//    val targets = XilinxStdTargets(
-//      vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
-//    )
-
-//    val targets =  AlteraStdTargets(
-//      quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin",
-//      quartusCycloneVPath  = null
-//    )
-
-
     //    val targets = IcestormStdTargets()
-    Bench(rtls, targets, "/eda/tmp")
+    Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
   }
 }
 
@@ -146,13 +141,13 @@ object BrieySynthesisBench {
     val rtls = List(briey)
 
     val targets = XilinxStdTargets(
-      vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
+      vivadoArtix7Path = "/media/miaou/HD/linux/Xilinx/Vivado/2018.3/bin"
     ) ++ AlteraStdTargets(
-      quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin/",
-      quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin/"
+      quartusCycloneIVPath = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin",
+      quartusCycloneVPath  = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin"
     )
 
-    Bench(rtls, targets, "/eda/tmp/")
+    Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
   }
 }
 
@@ -185,14 +180,13 @@ object MuraxSynthesisBench {
     val rtls = List(murax, muraxFast)
 
     val targets = IcestormStdTargets().take(1) ++ XilinxStdTargets(
-      vivadoArtix7Path = "/eda/Xilinx/Vivado/2017.2/bin"
+      vivadoArtix7Path = "/media/miaou/HD/linux/Xilinx/Vivado/2018.3/bin"
     ) ++ AlteraStdTargets(
-      quartusCycloneIVPath = "/eda/intelFPGA_lite/17.0/quartus/bin/",
-      quartusCycloneVPath  = "/eda/intelFPGA_lite/17.0/quartus/bin/"
+      quartusCycloneIVPath = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin",
+      quartusCycloneVPath  = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin"
     )
 
-
-    Bench(rtls, targets, "/eda/tmp/")
+    Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
   }
 }
 

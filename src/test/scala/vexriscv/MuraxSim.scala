@@ -75,7 +75,7 @@ object MuraxSim {
             })
             setAlignmentX(awt.Component.CENTER_ALIGNMENT)
           })
-          setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE)
+          setDefaultCloseOperation(WindowConstants.EXIT_ON_CLOSE)
           pack()
           setVisible(true)
 

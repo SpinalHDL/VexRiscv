@@ -1,14 +1,14 @@
 package vexriscv.plugin
 
 import vexriscv.{Pipeline, Stage}
-import spinal.core.Area
+import spinal.core.{Area, Nameable}
 
 /**
  * Created by PIC32F_USER on 03/03/2017.
  */
-trait Plugin[T <: Pipeline] {
+trait Plugin[T <: Pipeline] extends Nameable{
   var pipeline : T = null.asInstanceOf[T]
-  def getName() = this.getClass.getSimpleName.replace("$","")
+  setName(this.getClass.getSimpleName.replace("$",""))
 
   def setup(pipeline: T) : Unit = {}
   def build(pipeline: T) : Unit

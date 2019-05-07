@@ -4,6 +4,7 @@ import spinal.core._
 import spinal.lib._
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 
 class Stageable[T <: Data](_dataType : => T) extends HardType[T](_dataType) with Nameable{
@@ -49,7 +50,6 @@ class Stage() extends Area{
     val haltByOther = False   //When settable, stuck the instruction, should only be set by something else than the stucked instruction
     val removeIt    = False   //When settable, unschedule the instruction as if it was never executed (no side effect)
     val flushAll    = False   //When settable, unschedule instructions in the current stage and all prior ones
-    val redoIt      = False   //Allow to notify that a given instruction in a pipeline is rescheduled
     val isValid     = Bool //Inform if a instruction is in the current stage
     val isStuck     = Bool           //Inform if the instruction is stuck (haltItself || haltByOther)
     val isStuckByOthers = Bool       //Inform if the instruction is stuck by sombody else
@@ -68,6 +68,11 @@ class Stage() extends Area{
   val inputsDefault   = mutable.HashMap[Stageable[Data],Data]()
   val outputsDefault  = mutable.HashMap[Stageable[Data],Data]()
 
+  val dontSample      = mutable.HashMap[Stageable[_], ArrayBuffer[Bool]]()
+
+  def dontSampleStageable(s : Stageable[_], cond : Bool): Unit ={
+    dontSample.getOrElseUpdate(s, ArrayBuffer[Bool]()) += cond
+  }
   def inputInit[T <: BaseType](stageable : Stageable[T],initValue : T) =
     Component.current.addPrePopTask(() => inputsDefault(stageable.asInstanceOf[Stageable[Data]]).asInstanceOf[T].getDrivingReg.init(initValue))
 }
