@@ -3,6 +3,7 @@ package vexriscv.plugin
 import vexriscv._
 import spinal.core._
 import spinal.lib._
+import spinal.lib.bus.amba3.ahblite.{AhbLite3, AhbLite3Config, AhbLite3Master}
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
@@ -65,10 +66,15 @@ object IBusSimpleBus{
     addressWidth = 32,
     dataWidth = 32
   )
+
+  def getAhbLite3Config() = AhbLite3Config(
+    addressWidth = 32,
+    dataWidth = 32
+  )
 }
 
 
-case class IBusSimpleBus(interfaceKeepData : Boolean = false) extends Bundle with IMasterSlave {
+case class IBusSimpleBus(cmdIsPersistente : Boolean = false) extends Bundle with IMasterSlave {
   var cmd = Stream(IBusSimpleCmd())
   var rsp = Flow(IBusSimpleRsp())
 
@@ -78,8 +84,16 @@ case class IBusSimpleBus(interfaceKeepData : Boolean = false) extends Bundle wit
   }
 
 
+  def cmdS2mPipe() : IBusSimpleBus = {
+    val s = IBusSimpleBus()
+    s.cmd    << this.cmd.s2mPipe()
+    this.rsp << s.rsp
+    s
+  }
+
+
   def toAxi4ReadOnly(): Axi4ReadOnly = {
-    assert(!interfaceKeepData)
+    assert(cmdIsPersistente)
     val axi = Axi4ReadOnly(IBusSimpleBus.getAxi4Config())
 
     axi.ar.valid := cmd.valid
@@ -94,17 +108,11 @@ case class IBusSimpleBus(interfaceKeepData : Boolean = false) extends Bundle wit
     rsp.error := !axi.r.isOKAY()
     axi.r.ready := True
 
-
-    //TODO remove
-    val axi2 = Axi4ReadOnly(IBusSimpleBus.getAxi4Config())
-    axi.ar >-> axi2.ar
-    axi.r << axi2.r
-//    axi2 << axi
-    axi2
+    axi
   }
 
   def toAvalon(): AvalonMM = {
-    assert(!interfaceKeepData)
+    assert(cmdIsPersistente)
     val avalonConfig = IBusSimpleBus.getAvalonConfig()
     val mm = AvalonMM(avalonConfig)
 
@@ -154,6 +162,26 @@ case class IBusSimpleBus(interfaceKeepData : Boolean = false) extends Bundle wit
     rsp.error := False
     bus
   }
+
+  //cmdForkPersistence need to bet set
+  def toAhbLite3Master(): AhbLite3Master = {
+    val bus = AhbLite3Master(IBusSimpleBus.getAhbLite3Config())
+    bus.HADDR     := this.cmd.pc
+    bus.HWRITE    := False
+    bus.HSIZE     := 2
+    bus.HBURST    := 0
+    bus.HPROT     := "1110"
+    bus.HTRANS    := this.cmd.valid ## B"0"
+    bus.HMASTLOCK := False
+    bus.HWDATA.assignDontCare()
+    this.cmd.ready := bus.HREADY
+
+    val pending = RegInit(False) clearWhen(bus.HREADY) setWhen(this.cmd.fire)
+    this.rsp.valid := bus.HREADY && pending
+    this.rsp.inst := bus.HRDATA
+    this.rsp.error := bus.HRESP
+    bus
+  }
 }
 
 
@@ -199,7 +227,7 @@ class IBusSimplePlugin(resetVector : BigInt,
 
   override def setup(pipeline: VexRiscv): Unit = {
     super.setup(pipeline)
-    iBus = master(IBusSimpleBus(false)).setName("iBus")
+    iBus = master(IBusSimpleBus(cmdForkPersistence)).setName("iBus")
 
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.add(FENCE_I, Nil)
