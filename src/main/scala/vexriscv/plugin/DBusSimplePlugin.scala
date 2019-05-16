@@ -259,11 +259,17 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     bus.cmd.opcode := (cmd.wr ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
     bus.cmd.address := cmd.address.resized
     bus.cmd.data := cmd.data
+    bus.cmd.length := cmd.size.mux(
+      0       -> U"00",
+      1       -> U"01",
+      default -> U"11"
+    )
     bus.cmd.mask := cmd.size.mux(
-      0 -> B"0001",
-      1 -> B"0011",
+      0       -> B"0001",
+      1       -> B"0011",
       default -> B"1111"
     ) |<< cmd.address(1 downto 0)
+
     cmd.ready := bus.cmd.ready
 
     rsp.ready := bus.rsp.valid && !bus.rsp.context(0)
