@@ -82,8 +82,7 @@ object IBusSimpleBus{
     contextWidth = 0,
     canRead = true,
     canWrite = false,
-    allowUnalignedWordBurst = false,
-    allowUnalignedByteBurst = false,
+    alignment     = BmbParameter.BurstAlignement.LENGTH,
     maximumPendingTransactionPerId = if(plugin != null) plugin.pendingMax else Int.MaxValue
   )
 }

@@ -85,8 +85,7 @@ object DBusSimpleBus{
     contextWidth = 1,
     canRead = true,
     canWrite = true,
-    allowUnalignedWordBurst = false,
-    allowUnalignedByteBurst = false,
+    alignment     = BmbParameter.BurstAlignement.LENGTH,
     maximumPendingTransactionPerId = Int.MaxValue
   )
 }
