@@ -5,8 +5,10 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4ReadOnly}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
+import spinal.lib.bus.bmb.{Bmb, BmbParameter}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
+import vexriscv.plugin.{IBusSimpleBus, IBusSimplePlugin}
 
 
 case class InstructionCacheConfig( cacheSize : Int,
@@ -63,6 +65,18 @@ case class InstructionCacheConfig( cacheSize : Int,
     tgdWidth = 0,
     useBTE = true,
     useCTI = true
+  )
+
+  def getBmbParameter() = BmbParameter(
+    addressWidth = 32,
+    dataWidth = 32,
+    lengthWidth = log2Up(this.bytePerLine),
+    sourceWidth = 0,
+    contextWidth = 0,
+    canRead = true,
+    canWrite = false,
+    alignment = BmbParameter.BurstAlignement.LENGTH,
+    maximumPendingTransactionPerId = 1
   )
 }
 
@@ -231,6 +245,21 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
     rsp.valid := RegNext(bus.CYC && bus.ACK) init(False)
     rsp.data := RegNext(bus.DAT_MISO)
     rsp.error := False //TODO
+    bus
+  }
+
+  def toBmb() : Bmb = {
+    val busParameter = p.getBmbParameter
+    val bus = Bmb(busParameter)
+    bus.cmd.arbitrationFrom(cmd)
+    bus.cmd.opcode := Bmb.Cmd.Opcode.READ
+    bus.cmd.address := cmd.address.resized
+    bus.cmd.length := (1 << p.bytePerLine) - 1
+    bus.cmd.last := True
+    rsp.valid := bus.rsp.valid
+    rsp.data := bus.rsp.data
+    rsp.error := bus.rsp.isError
+    bus.rsp.ready := True
     bus
   }
 }
