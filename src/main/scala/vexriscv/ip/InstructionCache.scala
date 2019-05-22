@@ -254,7 +254,7 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
     bus.cmd.arbitrationFrom(cmd)
     bus.cmd.opcode := Bmb.Cmd.Opcode.READ
     bus.cmd.address := cmd.address.resized
-    bus.cmd.length := (1 << p.bytePerLine) - 1
+    bus.cmd.length := p.bytePerLine - 1
     bus.cmd.last := True
     rsp.valid := bus.rsp.valid
     rsp.data := bus.rsp.data
