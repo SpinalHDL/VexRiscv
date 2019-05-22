@@ -310,7 +310,7 @@ trait IContextSwitching{
   def isContextSwitching : Bool
 }
 
-class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface{
+class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface{
   import config._
   import CsrAccess._
 
