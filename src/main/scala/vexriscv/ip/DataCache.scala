@@ -323,7 +323,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     bus.cmd.opcode := (cmd.wr ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
     bus.cmd.address := cmd.address.resized
     bus.cmd.data := cmd.data
-    bus.cmd.length := cmd.length << 2 //TODO better sub word access
+    bus.cmd.length := (cmd.length << 2) | 3 //TODO better sub word access
     bus.cmd.mask := cmd.mask
 
     cmd.ready := bus.cmd.ready
