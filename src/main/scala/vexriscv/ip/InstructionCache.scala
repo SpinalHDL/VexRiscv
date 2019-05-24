@@ -362,7 +362,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     io.mem.cmd.address := address(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
     io.mem.cmd.size := log2Up(p.bytePerLine)
 
-    val wayToAllocate = Counter(wayCount, fire)
+    val wayToAllocate = Counter(wayCount, !valid)
     val wordIndex = Reg(UInt(log2Up(memWordPerLine) bits)) init(0)
 
 
