@@ -129,7 +129,13 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
       iBus = master(new InstructionCacheMemBus(IBusCachedPlugin.this.config)).setName("iBus")
       iBus <> cache.io.mem
       iBus.cmd.address.allowOverride := cache.io.mem.cmd.address
-      
+
+      //Memory bandwidth counter
+      val rspCounter = RegInit(UInt(32 bits)) init(0)
+      when(iBus.rsp.valid){
+        rspCounter := rspCounter + 1
+      }
+
       val stageOffset = if(relaxedPcCalculation) 1 else 0
       def stages = iBusRsp.stages.drop(stageOffset)
 
