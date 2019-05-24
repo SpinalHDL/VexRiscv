@@ -678,9 +678,11 @@ class DataCache(p : DataCacheConfig) extends Component{
       tagsWriteCmd.data.error := error || io.mem.rsp.error
       tagsWriteCmd.way := waysAllocator
 
-      waysAllocator := (waysAllocator ## waysAllocator.msb).resized
-
       error := False
+    }
+
+    when(!valid){
+      waysAllocator := (waysAllocator ## waysAllocator.msb).resized
     }
 
     io.cpu.redo setWhen(valid)
