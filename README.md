@@ -39,7 +39,7 @@ This repository hosts a RISC-V implementation written in SpinalHDL. Here are som
 - Optional interrupts and exception handling with Machine, [Supervisor] and [User] modes as defined in the [RISC-V Privileged ISA Specification v1.10](https://riscv.org/specifications/privileged-isa/).
 - Two implementations of shift instructions: Single cycle and shiftNumber cycles
 - Each stage can have optional bypass or interlock hazard logic
-- Linux compatible
+- Linux compatible (SoC : https://github.com/enjoy-digital/linux-on-litex-vexriscv)
 - Zephyr compatible
 - [FreeRTOS port](https://github.com/Dolu1990/FreeRTOS-RISCV)
 
