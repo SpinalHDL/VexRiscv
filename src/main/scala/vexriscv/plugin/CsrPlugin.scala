@@ -879,9 +879,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         import execute._
         //Manage WFI instructions
         val inWfi = False.addTag(Verilator.public)
+        val wfiWake = RegNext(interruptSpecs.map(_.cond).orR) init(False)
         if(wfiGenAsWait) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.WFI){
           inWfi := True
-          when(!interrupt){
+          when(!wfiWake){
             arbitration.haltItself := True
           }
         }
