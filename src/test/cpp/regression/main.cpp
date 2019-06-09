@@ -1550,7 +1550,7 @@ public:
 
                         riscvRef.liveness(top->VexRiscv->execute_CsrPlugin_inWfi);
                         if(top->VexRiscv->CsrPlugin_interruptJump){
-                            if(riscvRefEnable) riscvRef.trap(true, top->VexRiscv->CsrPlugin_interruptCode);
+                            if(riscvRefEnable) riscvRef.trap(true, top->VexRiscv->CsrPlugin_interrupt_code);
                         }
                     }
 				#endif
