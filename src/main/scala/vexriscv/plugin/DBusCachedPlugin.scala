@@ -239,7 +239,8 @@ class DBusCachedPlugin(config : DataCacheConfig,
 
       redoBranch.valid := False
       redoBranch.payload := input(PC)
-      arbitration.flushAll setWhen(redoBranch.valid)
+      arbitration.flushIt setWhen(redoBranch.valid)
+      arbitration.flushNext setWhen(redoBranch.valid)
 
       if(catchSomething) {
         exceptionBus.valid := False //cache.io.cpu.writeBack.mmuMiss || cache.io.cpu.writeBack.accessError || cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.unalignedAccess

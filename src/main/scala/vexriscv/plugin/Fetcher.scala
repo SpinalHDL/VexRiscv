@@ -103,7 +103,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       pcLoad.payload := MuxOH(OHMasking.first(valids.asBits), pcs)
     }
 
-    def flush = jump.pcLoad.valid || fetcherflushIt
+    def flush = fetcherflushIt || stages.map(_.arbitration.flushNext).orR
 
     class PcFetch extends Area{
       val preOutput = Stream(UInt(32 bits))
@@ -499,9 +499,14 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
           decodePrediction.cmd.hadBranch clearWhen(missaligned)
         }
 
-        predictionJumpInterface.valid := decodePrediction.cmd.hadBranch && decode.arbitration.isFiring //TODO OH Doublon de priorité
+        //TODO no more fireing depedancies
+        predictionJumpInterface.valid := decodePrediction.cmd.hadBranch && decode.arbitration.isValid //TODO OH Doublon de priorité
         predictionJumpInterface.payload := decode.input(PC) + ((decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
         if(relaxPredictorAddress) KeepAttribute(predictionJumpInterface.payload)
+
+        when(predictionJumpInterface.valid && decode.arbitration.isFiring){
+          flushIt()
+        }
 
 //        when(predictionJumpInterface.payload((if(pipeline(RVC_GEN)) 0 else 1) downto 0) =/= 0){
 //          decodePrediction.cmd.hadBranch := False

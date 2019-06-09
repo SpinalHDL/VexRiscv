@@ -351,7 +351,9 @@ class IBusSimplePlugin(resetVector : BigInt,
           redoRequired setWhen( stages.last.input.valid && mmu.joinCtx.refilling)
           redoBranch.valid := redoRequired && iBusRsp.readyForError
           redoBranch.payload := decode.input(PC)
-          decode.arbitration.flushAll setWhen(redoBranch.valid)
+
+          decode.arbitration.flushIt setWhen(redoBranch.valid)
+          decode.arbitration.flushNext setWhen(redoBranch.valid)
         }
 
 
