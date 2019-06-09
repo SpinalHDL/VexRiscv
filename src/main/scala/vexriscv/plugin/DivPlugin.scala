@@ -21,6 +21,7 @@ class DivPlugin extends MulDivIterativePlugin(genMul = false, genDiv = true, mul
 //       REGFILE_WRITE_VALID      -> True,
 //       BYPASSABLE_EXECUTE_STAGE -> False,
 //       BYPASSABLE_MEMORY_STAGE  -> True,
+//       BYPASSABLE_MEMORY2_STAGE -> True,
 //       RS1_USE                 -> True,
 //       RS2_USE                 -> True,
 //       IS_DIV                   -> True

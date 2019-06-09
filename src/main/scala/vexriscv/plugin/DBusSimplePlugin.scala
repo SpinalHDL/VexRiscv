@@ -293,6 +293,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       REGFILE_WRITE_VALID -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
       BYPASSABLE_MEMORY_STAGE  -> Bool(earlyInjection),
+      BYPASSABLE_MEMORY2_STAGE -> Bool(earlyInjection),
       MEMORY_STORE -> False
     ) ++ (if(catchAccessFault || catchAddressMisaligned) List(HAS_SIDE_EFFECT -> True) else Nil)
 

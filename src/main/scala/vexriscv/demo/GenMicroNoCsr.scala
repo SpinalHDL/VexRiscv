@@ -11,6 +11,7 @@ object GenMicroNoCsr extends App{
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       withMemoryStage = false,
+      withMemory2Stage = false,
       withWriteBackStage = false,
       plugins = List(
         new IBusSimplePlugin(

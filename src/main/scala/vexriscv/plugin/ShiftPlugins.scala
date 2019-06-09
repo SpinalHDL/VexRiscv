@@ -26,6 +26,7 @@ class FullBarrelShifterPlugin(earlyInjection : Boolean = false) extends Plugin[V
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> Bool(earlyInjection),
       BYPASSABLE_MEMORY_STAGE  -> True,
+      BYPASSABLE_MEMORY2_STAGE -> True,
       RS1_USE                  -> True
     )
 
@@ -35,6 +36,7 @@ class FullBarrelShifterPlugin(earlyInjection : Boolean = false) extends Plugin[V
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> Bool(earlyInjection),
       BYPASSABLE_MEMORY_STAGE  -> True,
+      BYPASSABLE_MEMORY2_STAGE -> True,
       RS1_USE                  -> True,
       RS2_USE                  -> True
     )

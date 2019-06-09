@@ -10,6 +10,7 @@ trait HazardService{
 
 class HazardSimplePlugin(bypassExecute : Boolean = false,
                          bypassMemory: Boolean = false,
+                         bypassMemory2: Boolean = false,
                          bypassWriteBack: Boolean = false,
                          bypassWriteBackBuffer : Boolean = false,
                          pessimisticUseSrc : Boolean = false,
@@ -95,6 +96,7 @@ class HazardSimplePlugin(bypassExecute : Boolean = false,
     }
 
     if(withWriteBackStage) trackHazardWithStage(writeBack,bypassWriteBack,null)
+    if(withMemory2Stage)   trackHazardWithStage(memory2  ,bypassMemory2  ,BYPASSABLE_MEMORY2_STAGE)
     if(withMemoryStage)    trackHazardWithStage(memory   ,bypassMemory   ,BYPASSABLE_MEMORY_STAGE)
     if(readStage != execute) trackHazardWithStage(execute  ,bypassExecute , if(stages.last == execute) null else BYPASSABLE_EXECUTE_STAGE)
 
