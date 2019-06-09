@@ -233,7 +233,6 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
 
         redoFetch clearWhen(!iBusRsp.readyForError)
         cache.io.cpu.fill.valid clearWhen(!iBusRsp.readyForError)
-        if (catchSomething) decodeExceptionPort.valid clearWhen(fetcherHalt)
 
         redoBranch.valid := redoFetch
         redoBranch.payload := (if (decodePcGen) decode.input(PC) else cacheRsp.pc)

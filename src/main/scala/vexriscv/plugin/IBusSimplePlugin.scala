@@ -372,7 +372,7 @@ class IBusSimplePlugin(resetVector : BigInt,
               exceptionDetected := True
             }
           }
-          decodeExceptionPort.valid  :=  exceptionDetected && iBusRsp.readyForError && !fetcherHalt
+          decodeExceptionPort.valid  :=  exceptionDetected && iBusRsp.readyForError
         }
       }
     }
