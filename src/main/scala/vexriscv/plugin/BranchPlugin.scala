@@ -84,6 +84,8 @@ class BranchPlugin(earlyBranch : Boolean,
     decodePrediction
   }
 
+  def hasHazardOnBranch = if(earlyBranch) pipeline.service(classOf[HazardService]).hazardOnExecuteRS else False
+
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
     import pipeline.config._
@@ -200,7 +202,7 @@ class BranchPlugin(earlyBranch : Boolean,
     //Apply branchs (JAL,JALR, Bxx)
     branchStage plug new Area {
       import branchStage._
-      jumpInterface.valid := arbitration.isValid && input(BRANCH_DO)
+      jumpInterface.valid := arbitration.isValid && input(BRANCH_DO) && !hasHazardOnBranch
       jumpInterface.payload := input(BRANCH_CALC)
 
       when(jumpInterface.valid && !arbitration.isStuckByOthers) {
@@ -282,7 +284,7 @@ class BranchPlugin(earlyBranch : Boolean,
     val branchStage = if(earlyBranch) execute else memory
     branchStage plug new Area {
       import branchStage._
-      jumpInterface.valid := arbitration.isValid && input(BRANCH_DO)
+      jumpInterface.valid := arbitration.isValid && input(BRANCH_DO) && !hasHazardOnBranch
       jumpInterface.payload := input(BRANCH_CALC)
 
       when(jumpInterface.valid && !arbitration.isStuckByOthers) {
@@ -361,7 +363,7 @@ class BranchPlugin(earlyBranch : Boolean,
           input(PC)
       }
 
-      jumpInterface.valid := arbitration.isValid && predictionMissmatch //Probably just isValid instead of isFiring is better
+      jumpInterface.valid := arbitration.isValid && predictionMissmatch && !hasHazardOnBranch
       jumpInterface.payload := (input(BRANCH_DO) ? input(BRANCH_CALC) | input(NEXT_PC))
 
 
