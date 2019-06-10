@@ -474,7 +474,7 @@ class CsrDimension(freertos : String, zephyr : String) extends VexRiscvDimension
     if(supervisor){
       new VexRiscvPosition("Supervisor") with CatchAllPosition{
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.linuxFull(0x80000020l))
-        override def testParam = s"FREERTOS=$freertos ZEPHYR=$zephyr LINUX_REGRESSION=yes SUPERVISOR=yes"
+        override def testParam = s"FREERTOS=$freertos ZEPHYR=$zephyr LINUX_REGRESSION=${sys.env.getOrElse("VEXRISCV_REGRESSION_LINUX_REGRESSION", "yes")} SUPERVISOR=yes"
       }
     } else if(catchAll){
       new VexRiscvPosition("MachineOs") with CatchAllPosition{
@@ -598,7 +598,7 @@ class TestIndividualFeatures extends FunSuite {
 
     test(prefix + name + "_test") {
       val debug = true
-      val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=9999924910246l FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=yes THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", 1)} ") + s" SEED=${testSeed} "
+      val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=9999924910246l STOP_ON_ERROR=no FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${sys.env.getOrElse("VEXRISCV_REGRESSION_COREMARK", "yes")} THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", 1)} ") + s" SEED=${testSeed} "
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
       println(testCmd)
       val str = doCmd(testCmd)
@@ -609,11 +609,11 @@ class TestIndividualFeatures extends FunSuite {
 //  dimensions.foreach(d => d.positions.foreach(p => p.dimension = d))
 
   val testId : Option[mutable.HashSet[Int]] = None
-  val seed = Random.nextLong()
+  val seed = sys.env.getOrElse("VEXRISCV_REGRESSION_SEED", Random.nextLong().toString).toLong
 
-//  val testId = Some(mutable.HashSet(18,34,77,85,118,129,132,134,152,167,175,188,191,198,199)) //37/29 sp_flop_rv32i_O3
-//val testId = Some(mutable.HashSet(0))
-//  val testId = Some(mutable.HashSet(4))
+//  val testId = Some(mutable.HashSet(3,4,9,11,13,16,18,19,20,21))
+//    val testId = Some(mutable.HashSet(24, 43, 49))
+//  val testId = Some(mutable.HashSet(11))
 //  val seed = -8309068850561113754l
 
 
