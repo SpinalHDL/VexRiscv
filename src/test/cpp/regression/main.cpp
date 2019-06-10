@@ -3847,7 +3847,9 @@ int main(int argc, char **argv, char **env) {
             #endif
 
 			#ifdef DEBUG_PLUGIN
+			#ifndef CONCURRENT_OS_EXECUTIONS
 				redo(REDO,DebugPluginTest().run(1e6););
+            #endif
 			#endif
 		#endif
 
