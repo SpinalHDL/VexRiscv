@@ -284,7 +284,7 @@ class IBusSimplePlugin(resetVector : BigInt,
         mmuBus.cmd.isValid := cmdForkStage.input.valid
         mmuBus.cmd.virtualAddress := cmdForkStage.input.payload
         mmuBus.cmd.bypassTranslation := False
-        mmuBus.end := cmdForkStage.output.fire || flush
+        mmuBus.end := cmdForkStage.output.fire || fetcherflushIt
 
         cmd.pc := mmuBus.rsp.physicalAddress(31 downto 2) @@ "00"
 
@@ -311,7 +311,7 @@ class IBusSimplePlugin(resetVector : BigInt,
         //Manage flush for iBus transactions in flight
         val discardCounter = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
         discardCounter := discardCounter - (iBus.rsp.fire && discardCounter =/= 0).asUInt
-        when(flush) {
+        when(fetcherflushIt) {
           if(secondStagePersistence)
             discardCounter := pendingCmd + cmd.valid.asUInt - iBus.rsp.fire.asUInt
           else
@@ -323,7 +323,7 @@ class IBusSimplePlugin(resetVector : BigInt,
         val rspBuffer = if(!rspHoldValue) new Area{
           val c = StreamFifoLowLatency(IBusSimpleRsp(), busLatencyMin + (if(cmdForkOnSecondStage && cmdForkPersistence) 1 else 0))
           c.io.push << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
-          c.io.flush := flush
+          c.io.flush := fetcherflushIt
           rspBufferOutput << c.io.pop
         } else new Area{
           val rspStream = iBus.rsp.throwWhen(discardCounter =/= 0).toStream

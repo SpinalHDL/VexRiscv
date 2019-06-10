@@ -151,7 +151,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         stages(0).halt setWhen (cache.io.cpu.prefetch.haltIt)
 
 
-        cache.io.cpu.fetch.isRemoved := flush
+        cache.io.cpu.fetch.isRemoved := fetcherflushIt
       }
 
 
