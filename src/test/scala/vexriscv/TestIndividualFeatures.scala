@@ -561,17 +561,7 @@ class TestIndividualFeatures extends FunSuite {
     new MmuDimension
   )
 
-
-//  def genDefaultsPositions(dims : Seq[VexRiscvDimension], stack : List[VexRiscvPosition] = Nil) : Seq[List[VexRiscvPosition]] = dims match {
-//    case head :: tail => head.default.flatMap(p => genDefaultsPositions(tail, p :: stack))
-//    case Nil => List(stack)
-//  }
-
-//  val usedPositions = mutable.HashSet[VexRiscvPosition]();
-//  val positionsCount = dimensions.map(d => d.positions.length).sum
-
   def doTest(positionsToApply : List[VexRiscvPosition], prefix : String = "", testSeed : Int, universes : mutable.HashSet[VexRiscvUniverse]): Unit ={
-//    usedPositions ++= positionsToApply
     val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
     val noWriteback = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
     def gen = {
@@ -605,8 +595,6 @@ class TestIndividualFeatures extends FunSuite {
       assert(str.contains("REGRESSION SUCCESS") && !str.contains("Broken pipe"))
     }
   }
-
-//  dimensions.foreach(d => d.positions.foreach(p => p.dimension = d))
 
   val testId : Option[mutable.HashSet[Int]] = None
   val seed = sys.env.getOrElse("VEXRISCV_REGRESSION_SEED", Random.nextLong().toString).toLong
@@ -655,31 +643,4 @@ class TestIndividualFeatures extends FunSuite {
       doTest(positions," random_" + i + "_", testSeed, universe)
     Hack.dCounter += 1
   }
-
-//  println(s"${usedPositions.size}/$positionsCount positions")
-
-//  for (dimension <- dimensions) {
-//    for (position <- dimension.positions/* if position.name.contains("Cached")*/) {
-//      for(defaults <- genDefaultsPositions(dimensions.filter(_ != dimension))){
-//        doTest(position :: defaults)
-//      }
-//    }
-//  }
 }
-
-
-
-/*
-val seed = -2412372746600605141l
-
-129
-FAIL AltQTest_rv32i_O3
-FAIL AltQTest_rv32ic_O3
-FAIL GenQTest_rv32i_O0
-
-134
-FAIL AltQTest_rv32i_O3
-
-  val seed = 4331444545509090137l
-1 => flops i O0
- */
