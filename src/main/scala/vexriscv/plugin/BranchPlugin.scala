@@ -345,7 +345,7 @@ class BranchPlugin(earlyBranch : Boolean,
       val branchAdder = branch_src1 + branch_src2
       insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ "0"
       insert(NEXT_PC) := input(PC) + (if(pipeline(RVC_GEN)) ((input(IS_RVC)) ? U(2) | U(4)) else 4)
-      insert(TARGET_MISSMATCH) := input(PC) =/= input(BRANCH_CALC)
+      insert(TARGET_MISSMATCH) := decode.input(PC) =/= input(BRANCH_CALC)
     }
 
     //Apply branchs (JAL,JALR, Bxx)

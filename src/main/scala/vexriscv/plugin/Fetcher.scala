@@ -185,7 +185,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       }
 
       //application of the selected jump request
-      when(jump.pcLoad.valid && (!decode.arbitration.isValid || !decode.arbitration.isStuck || decode.arbitration.isRemoved)) {
+      when(jump.pcLoad.valid && (!decode.arbitration.isStuck || decode.arbitration.isRemoved)) {
         pcReg := jump.pcLoad.payload
       }
     })
