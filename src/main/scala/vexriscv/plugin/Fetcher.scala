@@ -105,62 +105,45 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
     fetcherflushIt setWhen(stages.map(_.arbitration.flushNext).orR)
 
-    class PcFetch extends Area{
-      val preOutput = Stream(UInt(32 bits))
-      val output = preOutput.haltWhen(fetcherHalt)
-      val predictionPcLoad = ifGen(prediction == DYNAMIC_TARGET) (Flow(UInt(32 bits)))
-    }
-
-    val fetchPc = new PcFetch{
+    //The fetchPC pcReg can also be use for the second stage of the fetch
+    //When the fetcherHalt is set and the pipeline isn't stalled,, the pc is propagated to to the pcReg, which allow
+    //using the pc pipeline to get the next PC value for interrupts
+    val fetchPc = new Area{
       //PC calculation without Jump
+      val output = Stream(UInt(32 bits))
       val pcReg = Reg(UInt(32 bits)) init(if(resetVector != null) resetVector else externalResetVector) addAttribute(Verilator.public)
-      val inc = RegInit(False)
-      val propagatePc = False
-
+      val corrected = False
+      val pcRegPropagate = False
+      val booted = RegNext(True) init (False)
+      val inc = RegInit(False) clearWhen(corrected || pcRegPropagate) setWhen(output.fire) clearWhen(!output.valid && output.ready)
       val pc = pcReg + (inc ## B"00").asUInt
-      val samplePcNext = False
+      val predictionPcLoad = ifGen(prediction == DYNAMIC_TARGET) (Flow(UInt(32 bits)))
 
-      if(compressedGen) {
-        when(inc) {
-          pc(1) := False
-        }
-      }
-
-      when(propagatePc){
-        samplePcNext := True
-        inc := False
+      if(compressedGen) when(inc) {
+        pc(1) := False
       }
 
       if(predictionPcLoad != null) {
         when(predictionPcLoad.valid) {
-          inc := False
-          samplePcNext := True
+          corrected := True
           pc := predictionPcLoad.payload
         }
       }
       when(jump.pcLoad.valid) {
-        inc := False
-        samplePcNext := True
+        corrected := True
         pc := jump.pcLoad.payload
       }
 
 
-      when(preOutput.fire){
-        inc := True
-        samplePcNext := True
-      }
-
-
-      when(samplePcNext) {
+      when(booted && (output.ready || fetcherflushIt || pcRegPropagate)){
         pcReg := pc
       }
 
       pc(0) := False
       if(!pipeline(RVC_GEN)) pc(1) := False
 
-      preOutput.valid := RegNext(True) init (False)
-      preOutput.payload := pc
-
+      output.valid := !fetcherHalt && booted
+      output.payload := pc
     }
 
     val decodePc = ifGen(decodePcGen)(new Area {
@@ -225,10 +208,10 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       }
 
       for((s,sNext) <- (stages, stages.tail).zipped) {
-        if(s == stages.head && pcRegReusedForSecondStage && prediction != DYNAMIC_TARGET) { //DYNAMIC_TARGET realy need PC state for both stage(0) and stage(1)
+        if(s == stages.head && pcRegReusedForSecondStage) {
           sNext.input.arbitrationFrom(s.output.toEvent().m2sPipeWithFlush(fetcherflushIt, s != stages.head, collapsBubble = false))
           sNext.input.payload := fetchPc.pcReg
-          fetchPc.propagatePc setWhen(sNext.input.fire)
+          fetchPc.pcRegPropagate setWhen(sNext.input.ready)
         } else {
           sNext.input << s.output.m2sPipeWithFlush(fetcherflushIt, s != stages.head, collapsBubble = false)
         }

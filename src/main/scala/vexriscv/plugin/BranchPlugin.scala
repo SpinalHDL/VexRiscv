@@ -204,10 +204,7 @@ class BranchPlugin(earlyBranch : Boolean,
       import branchStage._
       jumpInterface.valid := arbitration.isValid && input(BRANCH_DO) && !hasHazardOnBranch
       jumpInterface.payload := input(BRANCH_CALC)
-
-      when(jumpInterface.valid && !arbitration.isStuckByOthers) {
-        arbitration.flushNext := True
-      }
+      arbitration.flushNext setWhen(jumpInterface.valid)
 
       if(catchAddressMisalignedForReal) {
         branchExceptionPort.valid := arbitration.isValid  && input(BRANCH_DO) && jumpInterface.payload(1)
@@ -286,10 +283,7 @@ class BranchPlugin(earlyBranch : Boolean,
       import branchStage._
       jumpInterface.valid := arbitration.isValid && input(BRANCH_DO) && !hasHazardOnBranch
       jumpInterface.payload := input(BRANCH_CALC)
-
-      when(jumpInterface.valid && !arbitration.isStuckByOthers) {
-        arbitration.flushNext := True
-      }
+      arbitration.flushNext setWhen(jumpInterface.valid)
 
       if(catchAddressMisalignedForReal) {
         val unalignedJump = input(BRANCH_DO) && input(BRANCH_CALC)(1)
@@ -365,11 +359,8 @@ class BranchPlugin(earlyBranch : Boolean,
 
       jumpInterface.valid := arbitration.isValid && predictionMissmatch && !hasHazardOnBranch
       jumpInterface.payload := (input(BRANCH_DO) ? input(BRANCH_CALC) | input(NEXT_PC))
+      arbitration.flushNext setWhen(jumpInterface.valid)
 
-
-      when(jumpInterface.valid && !arbitration.isStuckByOthers) {
-        arbitration.flushNext := True
-      }
 
       if(catchAddressMisalignedForReal) {
         branchExceptionPort.valid := arbitration.isValid && input(BRANCH_DO) && input(BRANCH_CALC)(1)
