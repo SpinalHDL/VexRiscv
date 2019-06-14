@@ -28,7 +28,7 @@ case class Masked(value : BigInt,care : BigInt){
   def mergeOneBitDifSmaller(x: Masked) = {
     val bit = value - x.value
     val ret = new Masked(value &~ bit, care & ~bit)
-//    ret.isPrime = isPrime || x.isPrime
+    //    ret.isPrime = isPrime || x.isPrime
     isPrime = false
     x.isPrime = false
     ret
@@ -44,7 +44,10 @@ case class Masked(value : BigInt,care : BigInt){
   def toString(bitCount : Int) = (0 until bitCount).map(i => if(care.testBit(i)) (if(value.testBit(i)) "1" else "0") else "-").reverseIterator.reduce(_+_)
 }
 
-class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false, forceLegalInstructionComputation : Boolean = false) extends Plugin[VexRiscv] with DecoderService {
+class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false,
+                          throwIllegalInstruction : Boolean = false,
+                          assertIllegalInstruction : Boolean = false,
+                          forceLegalInstructionComputation : Boolean = false) extends Plugin[VexRiscv] with DecoderService {
   override def add(encoding: Seq[(MaskedLiteral, Seq[(Stageable[_ <: BaseType], Any)])]): Unit = encoding.foreach(e => this.add(e._1,e._2))
   override def add(key: MaskedLiteral, values: Seq[(Stageable[_ <: BaseType], Any)]): Unit = {
     val instructionModel = encodings.getOrElseUpdate(key,ArrayBuffer[(Stageable[_ <: BaseType], BaseType)]())
@@ -78,6 +81,10 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false, forceLegalI
     }
   }
 
+  val detectLegalInstructions = catchIllegalInstruction || throwIllegalInstruction || forceLegalInstructionComputation || assertIllegalInstruction
+
+  object ASSERT_ERROR extends Stageable(Bool)
+
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline.config._
     import pipeline.decode._
@@ -86,7 +93,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false, forceLegalI
 
     val stupidDecoder = false
     if(stupidDecoder){
-      if (catchIllegalInstruction || forceLegalInstructionComputation) insert(LEGAL_INSTRUCTION) := False
+      if (detectLegalInstructions) insert(LEGAL_INSTRUCTION) := False
       for(stageable <- stageables){
         if(defaults.contains(stageable)){
           insert(stageable).assignFrom(defaults(stageable))
@@ -96,7 +103,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false, forceLegalI
       }
       for((key, tasks) <- encodings){
         when(input(INSTRUCTION) === key){
-          if (catchIllegalInstruction || forceLegalInstructionComputation) insert(LEGAL_INSTRUCTION) := True
+          if (detectLegalInstructions) insert(LEGAL_INSTRUCTION) := True
           for((stageable, value) <- tasks){
             insert(stageable).assignFrom(value)
           }
@@ -145,8 +152,15 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false, forceLegalI
       // logic implementation
       val decodedBits = Bits(stageables.foldLeft(0)(_ + _.dataType.getBitsWidth) bits)
       decodedBits := Symplify(input(INSTRUCTION), spec, decodedBits.getWidth)
-      if (catchIllegalInstruction || forceLegalInstructionComputation) insert(LEGAL_INSTRUCTION) := Symplify.logicOf(input(INSTRUCTION), SymplifyBit.getPrimeImplicantsByTrueAndDontCare(spec.unzip._1.toSeq, Nil, 32))
-
+      if (detectLegalInstructions) insert(LEGAL_INSTRUCTION) := Symplify.logicOf(input(INSTRUCTION), SymplifyBit.getPrimeImplicantsByTrueAndDontCare(spec.unzip._1.toSeq, Nil, 32))
+      if (throwIllegalInstruction) {
+        input(LEGAL_INSTRUCTION) //Fill the request for later (prePopTask)
+        Component.current.addPrePopTask(() => arbitration.isValid clearWhen(!input(LEGAL_INSTRUCTION)))
+      }
+      if(assertIllegalInstruction){
+        val reg = RegInit(False) setWhen(arbitration.isValid) clearWhen(arbitration.isRemoved || !arbitration.isStuck)
+        insert(ASSERT_ERROR) := arbitration.isValid || reg
+      }
 
       //Unpack decodedBits and insert fields in the pipeline
       offset = 0
@@ -162,6 +176,10 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false, forceLegalI
       decodeExceptionPort.code := 2
       decodeExceptionPort.badAddr := input(INSTRUCTION).asUInt
     }
+    if(assertIllegalInstruction){
+      pipeline.stages.tail.foreach(s => s.output(ASSERT_ERROR) clearWhen(s.arbitration.isRemoved))
+      assert(!pipeline.stages.last.output(ASSERT_ERROR))
+    }
   }
 
   def bench(toplevel : VexRiscv): Unit ={
@@ -176,7 +194,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false, forceLegalI
       val stageables = encodings.flatMap(_._2.map(_._1)).toSet
       stageables.foreach(e => out(RegNext(RegNext(toplevel.decode.insert(e)).setName(e.getName()))))
       if(catchIllegalInstruction) out(RegNext(RegNext(toplevel.decode.insert(LEGAL_INSTRUCTION)).setName(LEGAL_INSTRUCTION.getName())))
-    //  toplevel.getAdditionalNodesRoot.clear()
+      //  toplevel.getAdditionalNodesRoot.clear()
     }
   }
 }
@@ -345,14 +363,14 @@ object SymplifyBit{
 
   def main(args: Array[String]) {
     {
-//      val default = Masked(0, 0xF)
-//      val primeImplicants = List(4, 8, 10, 11, 12, 15).map(v => Masked(v, 0xF))
-//      val dcImplicants = List(9, 14).map(v => Masked(v, 0xF).setPrime(false))
-//      val reducedPrimeImplicants = getPrimeImplicantsByTrueAndDontCare(primeImplicants, dcImplicants, 4)
-//      println("UUT")
-//      println(reducedPrimeImplicants.map(_.toString(4)).mkString("\n"))
-//      println("REF")
-//      println("-100\n10--\n1--0\n1-1-")
+      //      val default = Masked(0, 0xF)
+      //      val primeImplicants = List(4, 8, 10, 11, 12, 15).map(v => Masked(v, 0xF))
+      //      val dcImplicants = List(9, 14).map(v => Masked(v, 0xF).setPrime(false))
+      //      val reducedPrimeImplicants = getPrimeImplicantsByTrueAndDontCare(primeImplicants, dcImplicants, 4)
+      //      println("UUT")
+      //      println(reducedPrimeImplicants.map(_.toString(4)).mkString("\n"))
+      //      println("REF")
+      //      println("-100\n10--\n1--0\n1-1-")
     }
 
     {

@@ -596,6 +596,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
             historyWrite.data.branchWish := 0
 
             decode.arbitration.isValid := False
+            decode.arbitration.flushNext := True
             dynamicTargetFailureCorrection.valid := True
           }
         })

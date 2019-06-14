@@ -514,7 +514,8 @@ class DecoderDimension extends VexRiscvDimension("Decoder") {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
     new VexRiscvPosition("") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DecoderSimplePlugin(
-        catchIllegalInstruction = catchAll
+        catchIllegalInstruction = catchAll,
+        throwIllegalInstruction = false
       )
 
 //      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
@@ -587,6 +588,7 @@ class TestIndividualFeatures extends FunSuite {
 
 
     test(prefix + name + "_test") {
+      println("START TEST " + prefix + name)
       val debug = true
       val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=9999924910246l STOP_ON_ERROR=no FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${sys.env.getOrElse("VEXRISCV_REGRESSION_COREMARK", "yes")} THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", 1)} ") + s" SEED=${testSeed} "
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
