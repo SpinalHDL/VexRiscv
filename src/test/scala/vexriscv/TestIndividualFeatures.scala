@@ -474,7 +474,7 @@ class CsrDimension(freertos : String, zephyr : String) extends VexRiscvDimension
     if(supervisor){
       new VexRiscvPosition("Supervisor") with CatchAllPosition{
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.linuxFull(0x80000020l))
-        override def testParam = s"FREERTOS=$freertos ZEPHYR=$zephyr LINUX_REGRESSION=yes SUPERVISOR=yes"
+        override def testParam = s"FREERTOS=$freertos ZEPHYR=$zephyr LINUX_REGRESSION=${sys.env.getOrElse("VEXRISCV_REGRESSION_LINUX_REGRESSION", "yes")} SUPERVISOR=yes"
       }
     } else if(catchAll){
       new VexRiscvPosition("MachineOs") with CatchAllPosition{
@@ -483,8 +483,8 @@ class CsrDimension(freertos : String, zephyr : String) extends VexRiscvDimension
       }
     } else if(r.nextDouble() < 0.3){
       new VexRiscvPosition("AllNoException") with CatchAllPosition{
-        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l).noException)
-        override def testParam = s"CSR=yes CSR_SKIP_TEST=yes FREERTOS=$freertos"
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l).noExceptionButEcall)
+        override def testParam = s"CSR=yes CSR_SKIP_TEST=yes FREERTOS=$freertos ZEPHYR=$zephyr"
       }
     } else {
       new VexRiscvPosition("None") {
@@ -514,7 +514,8 @@ class DecoderDimension extends VexRiscvDimension("Decoder") {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
     new VexRiscvPosition("") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DecoderSimplePlugin(
-        catchIllegalInstruction = catchAll
+        catchIllegalInstruction = catchAll,
+        throwIllegalInstruction = false
       )
 
 //      override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
@@ -555,23 +556,13 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "1"), sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")),
+    new CsrDimension(/*sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "1")*/ "0", sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")), //Freertos old port software is broken
     new DecoderDimension,
     new DebugDimension,
     new MmuDimension
   )
 
-
-//  def genDefaultsPositions(dims : Seq[VexRiscvDimension], stack : List[VexRiscvPosition] = Nil) : Seq[List[VexRiscvPosition]] = dims match {
-//    case head :: tail => head.default.flatMap(p => genDefaultsPositions(tail, p :: stack))
-//    case Nil => List(stack)
-//  }
-
-//  val usedPositions = mutable.HashSet[VexRiscvPosition]();
-//  val positionsCount = dimensions.map(d => d.positions.length).sum
-
   def doTest(positionsToApply : List[VexRiscvPosition], prefix : String = "", testSeed : Int, universes : mutable.HashSet[VexRiscvUniverse]): Unit ={
-//    usedPositions ++= positionsToApply
     val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
     val noWriteback = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
     def gen = {
@@ -597,8 +588,9 @@ class TestIndividualFeatures extends FunSuite {
 
 
     test(prefix + name + "_test") {
+      println("START TEST " + prefix + name)
       val debug = true
-      val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=9999924910246l FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=yes THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", 1)} ") + s" SEED=${testSeed} "
+      val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=9999924910246l STOP_ON_ERROR=no FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${sys.env.getOrElse("VEXRISCV_REGRESSION_COREMARK", "yes")} THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", 1)} ") + s" SEED=${testSeed} "
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
       println(testCmd)
       val str = doCmd(testCmd)
@@ -606,14 +598,12 @@ class TestIndividualFeatures extends FunSuite {
     }
   }
 
-//  dimensions.foreach(d => d.positions.foreach(p => p.dimension = d))
-
   val testId : Option[mutable.HashSet[Int]] = None
-  val seed = Random.nextLong()
+  val seed = sys.env.getOrElse("VEXRISCV_REGRESSION_SEED", Random.nextLong().toString).toLong
 
-//  val testId = Some(mutable.HashSet(18,34,77,85,118,129,132,134,152,167,175,188,191,198,199)) //37/29 sp_flop_rv32i_O3
-//val testId = Some(mutable.HashSet(0))
-//  val testId = Some(mutable.HashSet(4))
+//  val testId = Some(mutable.HashSet(3,4,9,11,13,16,18,19,20,21))
+//    val testId = Some(mutable.HashSet(24, 43, 49))
+//  val testId = Some(mutable.HashSet(11))
 //  val seed = -8309068850561113754l
 
 
@@ -655,31 +645,4 @@ class TestIndividualFeatures extends FunSuite {
       doTest(positions," random_" + i + "_", testSeed, universe)
     Hack.dCounter += 1
   }
-
-//  println(s"${usedPositions.size}/$positionsCount positions")
-
-//  for (dimension <- dimensions) {
-//    for (position <- dimension.positions/* if position.name.contains("Cached")*/) {
-//      for(defaults <- genDefaultsPositions(dimensions.filter(_ != dimension))){
-//        doTest(position :: defaults)
-//      }
-//    }
-//  }
 }
-
-
-
-/*
-val seed = -2412372746600605141l
-
-129
-FAIL AltQTest_rv32i_O3
-FAIL AltQTest_rv32ic_O3
-FAIL GenQTest_rv32i_O0
-
-134
-FAIL AltQTest_rv32i_O3
-
-  val seed = 4331444545509090137l
-1 => flops i O0
- */

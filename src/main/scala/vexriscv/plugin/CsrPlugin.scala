@@ -74,6 +74,7 @@ case class CsrPluginConfig(
   assert(!ucycleAccess.canWrite)
   def privilegeGen = userGen || supervisorGen
   def noException = this.copy(ecallGen = false, ebreakGen = false, catchIllegalAccess = false)
+  def noExceptionButEcall = this.copy(ecallGen = true, ebreakGen = false, catchIllegalAccess = false)
 }
 
 object CsrPluginConfig{
@@ -694,7 +695,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         exceptionValids := exceptionValidsRegs
         for(portInfo <- sortedByStage; port = portInfo.port ; stage = portInfo.stage; stageId = indexOf(portInfo.stage)) {
           when(port.valid) {
-            if(indexOf(stage) != 0) stages(indexOf(stage) - 1).arbitration.flushAll := True
+            stage.arbitration.flushNext := True
             stage.arbitration.removeIt := True
             exceptionValids(stageId) := True
             exceptionContext := port.payload
@@ -716,7 +717,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           }
         }
 
-        when(exceptionValidsRegs.orR){
+        when(exceptionValids.orR){
           fetcher.haltIt()
         }
 
@@ -806,7 +807,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
         jumpInterface.valid         := True
         jumpInterface.payload       := (if(!xtvecModeGen) xtvec.base @@ "00" else (xtvec.mode === 0 || hadException) ? (xtvec.base @@ "00") | ((xtvec.base + trapCause) @@ "00") )
-        beforeLastStage.arbitration.flushAll := True
+        lastStage.arbitration.flushNext := True
 
         if(privilegeGen) privilegeReg := targetPrivilege
 
@@ -845,7 +846,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.XRET) {
           fetcher.haltIt()
           jumpInterface.valid := True
-          beforeLastStage.arbitration.flushAll := True
+          lastStage.arbitration.flushNext := True
           switch(input(INSTRUCTION)(29 downto 28)){
             is(3){
               mstatus.MPP := U"00"

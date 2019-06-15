@@ -17,6 +17,8 @@ trait Pipeline {
   val things = mutable.HashMap[PipelineThing[_], Any]()
 //  val services = ArrayBuffer[Any]()
 
+  def stageBefore(stage : Stage) = stages(indexOf(stage)-1)
+
   def indexOf(stage : Stage) = stages.indexOf(stage)
 
   def service[T](clazz : Class[T]) = {
@@ -127,7 +129,7 @@ trait Pipeline {
 
     //Arbitration
     for(stageIndex <- 0 until stages.length; stage = stages(stageIndex)) {
-      stage.arbitration.isFlushed := stages.drop(stageIndex).map(_.arbitration.flushAll).orR
+      stage.arbitration.isFlushed := stages.drop(stageIndex+1).map(_.arbitration.flushNext).orR || stages.drop(stageIndex).map(_.arbitration.flushIt).orR
       if(!unremovableStages.contains(stage))
         stage.arbitration.removeIt setWhen stage.arbitration.isFlushed
       else
