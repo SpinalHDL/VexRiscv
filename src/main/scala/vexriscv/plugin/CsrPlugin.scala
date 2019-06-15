@@ -74,6 +74,7 @@ case class CsrPluginConfig(
   assert(!ucycleAccess.canWrite)
   def privilegeGen = userGen || supervisorGen
   def noException = this.copy(ecallGen = false, ebreakGen = false, catchIllegalAccess = false)
+  def noExceptionButEcall = this.copy(ecallGen = true, ebreakGen = false, catchIllegalAccess = false)
 }
 
 object CsrPluginConfig{

@@ -483,8 +483,8 @@ class CsrDimension(freertos : String, zephyr : String) extends VexRiscvDimension
       }
     } else if(r.nextDouble() < 0.3){
       new VexRiscvPosition("AllNoException") with CatchAllPosition{
-        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l).noException)
-        override def testParam = s"CSR=yes CSR_SKIP_TEST=yes FREERTOS=$freertos"
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l).noExceptionButEcall)
+        override def testParam = s"CSR=yes CSR_SKIP_TEST=yes FREERTOS=$freertos ZEPHYR=$zephyr"
       }
     } else {
       new VexRiscvPosition("None") {
@@ -556,7 +556,7 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension(sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "1"), sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")),
+    new CsrDimension(/*sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "1")*/ "0", sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")), //Freertos old port software is broken
     new DecoderDimension,
     new DebugDimension,
     new MmuDimension
