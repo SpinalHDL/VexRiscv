@@ -49,7 +49,8 @@ class Stage() extends Area{
     val haltItself  = False   //user settable, stuck the instruction, should only be set by the instruction itself
     val haltByOther = False   //When settable, stuck the instruction, should only be set by something else than the stucked instruction
     val removeIt    = False   //When settable, unschedule the instruction as if it was never executed (no side effect)
-    val flushAll    = False   //When settable, unschedule instructions in the current stage and all prior ones
+    val flushIt    = False   //When settable, unschedule the current instruction
+    val flushNext    = False   //When settable, unschedule instruction above in the pipeline
     val isValid     = Bool //Inform if a instruction is in the current stage
     val isStuck     = Bool           //Inform if the instruction is stuck (haltItself || haltByOther)
     val isStuckByOthers = Bool       //Inform if the instruction is stuck by sombody else

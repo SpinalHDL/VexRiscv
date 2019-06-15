@@ -203,7 +203,8 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
         when(stagesFromExecute.tail.map(_.arbitration.isValid).orR === False){
           iBusFetcher.flushIt()
           iBusFetcher.haltIt()
-          execute.arbitration.flushAll := True
+          execute.arbitration.flushIt   := True
+          execute.arbitration.flushNext := True
           haltIt := True
           haltedByBreak := True
         }

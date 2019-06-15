@@ -1550,7 +1550,7 @@ public:
 
                         riscvRef.liveness(top->VexRiscv->execute_CsrPlugin_inWfi);
                         if(top->VexRiscv->CsrPlugin_interruptJump){
-                            if(riscvRefEnable) riscvRef.trap(true, top->VexRiscv->CsrPlugin_interruptCode);
+                            if(riscvRefEnable) riscvRef.trap(true, top->VexRiscv->CsrPlugin_interrupt_code);
                         }
                     }
 				#endif
@@ -3443,7 +3443,7 @@ string freeRtosTests[] = {
 //    "test1","test1","test1","test1","test1","test1","test1","test1"
 
 		"AltQTest", "AltBlock",  "AltPollQ", "blocktim", "countsem", "dead", "EventGroupsDemo", "flop", "integer", "QPeek",
-		"QueueSet", "recmutex", "semtest", "TaskNotify", "BlockQ", "crhook", "dynamic",
+		"QueueSet", "recmutex", "semtest", "TaskNotify", "crhook", "dynamic",
 		"GenQTest", "PollQ", "QueueOverwrite", "QueueSetPolling", "sp_flop", "test1"
 		//"BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ","BlockQ"
 //		"flop"
@@ -3625,14 +3625,18 @@ static void multiThreading(queue<std::function<void()>> *lambdas, std::mutex *mu
 
 
 static void multiThreadedExecute(queue<std::function<void()>> &lambdas){
-	std::mutex mutex;
-	std::thread * t[THREAD_COUNT];
-	for(int id = 0;id < THREAD_COUNT;id++){
-		t[id] = new thread(multiThreading,&lambdas,&mutex);
-	}
-	for(int id = 0;id < THREAD_COUNT;id++){
-		t[id]->join();
-		delete t[id];
+    std::mutex mutex;
+    if(THREAD_COUNT == 1){
+        multiThreading(&lambdas, &mutex);
+    } else {
+        std::thread * t[THREAD_COUNT];
+        for(int id = 0;id < THREAD_COUNT;id++){
+            t[id] = new thread(multiThreading,&lambdas,&mutex);
+        }
+        for(int id = 0;id < THREAD_COUNT;id++){
+            t[id]->join();
+            delete t[id];
+        }
 	}
 }
 
@@ -3847,7 +3851,9 @@ int main(int argc, char **argv, char **env) {
             #endif
 
 			#ifdef DEBUG_PLUGIN
+			#ifndef CONCURRENT_OS_EXECUTIONS
 				redo(REDO,DebugPluginTest().run(1e6););
+            #endif
 			#endif
 		#endif
 

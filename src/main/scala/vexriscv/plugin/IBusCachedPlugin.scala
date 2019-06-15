@@ -157,7 +157,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         stages(0).halt setWhen (cache.io.cpu.prefetch.haltIt)
 
 
-        cache.io.cpu.fetch.isRemoved := flush
+        cache.io.cpu.fetch.isRemoved := fetcherflushIt
       }
 
 
@@ -237,12 +237,20 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
           decodeExceptionPort.code := 1
         }
 
-        redoFetch clearWhen(!iBusRsp.readyForError)
-        cache.io.cpu.fill.valid clearWhen(!iBusRsp.readyForError)
-        if (catchSomething) decodeExceptionPort.valid clearWhen(fetcherHalt)
+        when(!iBusRsp.readyForError){
+          redoFetch := False
+          cache.io.cpu.fill.valid := False
+        }
+//        when(pipeline.stages.map(_.arbitration.flushIt).orR){
+//          cache.io.cpu.fill.valid := False
+//        }
+
+
 
         redoBranch.valid := redoFetch
         redoBranch.payload := (if (decodePcGen) decode.input(PC) else cacheRsp.pc)
+        decode.arbitration.flushNext setWhen(redoBranch.valid)
+
 
         cacheRspArbitration.halt setWhen (issueDetected || iBusRspOutputHalt)
         iBusRsp.output.valid := cacheRspArbitration.output.valid
