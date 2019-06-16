@@ -293,9 +293,9 @@ class IBusDimension extends VexRiscvDimension("IBus") {
 
     if(r.nextDouble() < 0.5){
       val latency = r.nextInt(5) + 1
-      val compressed = true
+      val compressed = r.nextBoolean()
       val injectorStage = r.nextBoolean() || latency == 1
-      val prediction = random(r, List(DYNAMIC_TARGET))
+      val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
       val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
       val cmdForkOnSecondStage = r.nextBoolean()
       val cmdForkPersistence = r.nextBoolean()
@@ -316,10 +316,10 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       }
     } else {
       val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-      val compressed = true
+      val compressed = r.nextBoolean()
       val tighlyCoupled = r.nextBoolean() && !catchAll
 //      val tighlyCoupled = false
-      val prediction = random(r, List(DYNAMIC_TARGET))
+      val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
       val relaxedPcCalculation, twoCycleCache, injectorStage = r.nextBoolean()
       val twoCycleRam = r.nextBoolean() && twoCycleCache
       val bytePerLine = List(8,16,32,64)(r.nextInt(4))
@@ -590,7 +590,7 @@ class TestIndividualFeatures extends FunSuite {
     test(prefix + name + "_test") {
       println("START TEST " + prefix + name)
       val debug = true
-      val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=9999924910246l STOP_ON_ERROR=no FLOW_INFO=no DHRYSTONE=yes COREMARK=${sys.env.getOrElse("VEXRISCV_REGRESSION_COREMARK", "yes")} THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", 1)} ") + s" SEED=${testSeed} "
+      val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=9999924910246l STOP_ON_ERROR=no FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${sys.env.getOrElse("VEXRISCV_REGRESSION_COREMARK", "yes")} THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", 1)} ") + s" SEED=${testSeed} "
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
       println(testCmd)
       val str = doCmd(testCmd)
@@ -603,8 +603,8 @@ class TestIndividualFeatures extends FunSuite {
 
 //  val testId = Some(mutable.HashSet(3,4,9,11,13,16,18,19,20,21))
 //    val testId = Some(mutable.HashSet(24, 43, 49))
-//  val testId = Some(mutable.HashSet(55))
-//  val seed = 5354442454996442984l
+//  val testId = Some(mutable.HashSet(11))
+//  val seed = -8309068850561113754l
 
 
   val rand = new Random(seed)
