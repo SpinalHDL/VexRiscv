@@ -262,9 +262,14 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       })
 
       bufferValid clearWhen(output.fire)
+      val bufferFill = False
       when(input.fire){
-//        bufferValid := !(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1) && output.ready)
-        bufferValid := !(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1) && output.ready)
+        when(!(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1) && output.ready)) {
+          bufferValid := True
+          bufferFill := True
+        } otherwise {
+          bufferValid := False
+        }
         bufferData := input.rsp.inst(31 downto 16)
       }
       bufferValid.clearWhen(fetcherflushIt)
@@ -580,17 +585,15 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
 
         val predictionFailure = ifGen(compressedGen && cmdToRspStageCount > 1)(new Area{
-          val decompressorFailure = RegInit(False)
-          when(decompressor.input.fire){
-            decompressorFailure := decompressorContext.hit && !decompressorContext.hazard && !decompressor.output.valid && decompressorContext.line.branchWish(1)
-          }
-          decompressorFailure clearWhen(fetcherflushIt || decompressor.output.fire)
-
+          val predictionBranch =  decompressorContext.hit && !decompressorContext.hazard && decompressorContext.line.branchWish(1)
+          val unalignedWordIssue = decompressor.bufferFill && decompressor.input.rsp.inst(17 downto 16) === 3 && predictionBranch
+          val decompressorFailure = RegInit(False) setWhen(unalignedWordIssue) clearWhen(fetcherflushIt)
           val injectorFailure = Delay(decompressorFailure, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
+          val bypassFailure = if(!injectorStage) False else decompressorFailure && !injector.decodeInput.valid
 
           dynamicTargetFailureCorrection.valid := False
           dynamicTargetFailureCorrection.payload := decode.input(PC)
-          when(injector.decodeInput.valid && injectorFailure){
+          when(injectorFailure || bypassFailure){
             historyWrite.valid := True
             historyWrite.address := (decode.input(PC) >> 2).resized
             historyWrite.data.branchWish := 0

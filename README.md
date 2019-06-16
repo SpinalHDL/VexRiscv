@@ -100,9 +100,9 @@ VexRiscv full (RV32IM, 1.21 DMIPS/Mhz 2.30 Coremark/Mhz with cache trashing, 4KB
     Cyclone IV  -> 133 Mhz 2,298 LUT 1,096 FF
 
 VexRiscv full max dmips/mhz -> (RV32IM, 1.44 DMIPS/Mhz 2.70 Coremark/Mhz,, 16KB-I$,16KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch prediction in the fetch stage, branch and shift operations done in the Execute stage) ->
-    Artix 7     -> 195 Mhz 1943 LUT 1111 FF
+    Artix 7     -> 193 Mhz 1758 LUT 1094 FF
     Cyclone V   -> 90 Mhz 1,089 ALMs
-    Cyclone IV  -> 80 Mhz 2,335 LUT 1,048 FF
+    Cyclone IV  -> 79 Mhz 2,336 LUT 1,048 FF
 
 VexRiscv full with MMU (RV32IM, 1.24 DMIPS/Mhz 2.35 Coremark/Mhz, with cache trashing, 4KB-I$, 4KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, MMU) ->
     Artix 7     -> 239 Mhz 2029 LUT 1585 FF

@@ -112,7 +112,9 @@ ifneq ($(shell grep timerInterrupt ../../../../VexRiscv.v -w),)
 endif
 
 ifneq ($(shell grep externalInterrupt ../../../../VexRiscv.v -w),)
+ifneq ($(EXTERNAL_INTERRUPT),no)
     ADDCFLAGS += -CFLAGS -DEXTERNAL_INTERRUPT
+endif
 endif
 
 ifneq ($(RUN_HEX),no)
