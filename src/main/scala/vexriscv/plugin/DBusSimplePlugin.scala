@@ -6,6 +6,7 @@ import spinal.lib._
 import spinal.lib.bus.amba3.ahblite.{AhbLite3Config, AhbLite3Master}
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
+import spinal.lib.bus.bmb.{Bmb, BmbParameter}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 import vexriscv.ip.DataCacheMemCmd
@@ -75,6 +76,17 @@ object DBusSimpleBus{
   def getAhbLite3Config() = AhbLite3Config(
     addressWidth = 32,
     dataWidth = 32
+  )
+  def getBmbParameter() = BmbParameter(
+    addressWidth = 32,
+    dataWidth = 32,
+    lengthWidth = 2,
+    sourceWidth = 0,
+    contextWidth = 1,
+    canRead = true,
+    canWrite = true,
+    alignment     = BmbParameter.BurstAlignement.LENGTH,
+    maximumPendingTransactionPerId = Int.MaxValue
   )
 }
 
@@ -208,8 +220,6 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     bus
   }
 
-
-
   def toAhbLite3Master(avoidWriteToReadHazard : Boolean): AhbLite3Master = {
     val bus = AhbLite3Master(DBusSimpleBus.getAhbLite3Config())
     bus.HADDR     := this.cmd.address
@@ -235,6 +245,36 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
         this.cmd.ready := False
       }
     }
+    bus
+  }
+  
+  def toBmb() : Bmb = {
+    val pipelinedMemoryBusConfig = DBusSimpleBus.getBmbParameter()
+    val bus = Bmb(pipelinedMemoryBusConfig)
+
+    bus.cmd.valid := cmd.valid
+    bus.cmd.last := True
+    bus.cmd.context(0) := cmd.wr
+    bus.cmd.opcode := (cmd.wr ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
+    bus.cmd.address := cmd.address.resized
+    bus.cmd.data := cmd.data
+    bus.cmd.length := cmd.size.mux(
+      0       -> U"00",
+      1       -> U"01",
+      default -> U"11"
+    )
+    bus.cmd.mask := cmd.size.mux(
+      0       -> B"0001",
+      1       -> B"0011",
+      default -> B"1111"
+    ) |<< cmd.address(1 downto 0)
+
+    cmd.ready := bus.cmd.ready
+
+    rsp.ready := bus.rsp.valid && !bus.rsp.context(0)
+    rsp.data  := bus.rsp.data
+    rsp.error := bus.rsp.isError
+    bus.rsp.ready := True
 
     bus
   }

@@ -18,7 +18,7 @@ class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
   }
 }
 
-class DBusCachedPlugin(config : DataCacheConfig,
+class DBusCachedPlugin(val config : DataCacheConfig,
                        memoryTranslatorPortConfig : Any = null,
                        dBusCmdMasterPipe : Boolean = false,
                        dBusCmdSlavePipe : Boolean = false,
@@ -169,6 +169,14 @@ class DBusCachedPlugin(config : DataCacheConfig,
     def cmdBuf = optionPipe(dBusCmdSlavePipe, cache.io.mem.cmd)(_.s2mPipe())
     dBus.cmd << optionPipe(dBusCmdMasterPipe, cmdBuf)(_.m2sPipe())
     cache.io.mem.rsp << optionPipe(dBusRspSlavePipe,dBus.rsp)(_.m2sPipe())
+
+    pipeline plug new Area{
+      //Memory bandwidth counter
+      val rspCounter = RegInit(UInt(32 bits)) init(0)
+      when(dBus.rsp.valid){
+        rspCounter := rspCounter + 1
+      }
+    }
 
     decode plug new Area {
       import decode._

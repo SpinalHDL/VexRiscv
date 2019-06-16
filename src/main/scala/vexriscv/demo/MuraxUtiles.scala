@@ -12,7 +12,7 @@ import vexriscv.plugin.{DBusSimpleBus, IBusSimpleBus}
 
 class MuraxMasterArbiter(pipelinedMemoryBusConfig : PipelinedMemoryBusConfig) extends Component{
   val io = new Bundle{
-    val iBus = slave(IBusSimpleBus(false))
+    val iBus = slave(IBusSimpleBus(null))
     val dBus = slave(DBusSimpleBus())
     val masterBus = master(PipelinedMemoryBus(pipelinedMemoryBusConfig))
   }
