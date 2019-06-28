@@ -65,7 +65,7 @@ object MuraxConfig{
       SpiXdrMasterCtrl.Parameters(8, 12, SpiXdrParameter(2, 2, 1)).addFullDuplex(0,1,false),
       cmdFifoDepth = 32,
       rspFifoDepth = 32,
-      xip = SpiXdrMasterCtrl.XipBusParameters(addressWidth = 24, dataWidth = 32)
+      xip = SpiXdrMasterCtrl.XipBusParameters(addressWidth = 24, lengthWidth = 2)
     )),
     hardwareBreakpointCount = if(withXip) 3 else 0,
     cpuPlugins = ArrayBuffer( //DebugPlugin added by the toplevel
@@ -298,13 +298,7 @@ case class Murax(config : MuraxConfig) extends Component{
       val accessBus = new PipelinedMemoryBus(PipelinedMemoryBusConfig(24,32))
       mainBusMapping += accessBus -> (0xE0000000l, 16 MB)
 
-      ctrl.io.xip.cmd.valid <> (accessBus.cmd.valid && !accessBus.cmd.write)
-      ctrl.io.xip.cmd.ready <> accessBus.cmd.ready
-      ctrl.io.xip.cmd.payload <> accessBus.cmd.address
-
-      ctrl.io.xip.rsp.valid <> accessBus.rsp.valid
-      ctrl.io.xip.rsp.payload <> accessBus.rsp.data
-
+      ctrl.io.xip.fromPipelinedMemoryBus() << accessBus
       val bootloader = Apb3Rom("src/main/c/murax/xipBootloader/crt.bin")
       apbMapping += bootloader.io.apb     -> (0x1E000, 4 kB)
     })
