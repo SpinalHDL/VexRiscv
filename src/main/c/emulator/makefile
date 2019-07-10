@@ -18,6 +18,11 @@ sim: all
 qemu: CFLAGS += -DQEMU
 qemu: all
 
+litex: CFLAGS += -DLITEX -I${LITEX_BASE}/software/include
+litex: | check_litex_base all
+check_litex_base:
+	@[ "${LITEX_BASE}" ] || ( echo ">> LITEX_BASE is not set"; exit 1 )
+
 include ${STANDALONE}/common/riscv64-unknown-elf.mk
 include ${STANDALONE}/common/standalone.mk
 

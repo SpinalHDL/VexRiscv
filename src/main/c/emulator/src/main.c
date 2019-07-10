@@ -161,7 +161,7 @@ void trap(){
 #ifdef SIM
 			uint32_t instruction = csr_read(mbadaddr);
 #endif
-#ifdef QEMU
+#if defined(QEMU) || defined(LITEX)
 			uint32_t instruction = 0;
 			uint32_t i;
 			if (mepc & 2) {
