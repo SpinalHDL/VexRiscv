@@ -12,6 +12,12 @@ SRCS = 	$(wildcard src/*.c) \
 
 LDSCRIPT = ${STANDALONE}/common/ram.ld
 
+sim: CFLAGS += -DSIM
+sim: all
+
+qemu: CFLAGS += -DQEMU
+qemu: all
+
 include ${STANDALONE}/common/riscv64-unknown-elf.mk
 include ${STANDALONE}/common/standalone.mk
 
