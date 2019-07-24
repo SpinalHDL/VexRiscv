@@ -190,28 +190,44 @@ void stopSim(){
 }
 
 void putC(char ch){
+	// protect against writing to a full tx fifo
+	while(uart_txfull_read());
 	uart_rxtx_write(ch);
 }
 
 int32_t getC(){
-	return uart_rxempty_read()
-		? -1
-		: uart_rxtx_read();
+	if(uart_rxempty_read())
+	{
+		return -1;
+	}
+
+	// this is required to refresh rexempty status
+	uart_ev_pending_write(1 << 1);
+	return uart_rxtx_read();
 }
 
 uint32_t rdtime(){
- 	return (uint32_t)cpu_timer_time_read();
+	cpu_timer_latch_write(0);
+ 	uint32_t result = (uint32_t)cpu_timer_time_read();
+	cpu_timer_latch_write(1);
+ 	return result;
 }
 
 uint32_t rdtimeh(){
- 	return (uint32_t)(cpu_timer_time_read() >> 32);
+	cpu_timer_latch_write(0);
+ 	uint32_t result = (uint32_t)(cpu_timer_time_read() >> 32);
+	cpu_timer_latch_write(1);
+ 	return result;
 }
 
 void setMachineTimerCmp(uint32_t low, uint32_t high){
+	cpu_timer_latch_write(0);
 	cpu_timer_time_cmp_write((((unsigned long long int)high) << 32) | low);
+	cpu_timer_latch_write(1);
 }
 
 void halInit(){
+	cpu_timer_latch_write(1);
 }
 
 #endif
