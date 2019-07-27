@@ -18,11 +18,12 @@ class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
   }
 }
 
-class DBusCachedPlugin(config : DataCacheConfig,
+class DBusCachedPlugin(val config : DataCacheConfig,
                        memoryTranslatorPortConfig : Any = null,
                        dBusCmdMasterPipe : Boolean = false,
                        dBusCmdSlavePipe : Boolean = false,
                        dBusRspSlavePipe : Boolean = false,
+                       relaxedMemoryTranslationRegister : Boolean = false,
                        csrInfo : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService {
   import config._
 
@@ -49,6 +50,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
   object MEMORY_LRSC extends Stageable(Bool)
   object MEMORY_AMO extends Stageable(Bool)
   object IS_DBUS_SHARING extends Stageable(Bool())
+  object MEMORY_VIRTUAL_ADDRESS extends Stageable(UInt(32 bits))
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -168,6 +170,14 @@ class DBusCachedPlugin(config : DataCacheConfig,
     dBus.cmd << optionPipe(dBusCmdMasterPipe, cmdBuf)(_.m2sPipe())
     cache.io.mem.rsp << optionPipe(dBusRspSlavePipe,dBus.rsp)(_.m2sPipe())
 
+    pipeline plug new Area{
+      //Memory bandwidth counter
+      val rspCounter = RegInit(UInt(32 bits)) init(0)
+      when(dBus.rsp.valid){
+        rspCounter := rspCounter + 1
+      }
+    }
+
     decode plug new Area {
       import decode._
 
@@ -212,6 +222,8 @@ class DBusCachedPlugin(config : DataCacheConfig,
       when(cache.io.cpu.redo && arbitration.isValid && input(MEMORY_ENABLE)){
         arbitration.haltItself := True
       }
+
+      if(relaxedMemoryTranslationRegister) insert(MEMORY_VIRTUAL_ADDRESS) := cache.io.cpu.execute.address
     }
 
     memory plug new Area{
@@ -219,7 +231,7 @@ class DBusCachedPlugin(config : DataCacheConfig,
       cache.io.cpu.memory.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.memory.isStuck := arbitration.isStuck
       cache.io.cpu.memory.isRemoved := arbitration.removeIt
-      cache.io.cpu.memory.address := U(input(REGFILE_WRITE_DATA))
+      cache.io.cpu.memory.address := (if(relaxedMemoryTranslationRegister) input(MEMORY_VIRTUAL_ADDRESS) else U(input(REGFILE_WRITE_DATA)))
 
       cache.io.cpu.memory.mmuBus <> mmuBus
       cache.io.cpu.memory.mmuBus.rsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
@@ -235,7 +247,8 @@ class DBusCachedPlugin(config : DataCacheConfig,
 
       redoBranch.valid := False
       redoBranch.payload := input(PC)
-      arbitration.flushAll setWhen(redoBranch.valid)
+      arbitration.flushIt setWhen(redoBranch.valid)
+      arbitration.flushNext setWhen(redoBranch.valid)
 
       if(catchSomething) {
         exceptionBus.valid := False //cache.io.cpu.writeBack.mmuMiss || cache.io.cpu.writeBack.accessError || cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.unalignedAccess

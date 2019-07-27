@@ -68,11 +68,13 @@ case class CsrPluginConfig(
                             medelegAccess       : CsrAccess = CsrAccess.NONE,
                             midelegAccess       : CsrAccess = CsrAccess.NONE,
                             pipelineCsrRead     : Boolean = false,
+                            pipelinedInterrupt  : Boolean = true,
                             deterministicInteruptionEntry : Boolean = false //Only used for simulatation purposes
                           ){
   assert(!ucycleAccess.canWrite)
   def privilegeGen = userGen || supervisorGen
   def noException = this.copy(ecallGen = false, ebreakGen = false, catchIllegalAccess = false)
+  def noExceptionButEcall = this.copy(ecallGen = true, ebreakGen = false, catchIllegalAccess = false)
 }
 
 object CsrPluginConfig{
@@ -310,7 +312,7 @@ trait IContextSwitching{
   def isContextSwitching : Bool
 }
 
-class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface{
+class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface{
   import config._
   import CsrAccess._
 
@@ -693,7 +695,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         exceptionValids := exceptionValidsRegs
         for(portInfo <- sortedByStage; port = portInfo.port ; stage = portInfo.stage; stageId = indexOf(portInfo.stage)) {
           when(port.valid) {
-            if(indexOf(stage) != 0) stages(indexOf(stage) - 1).arbitration.flushAll := True
+            stage.arbitration.flushNext := True
             stage.arbitration.removeIt := True
             exceptionValids(stageId) := True
             exceptionContext := port.payload
@@ -715,7 +717,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
           }
         }
 
-        when(exceptionValidsRegs.orR){
+        when(exceptionValids.orR){
           fetcher.haltIt()
         }
 
@@ -729,32 +731,37 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
 
       //Process interrupt request, code and privilege
-      val interrupt = False
-      val interruptCode = UInt(4 bits).assignDontCare().addTag(Verilator.public)
-      var interruptPrivilegs = if (supervisorGen) List(1, 3) else List(3)
-      val interruptTargetPrivilege = UInt(2 bits).assignDontCare()
-      val privilegeAllowInterrupts = mutable.HashMap[Int, Bool]()
-      if(supervisorGen) privilegeAllowInterrupts += 1 -> ((sstatus.SIE && privilege === "01") || privilege < "01")
-      privilegeAllowInterrupts += 3 -> (mstatus.MIE || privilege < "11")
-      while(interruptPrivilegs.nonEmpty){
-        val p = interruptPrivilegs.head
-        when(privilegeAllowInterrupts(p)){
-          for(i <- interruptSpecs
-              if i.privilege <= p //EX : Machine timer interrupt can't go into supervisor mode
-              if interruptPrivilegs.tail.forall(e => i.delegators.exists(_.privilege == e))){ // EX : Supervisor timer need to have machine mode delegator
-            val delegUpOn = i.delegators.filter(_.privilege > p).map(_.enable).fold(True)(_ && _)
-            val delegDownOff = !i.delegators.filter(_.privilege <= p).map(_.enable).orR
-            when(i.cond && delegUpOn && delegDownOff){
-              interrupt := True
-              interruptCode := i.id
-              interruptTargetPrivilege := p
+      val interrupt = new Area {
+        val valid = if(pipelinedInterrupt) RegNext(False) init(False) else False
+        val code = if(pipelinedInterrupt) Reg(UInt(4 bits)) else UInt(4 bits).assignDontCare()
+        var privilegs = if (supervisorGen) List(1, 3) else List(3)
+        val targetPrivilege = if(pipelinedInterrupt) Reg(UInt(2 bits)) else UInt(2 bits).assignDontCare()
+        val privilegeAllowInterrupts = mutable.HashMap[Int, Bool]()
+        if (supervisorGen) privilegeAllowInterrupts += 1 -> ((sstatus.SIE && privilege === "01") || privilege < "01")
+        privilegeAllowInterrupts += 3 -> (mstatus.MIE || privilege < "11")
+        while (privilegs.nonEmpty) {
+          val p = privilegs.head
+          when(privilegeAllowInterrupts(p)) {
+            for (i <- interruptSpecs
+                 if i.privilege <= p //EX : Machine timer interrupt can't go into supervisor mode
+                 if privilegs.tail.forall(e => i.delegators.exists(_.privilege == e))) { // EX : Supervisor timer need to have machine mode delegator
+              val delegUpOn = i.delegators.filter(_.privilege > p).map(_.enable).fold(True)(_ && _)
+              val delegDownOff = !i.delegators.filter(_.privilege <= p).map(_.enable).orR
+              when(i.cond && delegUpOn && delegDownOff) {
+                valid := True
+                code := i.id
+                targetPrivilege := p
+              }
             }
           }
+          privilegs = privilegs.tail
         }
-        interruptPrivilegs = interruptPrivilegs.tail
+
+        code.addTag(Verilator.public)
       }
 
-      interrupt.clearWhen(!allowInterrupts)
+
+
 
       val exception = if(exceptionPortCtrl != null) exceptionPortCtrl.exceptionValids.last && allowException else False
       val lastStageWasWfi = if(wfiGenAsWait) RegNext(lastStage.arbitration.isFiring && lastStage.input(ENV_CTRL) === EnvCtrlEnum.WFI) init(False) else False
@@ -763,7 +770,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
       //Used to make the pipeline empty softly (for interrupts)
       val pipelineLiberator = new Area{
-        when(interrupt){
+        when(interrupt.valid && allowInterrupts){
           decode.arbitration.haltByOther := decode.arbitration.isValid
         }
 
@@ -773,18 +780,18 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
       //Interrupt/Exception entry logic
       val interruptJump = Bool.addTag(Verilator.public)
-      interruptJump := interrupt && pipelineLiberator.done
+      interruptJump := interrupt.valid && pipelineLiberator.done && allowInterrupts
 
       val hadException = RegNext(exception) init(False)
       pipelineLiberator.done.clearWhen(hadException)
 
 
-      val targetPrivilege = CombInit(interruptTargetPrivilege)
+      val targetPrivilege = CombInit(interrupt.targetPrivilege)
       if(exceptionPortCtrl != null) when(hadException) {
         targetPrivilege := exceptionPortCtrl.exceptionTargetPrivilege
       }
 
-      val trapCause = CombInit(interruptCode)
+      val trapCause = CombInit(interrupt.code)
       if(exceptionPortCtrl != null) when( hadException){
         trapCause := exceptionPortCtrl.exceptionContext.code
       }
@@ -800,7 +807,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
 
         jumpInterface.valid         := True
         jumpInterface.payload       := (if(!xtvecModeGen) xtvec.base @@ "00" else (xtvec.mode === 0 || hadException) ? (xtvec.base @@ "00") | ((xtvec.base + trapCause) @@ "00") )
-        beforeLastStage.arbitration.flushAll := True
+        lastStage.arbitration.flushNext := True
 
         if(privilegeGen) privilegeReg := targetPrivilege
 
@@ -839,7 +846,7 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.XRET) {
           fetcher.haltIt()
           jumpInterface.valid := True
-          beforeLastStage.arbitration.flushAll := True
+          lastStage.arbitration.flushNext := True
           switch(input(INSTRUCTION)(29 downto 28)){
             is(3){
               mstatus.MPP := U"00"
@@ -879,9 +886,10 @@ class CsrPlugin(config: CsrPluginConfig) extends Plugin[VexRiscv] with Exception
         import execute._
         //Manage WFI instructions
         val inWfi = False.addTag(Verilator.public)
+        val wfiWake = RegNext(interruptSpecs.map(_.cond).orR) init(False)
         if(wfiGenAsWait) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.WFI){
           inWfi := True
-          when(!interrupt){
+          when(!wfiWake){
             arbitration.haltItself := True
           }
         }

@@ -31,7 +31,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
                        historyRamSizeLog2 : Int = 10,
                        compressedGen : Boolean = false,
                        keepPcPlus4 : Boolean = false,
-                       config : InstructionCacheConfig,
+                       val config : InstructionCacheConfig,
                        memoryTranslatorPortConfig : Any = null,
                        injectorStage : Boolean = false,
                        withoutInjectorStage : Boolean = false,
@@ -129,7 +129,13 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
       iBus = master(new InstructionCacheMemBus(IBusCachedPlugin.this.config)).setName("iBus")
       iBus <> cache.io.mem
       iBus.cmd.address.allowOverride := cache.io.mem.cmd.address
-      
+
+      //Memory bandwidth counter
+      val rspCounter = RegInit(UInt(32 bits)) init(0)
+      when(iBus.rsp.valid){
+        rspCounter := rspCounter + 1
+      }
+
       val stageOffset = if(relaxedPcCalculation) 1 else 0
       def stages = iBusRsp.stages.drop(stageOffset)
 
@@ -151,7 +157,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         stages(0).halt setWhen (cache.io.cpu.prefetch.haltIt)
 
 
-        cache.io.cpu.fetch.isRemoved := flush
+        cache.io.cpu.fetch.isRemoved := fetcherflushIt
       }
 
 
@@ -231,12 +237,20 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
           decodeExceptionPort.code := 1
         }
 
-        redoFetch clearWhen(!iBusRsp.readyForError)
-        cache.io.cpu.fill.valid clearWhen(!iBusRsp.readyForError)
-        if (catchSomething) decodeExceptionPort.valid clearWhen(fetcherHalt)
+        when(!iBusRsp.readyForError){
+          redoFetch := False
+          cache.io.cpu.fill.valid := False
+        }
+//        when(pipeline.stages.map(_.arbitration.flushIt).orR){
+//          cache.io.cpu.fill.valid := False
+//        }
+
+
 
         redoBranch.valid := redoFetch
         redoBranch.payload := (if (decodePcGen) decode.input(PC) else cacheRsp.pc)
+        decode.arbitration.flushNext setWhen(redoBranch.valid)
+
 
         cacheRspArbitration.halt setWhen (issueDetected || iBusRspOutputHalt)
         iBusRsp.output.valid := cacheRspArbitration.output.valid

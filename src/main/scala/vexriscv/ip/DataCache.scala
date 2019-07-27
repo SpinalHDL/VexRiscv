@@ -5,8 +5,10 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4Shared}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
+import spinal.lib.bus.bmb.{Bmb, BmbParameter}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
+import vexriscv.plugin.DBusSimpleBus
 
 
 case class DataCacheConfig(cacheSize : Int,
@@ -63,6 +65,18 @@ case class DataCacheConfig(cacheSize : Int,
     tgdWidth = 0,
     useBTE = true,
     useCTI = true
+  )
+
+  def getBmbParameter() = BmbParameter(
+    addressWidth = 32,
+    dataWidth = 32,
+    lengthWidth = log2Up(this.bytePerLine),
+    sourceWidth = 0,
+    contextWidth = 1,
+    canRead = true,
+    canWrite = true,
+    alignment  = BmbParameter.BurstAlignement.LENGTH,
+    maximumPendingTransactionPerId = Int.MaxValue
   )
 }
 
@@ -295,6 +309,30 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     rsp.valid := bus.rsp.valid
     rsp.data  := bus.rsp.payload.data
     rsp.error := False
+    bus
+  }
+
+
+  def toBmb() : Bmb = {
+    val pipelinedMemoryBusConfig = p.getBmbParameter()
+    val bus = Bmb(pipelinedMemoryBusConfig)
+
+    bus.cmd.valid := cmd.valid
+    bus.cmd.last := cmd.last
+    bus.cmd.context(0) := cmd.wr
+    bus.cmd.opcode := (cmd.wr ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
+    bus.cmd.address := cmd.address.resized
+    bus.cmd.data := cmd.data
+    bus.cmd.length := (cmd.length << 2) | 3 //TODO better sub word access
+    bus.cmd.mask := cmd.mask
+
+    cmd.ready := bus.cmd.ready
+
+    rsp.valid := bus.rsp.valid && !bus.rsp.context(0)
+    rsp.data  := bus.rsp.data
+    rsp.error := bus.rsp.isError
+    bus.rsp.ready := True
+
     bus
   }
 
@@ -640,9 +678,11 @@ class DataCache(p : DataCacheConfig) extends Component{
       tagsWriteCmd.data.error := error || io.mem.rsp.error
       tagsWriteCmd.way := waysAllocator
 
-      waysAllocator := (waysAllocator ## waysAllocator.msb).resized
-
       error := False
+    }
+
+    when(!valid){
+      waysAllocator := (waysAllocator ## waysAllocator.msb).resized
     }
 
     io.cpu.redo setWhen(valid)

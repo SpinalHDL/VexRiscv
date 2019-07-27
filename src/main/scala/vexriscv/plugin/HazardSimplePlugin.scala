@@ -19,7 +19,7 @@ class HazardSimplePlugin(bypassExecute : Boolean = false,
 
 
   def hazardOnExecuteRS = {
-    if(pipeline.service(classOf[RegFileService]).readStage() == pipeline.execute) pipeline.execute.arbitration.isStuckByOthers else False
+    if(pipeline.service(classOf[RegFileService]).readStage() == pipeline.execute) pipeline.execute.arbitration.isStuckByOthers else False //TODO not so nice
   }
 
   override def setup(pipeline: VexRiscv): Unit = {

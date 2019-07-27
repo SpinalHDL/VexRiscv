@@ -109,7 +109,7 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   if(withMemoryStage){
     memory.arbitration.removeIt.noBackendCombMerge
   }
-  execute.arbitration.flushAll.noBackendCombMerge
+  execute.arbitration.flushNext.noBackendCombMerge
 
   this(RVC_GEN) = false
 }

@@ -4,7 +4,7 @@ ENTRY( _start )
 
 MEMORY
 {
-  ram : ORIGIN = 0x80000000, LENGTH = 64k
+  ram : ORIGIN = DEFINED(__ram_origin) ? __ram_origin : 0x80000000, LENGTH = 64k
 }
 
 
