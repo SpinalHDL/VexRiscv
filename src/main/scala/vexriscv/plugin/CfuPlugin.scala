@@ -4,7 +4,8 @@ import vexriscv.{DecoderService, Stageable, VexRiscv}
 import spinal.core._
 import spinal.lib._
 
-case class CfuParameter(latency : Int,
+case class CfuParameter(stageCount : Int,
+                        allowZeroLatency : Boolean,
                         dropWidth : Int,
                         CFU_VERSION : Int,
                         CFU_INTERFACE_ID_W : Int,
@@ -88,7 +89,7 @@ class CfuPlugin(val p: CfuParameter) extends Plugin[VexRiscv]{
     import pipeline.config._
 
     val forkStage = execute
-    val joinStageId = Math.min(stages.length - 1, pipeline.indexOf(execute) + p.latency - 1)
+    val joinStageId = Math.min(stages.length - 1, pipeline.indexOf(execute) + p.stageCount - 1)
     val joinStage = stages(joinStageId)
 
     forkStage plug new Area{
@@ -110,10 +111,16 @@ class CfuPlugin(val p: CfuParameter) extends Plugin[VexRiscv]{
 
     joinStage plug new Area{
       import joinStage._
+
+      //If the CFU interface can produce a result combinatorialy and the fork stage isn't the same than the join stage
+      //Then it is required to add a buffer on rsp to not propagate the fork stage ready := False in the CPU pipeline.
+      val rsp = if(forkStage != joinStage && p.allowZeroLatency) bus.rsp.m2sPipe() else bus.rsp
+
+
       when(input(CFU_IN_FLIGHT)){
-        arbitration.haltItself setWhen(!bus.rsp.valid)
-        bus.rsp.ready := arbitration.isStuckByOthers
-        output(REGFILE_WRITE_DATA) := bus.rsp.outputs(0)
+        arbitration.haltItself setWhen(!rsp.valid)
+        rsp.ready := arbitration.isStuckByOthers
+        output(REGFILE_WRITE_DATA) := rsp.outputs(0)
       }
     }
   }
