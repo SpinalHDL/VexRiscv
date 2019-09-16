@@ -945,9 +945,14 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val readData = B(0, 32 bits)
         val writeInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE)
         val readInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE)
-        val writeEnable = writeInstruction && ! blockedBySideEffects && !arbitration.isStuckByOthers// &&  readDataRegValid
-        val readEnable  = readInstruction  && ! blockedBySideEffects && !arbitration.isStuckByOthers// && !readDataRegValid
+        val writeEnable = writeInstruction && ! blockedBySideEffects // &&  readDataRegValid
+        val readEnable  = readInstruction  && ! blockedBySideEffects // && !readDataRegValid
         //arbitration.isStuckByOthers, in case of the hazardPlugin is in the executeStage
+        val hazardStage = service(classOf[RegFileService]).readStage()
+        if(hazardStage == execute) when (arbitration.isStuckByOthers){
+          writeEnable := False
+          readEnable  := False
+        }
 
 
 //        def readDataReg = memory.input(REGFILE_WRITE_DATA)  //PIPE OPT
