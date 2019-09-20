@@ -69,8 +69,9 @@ class MulDivIterativePlugin(genMul : Boolean = true,
     import pipeline.config._
     if(!genMul && !genDiv) return
 
-    memory plug new Area {
-      import memory._
+    val flushStage = if(memory != null) memory else execute
+    flushStage plug new Area {
+      import flushStage._
 
       //Shared ressources
       val rs1 = Reg(UInt(33 bits))
