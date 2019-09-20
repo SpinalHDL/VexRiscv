@@ -226,8 +226,10 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       if(relaxedMemoryTranslationRegister) insert(MEMORY_VIRTUAL_ADDRESS) := cache.io.cpu.execute.address
     }
 
-    memory plug new Area{
-      import memory._
+    val flushStage = if(memory != null) memory else execute
+    flushStage plug new Area {
+      import flushStage._
+
       cache.io.cpu.memory.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.memory.isStuck := arbitration.isStuck
       cache.io.cpu.memory.isRemoved := arbitration.removeIt
@@ -237,8 +239,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       cache.io.cpu.memory.mmuBus.rsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
     }
 
-    writeBack plug new Area{
-      import writeBack._
+    val fenceStage = stages.last
+    fenceStage plug new Area{
+      import fenceStage._
       cache.io.cpu.writeBack.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
@@ -323,10 +326,10 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       execute.insert(IS_DBUS_SHARING) := dBusAccess.cmd.fire
 
 
-      mmuBus.cmd.bypassTranslation setWhen(memory.input(IS_DBUS_SHARING))
-      cache.io.cpu.memory.isValid setWhen(memory.input(IS_DBUS_SHARING))
-      cache.io.cpu.writeBack.isValid setWhen(writeBack.input(IS_DBUS_SHARING))
-      dBusAccess.rsp.valid := writeBack.input(IS_DBUS_SHARING) && !cache.io.cpu.writeBack.isWrite && (cache.io.cpu.redo || !cache.io.cpu.writeBack.haltIt)
+      mmuBus.cmd.bypassTranslation setWhen(flushStage.input(IS_DBUS_SHARING))
+      cache.io.cpu.memory.isValid setWhen(flushStage.input(IS_DBUS_SHARING))
+      cache.io.cpu.writeBack.isValid setWhen(fenceStage.input(IS_DBUS_SHARING))
+      dBusAccess.rsp.valid := fenceStage.input(IS_DBUS_SHARING) && !cache.io.cpu.writeBack.isWrite && (cache.io.cpu.redo || !cache.io.cpu.writeBack.haltIt)
       dBusAccess.rsp.data := cache.io.cpu.writeBack.data
       dBusAccess.rsp.error := cache.io.cpu.writeBack.unalignedAccess || cache.io.cpu.writeBack.accessError
       dBusAccess.rsp.redo := cache.io.cpu.redo
@@ -334,10 +337,10 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         when(forceDatapath){
           execute.output(REGFILE_WRITE_DATA) := dBusAccess.cmd.address.asBits
         }
-        memory.input(IS_DBUS_SHARING) init(False)
-        writeBack.input(IS_DBUS_SHARING) init(False)
+        flushStage.input(IS_DBUS_SHARING) init(False)
+        fenceStage.input(IS_DBUS_SHARING) init(False)
         when(dBusAccess.rsp.valid){
-          writeBack.input(IS_DBUS_SHARING).getDrivingReg := False
+          fenceStage.input(IS_DBUS_SHARING).getDrivingReg := False
         }
       }
     }
