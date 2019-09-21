@@ -31,7 +31,7 @@ class MulDivIterativePlugin(genMul : Boolean = true,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
       REGFILE_WRITE_VALID      -> True,
-      BYPASSABLE_EXECUTE_STAGE -> False,
+      BYPASSABLE_EXECUTE_STAGE -> Bool(pipeline.stages.last == pipeline.execute),
       BYPASSABLE_MEMORY_STAGE  -> True,
       RS1_USE                 -> True,
       RS2_USE                 -> True
