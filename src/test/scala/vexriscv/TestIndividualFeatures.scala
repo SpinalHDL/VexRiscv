@@ -99,6 +99,22 @@ class MulDivDimension extends VexRiscvDimension("MulDiv") {
     val noWriteBack = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
 
     var l = List[VexRiscvPosition]()
+
+
+
+    new VexRiscvPosition("MulDivFpgaSimple") {
+      override def testParam = "MUL=yes DIV=yes"
+      override def applyOn(config: VexRiscvConfig): Unit = {
+        config.plugins += new MulSimplePlugin
+        config.plugins += new MulDivIterativePlugin(
+          genMul = false,
+          genDiv = true,
+          mulUnrollFactor = 32,
+          divUnrollFactor = 1
+        )
+      }
+    } :: l
+
     if(!noMemory) {
       l =  new VexRiscvPosition("MulDivAsic") {
         override def testParam = "MUL=yes DIV=yes"
