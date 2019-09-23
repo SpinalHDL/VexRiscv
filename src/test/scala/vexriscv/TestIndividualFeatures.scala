@@ -392,7 +392,7 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 
 
 
-    if(r.nextDouble() < 0.4 || noMemory || noWriteBack){
+    if(r.nextDouble() < 0.4 || noMemory){
       val withLrSc = catchAll
       val earlyInjection = r.nextBoolean() && !universes.contains(VexRiscvUniverse.NO_WRITEBACK)
       new VexRiscvPosition("Simple" + (if(earlyInjection) "Early" else "Late")) {
@@ -412,7 +412,8 @@ class DBusDimension extends VexRiscvDimension("DBus") {
       var wayCount = 0
       val withLrSc = catchAll
       val withAmo = catchAll && r.nextBoolean()
-      val dBusRspSlavePipe, relaxedMemoryTranslationRegister, earlyWaysHits = r.nextBoolean()
+      val dBusRspSlavePipe, relaxedMemoryTranslationRegister = r.nextBoolean()
+      val earlyWaysHits = r.nextBoolean() && !noWriteBack
       val dBusCmdMasterPipe, dBusCmdSlavePipe = false //As it create test bench issues
 
       do{
@@ -616,11 +617,11 @@ class TestIndividualFeatures extends FunSuite {
 
   val testId : Option[mutable.HashSet[Int]] = None
   val seed = sys.env.getOrElse("VEXRISCV_REGRESSION_SEED", Random.nextLong().toString).toLong
-
+//
 //  val testId = Some(mutable.HashSet(3,4,9,11,13,16,18,19,20,21))
-//    val testId = Some(mutable.HashSet(24, 43, 49))
-//  val testId = Some(mutable.HashSet(11))
-//  val seed = -8309068850561113754l
+//    val testId = Some(mutable.HashSet(22))
+//  val testId = Some(mutable.HashSet(22, 33 , 38, 47, 48))
+//  val seed = 5426556825163943143l
 
 
   val rand = new Random(seed)
@@ -638,11 +639,16 @@ class TestIndividualFeatures extends FunSuite {
       universe += VexRiscvUniverse.MMU
       universe += VexRiscvUniverse.FORCE_MULDIV
       universe += VexRiscvUniverse.SUPERVISOR
+      if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEMW_RATE", "0.6").toDouble < rand.nextDouble()){
+        universe += VexRiscvUniverse.NO_WRITEBACK
+      }
     } else {
       if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_MACHINE_OS_RATE", "0.5").toDouble > rand.nextDouble()) {
         universe += VexRiscvUniverse.CATCH_ALL
+        if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEMW_RATE", "0.6").toDouble < rand.nextDouble()){
+          universe += VexRiscvUniverse.NO_WRITEBACK
+        }
       }
-      var tmp = rand.nextDouble()
       if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEMW_RATE", "0.6").toDouble > rand.nextDouble()){
       }else if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEM_RATE", "0.5").toDouble > rand.nextDouble()){
         universe += VexRiscvUniverse.NO_WRITEBACK
