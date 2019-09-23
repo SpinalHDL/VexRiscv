@@ -148,7 +148,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(if(pipeline.writeBack != null) pipeline.writeBack else pipeline.execute)
 
     if(catchSomething)
-      exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(pipeline.writeBack)
+      exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(if(pipeline.writeBack == null) pipeline.memory else pipeline.writeBack)
 
     if(pipeline.serviceExist(classOf[PrivilegeService]))
       privilegeService = pipeline.service(classOf[PrivilegeService])
@@ -162,7 +162,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
     dBus = master(DataCacheMemBus(this.config)).setName("dBus")
 
-    val cache = new DataCache(this.config)
+    val cache = new DataCache(this.config.copy(
+      mergeExecuteMemory = writeBack == null
+    ))
 
     //Interconnect the plugin dBus with the cache dBus with some optional pipelining
     def optionPipe[T](cond : Boolean, on : T)(f : T => T) : T = if(cond) f(on) else on
@@ -226,19 +228,22 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       if(relaxedMemoryTranslationRegister) insert(MEMORY_VIRTUAL_ADDRESS) := cache.io.cpu.execute.address
     }
 
-    memory plug new Area{
-      import memory._
+    val mmuAndBufferStage = if(writeBack != null) memory else execute
+    mmuAndBufferStage plug new Area {
+      import mmuAndBufferStage._
+
       cache.io.cpu.memory.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.memory.isStuck := arbitration.isStuck
       cache.io.cpu.memory.isRemoved := arbitration.removeIt
-      cache.io.cpu.memory.address := (if(relaxedMemoryTranslationRegister) input(MEMORY_VIRTUAL_ADDRESS) else U(input(REGFILE_WRITE_DATA)))
+      cache.io.cpu.memory.address := (if(relaxedMemoryTranslationRegister) input(MEMORY_VIRTUAL_ADDRESS) else if(mmuAndBufferStage == execute) cache.io.cpu.execute.address else U(input(REGFILE_WRITE_DATA)))
 
       cache.io.cpu.memory.mmuBus <> mmuBus
       cache.io.cpu.memory.mmuBus.rsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
     }
 
-    writeBack plug new Area{
-      import writeBack._
+    val managementStage = stages.last
+    managementStage plug new Area{
+      import managementStage._
       cache.io.cpu.writeBack.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
@@ -323,10 +328,10 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       execute.insert(IS_DBUS_SHARING) := dBusAccess.cmd.fire
 
 
-      mmuBus.cmd.bypassTranslation setWhen(memory.input(IS_DBUS_SHARING))
-      cache.io.cpu.memory.isValid setWhen(memory.input(IS_DBUS_SHARING))
-      cache.io.cpu.writeBack.isValid setWhen(writeBack.input(IS_DBUS_SHARING))
-      dBusAccess.rsp.valid := writeBack.input(IS_DBUS_SHARING) && !cache.io.cpu.writeBack.isWrite && (cache.io.cpu.redo || !cache.io.cpu.writeBack.haltIt)
+      mmuBus.cmd.bypassTranslation setWhen(mmuAndBufferStage.input(IS_DBUS_SHARING))
+      if(mmuAndBufferStage != execute) (cache.io.cpu.memory.isValid setWhen(mmuAndBufferStage.input(IS_DBUS_SHARING)))
+      cache.io.cpu.writeBack.isValid setWhen(managementStage.input(IS_DBUS_SHARING))
+      dBusAccess.rsp.valid := managementStage.input(IS_DBUS_SHARING) && !cache.io.cpu.writeBack.isWrite && (cache.io.cpu.redo || !cache.io.cpu.writeBack.haltIt)
       dBusAccess.rsp.data := cache.io.cpu.writeBack.data
       dBusAccess.rsp.error := cache.io.cpu.writeBack.unalignedAccess || cache.io.cpu.writeBack.accessError
       dBusAccess.rsp.redo := cache.io.cpu.redo
@@ -334,10 +339,10 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         when(forceDatapath){
           execute.output(REGFILE_WRITE_DATA) := dBusAccess.cmd.address.asBits
         }
-        memory.input(IS_DBUS_SHARING) init(False)
-        writeBack.input(IS_DBUS_SHARING) init(False)
+        if(mmuAndBufferStage != execute) mmuAndBufferStage.input(IS_DBUS_SHARING) init(False)
+        managementStage.input(IS_DBUS_SHARING) init(False)
         when(dBusAccess.rsp.valid){
-          writeBack.input(IS_DBUS_SHARING).getDrivingReg := False
+          managementStage.input(IS_DBUS_SHARING).getDrivingReg := False
         }
       }
     }
