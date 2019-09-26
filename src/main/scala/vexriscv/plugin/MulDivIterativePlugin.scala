@@ -31,7 +31,7 @@ class MulDivIterativePlugin(genMul : Boolean = true,
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
       REGFILE_WRITE_VALID      -> True,
-      BYPASSABLE_EXECUTE_STAGE -> False,
+      BYPASSABLE_EXECUTE_STAGE -> Bool(pipeline.stages.last == pipeline.execute),
       BYPASSABLE_MEMORY_STAGE  -> True,
       RS1_USE                 -> True,
       RS2_USE                 -> True
@@ -69,8 +69,9 @@ class MulDivIterativePlugin(genMul : Boolean = true,
     import pipeline.config._
     if(!genMul && !genDiv) return
 
-    memory plug new Area {
-      import memory._
+    val flushStage = if(memory != null) memory else execute
+    flushStage plug new Area {
+      import flushStage._
 
       //Shared ressources
       val rs1 = Reg(UInt(33 bits))

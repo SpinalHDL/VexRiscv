@@ -95,7 +95,7 @@ class HazardSimplePlugin(bypassExecute : Boolean = false,
     }
 
     if(withWriteBackStage) trackHazardWithStage(writeBack,bypassWriteBack,null)
-    if(withMemoryStage)    trackHazardWithStage(memory   ,bypassMemory   ,BYPASSABLE_MEMORY_STAGE)
+    if(withMemoryStage)    trackHazardWithStage(memory   ,bypassMemory, if(stages.last == memory) null else BYPASSABLE_MEMORY_STAGE)
     if(readStage != execute) trackHazardWithStage(execute  ,bypassExecute , if(stages.last == execute) null else BYPASSABLE_EXECUTE_STAGE)
 
 

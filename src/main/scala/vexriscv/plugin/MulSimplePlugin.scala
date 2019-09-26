@@ -19,8 +19,8 @@ class MulSimplePlugin extends Plugin[VexRiscv]{
       SRC1_CTRL                -> Src1CtrlEnum.RS,
       SRC2_CTRL                -> Src2CtrlEnum.RS,
       REGFILE_WRITE_VALID      -> True,
-      BYPASSABLE_EXECUTE_STAGE -> False,
-      BYPASSABLE_MEMORY_STAGE  -> False,
+      BYPASSABLE_EXECUTE_STAGE -> Bool(pipeline.stages.last == pipeline.execute),
+      BYPASSABLE_MEMORY_STAGE  -> Bool(pipeline.stages.last == pipeline.memory),
       RS1_USE                  -> True,
       RS2_USE                  -> True,
       IS_MUL                   -> True
@@ -66,14 +66,16 @@ class MulSimplePlugin extends Plugin[VexRiscv]{
       insert(MUL_OPB) := ((bSigned ? b.msb | False) ## b).asSInt
     }
 
-    memory plug new Area {
-      import memory._
+    val injectionStage = if(pipeline.memory != null) pipeline.memory else pipeline.execute
+    injectionStage plug new Area {
+      import injectionStage._
 
       insert(MUL) := (input(MUL_OPA) * input(MUL_OPB))(63 downto 0).asBits
     }
 
-    writeBack plug new Area {
-      import writeBack._
+    val memStage = stages.last
+    memStage plug new Area {
+      import memStage._
 
       when(arbitration.isValid && input(IS_MUL)){
         switch(input(INSTRUCTION)(13 downto 12)){
