@@ -223,7 +223,10 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         arbitration.haltItself := True
       }
 
-      if(relaxedMemoryTranslationRegister) insert(MEMORY_VIRTUAL_ADDRESS) := cache.io.cpu.execute.address
+      if(relaxedMemoryTranslationRegister) {
+        insert(MEMORY_VIRTUAL_ADDRESS) := cache.io.cpu.execute.address
+        addPrePopTask( () => KeepAttribute(memory.input(MEMORY_VIRTUAL_ADDRESS).getDrivingReg))
+      }
     }
 
     memory plug new Area{
