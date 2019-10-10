@@ -8,7 +8,7 @@ import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.bmb.{Bmb, BmbParameter}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
-import vexriscv.plugin.{IBusSimpleBus, IBusSimplePlugin}
+import vexriscv.plugin.{IBusSimpleBus, IBusSimplePlugin, KeepAttribute}
 
 
 case class InstructionCacheConfig( cacheSize : Int,
@@ -325,7 +325,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
   val lineLoader = new Area{
     val fire = False
     val valid = RegInit(False) clearWhen(fire)
-    val address = Reg(UInt(addressWidth bits))
+    val address = KeepAttribute(Reg(UInt(addressWidth bits)))
     val hadError = RegInit(False) clearWhen(fire)
     val flushPending = RegInit(True)
 
@@ -363,7 +363,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     io.mem.cmd.size := log2Up(p.bytePerLine)
 
     val wayToAllocate = Counter(wayCount, !valid)
-    val wordIndex = Reg(UInt(log2Up(memWordPerLine) bits)) init(0)
+    val wordIndex = KeepAttribute(Reg(UInt(log2Up(memWordPerLine) bits)) init(0))
 
 
     val write = new Area{
