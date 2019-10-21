@@ -78,13 +78,19 @@ class MulDivIterativePlugin(genMul : Boolean = true,
       val rs2 = Reg(UInt(32 bits))
       val accumulator = Reg(UInt(65 bits))
 
+      //FrontendOK is only used for CPU configs without memory/writeback stages, were it is required to wait one extra cycle
+      // to let's the frontend process rs1 rs2 registers
+      val frontendOk = if(flushStage != execute) True else RegInit(False) setWhen(arbitration.isValid && ((if(genDiv) input(IS_DIV) else False) || (if(genMul) input(IS_MUL) else False))) clearWhen(arbitration.isMoving)
 
       val mul = ifGen(genMul) (if(customMul != null) customMul(rs1,rs2,memory,pipeline) else new Area{
         assert(isPow2(mulUnrollFactor))
         val counter = Counter(32 / mulUnrollFactor + 1)
         val done = counter.willOverflowIfInc
         when(arbitration.isValid && input(IS_MUL)){
-          when(!done){
+          when(!frontendOk || !done){
+            arbitration.haltItself := True
+          }
+          when(frontendOk && !done){
             arbitration.haltItself := True
             counter.increment()
             rs2 := rs2 |>> mulUnrollFactor
@@ -113,8 +119,10 @@ class MulDivIterativePlugin(genMul : Boolean = true,
         val done = Reg(Bool) setWhen(counter === counter.end-1) clearWhen(!arbitration.isStuck)
         val result = Reg(Bits(32 bits))
         when(arbitration.isValid && input(IS_DIV)){
-          when(!done){
+          when(!frontendOk || !done){
             arbitration.haltItself := True
+          }
+          when(frontendOk && !done){
             counter.increment()
 
             def stages(inNumerator: UInt, inRemainder: UInt, stage: Int): Unit = stage match {
@@ -140,16 +148,11 @@ class MulDivIterativePlugin(genMul : Boolean = true,
           }
 
           output(REGFILE_WRITE_DATA) := result
-//          when(input(INSTRUCTION)(13 downto 12) === "00" && counter === 0 && rs2 =/= 0 && rs1 < 16 && rs2 < 16 && !input(RS1).msb && !input(RS2).msb) {
-//            output(REGFILE_WRITE_DATA) := B(rs1(3 downto 0) / rs2(3 downto 0)).resized
-//            counter.willIncrement := False
-//            arbitration.haltItself := False
-//          }
         }
       })
 
       //Execute stage logic to drive memory stage's input regs
-      when(!arbitration.isStuck){
+      when(if(flushStage != execute) !arbitration.isStuck else !frontendOk){
         accumulator := 0
         def twoComplement(that : Bits, enable: Bool): UInt = (Mux(enable, ~that, that).asUInt + enable.asUInt)
         val rs2NeedRevert =  execute.input(RS2).msb && execute.input(IS_RS2_SIGNED)
