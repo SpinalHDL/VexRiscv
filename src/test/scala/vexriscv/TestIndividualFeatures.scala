@@ -102,10 +102,23 @@ class MulDivDimension extends VexRiscvDimension("MulDiv") {
 
 
 
-    new VexRiscvPosition("MulDivFpgaSimple") {
+    l = new VexRiscvPosition("MulDivFpgaSimple") {
       override def testParam = "MUL=yes DIV=yes"
       override def applyOn(config: VexRiscvConfig): Unit = {
         config.plugins += new MulSimplePlugin
+        config.plugins += new MulDivIterativePlugin(
+          genMul = false,
+          genDiv = true,
+          mulUnrollFactor = 32,
+          divUnrollFactor = 1
+        )
+      }
+    } :: l
+
+    if(!noMemory && !noWriteBack) l = new VexRiscvPosition("MulDivFpga16BitsDsp") {
+      override def testParam = "MUL=yes DIV=yes"
+      override def applyOn(config: VexRiscvConfig): Unit = {
+        config.plugins += new Mul16Plugin
         config.plugins += new MulDivIterativePlugin(
           genMul = false,
           genDiv = true,
@@ -619,9 +632,9 @@ class TestIndividualFeatures extends FunSuite {
   val seed = sys.env.getOrElse("VEXRISCV_REGRESSION_SEED", Random.nextLong().toString).toLong
 //
 //  val testId = Some(mutable.HashSet(3,4,9,11,13,16,18,19,20,21))
-//    val testId = Some(mutable.HashSet(22))
-//  val testId = Some(mutable.HashSet(22, 33 , 38, 47, 48))
-//  val seed = 5426556825163943143l
+//    val testId = Some(mutable.HashSet(11))
+//  val testId = Some(mutable.HashSet(4, 11))
+//  val seed = 6592877339343561798l
 
 
   val rand = new Random(seed)
