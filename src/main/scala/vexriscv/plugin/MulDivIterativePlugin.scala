@@ -80,7 +80,7 @@ class MulDivIterativePlugin(genMul : Boolean = true,
 
       //FrontendOK is only used for CPU configs without memory/writeback stages, were it is required to wait one extra cycle
       // to let's the frontend process rs1 rs2 registers
-      val frontendOk = if(flushStage != execute) True else RegInit(False) setWhen(arbitration.isValid && ((if(genDiv) input(IS_DIV) else False) || (if(genMul) input(IS_MUL) else False))) clearWhen(arbitration.isMoving)
+      val frontendOk = if(flushStage != execute) True else RegInit(False) setWhen(arbitration.isValid && !pipeline.service(classOf[HazardService]).hazardOnExecuteRS && ((if(genDiv) input(IS_DIV) else False) || (if(genMul) input(IS_MUL) else False))) clearWhen(arbitration.isMoving)
 
       val mul = ifGen(genMul) (if(customMul != null) customMul(rs1,rs2,memory,pipeline) else new Area{
         assert(isPow2(mulUnrollFactor))
