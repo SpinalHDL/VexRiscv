@@ -96,6 +96,11 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
       regFileWrite.address := U(shadowPrefix(output(INSTRUCTION)(rdRange)))
       regFileWrite.data := output(REGFILE_WRITE_DATA)
 
+      //Ensure no boot glitches modify X0
+      if(!x0Init && zeroBoot) when(regFileWrite.address === 0){
+        regFileWrite.valid := False
+      }
+
       //CPU will initialise constant register zero in the first cycle
       if(x0Init) {
         val boot = RegNext(False) init (True)
