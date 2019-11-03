@@ -106,17 +106,19 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     s
   }
 
-  def toAxi4Shared(stageCmd : Boolean = false): Axi4Shared = {
+  def toAxi4Shared(stageCmd : Boolean = false, pendingWritesMax : Int = 7): Axi4Shared = {
     val axi = Axi4Shared(DBusSimpleBus.getAxi4Config())
-    val pendingWritesMax = 7
+
+    val cmdPreFork = if (stageCmd) cmd.stage.stage().s2mPipe() else cmd
+
     val pendingWrites = CounterUpDown(
       stateCount = pendingWritesMax + 1,
-      incWhen = axi.sharedCmd.fire && axi.sharedCmd.write,
+      incWhen = cmdPreFork.fire && cmdPreFork.wr,
       decWhen = axi.writeRsp.fire
     )
 
-    val cmdPreFork = if (stageCmd) cmd.stage.stage().s2mPipe() else cmd
-    val (cmdFork, dataFork) = StreamFork2(cmdPreFork.haltWhen((pendingWrites =/= 0 && cmdPreFork.valid && !cmdPreFork.wr) || pendingWrites === pendingWritesMax))
+    val hazard = (pendingWrites =/= 0 && cmdPreFork.valid && !cmdPreFork.wr) || pendingWrites === pendingWritesMax
+    val (cmdFork, dataFork) = StreamFork2(cmdPreFork.haltWhen(hazard))
     axi.sharedCmd.arbitrationFrom(cmdFork)
     axi.sharedCmd.write := cmdFork.wr
     axi.sharedCmd.prot := "010"

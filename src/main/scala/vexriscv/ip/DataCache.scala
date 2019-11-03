@@ -184,16 +184,17 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     slave(rsp)
   }
 
-  def toAxi4Shared(stageCmd : Boolean = false): Axi4Shared = {
+  def toAxi4Shared(stageCmd : Boolean = false, pendingWritesMax  : Int = 7): Axi4Shared = {
     val axi = Axi4Shared(p.getAxi4SharedConfig())
-    val pendingWritesMax = 7
+
+    val cmdPreFork = if (stageCmd) cmd.stage.stage().s2mPipe() else cmd
+
     val pendingWrites = CounterUpDown(
       stateCount = pendingWritesMax + 1,
-      incWhen = axi.sharedCmd.fire && axi.sharedCmd.write,
+      incWhen = cmdPreFork.fire && cmdPreFork.wr,
       decWhen = axi.writeRsp.fire
     )
 
-    val cmdPreFork = if (stageCmd) cmd.stage.stage().s2mPipe() else cmd
     val hazard = (pendingWrites =/= 0 && !cmdPreFork.wr) || pendingWrites === pendingWritesMax
     val (cmdFork, dataFork) = StreamFork2(cmdPreFork.haltWhen(hazard))
     val cmdStage  = cmdFork.throwWhen(RegNextWhen(!cmdFork.last,cmdFork.fire).init(False))
