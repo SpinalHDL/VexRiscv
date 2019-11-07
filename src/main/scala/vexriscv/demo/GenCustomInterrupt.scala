@@ -19,6 +19,12 @@ object GenCustomInterrupt extends App{
           interruptName = "rawrrr",
           code = 24
         ),
+        new CsrPlugin(
+          CsrPluginConfig.smallest.copy(
+            xtvecModeGen = true,
+            mtvecAccess  = CsrAccess.WRITE_ONLY
+          )
+        ),
         new IBusSimplePlugin(
           resetVector = 0x80000000l,
           cmdForkOnSecondStage = false,
@@ -31,7 +37,6 @@ object GenCustomInterrupt extends App{
           catchAddressMisaligned = false,
           catchAccessFault = false
         ),
-        new CsrPlugin(CsrPluginConfig.smallest),
         new DecoderSimplePlugin(
           catchIllegalInstruction = false
         ),
