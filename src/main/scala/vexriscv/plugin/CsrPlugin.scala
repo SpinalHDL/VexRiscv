@@ -322,7 +322,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   //Mannage ExceptionService calls
   val exceptionPortsInfos = ArrayBuffer[ExceptionPortInfo]()
-  def exceptionCodeWidth = 4
   override def newExceptionPort(stage : Stage, priority : Int = 0) = {
     val interface = Flow(ExceptionCause())
     exceptionPortsInfos += ExceptionPortInfo(interface,stage,priority)
@@ -459,6 +458,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     import pipeline._
     import pipeline.config._
     val fetcher = service(classOf[IBusFetcher])
+    val trapCodeWidth = log2Up((List(16) ++ interruptSpecs.map(_.id + 1) ++ exceptionPortsInfos.map(p => 1 << widthOf(p.port.code))).max)
 
     //Define CSR mapping utilities
     implicit class CsrAccessPimper(csrAccess : CsrAccess){
@@ -511,7 +511,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       val mscratch = if(mscratchGen) Reg(Bits(xlen bits)) else null
       val mcause   = new Area{
         val interrupt = Reg(Bool)
-        val exceptionCode = Reg(UInt(exceptionCodeWidth bits))
+        val exceptionCode = Reg(UInt(trapCodeWidth bits))
       }
       val mtval = Reg(UInt(xlen bits))
       val mcycle   = Reg(UInt(64 bits)) randBoot()
@@ -582,7 +582,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
         val scause = new Area {
           val interrupt = Reg(Bool)
-          val exceptionCode = Reg(UInt(exceptionCodeWidth bits))
+          val exceptionCode = Reg(UInt(trapCodeWidth bits))
         }
         val stval = Reg(UInt(xlen bits))
         val sepc = Reg(UInt(xlen bits))
@@ -733,7 +733,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       //Process interrupt request, code and privilege
       val interrupt = new Area {
         val valid = if(pipelinedInterrupt) RegNext(False) init(False) else False
-        val code = if(pipelinedInterrupt) Reg(UInt(4 bits)) else UInt(4 bits).assignDontCare()
+        val code = if(pipelinedInterrupt) Reg(UInt(trapCodeWidth bits)) else UInt(trapCodeWidth bits).assignDontCare()
         var privilegs = if (supervisorGen) List(1, 3) else List(3)
         val targetPrivilege = if(pipelinedInterrupt) Reg(UInt(2 bits)) else UInt(2 bits).assignDontCare()
         val privilegeAllowInterrupts = mutable.HashMap[Int, Bool]()
@@ -1043,4 +1043,19 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       }
     }
   }
+}
+
+
+class UserInterruptPlugin(interruptName : String, code : Int, privilege : Int = 3) extends Plugin[VexRiscv]{
+  var interrupt, interruptEnable : Bool = null
+  override def setup(pipeline: VexRiscv): Unit = {
+    val csr = pipeline.service(classOf[CsrPlugin])
+    interrupt = in.Bool().setName(interruptName)
+    val interruptPending =  RegNext(interrupt) init(False)
+    val interruptEnable = RegInit(False).setName(interruptName + "_enable")
+    csr.addInterrupt(interruptPending , code, privilege, Nil)
+    csr.r(csrAddress = CSR.MIP, bitOffset = code,interruptPending)
+    csr.rw(csrAddress = CSR.MIE, bitOffset = code, interruptEnable)
+  }
+  override def build(pipeline: VexRiscv): Unit = {}
 }
