@@ -311,8 +311,11 @@ trait CsrInterface{
 trait IContextSwitching{
   def isContextSwitching : Bool
 }
+trait IWake{
+  def askWake() : Unit
+}
 
-class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface{
+class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface with IWake{
   import config._
   import CsrAccess._
 
@@ -338,6 +341,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var privilege : UInt = null
   var selfException : Flow[ExceptionCause] = null
   var contextSwitching : Bool = null
+  var thirdPartyWake : Bool = null
+
+  override def askWake(): Unit = thirdPartyWake := True
+
   override def isContextSwitching = contextSwitching
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
@@ -377,6 +384,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
+
+    thirdPartyWake = False
 
     val defaultEnv = List[(Stageable[_ <: BaseType],Any)](
     )
@@ -886,7 +895,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         import execute._
         //Manage WFI instructions
         val inWfi = False.addTag(Verilator.public)
-        val wfiWake = RegNext(interruptSpecs.map(_.cond).orR) init(False)
+        val wfiWake = RegNext(interruptSpecs.map(_.cond).orR || thirdPartyWake) init(False)
         if(wfiGenAsWait) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.WFI){
           inWfi := True
           when(!wfiWake){
