@@ -6,8 +6,7 @@ import spinal.lib._
 import spinal.lib.bus.bmb.WeakConnector
 import spinal.lib.bus.misc.{AddressMapping, DefaultMapping}
 
-case class CfuParameter(stageCount : Int,
-                        allowZeroLatency : Boolean,
+case class CfuPluginParameter(
                         CFU_VERSION : Int,
                         CFU_INTERFACE_ID_W : Int,
                         CFU_FUNCTION_ID_W : Int,
@@ -20,7 +19,19 @@ case class CfuParameter(stageCount : Int,
                         CFU_FLOW_REQ_READY_ALWAYS : Boolean,
                         CFU_FLOW_RESP_READY_ALWAYS : Boolean)
 
-case class CfuCmd(p : CfuParameter) extends Bundle{
+case class CfuBusParameter(CFU_VERSION : Int,
+                           CFU_INTERFACE_ID_W : Int,
+                           CFU_FUNCTION_ID_W : Int,
+                           CFU_REORDER_ID_W : Int,
+                           CFU_REQ_RESP_ID_W : Int,
+                           CFU_INPUTS : Int,
+                           CFU_INPUT_DATA_W : Int,
+                           CFU_OUTPUTS : Int,
+                           CFU_OUTPUT_DATA_W : Int,
+                           CFU_FLOW_REQ_READY_ALWAYS : Boolean,
+                           CFU_FLOW_RESP_READY_ALWAYS : Boolean)
+
+case class CfuCmd( p : CfuBusParameter ) extends Bundle{
   val function_id = UInt(p.CFU_FUNCTION_ID_W bits)
   val reorder_id = UInt(p.CFU_REORDER_ID_W bits)
   val request_id = UInt(p.CFU_REQ_RESP_ID_W bits)
@@ -35,7 +46,7 @@ case class CfuCmd(p : CfuParameter) extends Bundle{
   }
 }
 
-case class CfuRsp(p : CfuParameter) extends Bundle{
+case class CfuRsp(p : CfuBusParameter) extends Bundle{
   val response_ok = Bool()
   val response_id = UInt(p.CFU_REQ_RESP_ID_W bits)
   val outputs = Vec(Bits(p.CFU_OUTPUT_DATA_W bits), p.CFU_OUTPUTS)
@@ -48,7 +59,7 @@ case class CfuRsp(p : CfuParameter) extends Bundle{
   }
 }
 
-case class CfuBus(p : CfuParameter) extends Bundle with IMasterSlave{
+case class CfuBus(p : CfuBusParameter) extends Bundle with IMasterSlave{
   val cmd = Stream(CfuCmd(p))
   val rsp = Stream(CfuRsp(p))
 
@@ -69,7 +80,12 @@ case class CfuBus(p : CfuParameter) extends Bundle with IMasterSlave{
 
 
 
-class CfuPlugin(val p: CfuParameter) extends Plugin[VexRiscv]{
+class CfuPlugin( val stageCount : Int,
+                 val allowZeroLatency : Boolean,
+                 val encoding : MaskedLiteral,
+                 val busParameter : CfuBusParameter) extends Plugin[VexRiscv]{
+  def p = busParameter
+
   assert(p.CFU_INPUTS <= 2)
   assert(p.CFU_OUTPUTS == 1)
   assert(p.CFU_FUNCTION_ID_W == 3)
@@ -78,11 +94,12 @@ class CfuPlugin(val p: CfuParameter) extends Plugin[VexRiscv]{
   var joinException : Flow[ExceptionCause] = null
 
   lazy val forkStage = pipeline.execute
-  lazy val joinStage = pipeline.stages(Math.min(pipeline.stages.length - 1, pipeline.indexOf(forkStage) + p.stageCount))
+  lazy val joinStage = pipeline.stages(Math.min(pipeline.stages.length - 1, pipeline.indexOf(forkStage) + stageCount))
 
 
-  object CFU_ENABLE extends Stageable(Bool())
-  object CFU_IN_FLIGHT extends Stageable(Bool())
+  val CFU_ENABLE = new Stageable(Bool()).setCompositeName(this, "CFU_ENABLE")
+  val CFU_IN_FLIGHT = new Stageable(Bool()).setCompositeName(this, "CFU_IN_FLIGHT")
+
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline._
@@ -96,11 +113,11 @@ class CfuPlugin(val p: CfuParameter) extends Plugin[VexRiscv]{
 
     //custom-0
     decoderService.add(List(
-      M"000000-------------------0001011"  -> List(
+      encoding  -> List(
         CFU_ENABLE -> True,
         REGFILE_WRITE_VALID      -> True,
-        BYPASSABLE_EXECUTE_STAGE -> Bool(p.stageCount == 0),
-        BYPASSABLE_MEMORY_STAGE  -> Bool(p.stageCount <= 1),
+        BYPASSABLE_EXECUTE_STAGE -> Bool(stageCount == 0),
+        BYPASSABLE_MEMORY_STAGE  -> Bool(stageCount <= 1),
         RS1_USE -> True,
         RS2_USE -> True
       )
@@ -110,6 +127,7 @@ class CfuPlugin(val p: CfuParameter) extends Plugin[VexRiscv]{
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
+
 
     forkStage plug new Area{
       import forkStage._
@@ -121,7 +139,7 @@ class CfuPlugin(val p: CfuParameter) extends Plugin[VexRiscv]{
       bus.cmd.valid := (schedule || hold) && !fired
       arbitration.haltItself setWhen(bus.cmd.valid && !bus.cmd.ready)
 
-      bus.cmd.function_id := U(input(INSTRUCTION)(14 downto 12))
+      bus.cmd.function_id := U(input(INSTRUCTION)(14 downto 12)).resized
       bus.cmd.reorder_id := 0
       bus.cmd.request_id := 0
       if(p.CFU_INPUTS >= 1) bus.cmd.inputs(0) := input(RS1)
@@ -135,10 +153,10 @@ class CfuPlugin(val p: CfuParameter) extends Plugin[VexRiscv]{
       //Then it is required to add a buffer on rsp to not propagate the fork stage ready := False in the CPU pipeline.
       val rsp = if(p.CFU_FLOW_RESP_READY_ALWAYS){
         bus.rsp.toFlow.toStream.queueLowLatency(
-          size = p.stageCount + 1,
+          size = stageCount + 1,
           latency = 0
         )
-      } else if(forkStage != joinStage && p.allowZeroLatency) {
+      } else if(forkStage != joinStage && allowZeroLatency) {
         bus.rsp.m2sPipe()
       } else {
         bus.rsp.combStage()
@@ -159,14 +177,17 @@ class CfuPlugin(val p: CfuParameter) extends Plugin[VexRiscv]{
         }
       }
     }
+
+    addPrePopTask(() => stages.dropWhile(_ != memory).reverse.dropWhile(_ != joinStage).foreach(s => s.input(CFU_IN_FLIGHT).init(False)))
   }
 }
 
 
 object CfuTest{
-  def getCfuParameter() =  CfuParameter(
-    stageCount = 0,
-    allowZeroLatency = true,
+
+//  stageCount = 0,
+//  allowZeroLatency = true,
+  def getCfuParameter() = CfuBusParameter(
     CFU_VERSION = 0,
     CFU_INTERFACE_ID_W = 0,
     CFU_FUNCTION_ID_W = 3,
@@ -190,7 +211,31 @@ case class CfuTest() extends Component{
   io.bus.rsp.outputs(0) := ~(io.bus.cmd.inputs(0) & io.bus.cmd.inputs(1))
 }
 
-case class CfuDecoder(p : CfuParameter,
+
+case class CfuBb(p : CfuBusParameter) extends BlackBox{
+  val io = new Bundle {
+    val clk, reset = in Bool()
+    val bus = slave(CfuBus(p))
+  }
+
+  mapCurrentClockDomain(io.clk, io.reset)
+}
+
+//case class CfuGray(p : CfuBusParameter) extends BlackBox{
+//  val req_function_id = in Bits(p.CFU_FUNCTION_ID_W)
+//  val req_data = in Bits(p.CFU_REQ_INPUTS)
+//  val resp_data = in Bits(p.CFU_FUNCTION_ID_W)
+//  input `CFU_FUNCTION_ID req_function_id,
+//  input [CFU_REQ_INPUTS-1:0]`CFU_REQ_DATA req_data,
+//  output [CFU_RESP_OUTPUTS-1:0]`CFU_RESP_DATA resp_data
+//  io.bus.rsp.arbitrationFrom(io.bus.cmd)
+//  io.bus.rsp.response_ok := True
+//  io.bus.rsp.response_id := io.bus.cmd.request_id
+//  io.bus.rsp.outputs(0) := ~(io.bus.cmd.inputs(0) & io.bus.cmd.inputs(1))
+//}
+
+
+case class CfuDecoder(p : CfuBusParameter,
                       mappings : Seq[AddressMapping],
                       pendingMax : Int = 3) extends Component{
   val io = new Bundle {

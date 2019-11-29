@@ -51,9 +51,10 @@ object GenSmallAndProductiveCfu extends App{
           catchAddressMisaligned = false
         ),
         new CfuPlugin(
-          p = CfuParameter(
-            stageCount = 1,
-            allowZeroLatency = true,
+          stageCount = 1,
+          allowZeroLatency = true,
+          encoding = M"000000-------------------0001011",
+          busParameter = CfuBusParameter(
             CFU_VERSION = 0,
             CFU_INTERFACE_ID_W = 0,
             CFU_FUNCTION_ID_W = 2,
