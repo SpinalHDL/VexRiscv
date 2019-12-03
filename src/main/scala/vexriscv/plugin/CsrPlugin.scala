@@ -221,7 +221,7 @@ object CsrPluginConfig{
     mhartid        = null,
     misaExtensionsInit = 66,
     misaAccess     = CsrAccess.NONE,
-    mtvecAccess    = CsrAccess.NONE,
+    mtvecAccess    = CsrAccess.WRITE_ONLY,
     mtvecInit      = mtvecInit,
     mepcAccess     = CsrAccess.READ_WRITE,
     mscratchGen    = false,
@@ -229,8 +229,9 @@ object CsrPluginConfig{
     mbadaddrAccess = CsrAccess.READ_ONLY,
     mcycleAccess   = CsrAccess.NONE,
     minstretAccess = CsrAccess.NONE,
-    ecallGen       = false,
+    ecallGen       = true,
     wfiGenAsWait         = false,
+    wfiGenAsNop    = true,
     ucycleAccess   = CsrAccess.NONE
   )
 
