@@ -334,6 +334,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var exceptionPendings : Vec[Bool] = null
   override def isExceptionPending(stage : Stage): Bool = exceptionPendings(pipeline.stages.indexOf(stage))
 
+  var redoInterface : Flow[UInt] = null
   var jumpInterface : Flow[UInt] = null
   var timerInterrupt, externalInterrupt, softwareInterrupt : Bool = null
   var externalInterruptS : Bool = null
@@ -429,6 +430,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     jumpInterface = pcManagerService.createJumpInterface(pipeline.stages.last)
     jumpInterface.valid := False
     jumpInterface.payload.assignDontCare()
+
+
+    if(supervisorGen) {
+      redoInterface = pcManagerService.createJumpInterface(pipeline.execute)
+      redoInterface.valid := False
+      redoInterface.payload.assignDontCare()
+    }
 
     exceptionPendings = Vec(Bool, pipeline.stages.length)
     timerInterrupt    = in Bool() setName("timerInterrupt")
@@ -619,6 +627,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         scauseAccess(CSR.SCAUSE, xlen-1 -> scause.interrupt, 0 -> scause.exceptionCode)
         sbadaddrAccess(CSR.SBADADDR, stval)
         satpAccess(CSR.SATP, 31 -> satp.MODE, 22 -> satp.ASID, 0 -> satp.PPN)
+
+
+        if(supervisorGen) onWrite(CSR.SATP){
+          execute.arbitration.flushNext := True
+          redoInterface.valid := True
+          redoInterface.payload := execute.input(PC) + 4
+        }
       }
     }
 
