@@ -69,7 +69,8 @@ case class CsrPluginConfig(
                             midelegAccess       : CsrAccess = CsrAccess.NONE,
                             pipelineCsrRead     : Boolean = false,
                             pipelinedInterrupt  : Boolean = true,
-                            deterministicInteruptionEntry : Boolean = false //Only used for simulatation purposes
+                            deterministicInteruptionEntry : Boolean = false, //Only used for simulatation purposes
+                            wfiOutput           : Boolean = false
                           ){
   assert(!ucycleAccess.canWrite)
   def privilegeGen = userGen || supervisorGen
@@ -343,6 +344,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var selfException : Flow[ExceptionCause] = null
   var contextSwitching : Bool = null
   var thirdPartyWake : Bool = null
+  var inWfi : Bool = null
 
   override def askWake(): Unit = thirdPartyWake := True
 
@@ -909,7 +911,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       execute plug new Area{
         import execute._
         //Manage WFI instructions
-        val inWfi = False.addTag(Verilator.public)
+        inWfi = False.addTag(Verilator.public)
+        if(wfiOutput) out(inWfi)
         val wfiWake = RegNext(interruptSpecs.map(_.cond).orR || thirdPartyWake) init(False)
         if(wfiGenAsWait) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.WFI){
           inWfi := True
