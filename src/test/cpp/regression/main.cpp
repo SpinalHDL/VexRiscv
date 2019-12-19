@@ -1548,7 +1548,7 @@ public:
                         riscvRef.ipInput |= top->externalInterruptS << 9;
     #endif
 
-                        riscvRef.liveness(top->VexRiscv->execute_CsrPlugin_inWfi);
+                        riscvRef.liveness(top->VexRiscv->CsrPlugin_inWfi);
                         if(top->VexRiscv->CsrPlugin_interruptJump){
                             if(riscvRefEnable) riscvRef.trap(true, top->VexRiscv->CsrPlugin_interrupt_code);
                         }

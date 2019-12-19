@@ -388,6 +388,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
 
+    inWfi = False.addTag(Verilator.public)
+
     thirdPartyWake = False
 
     val defaultEnv = List[(Stageable[_ <: BaseType],Any)](
@@ -911,7 +913,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       execute plug new Area{
         import execute._
         //Manage WFI instructions
-        inWfi = False.addTag(Verilator.public)
         if(wfiOutput) out(inWfi)
         val wfiWake = RegNext(interruptSpecs.map(_.cond).orR || thirdPartyWake) init(False)
         if(wfiGenAsWait) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.WFI){
