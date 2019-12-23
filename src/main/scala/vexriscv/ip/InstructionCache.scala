@@ -8,7 +8,7 @@ import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.bmb.{Bmb, BmbParameter}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
-import vexriscv.plugin.{IBusSimpleBus, IBusSimplePlugin, KeepAttribute}
+import vexriscv.plugin.{IBusSimpleBus, IBusSimplePlugin}
 
 
 case class InstructionCacheConfig( cacheSize : Int,
