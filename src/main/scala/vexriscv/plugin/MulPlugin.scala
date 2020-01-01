@@ -79,23 +79,32 @@ class MulPlugin extends Plugin[VexRiscv]{
 
     //First aggregation of partial multiplication
     memory plug new Area {
-      import memory._
-      insert(MUL_LOW) := S(0, MUL_HL.dataType.getWidth + 16 + 2 bit) + (False ## input(MUL_LL)).asSInt + (input(MUL_LH) << 16) + (input(MUL_HL) << 16)
+      val stage = if(memory != null) {
+        memory
+      } else {
+        execute
+      }
+      stage.insert(MUL_LOW) := S(0, MUL_HL.dataType.getWidth + 16 + 2 bit) + (False ## stage.input(MUL_LL)).asSInt + (stage.input(MUL_LH) << 16) + (stage.input(MUL_HL) << 16)
     }
 
     //Final aggregation of partial multiplications, REGFILE_WRITE_DATA overriding
     writeBack plug new Area {
       import writeBack._
-      val result = input(MUL_LOW) + (input(MUL_HH) << 32)
+      val stage = if(writeBack != null) {
+        writeBack
+      } else {
+        execute
+      }
+      val result = stage.input(MUL_LOW) + (stage.input(MUL_HH) << 32)
 
 
-      when(arbitration.isValid && input(IS_MUL)){
-        switch(input(INSTRUCTION)(13 downto 12)){
+      when(stage.arbitration.isValid && stage.input(IS_MUL)){
+        switch(stage.input(INSTRUCTION)(13 downto 12)){
           is(B"00"){
-            output(REGFILE_WRITE_DATA) := input(MUL_LOW)(31 downto 0).asBits
+            stage.output(REGFILE_WRITE_DATA) := stage.input(MUL_LOW)(31 downto 0).asBits
           }
           is(B"01",B"10",B"11"){
-            output(REGFILE_WRITE_DATA) := result(63 downto 32).asBits
+            stage.output(REGFILE_WRITE_DATA) := result(63 downto 32).asBits
           }
         }
       }
