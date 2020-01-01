@@ -70,7 +70,11 @@ class MulDivIterativePlugin(genMul : Boolean = true,
     if(!genMul && !genDiv) return
 
     memory plug new Area {
-      import memory._
+      var stage = if (memory != null) {
+        memory
+      } else {
+        execute
+      }
 
       //Shared ressources
       val rs1 = Reg(UInt(33 bits))
@@ -82,18 +86,18 @@ class MulDivIterativePlugin(genMul : Boolean = true,
         assert(isPow2(mulUnrollFactor))
         val counter = Counter(32 / mulUnrollFactor + 1)
         val done = counter.willOverflowIfInc
-        when(arbitration.isValid && input(IS_MUL)){
+        when(stage.arbitration.isValid && stage.input(IS_MUL)){
           when(!done){
-            arbitration.haltItself := True
+            stage.arbitration.haltItself := True
             counter.increment()
             rs2 := rs2 |>> mulUnrollFactor
             val sumElements = ((0 until mulUnrollFactor).map(i => rs2(i) ? (rs1 << i) | U(0)) :+ (accumulator >> 32))
             val sumResult =  sumElements.map(_.asSInt.resize(32 + mulUnrollFactor + 1).asUInt).reduceBalancedTree(_ + _)
             accumulator := (sumResult @@ accumulator(31 downto 0)) >> mulUnrollFactor
           }
-          output(REGFILE_WRITE_DATA) := ((input(INSTRUCTION)(13 downto 12) === B"00") ? accumulator(31 downto 0) | accumulator(63 downto 32)).asBits
+          stage.output(REGFILE_WRITE_DATA) := ((stage.input(INSTRUCTION)(13 downto 12) === B"00") ? accumulator(31 downto 0) | accumulator(63 downto 32)).asBits
         }
-        when(!arbitration.isStuck) {
+        when(!stage.arbitration.isStuck) {
           counter.clear()
         }
       })
@@ -109,11 +113,11 @@ class MulDivIterativePlugin(genMul : Boolean = true,
 
         val needRevert = Reg(Bool)
         val counter = Counter(32 / divUnrollFactor + 2)
-        val done = Reg(Bool) setWhen(counter === counter.end-1) clearWhen(!arbitration.isStuck)
+        val done = Reg(Bool) setWhen(counter === counter.end-1) clearWhen(!stage.arbitration.isStuck)
         val result = Reg(Bits(32 bits))
-        when(arbitration.isValid && input(IS_DIV)){
+        when(stage.arbitration.isValid && stage.input(IS_DIV)){
           when(!done){
-            arbitration.haltItself := True
+            stage.arbitration.haltItself := True
             counter.increment()
 
             def stages(inNumerator: UInt, inRemainder: UInt, stage: Int): Unit = stage match {
@@ -133,12 +137,12 @@ class MulDivIterativePlugin(genMul : Boolean = true,
             stages(numerator, remainder, divUnrollFactor)
 
             when(counter === 32 / divUnrollFactor){
-              val selectedResult = (input(INSTRUCTION)(13) ? remainder | numerator)
+              val selectedResult = (stage.input(INSTRUCTION)(13) ? remainder | numerator)
               result := selectedResult.twoComplement(needRevert).asBits.resized
             }
           }
 
-          output(REGFILE_WRITE_DATA) := result
+          stage.output(REGFILE_WRITE_DATA) := result
 //          when(input(INSTRUCTION)(13 downto 12) === "00" && counter === 0 && rs2 =/= 0 && rs1 < 16 && rs2 < 16 && !input(RS1).msb && !input(RS2).msb) {
 //            output(REGFILE_WRITE_DATA) := B(rs1(3 downto 0) / rs2(3 downto 0)).resized
 //            counter.willIncrement := False
@@ -148,7 +152,7 @@ class MulDivIterativePlugin(genMul : Boolean = true,
       })
 
       //Execute stage logic to drive memory stage's input regs
-      when(!arbitration.isStuck){
+      when(!stage.arbitration.isStuck){
         accumulator := 0
         def twoComplement(that : Bits, enable: Bool): UInt = (Mux(enable, ~that, that).asUInt + enable.asUInt)
         val rs2NeedRevert =  execute.input(RS2).msb && execute.input(IS_RS2_SIGNED)
@@ -168,8 +172,8 @@ class MulDivIterativePlugin(genMul : Boolean = true,
         when(execute.input(FAST_DIV_VALID)) {
           execute.output(IS_DIV) := False
         }
-        when(input(FAST_DIV_VALID)) {
-          output(REGFILE_WRITE_DATA) := B(0, 28 bits) ## input(FAST_DIV_VALUE)
+        when(stage.input(FAST_DIV_VALID)) {
+          stage.output(REGFILE_WRITE_DATA) := B(0, 28 bits) ## stage.input(FAST_DIV_VALUE)
         }
       }
     }
