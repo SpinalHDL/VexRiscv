@@ -67,21 +67,29 @@ class MulSimplePlugin extends Plugin[VexRiscv]{
     }
 
     memory plug new Area {
-      import memory._
+      val stage = if (memory != null) {
+        memory
+      } else {
+        execute
+      }
 
-      insert(MUL) := (input(MUL_OPA) * input(MUL_OPB))(63 downto 0).asBits
+      stage.insert(MUL) := (stage.input(MUL_OPA) * stage.input(MUL_OPB))(63 downto 0).asBits
     }
 
     writeBack plug new Area {
-      import writeBack._
+      val stage = if (writeBack != null) {
+        writeBack
+      } else {
+        execute
+      }
 
-      when(arbitration.isValid && input(IS_MUL)){
-        switch(input(INSTRUCTION)(13 downto 12)){
+      when(stage.arbitration.isValid && stage.input(IS_MUL)){
+        switch(stage.input(INSTRUCTION)(13 downto 12)){
           is(B"00"){
-            output(REGFILE_WRITE_DATA) := input(MUL)(31 downto 0)
+            stage.output(REGFILE_WRITE_DATA) := stage.input(MUL)(31 downto 0)
           }
           is(B"01",B"10",B"11"){
-            output(REGFILE_WRITE_DATA) := input(MUL)(63 downto 32)
+            stage.output(REGFILE_WRITE_DATA) := stage.input(MUL)(63 downto 32)
           }
         }
       }
