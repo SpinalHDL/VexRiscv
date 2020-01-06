@@ -866,6 +866,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
       }
 
+      if(exceptionPortCtrl == null){
+        if(mbadaddrAccess == CsrAccess.READ_ONLY) mtval := 0
+        if(sbadaddrAccess == CsrAccess.READ_ONLY) stval := 0
+      }
 
       lastStage plug new Area{
         import lastStage._
