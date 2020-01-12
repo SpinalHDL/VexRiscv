@@ -49,6 +49,6 @@ spiWrite:
   sw    a0,CTRL_DATA(CTRL)
 spiWrite_wait:
   lw	t0,CTRL_STATUS(CTRL)
-  srli	t0,t0,0x10
+  slli t0,t0,0x10 
   beqz	t0,spiWrite_wait
   ret
