@@ -385,7 +385,8 @@ object Murax_iCE40_hx8k_breakout_board_xip{
 
       val led = out Bits(8 bits)
     }
-    val murax = Murax(MuraxConfig.default(withXip = true))
+    //val murax = Murax(MuraxConfig.default(withXip = true))
+    val murax = Murax(MuraxConfig.default(withXip = true).copy(onChipRamSize = 8 kB))
     murax.io.asyncReset := False
 
     val mainClkBuffer = SB_GB()
@@ -438,45 +439,6 @@ object Murax_iCE40_hx8k_breakout_board_xip{
 
   def main(args: Array[String]) {
     SpinalVerilog(Murax_iCE40_hx8k_breakout_board_xip())
-    /*SpinalVerilog{
-      val c = Murax(MuraxConfig.default(withXip = true))
-
-
-
-
-      c.rework {
-        c.resetCtrlClockDomain {
-          c.io.xip.setAsDirectionLess.allowDirectionLessIo.flattenForeach(_.unsetName())
-
-          out(RegNext(c.io.xip.ss)).setName("io_xip_ss")
-
-          val sclk = SB_IO_SCLK()
-          sclk.PACKAGE_PIN := inout(Analog(Bool)).setName("io_xip_sclk")
-          sclk.CLOCK_ENABLE := True
-
-          sclk.OUTPUT_CLK := ClockDomain.current.readClockWire
-          sclk.D_OUT_0 <> c.io.xip.sclk.write(0)
-          sclk.D_OUT_1 <> RegNext(c.io.xip.sclk.write(1))
-
-          for (i <- 0 until c.io.xip.p.dataWidth) {
-            val data = c.io.xip.data(i)
-            val bb = SB_IO_DATA()
-            bb.PACKAGE_PIN := inout(Analog(Bool)).setName(s"io_xip_data_$i" )
-            bb.CLOCK_ENABLE := True
-
-            bb.OUTPUT_CLK := ClockDomain.current.readClockWire
-            bb.OUTPUT_ENABLE <> data.writeEnable
-            bb.D_OUT_0 <> data.write(0)
-            bb.D_OUT_1 <> RegNext(data.write(1))
-
-            bb.INPUT_CLK := ClockDomain.current.readClockWire
-            data.read(0) := bb.D_IN_0
-            data.read(1) := RegNext(bb.D_IN_1)
-          }
-        }
-      }
-      c
-    }*/
   }
 }
 
