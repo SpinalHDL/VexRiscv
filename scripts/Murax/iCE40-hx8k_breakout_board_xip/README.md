@@ -9,6 +9,11 @@ This board can be purchased for ~$USD 49 directly from Lattice and is supported
 by the IceStorm
 [`iceprog`](https://github.com/cliffordwolf/icestorm/tree/master/iceprog) tool.
 
+# Bootloader operations
+
+A bootloader is implemented in a ROM within the FPGA bitfile. It configure the SPI and attempt to read the first word in 'XIP' area of the flash (0xE0040000 in CPU address space, 0x40000 in flash). If this first word is the magic word
+then the bootloader jump at 0xE0040000.
+The magic word is 0x12340fb7, which is the value for the instruction "li x31, 0x12340000" or "lui t6,0x12340".
 
 # Using the example
 
@@ -94,9 +99,7 @@ Bye.
 WARNING: having this output does NOT guarantee you actually programmed anything in the FPGA!
 
 After programming nothing visual will happen, except the LEDs being off.
-The bootloader is waiting for a valid content in the flash. "valid content" is
-identified by a magic word at 0xE0040000: it shall be 0x12340fb7, which is the
-value for the instruction "li x31, 0x12340000".
+The bootloader is waiting for a valid content in the flash (see Bootloader operations).
 
 ## Programming flash image
 
@@ -179,7 +182,7 @@ Connection closed by foreign host.
 From now the device runs the code from flash, LEDs shall display a dot moving from D9 to D2.
 
 ### Loading flash using GDB / eclipse
-- ```
+```
 src/openocd -f tcl/interface/ftdi/ft2232h_breakout.cfg -c "set MURAX_CPU0_YAML ../VexRiscv/cpu0.yaml" -f tcl/target/murax_xip.cfg
 ```
 - Make sure J7 is connected.
@@ -191,12 +194,12 @@ From there code loading, step, break points works as usual (including software b
 
 - Stop any OpenOCD connection
 - Remove J7, then:
-- ```
+```
 make clean prog
 ```
 - Remember to check a single FTDI device is listed in the output. If not:
     - Disconnect the other devices
-    - ```
+    ```
     make prog
     ```
 - Connect J7, flash software shall start executing.
