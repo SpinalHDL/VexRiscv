@@ -368,6 +368,16 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   val csrMapping = new CsrMapping()
 
+  //Print CSR mapping
+  def printCsr() {
+    for ((address, things) <- csrMapping.mapping) {
+      println("0x" + address.toHexString + " => ")
+      for (thing <- things) {
+        println(" - " + thing)
+      }
+    }
+  }
+
   //Interruption and exception data model
   case class Delegator(var enable : Bool, privilege : Int)
   case class InterruptSpec(var cond : Bool, id : Int, privilege : Int, delegators : List[Delegator])
