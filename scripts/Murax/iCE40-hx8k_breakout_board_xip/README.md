@@ -11,9 +11,8 @@ by the IceStorm
 
 # Bootloader operations
 
-A bootloader is implemented in a ROM within the FPGA bitfile. It configure the SPI and attempt to read the first word in 'XIP' area of the flash (0xE0040000 in CPU address space, 0x40000 in flash). If this first word is the magic word
+A bootloader is implemented in a ROM within the FPGA bitfile. It configure the SPI and attempt to read the first word in 'XIP' area of the flash (0xE0040000 in CPU address space, 0x40000 in flash). If this first word is not 0xFFFFFFFF and the same value is read 3 times,
 then the bootloader jump at 0xE0040000.
-The magic word is 0x12340fb7, which is the value for the instruction "li x31, 0x12340000" or "lui t6,0x12340".
 
 # Using the example
 

@@ -43,9 +43,17 @@ crtStart:
   sw t0, CTRL_XIP_CONFIG(CTRL)
   li t0, XIP_BASE
   lw t1, (t0)
-  li t2, 0x12340fb7
-  xor t1,t1,t2
-  bnez t1,retry
+  li t2, 0xFFFFFFFF
+  xor t3,t1,t2
+  beqz t3,retry
+  //if we are here we have read a value from flash which is not all ones
+  lw t2, (t0)
+  xor t3,t1,t2
+  bnez t3,retry
+  lw t2, (t0)
+  xor t3,t1,t2
+  bnez t3,retry
+  //if we are here we have read the same value 3 times, so flash seems good, lets's jump
   jr t0
 
 retry:

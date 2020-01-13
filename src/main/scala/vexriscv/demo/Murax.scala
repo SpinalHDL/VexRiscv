@@ -368,58 +368,55 @@ object Murax_iCE40_hx8k_breakout_board_xip{
 
   case class Murax_iCE40_hx8k_breakout_board_xip() extends Component{
     val io = new Bundle {
-      val J3  = in  Bool()
-      val H16 = in  Bool()
-      val G15 = in  Bool()
-      val G16 = out Bool()
-      val F15 = in  Bool()
-      val B12 = out Bool()
-      val B10 = in  Bool()
+      val mainClk  = in  Bool()
+      val jtag_tck = in  Bool()
+      val jtag_tdi = in  Bool()
+      val jtag_tdo = out Bool()
+      val jtag_tms = in  Bool()
+      val uart_txd = out Bool()
+      val uart_rxd = in  Bool()
 
-
-      //p12 as mosi mean flash config
-      val P12 = inout(Analog(Bool))
-      val P11 = inout(Analog(Bool))
-      val R11 = out Bool()
-      val R12 = out Bool()
+      val mosi = inout(Analog(Bool))
+      val miso = inout(Analog(Bool))
+      val sclk = out Bool()
+      val spis = out Bool()
 
       val led = out Bits(8 bits)
     }
-    //val murax = Murax(MuraxConfig.default(withXip = true))
     val murax = Murax(MuraxConfig.default(withXip = true).copy(onChipRamSize = 8 kB))
     murax.io.asyncReset := False
 
     val mainClkBuffer = SB_GB()
-    mainClkBuffer.USER_SIGNAL_TO_GLOBAL_BUFFER <> io.J3
+    mainClkBuffer.USER_SIGNAL_TO_GLOBAL_BUFFER <> io.mainClk
     mainClkBuffer.GLOBAL_BUFFER_OUTPUT <> murax.io.mainClk
 
     val jtagClkBuffer = SB_GB()
-    jtagClkBuffer.USER_SIGNAL_TO_GLOBAL_BUFFER <> io.H16
+    jtagClkBuffer.USER_SIGNAL_TO_GLOBAL_BUFFER <> io.jtag_tck
     jtagClkBuffer.GLOBAL_BUFFER_OUTPUT <> murax.io.jtag.tck
 
     io.led <> murax.io.gpioA.write(7 downto 0)
 
-    murax.io.jtag.tdi <> io.G15
-    murax.io.jtag.tdo <> io.G16
-    murax.io.jtag.tms <> io.F15
+    murax.io.jtag.tdi <> io.jtag_tdi
+    murax.io.jtag.tdo <> io.jtag_tdo
+    murax.io.jtag.tms <> io.jtag_tms
     murax.io.gpioA.read <> 0
-    murax.io.uart.txd <> io.B12
-    murax.io.uart.rxd <> io.B10
+    murax.io.uart.txd <> io.uart_txd
+    murax.io.uart.rxd <> io.uart_rxd
 
 
 
     val xip = new ClockingArea(murax.systemClockDomain) {
-      RegNext(murax.io.xip.ss.asBool) <> io.R12
+      RegNext(murax.io.xip.ss.asBool) <> io.spis
 
       val sclkIo = SB_IO_SCLK()
-      sclkIo.PACKAGE_PIN <> io.R11
+      sclkIo.PACKAGE_PIN <> io.sclk
       sclkIo.CLOCK_ENABLE := True
 
       sclkIo.OUTPUT_CLK := ClockDomain.current.readClockWire
       sclkIo.D_OUT_0 <> murax.io.xip.sclk.write(0)
       sclkIo.D_OUT_1 <> RegNext(murax.io.xip.sclk.write(1))
 
-      val datas = for ((data, pin) <- (murax.io.xip.data, List(io.P12, io.P11).reverse).zipped) yield new Area {
+      val datas = for ((data, pin) <- (murax.io.xip.data, List(io.mosi, io.miso)).zipped) yield new Area {
         val dataIo = SB_IO_DATA()
         dataIo.PACKAGE_PIN := pin
         dataIo.CLOCK_ENABLE := True
