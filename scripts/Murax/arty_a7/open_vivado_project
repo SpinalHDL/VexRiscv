@@ -1,0 +1,4 @@
+#!/bin/sh
+
+cd ./build
+vivado -mode batch -source ../open_vivado_project.tcl -notrace

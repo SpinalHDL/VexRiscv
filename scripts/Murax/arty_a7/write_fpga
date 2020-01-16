@@ -1,0 +1,3 @@
+#!/bin/sh
+cd ./build
+vivado -mode batch -source ../write_fpga.tcl -notrace

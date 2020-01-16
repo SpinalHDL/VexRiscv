@@ -477,3 +477,10 @@ object MuraxWithRamInit{
     SpinalVerilog(Murax(MuraxConfig.default.copy(onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")))
   }
 }
+
+object Murax_arty{
+  def main(args: Array[String]) {
+    val hex = "src/main/c/murax/hello_world/build/hello_world.hex"
+    SpinalVerilog(Murax(MuraxConfig.default(false).copy(coreFrequency = 100 MHz,onChipRamSize = 32 kB, onChipRamHexFile = hex)))
+  }
+}
