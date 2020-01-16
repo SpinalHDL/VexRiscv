@@ -33,5 +33,5 @@ clean-for-commit:
 	rm -f *.d
 	rm demo_rom.bin demo.bin crt_ram.bin
 
-clean: clean-tmp
+clean: clean-for-commit
 	rm -f *.bin
