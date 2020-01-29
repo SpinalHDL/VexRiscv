@@ -1,19 +1,21 @@
 
+VBASE = ../../..
+VNAME = Murax_iCE40_hx8k_breakout_board_xip
+VERILOG = ${VBASE}/${VNAME}.v
 
-VERILOG = ../../../Murax_iCE40_hx8k_breakout_board_xip.v
+all: prog
 
-generate :
-	#(cd ../../..; sbt "runMain vexriscv.demo.Murax_iCE40_hx8k_breakout_board_xip")
+${VERILOG} :
+	(cd ${VBASE}; sbt "runMain vexriscv.demo.${VNAME}")
 
-../../../Murax_iCE40_hx8k_breakout_board_xip.v :
-	#(cd ../../..; sbt "runMain vexriscv.demo.Murax_iCE40_hx8k_breakout_board_xip")
+generate : ${VERILOG}
 
-../../../Murax_iCE40_hx8k_breakout_board_xip.v*.bin:
+${VERILOG}*.bin:
 
-bin/Murax_iCE40_hx8k_breakout_board_xip.blif : ${VERILOG} ../../../Murax_iCE40_hx8k_breakout_board_xip.v*.bin
+bin/Murax_iCE40_hx8k_breakout_board_xip.blif : ${VERILOG} ${VERILOG}*.bin
 	mkdir -p bin
 	rm -f Murax_iCE40_hx8k_breakout_board_xip.v*.bin
-	cp ../../../Murax_iCE40_hx8k_breakout_board_xip.v*.bin . | true
+	cp ${VERILOG}*.bin . | true
 	yosys -v3 -p "synth_ice40 -top Murax_iCE40_hx8k_breakout_board_xip -blif bin/Murax_iCE40_hx8k_breakout_board_xip.blif" ${VERILOG}
 
 bin/Murax_iCE40_hx8k_breakout_board_xip.asc : Murax_iCE40_hx8k_breakout_board_xip.pcf bin/Murax_iCE40_hx8k_breakout_board_xip.blif
@@ -28,11 +30,15 @@ time: bin/Murax_iCE40_hx8k_breakout_board_xip.bin
 	icetime -tmd hx8k bin/Murax_iCE40_hx8k_breakout_board_xip.asc
 
 prog : bin/Murax_iCE40_hx8k_breakout_board_xip.bin
+	lsusb -d 0403:6010
 	iceprog -S bin/Murax_iCE40_hx8k_breakout_board_xip.bin
 
 sudo-prog : bin/Murax_iCE40_hx8k_breakout_board_xip.bin
+	sudo lsusb -d 0403:6010
 	sudo iceprog -S bin/Murax_iCE40_hx8k_breakout_board_xip.bin
 
 clean :
 	rm -rf bin
 	rm -f Murax_iCE40_hx8k_breakout_board_xip.v*.bin
+	rm -f ${VERILOG}*.bin
+	rm -f ${VERILOG}

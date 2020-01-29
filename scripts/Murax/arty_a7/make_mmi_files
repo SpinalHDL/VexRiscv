@@ -1,0 +1,4 @@
+#!/bin/sh
+
+cd ./build
+vivado -mode batch -source ../make_mmi_files.tcl -notrace
