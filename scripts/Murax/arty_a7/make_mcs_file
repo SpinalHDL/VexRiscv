@@ -1,0 +1,6 @@
+#!/bin/sh
+#Create mcs file for QSPI flash
+
+cd ./build
+
+vivado -mode batch -source ../make_mcs_file.tcl -notrace

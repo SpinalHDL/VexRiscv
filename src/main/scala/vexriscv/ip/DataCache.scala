@@ -24,8 +24,9 @@ case class DataCacheConfig(cacheSize : Int,
                            earlyDataMux : Boolean = false,
                            tagSizeShift : Int = 0, //Used to force infering ram
                            withLrSc : Boolean = false,
-                           withAmo : Boolean = false){
-
+                           withAmo : Boolean = false,
+                           mergeExecuteMemory : Boolean = false){
+  assert(!(mergeExecuteMemory && (earlyDataMux || earlyWaysHits)))
   assert(!(earlyDataMux && !earlyWaysHits))
   def burstSize = bytePerLine*8/memDataWidth
   val burstLength = bytePerLine/(memDataWidth/8)
@@ -447,7 +448,7 @@ class DataCache(p : DataCacheConfig) extends Component{
   }
 
   val stageA = new Area{
-    def stagePipe[T <: Data](that : T) = RegNextWhen(that, !io.cpu.memory.isStuck)
+    def stagePipe[T <: Data](that : T) = if(mergeExecuteMemory) CombInit(that) else RegNextWhen(that, !io.cpu.memory.isStuck)
     val request = stagePipe(io.cpu.execute.args)
     val mask = stagePipe(stage0.mask)
     io.cpu.memory.mmuBus.cmd.isValid := io.cpu.memory.isValid
@@ -458,16 +459,22 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     val wayHits = earlyWaysHits generate ways.map(way => (io.cpu.memory.mmuBus.rsp.physicalAddress(tagRange) === way.tagsReadRsp.address && way.tagsReadRsp.valid))
     val dataMux = earlyDataMux generate MuxOH(wayHits, ways.map(_.dataReadRsp))
-    val colisions = stagePipe(stage0.colisions) | collisionProcess(io.cpu.memory.address(lineRange.high downto wordRange.low), mask) //Assume the writeback stage will never be unstall memory acces while memory stage is stalled
+    val colisions = if(mergeExecuteMemory){
+      stagePipe(stage0.colisions)
+    } else {
+      //Assume the writeback stage will never be unstall memory acces while memory stage is stalled
+      stagePipe(stage0.colisions) | collisionProcess(io.cpu.memory.address(lineRange.high downto wordRange.low), mask)
+    }
   }
 
   val stageB = new Area {
     def stagePipe[T <: Data](that : T) = RegNextWhen(that, !io.cpu.writeBack.isStuck)
+    def ramPipe[T <: Data](that : T) = if(mergeExecuteMemory) CombInit(that) else  RegNextWhen(that, !io.cpu.writeBack.isStuck)
     val request = RegNextWhen(stageA.request, !io.cpu.writeBack.isStuck)
     val mmuRspFreeze = False
     val mmuRsp = RegNextWhen(io.cpu.memory.mmuBus.rsp, !io.cpu.writeBack.isStuck && !mmuRspFreeze)
-    val tagsReadRsp = ways.map(w => stagePipe(w.tagsReadRsp))
-    val dataReadRsp = !earlyDataMux generate ways.map(w => stagePipe(w.dataReadRsp))
+    val tagsReadRsp = ways.map(w => ramPipe(w.tagsReadRsp))
+    val dataReadRsp = !earlyDataMux generate ways.map(w => ramPipe(w.dataReadRsp))
     val waysHits = if(earlyWaysHits) stagePipe(B(stageA.wayHits)) else B(tagsReadRsp.map(tag => mmuRsp.physicalAddress(tagRange) === tag.address && tag.valid).asBits())
     val waysHit = waysHits.orR
     val dataMux = if(earlyDataMux) stagePipe(stageA.dataMux) else MuxOH(waysHits, dataReadRsp)
