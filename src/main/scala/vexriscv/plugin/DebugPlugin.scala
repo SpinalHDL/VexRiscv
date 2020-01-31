@@ -246,6 +246,11 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
         }
         if(pipeline.things.contains(DEBUG_BYPASS_CACHE)) pipeline(DEBUG_BYPASS_CACHE) := True
       }
+
+      val wakeService = serviceElse(classOf[IWake], null)
+      if(wakeService != null) when(haltIt){
+        wakeService.askWake()
+      }
     }}
   }
 }

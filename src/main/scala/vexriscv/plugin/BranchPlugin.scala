@@ -53,7 +53,8 @@ trait PredictionInterface{
 class BranchPlugin(earlyBranch : Boolean,
                    catchAddressMisaligned : Boolean = false,
                    fenceiGenAsAJump : Boolean = false,
-                   fenceiGenAsANop : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
+                   fenceiGenAsANop : Boolean = false,
+                   decodeBranchSrc2 : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
 
 
   def catchAddressMisalignedForReal = catchAddressMisaligned && !pipeline(RVC_GEN)
@@ -310,6 +311,8 @@ class BranchPlugin(earlyBranch : Boolean,
     //Do branch calculations (conditions + target PC)
     object NEXT_PC extends Stageable(UInt(32 bits))
     object TARGET_MISSMATCH extends Stageable(Bool)
+    object BRANCH_SRC2 extends Stageable(UInt(32 bits))
+    val branchSrc2Stage = if(decodeBranchSrc2) decode else execute
     execute plug new Area {
       import execute._
 
@@ -328,15 +331,16 @@ class BranchPlugin(earlyBranch : Boolean,
         )
       )
 
-      val imm = IMM(input(INSTRUCTION))
       val branch_src1 = (input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? input(RS1).asUInt | input(PC)
-      val branch_src2 = input(BRANCH_CTRL).mux(
+
+      val imm = IMM(branchSrc2Stage.input(INSTRUCTION))
+      branchSrc2Stage.insert(BRANCH_SRC2) := branchSrc2Stage.input(BRANCH_CTRL).mux(
         BranchCtrlEnum.JAL  -> imm.j_sext,
         BranchCtrlEnum.JALR -> imm.i_sext,
         default             -> imm.b_sext
       ).asUInt
 
-      val branchAdder = branch_src1 + branch_src2
+      val branchAdder = branch_src1 + input(BRANCH_SRC2)
       insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ "0"
       insert(NEXT_PC) := input(PC) + (if(pipeline(RVC_GEN)) ((input(IS_RVC)) ? U(2) | U(4)) else 4)
       insert(TARGET_MISSMATCH) := decode.input(PC) =/= input(BRANCH_CALC)

@@ -61,7 +61,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
   var redoBranch : Flow[UInt] = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
   val tightlyCoupledPorts = ArrayBuffer[TightlyCoupledPort]()
-
+  def tightlyGen = tightlyCoupledPorts.nonEmpty
 
   def newTightlyCoupledPort(p : TightlyCoupledPortParameter) = {
     val port = TightlyCoupledPort(p, null)
@@ -125,7 +125,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
     import pipeline.config._
 
     pipeline plug new FetchArea(pipeline) {
-      val cache = new InstructionCache(IBusCachedPlugin.this.config)
+      val cache = new InstructionCache(IBusCachedPlugin.this.config.copy(bypassGen = tightlyGen))
       iBus = master(new InstructionCacheMemBus(IBusCachedPlugin.this.config)).setName("iBus")
       iBus <> cache.io.mem
       iBus.cmd.address.allowOverride := cache.io.mem.cmd.address
@@ -165,8 +165,8 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         val tightlyCoupledHits = RegNextWhen(s0.tightlyCoupledHits, stages(1).input.ready)
         val tightlyCoupledHit = RegNextWhen(s0.tightlyCoupledHit, stages(1).input.ready)
 
-        cache.io.cpu.fetch.dataBypassValid := tightlyCoupledHit
-        cache.io.cpu.fetch.dataBypass := (if(tightlyCoupledPorts.isEmpty) B(0) else MuxOH(tightlyCoupledHits, tightlyCoupledPorts.map(e => CombInit(e.bus.data))))
+        if(tightlyGen) cache.io.cpu.fetch.dataBypassValid := tightlyCoupledHit
+        if(tightlyGen) cache.io.cpu.fetch.dataBypass := MuxOH(tightlyCoupledHits, tightlyCoupledPorts.map(e => CombInit(e.bus.data)))
 
         //Connect fetch cache side
         cache.io.cpu.fetch.isValid := stages(1).input.valid && !tightlyCoupledHit

@@ -1,10 +1,11 @@
 package vexriscv.demo
 
 import spinal.core._
+import spinal.lib._
 import spinal.lib.eda.bench._
 import spinal.lib.eda.icestorm.IcestormStdTargets
 import vexriscv.VexRiscv
-import vexriscv.plugin.{DecoderSimplePlugin, KeepAttribute}
+import vexriscv.plugin.{DecoderSimplePlugin}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random

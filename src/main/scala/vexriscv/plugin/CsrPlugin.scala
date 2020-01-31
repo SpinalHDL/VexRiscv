@@ -69,7 +69,8 @@ case class CsrPluginConfig(
                             midelegAccess       : CsrAccess = CsrAccess.NONE,
                             pipelineCsrRead     : Boolean = false,
                             pipelinedInterrupt  : Boolean = true,
-                            deterministicInteruptionEntry : Boolean = false //Only used for simulatation purposes
+                            deterministicInteruptionEntry : Boolean = false, //Only used for simulatation purposes
+                            wfiOutput           : Boolean = false
                           ){
   assert(!ucycleAccess.canWrite)
   def privilegeGen = userGen || supervisorGen
@@ -311,8 +312,11 @@ trait CsrInterface{
 trait IContextSwitching{
   def isContextSwitching : Bool
 }
+trait IWake{
+  def askWake() : Unit
+}
 
-class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface{
+class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface with IWake{
   import config._
   import CsrAccess._
 
@@ -322,7 +326,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   //Mannage ExceptionService calls
   val exceptionPortsInfos = ArrayBuffer[ExceptionPortInfo]()
-  def exceptionCodeWidth = 4
   override def newExceptionPort(stage : Stage, priority : Int = 0) = {
     val interface = Flow(ExceptionCause())
     exceptionPortsInfos += ExceptionPortInfo(interface,stage,priority)
@@ -332,6 +335,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var exceptionPendings : Vec[Bool] = null
   override def isExceptionPending(stage : Stage): Bool = exceptionPendings(pipeline.stages.indexOf(stage))
 
+  var redoInterface : Flow[UInt] = null
   var jumpInterface : Flow[UInt] = null
   var timerInterrupt, externalInterrupt, softwareInterrupt : Bool = null
   var externalInterruptS : Bool = null
@@ -339,6 +343,11 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var privilege : UInt = null
   var selfException : Flow[ExceptionCause] = null
   var contextSwitching : Bool = null
+  var thirdPartyWake : Bool = null
+  var inWfi : Bool = null
+
+  override def askWake(): Unit = thirdPartyWake := True
+
   override def isContextSwitching = contextSwitching
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
@@ -359,6 +368,16 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   val csrMapping = new CsrMapping()
 
+  //Print CSR mapping
+  def printCsr() {
+    for ((address, things) <- csrMapping.mapping) {
+      println("0x" + address.toHexString + " => ")
+      for (thing <- things) {
+        println(" - " + thing)
+      }
+    }
+  }
+
   //Interruption and exception data model
   case class Delegator(var enable : Bool, privilege : Int)
   case class InterruptSpec(var cond : Bool, id : Int, privilege : Int, delegators : List[Delegator])
@@ -378,6 +397,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
+
+    inWfi = False.addTag(Verilator.public)
+
+    thirdPartyWake = False
 
     val defaultEnv = List[(Stageable[_ <: BaseType],Any)](
     )
@@ -422,6 +445,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     jumpInterface.valid := False
     jumpInterface.payload.assignDontCare()
 
+
+    if(supervisorGen) {
+      redoInterface = pcManagerService.createJumpInterface(pipeline.execute)
+      redoInterface.valid := False
+      redoInterface.payload.assignDontCare()
+    }
+
     exceptionPendings = Vec(Bool, pipeline.stages.length)
     timerInterrupt    = in Bool() setName("timerInterrupt")
     externalInterrupt = in Bool() setName("externalInterrupt")
@@ -459,6 +489,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     import pipeline._
     import pipeline.config._
     val fetcher = service(classOf[IBusFetcher])
+    val trapCodeWidth = log2Up((List(16) ++ interruptSpecs.map(_.id + 1) ++ exceptionPortsInfos.map(p => 1 << widthOf(p.port.code))).max)
 
     //Define CSR mapping utilities
     implicit class CsrAccessPimper(csrAccess : CsrAccess){
@@ -511,7 +542,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       val mscratch = if(mscratchGen) Reg(Bits(xlen bits)) else null
       val mcause   = new Area{
         val interrupt = Reg(Bool)
-        val exceptionCode = Reg(UInt(exceptionCodeWidth bits))
+        val exceptionCode = Reg(UInt(trapCodeWidth bits))
       }
       val mtval = Reg(UInt(xlen bits))
       val mcycle   = Reg(UInt(64 bits)) randBoot()
@@ -582,7 +613,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
         val scause = new Area {
           val interrupt = Reg(Bool)
-          val exceptionCode = Reg(UInt(exceptionCodeWidth bits))
+          val exceptionCode = Reg(UInt(trapCodeWidth bits))
         }
         val stval = Reg(UInt(xlen bits))
         val sepc = Reg(UInt(xlen bits))
@@ -610,6 +641,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         scauseAccess(CSR.SCAUSE, xlen-1 -> scause.interrupt, 0 -> scause.exceptionCode)
         sbadaddrAccess(CSR.SBADADDR, stval)
         satpAccess(CSR.SATP, 31 -> satp.MODE, 22 -> satp.ASID, 0 -> satp.PPN)
+
+
+        if(supervisorGen) onWrite(CSR.SATP){
+          execute.arbitration.flushNext := True
+          redoInterface.valid := True
+          redoInterface.payload := execute.input(PC) + 4
+        }
       }
     }
 
@@ -733,7 +771,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       //Process interrupt request, code and privilege
       val interrupt = new Area {
         val valid = if(pipelinedInterrupt) RegNext(False) init(False) else False
-        val code = if(pipelinedInterrupt) Reg(UInt(4 bits)) else UInt(4 bits).assignDontCare()
+        val code = if(pipelinedInterrupt) Reg(UInt(trapCodeWidth bits)) else UInt(trapCodeWidth bits).assignDontCare()
         var privilegs = if (supervisorGen) List(1, 3) else List(3)
         val targetPrivilege = if(pipelinedInterrupt) Reg(UInt(2 bits)) else UInt(2 bits).assignDontCare()
         val privilegeAllowInterrupts = mutable.HashMap[Int, Bool]()
@@ -838,6 +876,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
       }
 
+      if(exceptionPortCtrl == null){
+        if(mbadaddrAccess == CsrAccess.READ_ONLY) mtval := 0
+        if(sbadaddrAccess == CsrAccess.READ_ONLY) stval := 0
+      }
 
       lastStage plug new Area{
         import lastStage._
@@ -885,8 +927,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       execute plug new Area{
         import execute._
         //Manage WFI instructions
-        val inWfi = False.addTag(Verilator.public)
-        val wfiWake = RegNext(interruptSpecs.map(_.cond).orR) init(False)
+        if(wfiOutput) out(inWfi)
+        val wfiWake = RegNext(interruptSpecs.map(_.cond).orR || thirdPartyWake) init(False)
         if(wfiGenAsWait) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.WFI){
           inWfi := True
           when(!wfiWake){
@@ -1043,4 +1085,19 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       }
     }
   }
+}
+
+
+class UserInterruptPlugin(interruptName : String, code : Int, privilege : Int = 3) extends Plugin[VexRiscv]{
+  var interrupt, interruptEnable : Bool = null
+  override def setup(pipeline: VexRiscv): Unit = {
+    val csr = pipeline.service(classOf[CsrPlugin])
+    interrupt = in.Bool().setName(interruptName)
+    val interruptPending =  RegNext(interrupt) init(False)
+    val interruptEnable = RegInit(False).setName(interruptName + "_enable")
+    csr.addInterrupt(interruptPending , code, privilege, Nil)
+    csr.r(csrAddress = CSR.MIP, bitOffset = code,interruptPending)
+    csr.rw(csrAddress = CSR.MIE, bitOffset = code, interruptEnable)
+  }
+  override def build(pipeline: VexRiscv): Unit = {}
 }
