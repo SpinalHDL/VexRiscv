@@ -21,7 +21,7 @@ proc swap_bits { bit } {
 # open_run impl_1
 
 # Find all the RAMs, place in a list
-set rams [get_cells -hier -regexp {.*core/system_ram/.*} -filter {REF_NAME =~ RAMB36E1}]
+set rams [get_cells -hier -regexp {.*core/system_ram/.*} -filter {REF_NAME == RAMB36E1 || REF_NAME == RAMB18E1}]
 
 puts "[llength $rams] RAMs in total"
 foreach m $rams {puts $m}
@@ -89,7 +89,7 @@ set i 0
 foreach ram $rams {
     # Get the RAM location
     set loc_val [get_property LOC [get_cells $ram]]
-    regexp -- {(RAMB36_)([0-9XY]+)} $loc_val full ram_name loc_xy
+    regexp {(RAMB.+_)([0-9XY]+)} $loc_val full ram_name loc_xy
 
     set memi [dict create ram $ram loc $loc_xy]
 
