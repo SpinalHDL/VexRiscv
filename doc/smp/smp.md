@@ -13,7 +13,7 @@ Features :
 |---------------|-------------|
 | Valid/Invalid | Line loaded or not |
 | Shared/Unique | shared => multiple copy of the cache line in different caches, unique => no other caches has a copy of the line |
-| Owner/Lodger  | invited => copy of the line, but no other responsibility, invited => the given cache is responsible to write back dirty data and answer probes with the data |
+| Owner/Lodger  | lodger => copy of the line, but no other responsibility, owner => the given cache is responsible to write back dirty data and answer probes with the data |
 | Clean/Dirty   | clean => match main memory, dirty => main memory need updates |
 
 All combination of those cache flag are valid. But if a cache line is invalid, the other flags have no meaning.
