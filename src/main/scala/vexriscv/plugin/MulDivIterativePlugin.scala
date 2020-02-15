@@ -167,7 +167,7 @@ class MulDivIterativePlugin(genMul : Boolean = true,
       }
 
       if(dhrystoneOpt) {
-        execute.insert(FAST_DIV_VALID) := execute.input(IS_DIV) && execute.input(INSTRUCTION)(13 downto 12) === "00" && !execute.input(RS1).msb && !execute.input(RS2).msb && execute.input(RS1).asUInt < 16 && execute.input(RS2).asUInt < 16 && execute.input(RS2) =/= 0
+        execute.insert(FAST_DIV_VALID) := execute.input(IS_DIV) && execute.input(INSTRUCTION)(13 downto 12) === B"00" && !execute.input(RS1).msb && !execute.input(RS2).msb && execute.input(RS1).asUInt < 16 && execute.input(RS2).asUInt < 16 && execute.input(RS2) =/= 0
         execute.insert(FAST_DIV_VALUE) := (0 to 15).flatMap(n => (0 to 15).map(d => U(if (d == 0) 0 else n / d, 4 bits))).read(U(execute.input(RS1)(3 downto 0)) @@ U(execute.input(RS2)(3 downto 0))) //(U(execute.input(RS1)(3 downto 0)) / U(execute.input(RS2)(3 downto 0))
         when(execute.input(FAST_DIV_VALID)) {
           execute.output(IS_DIV) := False
