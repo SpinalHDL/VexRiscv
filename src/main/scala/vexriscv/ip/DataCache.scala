@@ -259,7 +259,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     val cmdBridge = Stream (DataCacheMemCmd(p))
     val isBurst = cmdBridge.length =/= 0
     cmdBridge.valid := cmd.valid
-    cmdBridge.address := (isBurst ? (cmd.address(31 downto widthOf(counter) + 2) @@ counter @@ "00") | (cmd.address(31 downto 2) @@ "00"))
+    cmdBridge.address := (isBurst ? (cmd.address(31 downto widthOf(counter) + 2) @@ counter @@ U"00") | (cmd.address(31 downto 2) @@ U"00"))
     cmdBridge.wr := cmd.wr
     cmdBridge.mask := cmd.mask
     cmdBridge.data := cmd.data
@@ -278,8 +278,8 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
     bus.ADR := cmdBridge.address >> 2
     bus.CTI := Mux(isBurst, cmdBridge.last ? B"111" | B"010", B"000")
-    bus.BTE := "00"
-    bus.SEL := cmdBridge.wr ? cmdBridge.mask | "1111"
+    bus.BTE := B"00"
+    bus.SEL := cmdBridge.wr ? cmdBridge.mask | B"1111"
     bus.WE  := cmdBridge.wr
     bus.DAT_MOSI := cmdBridge.data
 

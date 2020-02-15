@@ -775,8 +775,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         var privilegs = if (supervisorGen) List(1, 3) else List(3)
         val targetPrivilege = if(pipelinedInterrupt) Reg(UInt(2 bits)) else UInt(2 bits).assignDontCare()
         val privilegeAllowInterrupts = mutable.HashMap[Int, Bool]()
-        if (supervisorGen) privilegeAllowInterrupts += 1 -> ((sstatus.SIE && privilege === "01") || privilege < "01")
-        privilegeAllowInterrupts += 3 -> (mstatus.MIE || privilege < "11")
+        if (supervisorGen) privilegeAllowInterrupts += 1 -> ((sstatus.SIE && privilege === U"01") || privilege < U"01")
+        privilegeAllowInterrupts += 3 -> (mstatus.MIE || privilege < U"11")
         while (privilegs.nonEmpty) {
           val p = privilegs.head
           when(privilegeAllowInterrupts(p)) {
@@ -844,7 +844,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         fetcher.haltIt() //Avoid having the fetch confused by the incomming privilege switch
 
         jumpInterface.valid         := True
-        jumpInterface.payload       := (if(!xtvecModeGen) xtvec.base @@ "00" else (xtvec.mode === 0 || hadException) ? (xtvec.base @@ "00") | ((xtvec.base + trapCause) @@ "00") )
+        jumpInterface.payload       := (if(!xtvecModeGen) xtvec.base @@ U"00" else (xtvec.mode === 0 || hadException) ? (xtvec.base @@ U"00") | ((xtvec.base + trapCause) @@ U"00") )
         lastStage.arbitration.flushNext := True
 
         if(privilegeGen) privilegeReg := targetPrivilege
@@ -917,8 +917,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
         val imm = IMM(input(INSTRUCTION))
         insert(CSR_WRITE_OPCODE) := ! (
-             (input(INSTRUCTION)(14 downto 13) === "01" && input(INSTRUCTION)(rs1Range) === 0)
-          || (input(INSTRUCTION)(14 downto 13) === "11" && imm.z === 0)
+             (input(INSTRUCTION)(14 downto 13) === B"01" && input(INSTRUCTION)(rs1Range) === 0)
+          || (input(INSTRUCTION)(14 downto 13) === B"11" && imm.z === 0)
         )
         insert(CSR_READ_OPCODE) := input(INSTRUCTION)(13 downto 7) =/= B"0100000"
       }

@@ -211,7 +211,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         if (catchSomething) {
           decodeExceptionPort.valid := False
           decodeExceptionPort.code.assignDontCare()
-          decodeExceptionPort.badAddr := cacheRsp.pc(31 downto 2) @@ "00"
+          decodeExceptionPort.badAddr := cacheRsp.pc(31 downto 2) @@ U"00"
         }
 
         when(cacheRsp.isValid && cacheRsp.mmuRefilling && !issueDetected) {
