@@ -67,29 +67,42 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
     pipeline(RVC_GEN) = compressedGen
 
-    prediction match {
-      case NONE =>
-      case STATIC | DYNAMIC => {
-        predictionJumpInterface = createJumpInterface(pipeline.decode)
-        decodePrediction = pipeline.service(classOf[PredictionInterface]).askDecodePrediction()
-      }
-      case DYNAMIC_TARGET => {
-        fetchPrediction = pipeline.service(classOf[PredictionInterface]).askFetchPrediction()
-        if(compressedGen && cmdToRspStageCount > 1){
-          dynamicTargetFailureCorrection = createJumpInterface(pipeline.decode)
-        }
-      }
-    }
+//    prediction match {
+//      case NONE =>
+//      case STATIC | DYNAMIC => {
+//        predictionJumpInterface = createJumpInterface(pipeline.decode)
+//        decodePrediction = pipeline.service(classOf[PredictionInterface]).askDecodePrediction()
+//      }
+//      case DYNAMIC_TARGET => {
+//        fetchPrediction = pipeline.service(classOf[PredictionInterface]).askFetchPrediction()
+//        if(compressedGen && cmdToRspStageCount > 1){
+//          dynamicTargetFailureCorrection = createJumpInterface(pipeline.decode)
+//        }
+//      }
+//    }
 
     pcValids = Vec(Bool, pipeline.stages.size)
   }
 
+  object IBUS_RSP
+  object DECOMPRESSOR
+  object INJECTOR_M2S
+
+  def isDrivingDecode(s : Any): Boolean = {
+    if(injectorStage) return s == INJECTOR_M2S
+    if(compressedGen) return s == DECOMPRESSOR
+    s == IBUS_RSP
+  }
+
+  def getFlushAt(s : Any, lastCond : Boolean = true): Bool = {
+    if(isDrivingDecode(s) && lastCond)  pipeline.decode.arbitration.isRemoved else fetcherflushIt
+  }
 
   class FetchArea(pipeline : VexRiscv) extends Area {
     import pipeline._
     import pipeline.config._
 
-    //JumpService hardware implementation
+    //Arbitrate jump requests into pcLoad
     val jump = new Area {
       val sortedByStage = jumpInfos.sortWith((a, b) => {
         (pipeline.indexOf(a.stage) > pipeline.indexOf(b.stage)) ||
@@ -117,25 +130,25 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       val booted = RegNext(True) init (False)
       val inc = RegInit(False) clearWhen(corrected || pcRegPropagate) setWhen(output.fire) clearWhen(!output.valid && output.ready)
       val pc = pcReg + (inc ## B"00").asUInt
-      val predictionPcLoad = ifGen(prediction == DYNAMIC_TARGET) (Flow(UInt(32 bits)))
+//      val predictionPcLoad = ifGen(prediction == DYNAMIC_TARGET) (Flow(UInt(32 bits)))
 
       if(compressedGen) when(inc) {
         pc(1) := False
       }
 
-      if(predictionPcLoad != null) {
-        when(predictionPcLoad.valid) {
-          corrected := True
-          pc := predictionPcLoad.payload
-        }
-      }
+//      if(predictionPcLoad != null) {
+//        when(predictionPcLoad.valid) {
+//          corrected := True
+//          pc := predictionPcLoad.payload
+//        }
+//      }
       when(jump.pcLoad.valid) {
         corrected := True
         pc := jump.pcLoad.payload
       }
 
 
-      when(booted && (output.ready || fetcherflushIt || pcRegPropagate)){
+      when(booted && (output.ready || corrected || pcRegPropagate)){
         pcReg := pc
       }
 
@@ -160,12 +173,12 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         pcReg := pcPlus
       }
 
-      val predictionPcLoad = ifGen(prediction == DYNAMIC_TARGET) (Flow(UInt(32 bits)))
-      if(prediction == DYNAMIC_TARGET) {
-        when(predictionPcLoad.valid) {
-          pcReg := predictionPcLoad.payload
-        }
-      }
+//      val predictionPcLoad = ifGen(prediction == DYNAMIC_TARGET) (Flow(UInt(32 bits)))
+//      if(prediction == DYNAMIC_TARGET) {
+//        when(predictionPcLoad.valid) {
+//          pcReg := predictionPcLoad.payload
+//        }
+//      }
 
       //application of the selected jump request
       when(jump.pcLoad.valid && (!decode.arbitration.isStuck || decode.arbitration.isRemoved)) {
@@ -177,27 +190,18 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
     case class FetchRsp() extends Bundle {
       val pc = UInt(32 bits)
       val rsp = IBusSimpleRsp()
-      val isRvc = Bool
+      val isRvc = Bool()
     }
 
 
     val iBusRsp = new Area {
-//      val input = Stream(UInt(32 bits))
-//      val inputPipeline = Vec(Stream(UInt(32 bits)), cmdToRspStageCount)
-//      val inputPipelineHalt = Vec(False, cmdToRspStageCount-1)
-//      for(i <- 0 until cmdToRspStageCount) {
-//        inputPipeline(i) << {i match {
-//          case 0 => input.m2sPipeWithFlush(flush, false, collapsBubble = false)
-//          case _ => inputPipeline(i-1).haltWhen(inputPipelineHalt(i-1)).m2sPipeWithFlush(flush,collapsBubble = false)
-//        }}
-//      }
-
-//      val stages = Array.fill(cmdToRspStageCount)(Stream(UInt(32 bits)))
+      val fetchFlush = False
       val stages = Array.fill(cmdToRspStageCount + 1)(new Bundle {
         val input = Stream(UInt(32 bits))
         val output = Stream(UInt(32 bits))
-        val halt = Bool
-        val inputSample = Bool
+        val halt = Bool()
+        val inputSample = Bool()
+        val flush = Bool()
       })
 
       stages(0).input << fetchPc.output
@@ -207,28 +211,17 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         s.output << s.input.haltWhen(s.halt)
       }
 
+      stages.head.flush :=  getFlushAt(IBUS_RSP, stages.head == stages.last) || fetchFlush
       for((s,sNext) <- (stages, stages.tail).zipped) {
+        sNext.flush := getFlushAt(IBUS_RSP, sNext == stages.last) || fetchFlush
         if(s == stages.head && pcRegReusedForSecondStage) {
-          sNext.input.arbitrationFrom(s.output.toEvent().m2sPipeWithFlush(fetcherflushIt, s != stages.head, collapsBubble = false))
+          sNext.input.arbitrationFrom(s.output.toEvent().m2sPipeWithFlush(sNext.flush, s != stages.head, collapsBubble = false))
           sNext.input.payload := fetchPc.pcReg
           fetchPc.pcRegPropagate setWhen(sNext.input.ready)
         } else {
-          sNext.input << s.output.m2sPipeWithFlush(fetcherflushIt, s != stages.head, collapsBubble = false)
+          sNext.input << s.output.m2sPipeWithFlush(sNext.flush, s != stages.head, collapsBubble = false)
         }
       }
-
-//
-//      val pipeline = Vec(Stream(UInt(32 bits)), cmdToRspStageCount + 1)
-//      val halts = Vec(False, cmdToRspStageCount)
-//      for(i <- 0 until cmdToRspStageCount + 1) {
-//        pipeline(i) << {i match {
-//          case 0 => pipeline(0) << fetchPc.output.haltWhen(halts(i))
-//          case 1 => pipeline(1).m2sPipeWithFlush(flush, false, collapsBubble = false)
-//          case _ => inputPipeline(i-1).haltWhen(inputPipelineHalt(i-1)).m2sPipeWithFlush(flush,collapsBubble = false)
-//        }}
-//      }
-
-      // ...
 
       val readyForError = True
       val output = Stream(FetchRsp())
@@ -253,7 +246,6 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       output.pc := input.pc
       output.isRvc := isRvc
       output.rsp.inst := isRvc ? decompressed | raw
-//      input.ready := (bufferValid ? (!isRvc && output.ready) | (input.pc(1) || output.ready))
       input.ready := !output.valid || !(!output.ready || (isRvc && !input.pc(1) && input.rsp.inst(16, 2 bits) =/= 3) || (!isRvc && bufferValid && input.rsp.inst(16, 2 bits) =/= 3))
       addPrePopTask(() => {
         when(!input.ready && output.fire && !fetcherflushIt /* && ((isRvc && !bufferValid && !input.pc(1)) || (!isRvc && bufferValid && input.rsp.inst(16, 2 bits) =/= 3))*/) {
@@ -286,7 +278,8 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         incomingInstruction setWhen (inputBeforeStage.valid)
       }
       val decodeInput = (if (injectorStage) {
-        val decodeInput = inputBeforeStage.m2sPipeWithFlush(fetcherflushIt, collapsBubble = false)
+        val flushStage = getFlushAt(INJECTOR_M2S)
+        val decodeInput = inputBeforeStage.m2sPipeWithFlush(flushStage, collapsBubble = false)
         decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), inputBeforeStage.rsp.inst)
         iBusRsp.readyForError.clearWhen(decodeInput.valid) //Can't emit error when there is a instruction pending in the injector stage buffer
         incomingInstruction setWhen (decodeInput.valid)
@@ -323,13 +316,10 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         pcValids := Vec(valids.takeRight(stages.size))
       }
 
-      val decodeRemoved = RegInit(False) setWhen(decode.arbitration.isRemoved) clearWhen(fetcherflushIt) //!decode.arbitration.isStuck || decode.arbitration.isFlushed
-
       decodeInput.ready := !decode.arbitration.isStuck
-      decode.arbitration.isValid := decodeInput.valid && !decodeRemoved
+      decode.arbitration.isValid := decodeInput.valid
       decode.insert(PC) := (if (decodePcGen) decodePc.pcReg else decodeInput.pc)
       decode.insert(INSTRUCTION) := decodeInput.rsp.inst
-      decode.insert(INSTRUCTION_READY) := True
       if (compressedGen) decode.insert(IS_RVC) := decodeInput.isRvc
 
       if (injectionPort != null) {
@@ -401,11 +391,11 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         else
           decode.input(PC) + 4)
 
-        if(decodePc != null && decodePc.predictionPcLoad != null){
-          when(decodePc.predictionPcLoad.valid){
-            decode.insert(FORMAL_PC_NEXT) := decodePc.predictionPcLoad.payload
-          }
-        }
+//        if(decodePc != null && decodePc.predictionPcLoad != null){
+//          when(decodePc.predictionPcLoad.valid){
+//            decode.insert(FORMAL_PC_NEXT) := decodePc.predictionPcLoad.payload
+//          }
+//        }
 
         jumpInfos.foreach(info => {
           when(info.interface.valid) {
@@ -429,182 +419,182 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       (ifGen(compressedGen)(decompressorContext), injectorContextWire)
     }
 
-    val predictor = prediction match {
-      case NONE =>
-      case STATIC | DYNAMIC => {
-        def historyWidth = 2
-        val dynamic = ifGen(prediction == DYNAMIC) (new Area {
-          case class BranchPredictorLine()  extends Bundle{
-            val history = SInt(historyWidth bits)
-          }
-
-          val historyCache = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
-          val historyWrite = historyCache.writePort
-          val historyWriteLast = RegNextWhen(historyWrite, iBusRsp.stages(0).output.ready)
-          val hazard = historyWriteLast.valid && historyWriteLast.address === (iBusRsp.stages(0).input.payload >> 2).resized
-
-          case class DynamicContext() extends Bundle{
-            val hazard = Bool
-            val line = BranchPredictorLine()
-          }
-          val fetchContext = DynamicContext()
-          fetchContext.hazard := hazard
-          fetchContext.line := historyCache.readSync((fetchPc.output.payload >> 2).resized, iBusRsp.stages(0).output.ready || fetcherflushIt)
-
-          object PREDICTION_CONTEXT extends Stageable(DynamicContext())
-          decode.insert(PREDICTION_CONTEXT) := stage1ToInjectorPipe(fetchContext)._2
-          val decodeContextPrediction = decode.input(PREDICTION_CONTEXT).line.history.msb
-
-          val branchStage = decodePrediction.stage
-          val branchContext = branchStage.input(PREDICTION_CONTEXT)
-          val moreJump = decodePrediction.rsp.wasWrong ^ branchContext.line.history.msb
-
-          historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits) + (if(pipeline(RVC_GEN))
-            ((!branchStage.input(IS_RVC) && branchStage.input(PC)(1)) ? U(1) | U(0))
-          else
-            U(0))
-
-          historyWrite.data.history := branchContext.line.history + (moreJump ? S(-1) | S(1))
-          val sat = (branchContext.line.history === (moreJump ? S(branchContext.line.history.minValue) | S(branchContext.line.history.maxValue)))
-          historyWrite.valid := !branchContext.hazard && branchStage.arbitration.isFiring && branchStage.input(BRANCH_CTRL) === BranchCtrlEnum.B && !sat
-        })
-
-
-        val imm = IMM(decode.input(INSTRUCTION))
-
-        val conditionalBranchPrediction = prediction match {
-          case STATIC =>  imm.b_sext.msb
-          case DYNAMIC => dynamic.decodeContextPrediction
-        }
-
-        decodePrediction.cmd.hadBranch := decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL || (decode.input(BRANCH_CTRL) === BranchCtrlEnum.B && conditionalBranchPrediction)
-
-        val noPredictionOnMissaligned = (!pipeline(RVC_GEN)) generate new Area{
-          val missaligned = decode.input(BRANCH_CTRL).mux(
-            BranchCtrlEnum.JAL  ->  imm.j_sext(1),
-            default             ->  imm.b_sext(1)
-          )
-          decodePrediction.cmd.hadBranch clearWhen(missaligned)
-        }
-
-        //TODO no more fireing depedancies
-        predictionJumpInterface.valid := decode.arbitration.isValid && decodePrediction.cmd.hadBranch //TODO OH Doublon de priorité
-        predictionJumpInterface.payload := decode.input(PC) + ((decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
-        if(relaxPredictorAddress) KeepAttribute(predictionJumpInterface.payload)
-
-        when(predictionJumpInterface.valid && decode.arbitration.isFiring){
-          flushIt()
-        }
-      }
-      case DYNAMIC_TARGET => new Area{
-//        assert(!compressedGen || cmdToRspStageCount == 1, "Can't combine DYNAMIC_TARGET and RVC as it could stop the instruction fetch mid-air")
-
-        case class BranchPredictorLine()  extends Bundle{
-          val source = Bits(30 - historyRamSizeLog2 bits)
-          val branchWish = UInt(2 bits)
-          val target = UInt(32 bits)
-          val unaligned = ifGen(compressedGen)(Bool)
-        }
-
-        val history = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
-        val historyWrite = history.writePort
-
-        val line = history.readSync((iBusRsp.stages(0).input.payload >> 2).resized, iBusRsp.stages(0).output.ready || fetcherflushIt)
-        val hit = line.source === (iBusRsp.stages(1).input.payload.asBits >> 2 + historyRamSizeLog2) && (if(compressedGen)(!(!line.unaligned && iBusRsp.stages(1).input.payload(1))) else True)
-
-        //Avoid stoping instruction fetch in the middle patch
-        if(compressedGen && cmdToRspStageCount == 1){
-          hit clearWhen(!decompressor.output.valid)
-        }
-
-        //Avoid write to read hazard
-        val historyWriteLast = RegNextWhen(historyWrite, iBusRsp.stages(0).output.ready)
-        val hazard = historyWriteLast.valid && historyWriteLast.address === (iBusRsp.stages(1).input.payload >> 2).resized
-        //TODO improve predictionPcLoad way of doing things
-        fetchPc.predictionPcLoad.valid := line.branchWish.msb && hit && !hazard && iBusRsp.stages(1).output.valid //XXX && !(!line.unaligned && iBusRsp.inputPipeline(0).payload(1))
-        fetchPc.predictionPcLoad.payload := line.target
-
-        case class PredictionResult()  extends Bundle{
-          val hazard = Bool
-          val hit = Bool
-          val line = BranchPredictorLine()
-        }
-
-        val fetchContext = PredictionResult()
-        fetchContext.hazard := hazard
-        fetchContext.hit := hit
-        fetchContext.line := line
-
-        val (decompressorContext, injectorContext) = stage1ToInjectorPipe(fetchContext)
-        if(compressedGen) {
-          //prediction hit on the right instruction into words
-          decompressorContext.hit clearWhen(decompressorContext.line.unaligned && (decompressor.bufferValid || (decompressor.isRvc && !decompressor.input.pc(1))))
-
-         // if(compressedGen) injectorContext.hit clearWhen(decodePc.pcReg(1) =/= injectorContext.line.unaligned)
-
-          decodePc.predictionPcLoad.valid := injectorContext.line.branchWish.msb && injectorContext.hit && !injectorContext.hazard && injector.decodeInput.fire
-          decodePc.predictionPcLoad.payload := injectorContext.line.target
-
-
-          when(decompressorContext.line.branchWish.msb && decompressorContext.hit && !decompressorContext.hazard && decompressor.output.fire){
-            decompressor.bufferValid := False
-            decompressor.input.ready := True
-          }
-        }
-
-        object PREDICTION_CONTEXT extends Stageable(PredictionResult())
-        pipeline.decode.insert(PREDICTION_CONTEXT) := injectorContext
-        val branchStage = fetchPrediction.stage
-        val branchContext = branchStage.input(PREDICTION_CONTEXT)
-
-        fetchPrediction.cmd.hadBranch := branchContext.hit && !branchContext.hazard && branchContext.line.branchWish.msb
-        fetchPrediction.cmd.targetPc := branchContext.line.target
-
-
-        historyWrite.valid := False
-        historyWrite.address := fetchPrediction.rsp.sourceLastWord(2, historyRamSizeLog2 bits)
-        historyWrite.data.source := fetchPrediction.rsp.sourceLastWord.asBits >> 2 + historyRamSizeLog2
-        historyWrite.data.target := fetchPrediction.rsp.finalPc
-        if(compressedGen) historyWrite.data.unaligned := !fetchPrediction.stage.input(PC)(1) ^ fetchPrediction.stage.input(IS_RVC)
-
-        when(fetchPrediction.rsp.wasRight) {
-          historyWrite.valid := branchContext.hit
-          historyWrite.data.branchWish := branchContext.line.branchWish + (branchContext.line.branchWish === 2).asUInt - (branchContext.line.branchWish === 1).asUInt
-        } otherwise {
-          when(branchContext.hit) {
-            historyWrite.valid := True
-            historyWrite.data.branchWish := branchContext.line.branchWish - (branchContext.line.branchWish.msb).asUInt + (!branchContext.line.branchWish.msb).asUInt
-          } otherwise {
-            historyWrite.valid := True
-            historyWrite.data.branchWish := "10"
-          }
-        }
-
-        historyWrite.valid clearWhen(branchContext.hazard || !branchStage.arbitration.isFiring)
-
-
-
-        val predictionFailure = ifGen(compressedGen && cmdToRspStageCount > 1)(new Area{
-          val predictionBranch =  decompressorContext.hit && !decompressorContext.hazard && decompressorContext.line.branchWish(1)
-          val unalignedWordIssue = decompressor.bufferFill && decompressor.input.rsp.inst(17 downto 16) === 3 && predictionBranch
-          val decompressorFailure = RegInit(False) setWhen(unalignedWordIssue) clearWhen(fetcherflushIt)
-          val injectorFailure = Delay(decompressorFailure, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
-          val bypassFailure = if(!injectorStage) False else decompressorFailure && !injector.decodeInput.valid
-
-          dynamicTargetFailureCorrection.valid := False
-          dynamicTargetFailureCorrection.payload := decode.input(PC)
-          when(injectorFailure || bypassFailure){
-            historyWrite.valid := True
-            historyWrite.address := (decode.input(PC) >> 2).resized
-            historyWrite.data.branchWish := 0
-
-            decode.arbitration.isValid := False
-            decode.arbitration.flushNext := True
-            dynamicTargetFailureCorrection.valid := True
-          }
-        })
-      }
-    }
+//    val predictor = prediction match {
+//      case NONE =>
+//      case STATIC | DYNAMIC => {
+//        def historyWidth = 2
+//        val dynamic = ifGen(prediction == DYNAMIC) (new Area {
+//          case class BranchPredictorLine()  extends Bundle{
+//            val history = SInt(historyWidth bits)
+//          }
+//
+//          val historyCache = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
+//          val historyWrite = historyCache.writePort
+//          val historyWriteLast = RegNextWhen(historyWrite, iBusRsp.stages(0).output.ready)
+//          val hazard = historyWriteLast.valid && historyWriteLast.address === (iBusRsp.stages(0).input.payload >> 2).resized
+//
+//          case class DynamicContext() extends Bundle{
+//            val hazard = Bool
+//            val line = BranchPredictorLine()
+//          }
+//          val fetchContext = DynamicContext()
+//          fetchContext.hazard := hazard
+//          fetchContext.line := historyCache.readSync((fetchPc.output.payload >> 2).resized, iBusRsp.stages(0).output.ready || fetcherflushIt)
+//
+//          object PREDICTION_CONTEXT extends Stageable(DynamicContext())
+//          decode.insert(PREDICTION_CONTEXT) := stage1ToInjectorPipe(fetchContext)._2
+//          val decodeContextPrediction = decode.input(PREDICTION_CONTEXT).line.history.msb
+//
+//          val branchStage = decodePrediction.stage
+//          val branchContext = branchStage.input(PREDICTION_CONTEXT)
+//          val moreJump = decodePrediction.rsp.wasWrong ^ branchContext.line.history.msb
+//
+//          historyWrite.address := branchStage.input(PC)(2, historyRamSizeLog2 bits) + (if(pipeline(RVC_GEN))
+//            ((!branchStage.input(IS_RVC) && branchStage.input(PC)(1)) ? U(1) | U(0))
+//          else
+//            U(0))
+//
+//          historyWrite.data.history := branchContext.line.history + (moreJump ? S(-1) | S(1))
+//          val sat = (branchContext.line.history === (moreJump ? S(branchContext.line.history.minValue) | S(branchContext.line.history.maxValue)))
+//          historyWrite.valid := !branchContext.hazard && branchStage.arbitration.isFiring && branchStage.input(BRANCH_CTRL) === BranchCtrlEnum.B && !sat
+//        })
+//
+//
+//        val imm = IMM(decode.input(INSTRUCTION))
+//
+//        val conditionalBranchPrediction = prediction match {
+//          case STATIC =>  imm.b_sext.msb
+//          case DYNAMIC => dynamic.decodeContextPrediction
+//        }
+//
+//        decodePrediction.cmd.hadBranch := decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL || (decode.input(BRANCH_CTRL) === BranchCtrlEnum.B && conditionalBranchPrediction)
+//
+//        val noPredictionOnMissaligned = (!pipeline(RVC_GEN)) generate new Area{
+//          val missaligned = decode.input(BRANCH_CTRL).mux(
+//            BranchCtrlEnum.JAL  ->  imm.j_sext(1),
+//            default             ->  imm.b_sext(1)
+//          )
+//          decodePrediction.cmd.hadBranch clearWhen(missaligned)
+//        }
+//
+//        //TODO no more fireing depedancies
+//        predictionJumpInterface.valid := decode.arbitration.isValid && decodePrediction.cmd.hadBranch //TODO OH Doublon de priorité
+//        predictionJumpInterface.payload := decode.input(PC) + ((decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
+//        if(relaxPredictorAddress) KeepAttribute(predictionJumpInterface.payload)
+//
+//        when(predictionJumpInterface.valid && decode.arbitration.isFiring){
+//          flushIt()
+//        }
+//      }
+//      case DYNAMIC_TARGET => new Area{
+////        assert(!compressedGen || cmdToRspStageCount == 1, "Can't combine DYNAMIC_TARGET and RVC as it could stop the instruction fetch mid-air")
+//
+//        case class BranchPredictorLine()  extends Bundle{
+//          val source = Bits(30 - historyRamSizeLog2 bits)
+//          val branchWish = UInt(2 bits)
+//          val target = UInt(32 bits)
+//          val unaligned = ifGen(compressedGen)(Bool)
+//        }
+//
+//        val history = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
+//        val historyWrite = history.writePort
+//
+//        val line = history.readSync((iBusRsp.stages(0).input.payload >> 2).resized, iBusRsp.stages(0).output.ready || fetcherflushIt)
+//        val hit = line.source === (iBusRsp.stages(1).input.payload.asBits >> 2 + historyRamSizeLog2) && (if(compressedGen)(!(!line.unaligned && iBusRsp.stages(1).input.payload(1))) else True)
+//
+//        //Avoid stoping instruction fetch in the middle patch
+//        if(compressedGen && cmdToRspStageCount == 1){
+//          hit clearWhen(!decompressor.output.valid)
+//        }
+//
+//        //Avoid write to read hazard
+//        val historyWriteLast = RegNextWhen(historyWrite, iBusRsp.stages(0).output.ready)
+//        val hazard = historyWriteLast.valid && historyWriteLast.address === (iBusRsp.stages(1).input.payload >> 2).resized
+//        //TODO improve predictionPcLoad way of doing things
+//        fetchPc.predictionPcLoad.valid := line.branchWish.msb && hit && !hazard && iBusRsp.stages(1).output.valid //XXX && !(!line.unaligned && iBusRsp.inputPipeline(0).payload(1))
+//        fetchPc.predictionPcLoad.payload := line.target
+//
+//        case class PredictionResult()  extends Bundle{
+//          val hazard = Bool
+//          val hit = Bool
+//          val line = BranchPredictorLine()
+//        }
+//
+//        val fetchContext = PredictionResult()
+//        fetchContext.hazard := hazard
+//        fetchContext.hit := hit
+//        fetchContext.line := line
+//
+//        val (decompressorContext, injectorContext) = stage1ToInjectorPipe(fetchContext)
+//        if(compressedGen) {
+//          //prediction hit on the right instruction into words
+//          decompressorContext.hit clearWhen(decompressorContext.line.unaligned && (decompressor.bufferValid || (decompressor.isRvc && !decompressor.input.pc(1))))
+//
+//         // if(compressedGen) injectorContext.hit clearWhen(decodePc.pcReg(1) =/= injectorContext.line.unaligned)
+//
+//          decodePc.predictionPcLoad.valid := injectorContext.line.branchWish.msb && injectorContext.hit && !injectorContext.hazard && injector.decodeInput.fire
+//          decodePc.predictionPcLoad.payload := injectorContext.line.target
+//
+//
+//          when(decompressorContext.line.branchWish.msb && decompressorContext.hit && !decompressorContext.hazard && decompressor.output.fire){
+//            decompressor.bufferValid := False
+//            decompressor.input.ready := True
+//          }
+//        }
+//
+//        object PREDICTION_CONTEXT extends Stageable(PredictionResult())
+//        pipeline.decode.insert(PREDICTION_CONTEXT) := injectorContext
+//        val branchStage = fetchPrediction.stage
+//        val branchContext = branchStage.input(PREDICTION_CONTEXT)
+//
+//        fetchPrediction.cmd.hadBranch := branchContext.hit && !branchContext.hazard && branchContext.line.branchWish.msb
+//        fetchPrediction.cmd.targetPc := branchContext.line.target
+//
+//
+//        historyWrite.valid := False
+//        historyWrite.address := fetchPrediction.rsp.sourceLastWord(2, historyRamSizeLog2 bits)
+//        historyWrite.data.source := fetchPrediction.rsp.sourceLastWord.asBits >> 2 + historyRamSizeLog2
+//        historyWrite.data.target := fetchPrediction.rsp.finalPc
+//        if(compressedGen) historyWrite.data.unaligned := !fetchPrediction.stage.input(PC)(1) ^ fetchPrediction.stage.input(IS_RVC)
+//
+//        when(fetchPrediction.rsp.wasRight) {
+//          historyWrite.valid := branchContext.hit
+//          historyWrite.data.branchWish := branchContext.line.branchWish + (branchContext.line.branchWish === 2).asUInt - (branchContext.line.branchWish === 1).asUInt
+//        } otherwise {
+//          when(branchContext.hit) {
+//            historyWrite.valid := True
+//            historyWrite.data.branchWish := branchContext.line.branchWish - (branchContext.line.branchWish.msb).asUInt + (!branchContext.line.branchWish.msb).asUInt
+//          } otherwise {
+//            historyWrite.valid := True
+//            historyWrite.data.branchWish := "10"
+//          }
+//        }
+//
+//        historyWrite.valid clearWhen(branchContext.hazard || !branchStage.arbitration.isFiring)
+//
+//
+//
+//        val predictionFailure = ifGen(compressedGen && cmdToRspStageCount > 1)(new Area{
+//          val predictionBranch =  decompressorContext.hit && !decompressorContext.hazard && decompressorContext.line.branchWish(1)
+//          val unalignedWordIssue = decompressor.bufferFill && decompressor.input.rsp.inst(17 downto 16) === 3 && predictionBranch
+//          val decompressorFailure = RegInit(False) setWhen(unalignedWordIssue) clearWhen(fetcherflushIt)
+//          val injectorFailure = Delay(decompressorFailure, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
+//          val bypassFailure = if(!injectorStage) False else decompressorFailure && !injector.decodeInput.valid
+//
+//          dynamicTargetFailureCorrection.valid := False
+//          dynamicTargetFailureCorrection.payload := decode.input(PC)
+//          when(injectorFailure || bypassFailure){
+//            historyWrite.valid := True
+//            historyWrite.address := (decode.input(PC) >> 2).resized
+//            historyWrite.data.branchWish := 0
+//
+//            decode.arbitration.isValid := False
+//            decode.arbitration.flushNext := True
+//            dynamicTargetFailureCorrection.valid := True
+//          }
+//        })
+//      }
+//    }
 
     def stageXToIBusRsp[T <: Data](stage : Any, input : T): (T) ={
       iBusRsp.stages.dropWhile(_ != stage).tail.foldLeft(input)((data,stage) => RegNextWhen(data, stage.output.ready))

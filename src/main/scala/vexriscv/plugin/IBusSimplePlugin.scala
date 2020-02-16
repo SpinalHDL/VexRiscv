@@ -384,6 +384,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
 
           decode.arbitration.flushIt setWhen(redoBranch.valid)
           decode.arbitration.flushNext setWhen(redoBranch.valid)
+          ???
         }
 
 

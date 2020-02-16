@@ -237,19 +237,10 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
           decodeExceptionPort.code := 1
         }
 
-        when(!iBusRsp.readyForError){
-          redoFetch := False
-          cache.io.cpu.fill.valid := False
-        }
-//        when(pipeline.stages.map(_.arbitration.flushIt).orR){
-//          cache.io.cpu.fill.valid := False
-//        }
-
-
 
         redoBranch.valid := redoFetch
         redoBranch.payload := (if (decodePcGen) decode.input(PC) else cacheRsp.pc)
-        decode.arbitration.flushNext setWhen(redoBranch.valid)
+        iBusRsp.fetchFlush setWhen(redoBranch.valid)
 
 
         cacheRspArbitration.halt setWhen (issueDetected || iBusRspOutputHalt)
