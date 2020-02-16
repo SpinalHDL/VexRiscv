@@ -316,7 +316,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
         mmuBus.cmd.bypassTranslation := False
         mmuBus.end := cmdForkStage.output.fire || fetcherflushIt
 
-        cmd.pc := mmuBus.rsp.physicalAddress(31 downto 2) @@ "00"
+        cmd.pc := mmuBus.rsp.physicalAddress(31 downto 2) @@ U"00"
 
         //do not emit memory request if MMU miss
         when(mmuBus.rsp.exception || mmuBus.rsp.refilling){
@@ -333,7 +333,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
       }
 
       val mmuLess = (mmuBus == null) generate new Area{
-        cmd.pc := cmdForkStage.input.payload(31 downto 2) @@ "00"
+        cmd.pc := cmdForkStage.input.payload(31 downto 2) @@ U"00"
       }
 
       val rspJoin = new Area {
@@ -390,7 +390,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
 
         if(catchSomething){
           decodeExceptionPort.code.assignDontCare()
-          decodeExceptionPort.badAddr := join.pc(31 downto 2) @@ "00"
+          decodeExceptionPort.badAddr := join.pc(31 downto 2) @@ U"00"
 
           if(catchAccessFault) when(join.valid && join.rsp.error){
             decodeExceptionPort.code  := 1
