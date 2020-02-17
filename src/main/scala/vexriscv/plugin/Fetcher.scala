@@ -76,7 +76,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       }
       case DYNAMIC_TARGET => {
         fetchPrediction = pipeline.service(classOf[PredictionInterface]).askFetchPrediction()
-        if(compressedGen && cmdToRspStageCount > 1){
+        if(compressedGen){
           dynamicTargetFailureCorrection = createJumpInterface(pipeline.decode)
         }
       }
@@ -575,13 +575,13 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
 
 
-        val predictionFailure = ifGen(compressedGen && cmdToRspStageCount > 1)(new Area{
+        val predictionFailure = ifGen(compressedGen)(new Area{
           val predictionBranch =  decompressorContext.hit && !decompressorContext.hazard && decompressorContext.line.branchWish(1)
           val unalignedWordIssue = decompressor.bufferFill && decompressor.input.rsp.inst(17 downto 16) === 3 && predictionBranch
           val decompressorFailure = RegInit(False) setWhen(unalignedWordIssue) clearWhen(fetcherflushIt)
           val injectorFailure = Delay(decompressorFailure, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
           val bypassFailure = if(!injectorStage) False else decompressorFailure && !injector.decodeInput.valid
-          ???
+
           dynamicTargetFailureCorrection.valid := False
           dynamicTargetFailureCorrection.payload := decode.input(PC)
           when(injectorFailure || bypassFailure){
