@@ -808,17 +808,29 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
       //Used to make the pipeline empty softly (for interrupts)
       val pipelineLiberator = new Area{
-        when(interrupt.valid && allowInterrupts){
-          decode.arbitration.haltByOther := decode.arbitration.isValid
+        val pcValids = Vec(RegInit(False), stagesFromExecute.length)
+        val active = interrupt.valid && allowInterrupts && decode.arbitration.isValid
+        when(active){
+          decode.arbitration.haltByOther := True
+          for((stage, reg, previous) <- (stagesFromExecute, pcValids, True :: pcValids.toList).zipped){
+            when(!stage.arbitration.isStuck){
+              reg := previous
+            }
+          }
+        }
+        when(!active || decode.arbitration.isRemoved) {
+          pcValids.foreach(_ := False)
         }
 
-        val done = !stagesFromExecute.map(_.arbitration.isValid).orR && fetcher.pcValid(mepcCaptureStage)
+//        val pcValids = for(stage <- stagesFromExecute) yield RegInit(False) clearWhen(!started) setWhen(!stage.arbitration.isValid)
+        val done = CombInit(pcValids.last)
         if(exceptionPortCtrl != null) done.clearWhen(exceptionPortCtrl.exceptionValidsRegs.tail.orR)
       }
 
       //Interrupt/Exception entry logic
       val interruptJump = Bool.addTag(Verilator.public)
       interruptJump := interrupt.valid && pipelineLiberator.done && allowInterrupts
+      if(pipelinedInterrupt) interrupt.valid clearWhen(interruptJump) //avoid double fireing
 
       val hadException = RegNext(exception) init(False)
       pipelineLiberator.done.clearWhen(hadException)
