@@ -59,7 +59,6 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
   var iBus  : InstructionCacheMemBus = null
   var mmuBus : MemoryTranslatorBus = null
   var privilegeService : PrivilegeService = null
-  var redoBranch : Flow[UInt] = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
   val tightlyCoupledPorts = ArrayBuffer[TightlyCoupledPort]()
   def tightlyGen = tightlyCoupledPorts.nonEmpty
@@ -235,10 +234,9 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
           decodeExceptionPort.code := 1
         }
 
-
-        fetchPc.redo.valid := redoFetch
-        fetchPc.redo.payload := iBusRsp.stages.last.input.payload
-        iBusRsp.fetchFlush setWhen(redoFetch)
+        when(redoFetch) {
+          iBusRsp.redoFetch := True
+        }
 
 
         cacheRspArbitration.halt setWhen (issueDetected || iBusRspOutputHalt)

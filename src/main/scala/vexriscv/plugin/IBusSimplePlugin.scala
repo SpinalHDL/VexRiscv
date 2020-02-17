@@ -369,18 +369,16 @@ class IBusSimplePlugin(    resetVector : BigInt,
 
         val join = Stream(FetchRsp())
         val exceptionDetected = False
-        val redoRequired = False
         join.valid := stages.last.output.valid && rspBufferOutput.valid
         join.payload := fetchRsp
         stages.last.output.ready := stages.last.output.valid ? join.fire | join.ready
         rspBufferOutput.ready := join.fire
-        output << join.haltWhen(exceptionDetected || redoRequired)
+        output << join.haltWhen(exceptionDetected)
 
         if(memoryTranslatorPortConfig != null){
-          redoRequired setWhen( stages.last.input.valid && mmu.joinCtx.refilling)
-          fetchPc.redo.valid := redoRequired && iBusRsp.readyForError
-          fetchPc.redo.payload := decode.input(PC)
-          iBusRsp.fetchFlush setWhen(fetchPc.redo.valid)
+          when(stages.last.input.valid && mmu.joinCtx.refilling) {
+            iBusRsp.redoFetch := True
+          }
         }
 
 

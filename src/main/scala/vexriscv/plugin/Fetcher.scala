@@ -76,9 +76,6 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       }
       case DYNAMIC_TARGET => {
         fetchPrediction = pipeline.service(classOf[PredictionInterface]).askFetchPrediction()
-        if(compressedGen){
-          dynamicTargetFailureCorrection = createJumpInterface(pipeline.decode)
-        }
       }
     }
 
@@ -205,7 +202,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
 
     val iBusRsp = new Area {
-      val fetchFlush = False
+      val redoFetch = False
       val stages = Array.fill(cmdToRspStageCount + 1)(new Bundle {
         val input = Stream(UInt(32 bits))
         val output = Stream(UInt(32 bits))
@@ -219,10 +216,13 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         s.output << s.input.haltWhen(s.halt)
       }
 
+      fetchPc.redo.valid := redoFetch
+      fetchPc.redo.payload := stages.last.input.payload
+
       stages.head.flush :=  False //getFlushAt(IBUS_RSP, stages.head == stages.last) || fetchFlush
       for((s,sNext) <- (stages, stages.tail).zipped) {
         val discardInputOnFlush = s != stages.head
-        sNext.flush := getFlushAt(IBUS_RSP, sNext == stages.last) || fetchFlush
+        sNext.flush := getFlushAt(IBUS_RSP, sNext == stages.last) || redoFetch
         if(s == stages.head && pcRegReusedForSecondStage) {
           sNext.input.arbitrationFrom(s.output.toEvent().m2sPipeWithFlush(sNext.flush, false, collapsBubble = false, flushInput = s.flush))
           sNext.input.payload := fetchPc.pcReg
@@ -582,16 +582,12 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
           val injectorFailure = Delay(decompressorFailure, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
           val bypassFailure = if(!injectorStage) False else decompressorFailure && !injector.decodeInput.valid
 
-          dynamicTargetFailureCorrection.valid := False
-          dynamicTargetFailureCorrection.payload := decode.input(PC)
           when(injectorFailure || bypassFailure){
             historyWrite.valid := True
             historyWrite.address := (decode.input(PC) >> 2).resized
             historyWrite.data.branchWish := 0
 
-            decode.arbitration.isValid := False
-            decode.arbitration.flushNext := True
-            dynamicTargetFailureCorrection.valid := True
+            iBusRsp.redoFetch := True
           }
         })
       }
