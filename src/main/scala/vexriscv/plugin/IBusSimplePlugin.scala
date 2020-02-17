@@ -245,13 +245,13 @@ class IBusSimplePlugin(    resetVector : BigInt,
     prediction = prediction,
     historyRamSizeLog2 = historyRamSizeLog2,
     injectorStage = injectorStage,
-  relaxPredictorAddress = relaxPredictorAddress){
+    relaxPredictorAddress = relaxPredictorAddress,
+    fetchRedoGen = memoryTranslatorPortConfig != null){
 
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
   val catchSomething = memoryTranslatorPortConfig != null || catchAccessFault
   var mmuBus : MemoryTranslatorBus = null
-  var redoBranch : Flow[UInt] = null
 
   if(rspHoldValue) assert(busLatencyMin <= 1)
 
@@ -268,7 +268,6 @@ class IBusSimplePlugin(    resetVector : BigInt,
 
     if(memoryTranslatorPortConfig != null) {
       mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_INSTRUCTION, memoryTranslatorPortConfig)
-      redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.decode, priority = 1) //Priority 1 will win against branch predictor
     }
   }
 
@@ -379,12 +378,9 @@ class IBusSimplePlugin(    resetVector : BigInt,
 
         if(memoryTranslatorPortConfig != null){
           redoRequired setWhen( stages.last.input.valid && mmu.joinCtx.refilling)
-          redoBranch.valid := redoRequired && iBusRsp.readyForError
-          redoBranch.payload := decode.input(PC)
-
-          decode.arbitration.flushIt setWhen(redoBranch.valid)
-          decode.arbitration.flushNext setWhen(redoBranch.valid)
-          ???
+          fetchPc.redo.valid := redoRequired && iBusRsp.readyForError
+          fetchPc.redo.payload := decode.input(PC)
+          iBusRsp.fetchFlush setWhen(fetchPc.redo.valid)
         }
 
 

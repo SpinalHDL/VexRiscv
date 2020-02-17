@@ -46,7 +46,8 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
   prediction = prediction,
   historyRamSizeLog2 = historyRamSizeLog2,
   injectorStage = (!config.twoCycleCache && !withoutInjectorStage) || injectorStage,
-  relaxPredictorAddress = relaxPredictorAddress){
+  relaxPredictorAddress = relaxPredictorAddress,
+  fetchRedoGen = true){
   import config._
 
   assert(isPow2(cacheSize))
@@ -85,9 +86,6 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
     decoderService.add(FENCE_I,  List(
         FLUSH_ALL -> True
     ))
-
-
-    redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(pipeline.decode, priority = 1) //Priority 1 will win against branch predictor
 
     if(catchSomething) {
       val exceptionService = pipeline.service(classOf[ExceptionService])
@@ -238,9 +236,9 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         }
 
 
-        redoBranch.valid := redoFetch
-        redoBranch.payload := (if (decodePcGen) decode.input(PC) else cacheRsp.pc)
-        iBusRsp.fetchFlush setWhen(redoBranch.valid)
+        fetchPc.redo.valid := redoFetch
+        fetchPc.redo.payload := iBusRsp.stages.last.input.payload
+        iBusRsp.fetchFlush setWhen(redoFetch)
 
 
         cacheRspArbitration.halt setWhen (issueDetected || iBusRspOutputHalt)

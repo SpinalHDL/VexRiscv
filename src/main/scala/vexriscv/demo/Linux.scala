@@ -272,7 +272,7 @@ object LinuxGen {
         //            wfiGenAsNop    = true,
         //            ucycleAccess   = CsrAccess.NONE
         //          )),
-//        new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
+        new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
           earlyBranch = false,
           catchAddressMisaligned = true,
@@ -310,7 +310,7 @@ object LinuxGen {
 //      }
 //    }
 
-    SpinalConfig(mergeAsyncProcess = true, anonymSignalPrefix = "_zz").generateVerilog {
+    SpinalConfig(mergeAsyncProcess = false, anonymSignalPrefix = "_zz").generateVerilog {
 
 
       val toplevel = new VexRiscv(configFull(

@@ -21,7 +21,8 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
                                val prediction : BranchPrediction,
                                val historyRamSizeLog2 : Int,
                                val injectorStage : Boolean,
-                               val relaxPredictorAddress : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
+                               val relaxPredictorAddress : Boolean,
+                               val fetchRedoGen : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
   var prefetchExceptionPort : Flow[ExceptionCause] = null
   var decodePrediction : DecodePredictionBus = null
   var fetchPrediction : FetchPredictionBus = null
@@ -131,11 +132,16 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       val inc = RegInit(False) clearWhen(corrected || pcRegPropagate) setWhen(output.fire) clearWhen(!output.valid && output.ready)
       val pc = pcReg + (inc ## B"00").asUInt
 //      val predictionPcLoad = ifGen(prediction == DYNAMIC_TARGET) (Flow(UInt(32 bits)))
+      val redo = fetchRedoGen generate Flow(UInt(32 bits))
 
       if(compressedGen) when(inc) {
         pc(1) := False
       }
 
+      if(fetchRedoGen) when(redo.valid){
+        corrected := True
+        pc := redo.payload
+      }
 //      if(predictionPcLoad != null) {
 //        when(predictionPcLoad.valid) {
 //          corrected := True
@@ -146,7 +152,6 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         corrected := True
         pc := jump.pcLoad.payload
       }
-
 
       when(booted && (output.ready || corrected || pcRegPropagate)){
         pcReg := pc
@@ -231,6 +236,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
     val decompressor = ifGen(decodePcGen)(new Area{
       def input = iBusRsp.output
       val output = Stream(FetchRsp())
+      val flush = getFlushAt(DECOMPRESSOR)
 
       val bufferValid = RegInit(False)
       val bufferData = Reg(Bits(16 bits))
@@ -248,7 +254,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       output.rsp.inst := isRvc ? decompressed | raw
       input.ready := !output.valid || !(!output.ready || (isRvc && !input.pc(1) && input.rsp.inst(16, 2 bits) =/= 3) || (!isRvc && bufferValid && input.rsp.inst(16, 2 bits) =/= 3))
       addPrePopTask(() => {
-        when(!input.ready && output.fire && !fetcherflushIt /* && ((isRvc && !bufferValid && !input.pc(1)) || (!isRvc && bufferValid && input.rsp.inst(16, 2 bits) =/= 3))*/) {
+        when(!input.ready && output.fire && !flush /* && ((isRvc && !bufferValid && !input.pc(1)) || (!isRvc && bufferValid && input.rsp.inst(16, 2 bits) =/= 3))*/) {
           input.pc.getDrivingReg(1) := True
         }
       })
@@ -264,7 +270,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         }
         bufferData := input.rsp.inst(31 downto 16)
       }
-      bufferValid.clearWhen(fetcherflushIt)
+      bufferValid.clearWhen(flush)
       iBusRsp.readyForError.clearWhen(bufferValid && isRvc) //Can't emit error, as there is a earlier instruction pending
       incomingInstruction setWhen(bufferValid && bufferData(1 downto 0) =/= 3)
     })
