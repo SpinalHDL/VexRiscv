@@ -122,7 +122,7 @@ object StreamForkVex{
 
 object StreamVexPimper{
   implicit class StreamFlushPimper[T <: Data](pimped : Stream[T]){
-    def m2sPipeWithFlush(flush : Bool, discardInput : Boolean = true, collapsBubble : Boolean = true): Stream[T] = {
+    def m2sPipeWithFlush(flush : Bool, discardInput : Boolean = true, collapsBubble : Boolean = true, flushInput : Bool = null): Stream[T] = {
       val ret = cloneOf(pimped)
 
       val rValid = RegInit(False)
@@ -132,7 +132,10 @@ object StreamVexPimper{
       pimped.ready := (Bool(collapsBubble) && !ret.valid) || ret.ready
 
       when(pimped.ready) {
-        rValid := pimped.valid
+        if(flushInput == null)
+          rValid := pimped.valid
+        else
+          rValid := pimped.valid && !flushInput
         rData := pimped.payload
       }
 
