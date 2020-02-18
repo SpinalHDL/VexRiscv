@@ -129,7 +129,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       val inc = RegInit(False) clearWhen(corrected || pcRegPropagate) setWhen(output.fire) clearWhen(!output.valid && output.ready)
       val pc = pcReg + (inc ## B"00").asUInt
       val predictionPcLoad = ifGen(prediction == DYNAMIC_TARGET) (Flow(UInt(32 bits)))
-      val redo = fetchRedoGen generate Flow(UInt(32 bits))
+      val redo = (fetchRedoGen || prediction == DYNAMIC_TARGET) generate Flow(UInt(32 bits))
       val flushed = False
 
       if(compressedGen) when(inc) {
@@ -142,7 +142,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
           pc := predictionPcLoad.payload
         }
       }
-      if(fetchRedoGen) when(redo.valid){
+      if(redo != null) when(redo.valid){
         corrected := True
         pc := redo.payload
         flushed := True
@@ -216,8 +216,10 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         s.output << s.input.haltWhen(s.halt)
       }
 
-      fetchPc.redo.valid := redoFetch
-      fetchPc.redo.payload := stages.last.input.payload
+      if(fetchPc.redo != null) {
+        fetchPc.redo.valid := redoFetch
+        fetchPc.redo.payload := stages.last.input.payload
+      }
 
       stages.head.flush :=  False //getFlushAt(IBUS_RSP, stages.head == stages.last) || fetchFlush
       for((s,sNext) <- (stages, stages.tail).zipped) {
@@ -579,7 +581,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
           val predictionBranch =  decompressorContext.hit && !decompressorContext.hazard && decompressorContext.line.branchWish(1)
           val unalignedWordIssue = decompressor.bufferFill && decompressor.input.rsp.inst(17 downto 16) === 3 && predictionBranch
           val decompressorFailure = RegInit(False) setWhen(unalignedWordIssue) clearWhen(fetcherflushIt)
-          val injectorFailure = Delay(decompressorFailure, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
+          val injectorFailure = Delay(decompressorFailure, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready, init=False)
           val bypassFailure = if(!injectorStage) False else decompressorFailure && !injector.decodeInput.valid
 
           when(injectorFailure || bypassFailure){
