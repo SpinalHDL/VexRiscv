@@ -43,7 +43,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
     injectionPort = Stream(Bits(32 bits))
     injectionPort
   }
-  def pcRegReusedForSecondStage = allowPcRegReusedForSecondStage && prediction != DYNAMIC_TARGET
+  def pcRegReusedForSecondStage = allowPcRegReusedForSecondStage && prediction != DYNAMIC_TARGET //TODO might not be required for  DYNAMIC_TARGET
   var predictionJumpInterface : Flow[UInt] = null
 
   override def haltIt(): Unit = fetcherHalt := True
@@ -253,32 +253,31 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         whenFalse = input.rsp.inst(31 downto 16) ## (input.pc(1) ? input.rsp.inst(31 downto 16) | input.rsp.inst(15 downto 0))
       )
       val isRvc = raw(1 downto 0) =/= 3
+      val isBufferRvc = bufferData(1 downto 0) =/= 3
       val decompressed = RvcDecompressor(raw(15 downto 0))
-      output.valid := (isRvc ? (bufferValid || input.valid) | (input.valid && (bufferValid || !input.pc(1))))
+      output.valid := bufferValid ? (isBufferRvc || input.valid) | (input.valid && (!input.pc(1) || input.rsp.inst(17 downto 16) =/= 3))
       output.pc := input.pc
       output.isRvc := isRvc
       output.rsp.inst := isRvc ? decompressed | raw
-      input.ready := !output.valid || !(!output.ready || (isRvc && !input.pc(1) && input.rsp.inst(16, 2 bits) =/= 3) || (!isRvc && bufferValid && input.rsp.inst(16, 2 bits) =/= 3))
-      addPrePopTask(() => {
-        when(!input.ready && output.fire && !flush /* && ((isRvc && !bufferValid && !input.pc(1)) || (!isRvc && bufferValid && input.rsp.inst(16, 2 bits) =/= 3))*/) {
-          input.pc.getDrivingReg(1) := True
-        }
-      })
+      input.ready := output.ready && !(bufferValid && isBufferRvc)
 
-      bufferValid clearWhen(output.fire)
       val bufferFill = False
-      when(input.fire){
-        when(!(!isRvc && !input.pc(1) && !bufferValid) && !(isRvc && input.pc(1) && output.ready)) {
-          bufferValid := True
-          bufferFill := True
-        } otherwise {
-          bufferValid := False
-        }
-        bufferData := input.rsp.inst(31 downto 16)
+      when(output.ready && (isBufferRvc || input.valid)){
+        bufferValid := False
       }
+      when(output.ready && input.valid){
+        bufferData := input.rsp.inst(31 downto 16)
+        when((!bufferValid && !input.pc(1) && input.rsp.inst(1 downto 0) =/= 3) || (bufferValid && !isBufferRvc) || (input.pc(1) && input.rsp.inst(17 downto 16) === 3)){
+          bufferFill := True
+          bufferValid := True
+        }
+      }
+
       bufferValid.clearWhen(flush)
-      iBusRsp.readyForError.clearWhen(bufferValid && isRvc) //Can't emit error, as there is a earlier instruction pending
-      incomingInstruction setWhen(bufferValid && bufferData(1 downto 0) =/= 3)
+      when(bufferValid && isBufferRvc){
+        iBusRsp.readyForError := False
+        incomingInstruction := True
+      }
     })
 
 
