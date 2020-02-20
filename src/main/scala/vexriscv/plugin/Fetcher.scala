@@ -247,36 +247,42 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       val bufferValid = RegInit(False)
       val bufferData = Reg(Bits(16 bits))
 
+
+      val isInputLowRvc = input.rsp.inst(1 downto 0) =/= 3
+      val isInputHighRvc = input.rsp.inst(17 downto 16) =/= 3
+      val doubleRvc = iBusRsp.stages.last.input.valid && !bufferValid && isInputLowRvc && isInputHighRvc && !input.pc(1)
+      val throw2BytesReg = RegInit(False)
+      val throw2Bytes = throw2BytesReg || input.pc(1)
+      val unaligned = throw2Bytes || bufferValid
+      def aligned = !unaligned
       val raw = Mux(
         sel = bufferValid,
         whenTrue = input.rsp.inst(15 downto 0) ## bufferData,
-        whenFalse = input.rsp.inst(31 downto 16) ## (input.pc(1) ? input.rsp.inst(31 downto 16) | input.rsp.inst(15 downto 0))
+        whenFalse = input.rsp.inst(31 downto 16) ## (throw2Bytes ? input.rsp.inst(31 downto 16) | input.rsp.inst(15 downto 0))
       )
       val isRvc = raw(1 downto 0) =/= 3
-      val isBufferRvc = bufferData(1 downto 0) =/= 3
       val decompressed = RvcDecompressor(raw(15 downto 0))
-      output.valid := bufferValid ? (isBufferRvc || input.valid) | (input.valid && (!input.pc(1) || input.rsp.inst(17 downto 16) =/= 3))
+      output.valid := input.valid && !(throw2Bytes && !bufferValid && !isInputHighRvc)
       output.pc := input.pc
       output.isRvc := isRvc
       output.rsp.inst := isRvc ? decompressed | raw
-      input.ready := output.ready && !(bufferValid && isBufferRvc)
+      input.ready := output.ready && (!iBusRsp.stages.last.input.valid || (!(bufferValid && isInputHighRvc) && !(aligned && isInputLowRvc && isInputHighRvc)))
 
-      val bufferFill = False
-      when(output.ready && (isBufferRvc || input.valid)){
+      when(output.fire){
+        throw2BytesReg := (aligned && isInputLowRvc && isInputHighRvc) || (bufferValid && isInputHighRvc)
+      }
+      val bufferFill = (aligned && isInputLowRvc && !isInputHighRvc) || (bufferValid && !isInputHighRvc) || (throw2Bytes && !isRvc && !isInputHighRvc)
+      when(output.ready && input.valid){
         bufferValid := False
       }
       when(output.ready && input.valid){
         bufferData := input.rsp.inst(31 downto 16)
-        when((!bufferValid && !input.pc(1) && input.rsp.inst(1 downto 0) =/= 3) || (bufferValid && !isBufferRvc) || (input.pc(1) && input.rsp.inst(17 downto 16) === 3)){
-          bufferFill := True
-          bufferValid := True
-        }
+        bufferValid setWhen(bufferFill)
       }
 
-      bufferValid.clearWhen(flush)
-      when(bufferValid && isBufferRvc){
-        iBusRsp.readyForError := False
-        incomingInstruction := True
+      when(flush){
+        throw2BytesReg := False
+        bufferValid := False
       }
     })
 
@@ -504,7 +510,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
           val source = Bits(30 - historyRamSizeLog2 bits)
           val branchWish = UInt(2 bits)
           val target = UInt(32 bits)
-          val unaligned = ifGen(compressedGen)(Bool)
+          val last2Bytes = ifGen(compressedGen)(Bool)
         }
 
         val history = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
@@ -515,6 +521,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         val hazard = historyWriteLast.valid && historyWriteLast.address === (iBusRsp.stages(1).input.payload >> 2).resized
         val line = history.readSync((iBusRsp.stages(0).input.payload >> 2).resized, iBusRsp.stages(0).output.ready)
         val hit = line.source === (iBusRsp.stages(1).input.payload.asBits >> 2 + historyRamSizeLog2)
+        if(compressedGen) hit clearWhen(!line.last2Bytes && iBusRsp.stages(1).input.payload(1))
 
         fetchPc.predictionPcLoad.valid := line.branchWish.msb && hit && !hazard && iBusRsp.stages(1).input.valid
         fetchPc.predictionPcLoad.payload := line.target
@@ -533,14 +540,16 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         val (decompressorContext, injectorContext) = stage1ToInjectorPipe(fetchContext)
         if(compressedGen) {
           //prediction hit on the right instruction into words
-          decompressorContext.hit clearWhen(decompressorContext.line.unaligned && (decompressor.bufferValid || (decompressor.isRvc && !decompressor.input.pc(1))))
+          decompressorContext.hit clearWhen(decompressorContext.line.last2Bytes && (decompressor.bufferValid || (decompressor.isRvc && !decompressor.throw2Bytes)))
 
           decodePc.predictionPcLoad.valid := injectorContext.line.branchWish.msb && injectorContext.hit && !injectorContext.hazard && injector.decodeInput.fire
           decodePc.predictionPcLoad.payload := injectorContext.line.target
 
+          //Clean the RVC buffer when a prediction was made
           when(decompressorContext.line.branchWish.msb && decompressorContext.hit && !decompressorContext.hazard && decompressor.output.fire){
             decompressor.bufferValid := False
-            decompressor.input.ready := True
+            decompressor.throw2BytesReg := False
+            decompressor.input.ready := True //Drop the remaining byte if any
           }
         }
 
@@ -557,7 +566,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         historyWrite.address := fetchPrediction.rsp.sourceLastWord(2, historyRamSizeLog2 bits)
         historyWrite.data.source := fetchPrediction.rsp.sourceLastWord.asBits >> 2 + historyRamSizeLog2
         historyWrite.data.target := fetchPrediction.rsp.finalPc
-        if(compressedGen) historyWrite.data.unaligned := !fetchPrediction.stage.input(PC)(1) ^ fetchPrediction.stage.input(IS_RVC)
+        if(compressedGen) historyWrite.data.last2Bytes := fetchPrediction.stage.input(PC)(1) && fetchPrediction.stage.input(IS_RVC)
 
         when(fetchPrediction.rsp.wasRight) {
           historyWrite.valid := branchContext.hit
@@ -574,18 +583,13 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
         historyWrite.valid clearWhen(branchContext.hazard || !branchStage.arbitration.isFiring)
 
-
-
         val predictionFailure = ifGen(compressedGen)(new Area{
           val predictionBranch =  decompressorContext.hit && !decompressorContext.hazard && decompressorContext.line.branchWish(1)
-          val unalignedWordIssue = decompressor.bufferFill && decompressor.input.rsp.inst(17 downto 16) === 3 && predictionBranch
-          val decompressorFailure = RegInit(False) setWhen(unalignedWordIssue) clearWhen(fetcherflushIt)
-          val injectorFailure = Delay(decompressorFailure, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready, init=False)
-          val bypassFailure = if(!injectorStage) False else decompressorFailure && !injector.decodeInput.valid
+          val unalignedWordIssue = iBusRsp.output.valid && predictionBranch && decompressor.throw2Bytes && !decompressor.isInputHighRvc
 
-          when(injectorFailure || bypassFailure){
+          when(unalignedWordIssue){
             historyWrite.valid := True
-            historyWrite.address := (decode.input(PC) >> 2).resized
+            historyWrite.address := (iBusRsp.stages(1).input.payload >> 2).resized
             historyWrite.data.branchWish := 0
 
             iBusRsp.redoFetch := True
