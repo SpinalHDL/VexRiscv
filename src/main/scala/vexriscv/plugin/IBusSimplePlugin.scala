@@ -317,15 +317,16 @@ class IBusSimplePlugin(    resetVector : BigInt,
 
         cmd.pc := mmuBus.rsp.physicalAddress(31 downto 2) @@ U"00"
 
-        //do not emit memory request if MMU miss
-        when(mmuBus.rsp.exception || mmuBus.rsp.refilling){
-          cmdForkStage.halt := False
-          cmd.valid := False
-        }
-
-        when(mmuBus.busy){
-          cmdForkStage.input.valid := False
-          cmdForkStage.input.ready := False
+        //do not emit memory request if MMU had issues
+        when(cmdForkStage.input.valid) {
+          when(mmuBus.rsp.refilling) {
+            cmdForkStage.halt := True
+            cmd.valid := False
+          }
+          when(mmuBus.rsp.exception) {
+            cmdForkStage.halt := False
+            cmd.valid := False
+          }
         }
 
         val joinCtx = stageXToIBusRsp(cmdForkStage, mmuBus.rsp)
@@ -354,6 +355,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
           c.io.push << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
           c.io.flush := iBusRsp.stages.last.flush
           if(compressedGen) c.io.flush setWhen(decompressor.consumeCurrent)
+          if(!compressedGen && isDrivingDecode(IBUS_RSP)) c.io.flush setWhen(decode.arbitration.flushNext && iBusRsp.output.ready)
           rspBufferOutput << c.io.pop
         } else new Area{
           val rspStream = iBus.rsp.throwWhen(discardCounter =/= 0).toStream
