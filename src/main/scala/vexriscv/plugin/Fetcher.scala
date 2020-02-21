@@ -88,8 +88,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
   def isDrivingDecode(s : Any): Boolean = {
     if(injectorStage) return s == INJECTOR_M2S
-    if(compressedGen) return s == DECOMPRESSOR
-    s == IBUS_RSP
+    s == IBUS_RSP || s == DECOMPRESSOR
   }
 
   def getFlushAt(s : Any, lastCond : Boolean = true): Bool = {
@@ -240,9 +239,11 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
     }
 
     val decompressor = ifGen(decodePcGen)(new Area{
-      val input = iBusRsp.output.clearValidWhen(iBusRsp.stages.last.flush)
+      val input = iBusRsp.output.clearValidWhen(iBusRsp.redoFetch)
       val output = Stream(FetchRsp())
       val flush = getFlushAt(DECOMPRESSOR)
+      val flushNext = if(isDrivingDecode(DECOMPRESSOR)) decode.arbitration.flushNext else False
+      val consumeCurrent = if(isDrivingDecode(DECOMPRESSOR)) flushNext && output.ready else False
 
       val bufferValid = RegInit(False)
       val bufferData = Reg(Bits(16 bits))
@@ -250,7 +251,6 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
       val isInputLowRvc = input.rsp.inst(1 downto 0) =/= 3
       val isInputHighRvc = input.rsp.inst(17 downto 16) =/= 3
-      val doubleRvc = iBusRsp.stages.last.input.valid && !bufferValid && isInputLowRvc && isInputHighRvc && !input.pc(1)
       val throw2BytesReg = RegInit(False)
       val throw2Bytes = throw2BytesReg || input.pc(1)
       val unaligned = throw2Bytes || bufferValid
@@ -266,7 +266,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       output.pc := input.pc
       output.isRvc := isRvc
       output.rsp.inst := isRvc ? decompressed | raw
-      input.ready := output.ready && (!iBusRsp.stages.last.input.valid || (!(bufferValid && isInputHighRvc) && !(aligned && isInputLowRvc && isInputHighRvc)))
+      input.ready := output.ready && (!iBusRsp.stages.last.input.valid || flushNext || (!(bufferValid && isInputHighRvc) && !(aligned && isInputLowRvc && isInputHighRvc)))
 
       when(output.fire){
         throw2BytesReg := (aligned && isInputLowRvc && isInputHighRvc) || (bufferValid && isInputHighRvc)
@@ -280,7 +280,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         bufferValid setWhen(bufferFill)
       }
 
-      when(flush){
+      when(flush || consumeCurrent){
         throw2BytesReg := False
         bufferValid := False
       }
@@ -495,13 +495,11 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         }
 
         //TODO no more fireing depedancies
-        predictionJumpInterface.valid := decode.arbitration.isValid && decodePrediction.cmd.hadBranch //TODO OH Doublon de priorité
+        predictionJumpInterface.valid := decode.arbitration.isValid && decodePrediction.cmd.hadBranch
         predictionJumpInterface.payload := decode.input(PC) + ((decode.input(BRANCH_CTRL) === BranchCtrlEnum.JAL) ? imm.j_sext | imm.b_sext).asUInt
-        if(relaxPredictorAddress) KeepAttribute(predictionJumpInterface.payload)
+        decode.arbitration.flushNext setWhen(predictionJumpInterface.valid)
 
-        when(predictionJumpInterface.valid && decode.arbitration.isFiring){
-          flushIt()
-        }
+        if(relaxPredictorAddress) KeepAttribute(predictionJumpInterface.payload)
       }
       case DYNAMIC_TARGET => new Area{
 //        assert(!compressedGen || cmdToRspStageCount == 1, "Can't combine DYNAMIC_TARGET and RVC as it could stop the instruction fetch mid-air")

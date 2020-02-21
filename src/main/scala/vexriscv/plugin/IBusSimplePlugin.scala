@@ -352,7 +352,8 @@ class IBusSimplePlugin(    resetVector : BigInt,
         val rspBuffer = if(!rspHoldValue) new Area{
           val c = StreamFifoLowLatency(IBusSimpleRsp(), busLatencyMin + (if(cmdForkOnSecondStage && cmdForkPersistence) 1 else 0))
           c.io.push << iBus.rsp.throwWhen(discardCounter =/= 0).toStream
-          c.io.flush := fetcherflushIt
+          c.io.flush := iBusRsp.stages.last.flush
+          if(compressedGen) c.io.flush setWhen(decompressor.consumeCurrent)
           rspBufferOutput << c.io.pop
         } else new Area{
           val rspStream = iBus.rsp.throwWhen(discardCounter =/= 0).toStream
