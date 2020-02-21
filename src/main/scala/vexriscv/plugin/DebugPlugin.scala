@@ -201,7 +201,6 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
         execute.arbitration.haltByOther := True
         busReadDataReg := execute.input(PC).asBits
         when(stagesFromExecute.tail.map(_.arbitration.isValid).orR === False){
-          iBusFetcher.flushIt()
           iBusFetcher.haltIt()
           execute.arbitration.flushIt   := True
           execute.arbitration.flushNext := True

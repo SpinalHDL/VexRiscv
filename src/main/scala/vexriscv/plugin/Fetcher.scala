@@ -32,7 +32,6 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 //  assert(!(cmdToRspStageCount == 1 && !injectorStage))
   assert(!(compressedGen && !decodePcGen))
   var fetcherHalt : Bool = null
-  var fetcherflushIt : Bool = null
   var pcValids : Vec[Bool] = null
   def pcValid(stage : Stage) = pcValids(pipeline.indexOf(stage))
   var incomingInstruction : Bool = null
@@ -47,8 +46,6 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
   var predictionJumpInterface : Flow[UInt] = null
 
   override def haltIt(): Unit = fetcherHalt := True
-  override def flushIt(): Unit = fetcherflushIt := True
-
   case class JumpInfo(interface :  Flow[UInt], stage: Stage, priority : Int)
   val jumpInfos = ArrayBuffer[JumpInfo]()
   override def createJumpInterface(stage: Stage, priority : Int = 0): Flow[UInt] = {
@@ -62,7 +59,6 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 //  var decodeExceptionPort : Flow[ExceptionCause] = null
   override def setup(pipeline: VexRiscv): Unit = {
     fetcherHalt = False
-    fetcherflushIt = False
     incomingInstruction = False
     if(resetVector == null) externalResetVector = in(UInt(32 bits).setName("externalResetVector"))
 
@@ -91,13 +87,16 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
     s == IBUS_RSP || s == DECOMPRESSOR
   }
 
-  def getFlushAt(s : Any, lastCond : Boolean = true): Bool = {
-    if(isDrivingDecode(s) && lastCond)  pipeline.decode.arbitration.isRemoved else fetcherflushIt
-  }
+
 
   class FetchArea(pipeline : VexRiscv) extends Area {
     import pipeline._
     import pipeline.config._
+    val fetcherflushIt = stages.map(_.arbitration.flushNext).orR
+
+    def getFlushAt(s : Any, lastCond : Boolean = true): Bool = {
+      if(isDrivingDecode(s) && lastCond)  pipeline.decode.arbitration.isRemoved else fetcherflushIt
+    }
 
     //Arbitrate jump requests into pcLoad
     val jump = new Area {
@@ -113,7 +112,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       pcLoad.payload := MuxOH(OHMasking.first(valids.asBits), pcs)
     }
 
-    fetcherflushIt setWhen(stages.map(_.arbitration.flushNext).orR)
+
 
     //The fetchPC pcReg can also be use for the second stage of the fetch
     //When the fetcherHalt is set and the pipeline isn't stalled,, the pc is propagated to to the pcReg, which allow
