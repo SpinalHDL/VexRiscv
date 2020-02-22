@@ -421,18 +421,15 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       }
     }
 
-    def stage1ToInjectorPipe[T <: Data](input : T): (T,T) ={
+    def stage1ToInjectorPipe[T <: Data](input : T): (T, T, T) ={
       val iBusRspContext = iBusRsp.stages.drop(1).dropRight(1).foldLeft(input)((data,stage) => RegNextWhen(data, stage.output.ready))
-//      val decompressorContext = ifGen(compressedGen)(new Area{
-//        val lastContext = RegNextWhen(iBusRspContext, decompressor.input.fire)
-//        val output = decompressor.bufferValid ? lastContext | iBusRspContext
-//      })
-      val decompressorContext = cloneOf(input)
-      decompressorContext := iBusRspContext
-      val injectorContext = Delay(if(compressedGen) decompressorContext else iBusRspContext, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
+
+      val iBusRspContextOutput = cloneOf(input)
+      iBusRspContextOutput := iBusRspContext
+      val injectorContext = Delay(iBusRspContextOutput, cycleCount=if(injectorStage) 1 else 0, when=injector.decodeInput.ready)
       val injectorContextWire = cloneOf(input) //Allow combinatorial override
       injectorContextWire := injectorContext
-      (ifGen(compressedGen)(decompressorContext), injectorContextWire)
+      (iBusRspContext, iBusRspContextOutput, injectorContextWire)
     }
 
     val predictor = prediction match {
@@ -458,7 +455,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
           fetchContext.line := historyCache.readSync((fetchPc.output.payload >> 2).resized, iBusRsp.stages(0).output.ready || fetcherflushIt)
 
           object PREDICTION_CONTEXT extends Stageable(DynamicContext())
-          decode.insert(PREDICTION_CONTEXT) := stage1ToInjectorPipe(fetchContext)._2
+          decode.insert(PREDICTION_CONTEXT) := stage1ToInjectorPipe(fetchContext)._3
           val decodeContextPrediction = decode.input(PREDICTION_CONTEXT).line.history.msb
 
           val branchStage = decodePrediction.stage
@@ -534,21 +531,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         fetchContext.hit := hit
         fetchContext.line := line
 
-        val (decompressorContext, injectorContext) = stage1ToInjectorPipe(fetchContext)
-        if(compressedGen) {
-          //prediction hit on the right instruction into words
-          decompressorContext.hit clearWhen(decompressorContext.line.last2Bytes && (decompressor.bufferValid || (decompressor.isRvc && !decompressor.throw2Bytes)))
-
-          decodePc.predictionPcLoad.valid := injectorContext.line.branchWish.msb && injectorContext.hit && !injectorContext.hazard && injector.decodeInput.fire
-          decodePc.predictionPcLoad.payload := injectorContext.line.target
-
-          //Clean the RVC buffer when a prediction was made
-          when(decompressorContext.line.branchWish.msb && decompressorContext.hit && !decompressorContext.hazard && decompressor.output.fire){
-            decompressor.bufferValid := False
-            decompressor.throw2BytesReg := False
-            decompressor.input.ready := True //Drop the remaining byte if any
-          }
-        }
+        val (decompressorContext, decompressorContextOutput, injectorContext) = stage1ToInjectorPipe(fetchContext)
 
         object PREDICTION_CONTEXT extends Stageable(PredictionResult())
         pipeline.decode.insert(PREDICTION_CONTEXT) := injectorContext
@@ -580,7 +563,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
         historyWrite.valid clearWhen(branchContext.hazard || !branchStage.arbitration.isFiring)
 
-        val predictionFailure = ifGen(compressedGen)(new Area{
+        val compressor = compressedGen generate new Area{
           val predictionBranch =  decompressorContext.hit && !decompressorContext.hazard && decompressorContext.line.branchWish(1)
           val unalignedWordIssue = iBusRsp.output.valid && predictionBranch && decompressor.throw2Bytes && !decompressor.isInputHighRvc
 
@@ -591,7 +574,20 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
             iBusRsp.redoFetch := True
           }
-        })
+
+          //Do not trigger prediction hit when it is one for the upper RVC word and we aren't there yet
+          decompressorContextOutput.hit clearWhen(decompressorContext.line.last2Bytes && !decompressor.throw2Bytes)
+
+          decodePc.predictionPcLoad.valid := injectorContext.line.branchWish.msb && injectorContext.hit && !injectorContext.hazard && injector.decodeInput.fire
+          decodePc.predictionPcLoad.payload := injectorContext.line.target
+
+          //Clean the RVC buffer when a prediction was made
+          when(decompressorContext.line.branchWish.msb && decompressorContextOutput.hit && !decompressorContext.hazard && decompressor.output.fire){
+            decompressor.bufferValid := False
+            decompressor.throw2BytesReg := False
+            decompressor.input.ready := True //Drop the remaining byte if any
+          }
+        }
       }
     }
 
