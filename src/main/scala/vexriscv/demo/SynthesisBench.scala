@@ -96,7 +96,7 @@ object VexRiscvSynthesisBench {
     }
 
     val full = new Rtl {
-      override def getName(): String = "VexRiscv full"
+      override def getName(): String = "VexRiscv full with MMU"
       override def getRtlPath(): String = "VexRiscvFull.v"
       SpinalVerilog(wrap(GenFull.cpu()).setDefinitionName(getRtlPath().split("\\.").head))
     }
