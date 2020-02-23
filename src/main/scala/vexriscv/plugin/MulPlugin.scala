@@ -2,6 +2,7 @@ package vexriscv.plugin
 import vexriscv._
 import vexriscv.VexRiscv
 import spinal.core._
+import spinal.lib.KeepAttribute
 
 //Input buffer generaly avoid the FPGA synthesis to duplicate reg inside the DSP cell, which could stress timings quite much.
 class MulPlugin(inputBuffer : Boolean = false) extends Plugin[VexRiscv]{
@@ -94,6 +95,12 @@ class MulPlugin(inputBuffer : Boolean = false) extends Plugin[VexRiscv]{
       insert(MUL_LH) := aSLow * bHigh
       insert(MUL_HL) := aHigh * bSLow
       insert(MUL_HH) := aHigh * bHigh
+
+      Component.current.afterElaboration{
+        //Avoid synthesis tools to retime RS1 RS2 from execute stage to decode stage leading to bad timings (ex : Vivado, even if retiming is disabled)
+        KeepAttribute(input(RS1).getDrivingReg)
+        KeepAttribute(input(RS2).getDrivingReg)
+      }
     }
 
     //First aggregation of partial multiplication
