@@ -22,7 +22,8 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
                                val historyRamSizeLog2 : Int,
                                val injectorStage : Boolean,
                                val relaxPredictorAddress : Boolean,
-                               val fetchRedoGen : Boolean) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
+                               val fetchRedoGen : Boolean,
+                               val predictionBuffer : Boolean = true) extends Plugin[VexRiscv] with JumpService with IBusFetcher{
   var prefetchExceptionPort : Flow[ExceptionCause] = null
   var decodePrediction : DecodePredictionBus = null
   var fetchPrediction : FetchPredictionBus = null
@@ -121,10 +122,12 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       //PC calculation without Jump
       val output = Stream(UInt(32 bits))
       val pcReg = Reg(UInt(32 bits)) init(if(resetVector != null) resetVector else externalResetVector) addAttribute(Verilator.public)
-      val corrected = False
+      val correction = False
+      val correctionReg = RegInit(False) setWhen(correction) clearWhen(output.fire)
+      val corrected = correction || correctionReg
       val pcRegPropagate = False
       val booted = RegNext(True) init (False)
-      val inc = RegInit(False) clearWhen(corrected || pcRegPropagate) setWhen(output.fire) clearWhen(!output.valid && output.ready)
+      val inc = RegInit(False) clearWhen(correction || pcRegPropagate) setWhen(output.fire) clearWhen(!output.valid && output.ready)
       val pc = pcReg + (inc ## B"00").asUInt
       val predictionPcLoad = ifGen(prediction == DYNAMIC_TARGET) (Flow(UInt(32 bits)))
       val redo = (fetchRedoGen || prediction == DYNAMIC_TARGET) generate Flow(UInt(32 bits))
@@ -136,22 +139,22 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
       if(predictionPcLoad != null) {
         when(predictionPcLoad.valid) {
-          corrected := True
+          correction := True
           pc := predictionPcLoad.payload
         }
       }
       if(redo != null) when(redo.valid){
-        corrected := True
+        correction := True
         pc := redo.payload
         flushed := True
       }
       when(jump.pcLoad.valid) {
-        corrected := True
+        correction := True
         pc := jump.pcLoad.payload
         flushed := True
       }
 
-      when(booted && (output.ready || corrected || pcRegPropagate)){
+      when(booted && (output.ready || correction || pcRegPropagate)){
         pcReg := pc
       }
 
@@ -506,17 +509,36 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         case class BranchPredictorLine()  extends Bundle{
           val source = Bits(30 - historyRamSizeLog2 bits)
           val branchWish = UInt(2 bits)
-          val target = UInt(32 bits)
           val last2Bytes = ifGen(compressedGen)(Bool)
+          val target = UInt(32 bits)
         }
 
         val history = Mem(BranchPredictorLine(), 1 << historyRamSizeLog2)
-        val historyWrite = history.writePort
+        val historyWriteDelayPatched = history.writePort
+        val historyWrite = cloneOf(historyWriteDelayPatched)
+        historyWriteDelayPatched.valid := historyWrite.valid
+        historyWriteDelayPatched.address := (if(predictionBuffer) historyWrite.address - 1 else historyWrite.address)
+        historyWriteDelayPatched.data := historyWrite.data
+
+
+        val writeLast = RegNextWhen(historyWriteDelayPatched, iBusRsp.stages(0).output.ready)
 
         //Avoid write to read hazard
-        val historyWriteLast = RegNextWhen(historyWrite, iBusRsp.stages(0).output.ready)
-        val hazard = historyWriteLast.valid && historyWriteLast.address === (iBusRsp.stages(1).input.payload >> 2).resized
-        val line = history.readSync((iBusRsp.stages(0).input.payload >> 2).resized, iBusRsp.stages(0).output.ready)
+        val buffer = predictionBuffer generate new Area{
+          val line = history.readSync((iBusRsp.stages(0).input.payload >> 2).resized, iBusRsp.stages(0).output.ready)
+          val pcCorrected = RegNextWhen(fetchPc.corrected, iBusRsp.stages(0).input.ready)
+          val hazard = (writeLast.valid && writeLast.address === (iBusRsp.stages(1).input.payload >> 2).resized)
+        }
+
+        val (line, hazard) = predictionBuffer match {
+          case true =>
+            (RegNextWhen(buffer.line, iBusRsp.stages(0).output.ready),
+             RegNextWhen(buffer.hazard, iBusRsp.stages(0).output.ready) || buffer.pcCorrected)
+          case false =>
+            (history.readSync((iBusRsp.stages(0).input.payload >> 2).resized,
+             iBusRsp.stages(0).output.ready), writeLast.valid && writeLast.address === (iBusRsp.stages(1).input.payload >> 2).resized)
+        }
+
         val hit = line.source === (iBusRsp.stages(1).input.payload.asBits >> 2 + historyRamSizeLog2)
         if(compressedGen) hit clearWhen(!line.last2Bytes && iBusRsp.stages(1).input.payload(1))
 
@@ -534,7 +556,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         fetchContext.hit := hit
         fetchContext.line := line
 
-        val (decompressorContext, decompressorContextOutput, injectorContext) = stage1ToInjectorPipe(fetchContext)
+        val (iBusRspContext, iBusRspContextOutput, injectorContext) = stage1ToInjectorPipe(fetchContext)
 
         object PREDICTION_CONTEXT extends Stageable(PredictionResult())
         pipeline.decode.insert(PREDICTION_CONTEXT) := injectorContext
@@ -567,7 +589,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         historyWrite.valid clearWhen(branchContext.hazard || !branchStage.arbitration.isFiring)
 
         val compressor = compressedGen generate new Area{
-          val predictionBranch =  decompressorContext.hit && !decompressorContext.hazard && decompressorContext.line.branchWish(1)
+          val predictionBranch =  iBusRspContext.hit && !iBusRspContext.hazard && iBusRspContext.line.branchWish(1)
           val unalignedWordIssue = iBusRsp.output.valid && predictionBranch && decompressor.throw2Bytes && !decompressor.isInputHighRvc
 
           when(unalignedWordIssue){
@@ -579,13 +601,13 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
           }
 
           //Do not trigger prediction hit when it is one for the upper RVC word and we aren't there yet
-          decompressorContextOutput.hit clearWhen(decompressorContext.line.last2Bytes && (decompressor.bufferValid || (!decompressor.throw2Bytes && decompressor.isInputLowRvc)))
+          iBusRspContextOutput.hit clearWhen(iBusRspContext.line.last2Bytes && (decompressor.bufferValid || (!decompressor.throw2Bytes && decompressor.isInputLowRvc)))
 
           decodePc.predictionPcLoad.valid := injectorContext.line.branchWish.msb && injectorContext.hit && !injectorContext.hazard && injector.decodeInput.fire
           decodePc.predictionPcLoad.payload := injectorContext.line.target
 
           //Clean the RVC buffer when a prediction was made
-          when(decompressorContext.line.branchWish.msb && decompressorContextOutput.hit && !decompressorContext.hazard && decompressor.output.fire){
+          when(iBusRspContext.line.branchWish.msb && iBusRspContextOutput.hit && !iBusRspContext.hazard && decompressor.output.fire){
             decompressor.bufferValid := False
             decompressor.throw2BytesReg := False
             decompressor.input.ready := True //Drop the remaining byte if any

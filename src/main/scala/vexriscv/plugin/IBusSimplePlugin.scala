@@ -233,7 +233,8 @@ class IBusSimplePlugin(    resetVector : BigInt,
                        val rspHoldValue : Boolean = false,
                        val singleInstructionPipeline : Boolean = false,
                        val memoryTranslatorPortConfig : Any = null,
-                           relaxPredictorAddress : Boolean = true
+                           relaxPredictorAddress : Boolean = true,
+                           predictionBuffer : Boolean = true
                       ) extends IBusFetcherImpl(
     resetVector = resetVector,
     keepPcPlus4 = keepPcPlus4,
@@ -246,7 +247,8 @@ class IBusSimplePlugin(    resetVector : BigInt,
     historyRamSizeLog2 = historyRamSizeLog2,
     injectorStage = injectorStage,
     relaxPredictorAddress = relaxPredictorAddress,
-    fetchRedoGen = memoryTranslatorPortConfig != null){
+    fetchRedoGen = memoryTranslatorPortConfig != null,
+  predictionBuffer = predictionBuffer){
 
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null

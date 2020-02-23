@@ -35,7 +35,8 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
                        memoryTranslatorPortConfig : Any = null,
                        injectorStage : Boolean = false,
                        withoutInjectorStage : Boolean = false,
-                       relaxPredictorAddress : Boolean = true)  extends IBusFetcherImpl(
+                       relaxPredictorAddress : Boolean = true,
+                       predictionBuffer : Boolean = true)  extends IBusFetcherImpl(
   resetVector = resetVector,
   keepPcPlus4 = keepPcPlus4,
   decodePcGen = compressedGen,
@@ -47,7 +48,8 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
   historyRamSizeLog2 = historyRamSizeLog2,
   injectorStage = (!config.twoCycleCache && !withoutInjectorStage) || injectorStage,
   relaxPredictorAddress = relaxPredictorAddress,
-  fetchRedoGen = true){
+  fetchRedoGen = true,
+  predictionBuffer = predictionBuffer){
   import config._
 
   assert(isPow2(cacheSize))
