@@ -247,7 +247,6 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       val bufferValid = RegInit(False)
       val bufferData = Reg(Bits(16 bits))
 
-
       val isInputLowRvc = input.rsp.inst(1 downto 0) =/= 3
       val isInputHighRvc = input.rsp.inst(17 downto 16) =/= 3
       val throw2BytesReg = RegInit(False)
@@ -282,6 +281,10 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       when(flush || consumeCurrent){
         throw2BytesReg := False
         bufferValid := False
+      }
+
+      if(fetchPc.redo != null) {
+        fetchPc.redo.payload(1) setWhen(throw2BytesReg)
       }
     })
 
@@ -576,7 +579,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
           }
 
           //Do not trigger prediction hit when it is one for the upper RVC word and we aren't there yet
-          decompressorContextOutput.hit clearWhen(decompressorContext.line.last2Bytes && !decompressor.throw2Bytes)
+          decompressorContextOutput.hit clearWhen(decompressorContext.line.last2Bytes && (decompressor.bufferValid || (!decompressor.throw2Bytes && decompressor.isInputLowRvc)))
 
           decodePc.predictionPcLoad.valid := injectorContext.line.branchWish.msb && injectorContext.hit && !injectorContext.hazard && injector.decodeInput.fire
           decodePc.predictionPcLoad.payload := injectorContext.line.target
