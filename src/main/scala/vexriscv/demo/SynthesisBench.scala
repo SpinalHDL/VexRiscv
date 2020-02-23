@@ -121,7 +121,7 @@ object VexRiscvSynthesisBench {
     ) ++  IcestormStdTargets().take(1)
 
     //    val targets = IcestormStdTargets()
-    Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
+    Bench(rtls, targets, "/media/miaou/HD/linux/tmp/")
   }
 }
 

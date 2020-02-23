@@ -686,7 +686,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
 
       //Aggregate all exception port and remove required instructions
-      val exceptionPortCtrl = if(exceptionPortsInfos.nonEmpty) new Area{
+      val exceptionPortCtrl = exceptionPortsInfos.nonEmpty generate new Area{
         val firstStageIndexWithExceptionPort = exceptionPortsInfos.map(i => indexOf(i.stage)).min
         val exceptionValids = Vec(stages.map(s => Bool().setPartialName(s.getName())))
         val exceptionValidsRegs = Vec(stages.map(s => Reg(Bool).init(False).setPartialName(s.getName()))).allowUnsetRegToAvoidLatch
@@ -763,7 +763,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         //Avoid the PC register of the last stage to change durring an exception handleing (Used to fill Xepc)
         stages.last.dontSample.getOrElseUpdate(PC, ArrayBuffer[Bool]()) += exceptionValids.last
         exceptionPendings := exceptionValidsRegs
-      } else null
+      }
 
 
 
