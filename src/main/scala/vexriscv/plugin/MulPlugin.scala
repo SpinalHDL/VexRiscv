@@ -98,8 +98,8 @@ class MulPlugin(inputBuffer : Boolean = false) extends Plugin[VexRiscv]{
 
       Component.current.afterElaboration{
         //Avoid synthesis tools to retime RS1 RS2 from execute stage to decode stage leading to bad timings (ex : Vivado, even if retiming is disabled)
-        KeepAttribute(input(RS1).getDrivingReg)
-        KeepAttribute(input(RS2).getDrivingReg)
+        KeepAttribute(input(RS1))
+        KeepAttribute(input(RS2))
       }
     }
 
