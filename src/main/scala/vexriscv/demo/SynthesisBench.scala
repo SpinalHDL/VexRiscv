@@ -4,8 +4,9 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.eda.bench._
 import spinal.lib.eda.icestorm.IcestormStdTargets
+import spinal.lib.io.InOutWrapper
 import vexriscv.VexRiscv
-import vexriscv.plugin.{DecoderSimplePlugin}
+import vexriscv.plugin.DecoderSimplePlugin
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
@@ -132,7 +133,7 @@ object BrieySynthesisBench {
       override def getName(): String = "Briey"
       override def getRtlPath(): String = "Briey.v"
       SpinalVerilog({
-        val briey = new Briey(BrieyConfig.default).setDefinitionName(getRtlPath().split("\\.").head)
+        val briey = InOutWrapper(new Briey(BrieyConfig.default).setDefinitionName(getRtlPath().split("\\.").head))
         briey.io.axiClk.setName("clk")
         briey
       })
@@ -161,7 +162,7 @@ object MuraxSynthesisBench {
       override def getName(): String = "Murax"
       override def getRtlPath(): String = "Murax.v"
       SpinalVerilog({
-        val murax = new Murax(MuraxConfig.default.copy(gpioWidth = 8)).setDefinitionName(getRtlPath().split("\\.").head)
+        val murax = InOutWrapper(new Murax(MuraxConfig.default.copy(gpioWidth = 8)).setDefinitionName(getRtlPath().split("\\.").head))
         murax.io.mainClk.setName("clk")
         murax
       })
@@ -172,7 +173,7 @@ object MuraxSynthesisBench {
       override def getName(): String = "MuraxFast"
       override def getRtlPath(): String = "MuraxFast.v"
       SpinalVerilog({
-        val murax = new Murax(MuraxConfig.fast.copy(gpioWidth = 8)).setDefinitionName(getRtlPath().split("\\.").head)
+        val murax = InOutWrapper(new Murax(MuraxConfig.fast.copy(gpioWidth = 8)).setDefinitionName(getRtlPath().split("\\.").head))
         murax.io.mainClk.setName("clk")
         murax
       })
