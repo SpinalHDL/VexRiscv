@@ -343,7 +343,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
         //Manage flush for iBus transactions in flight
         val discardCounter = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
         discardCounter := discardCounter - (iBus.rsp.fire && discardCounter =/= 0).asUInt
-        when(fetcherflushIt) {
+        when(iBusRsp.stages.last.flush) {
           if(secondStagePersistence)
             discardCounter := pendingCmd + cmd.valid.asUInt - iBus.rsp.fire.asUInt
           else

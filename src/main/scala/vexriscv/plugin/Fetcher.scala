@@ -159,7 +159,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       }
 
       pc(0) := False
-      if(!pipeline(RVC_GEN)) pc(1) := False
+      if(!compressedGen) pc(1) := False
 
       output.valid := !fetcherHalt && booted
       output.payload := pc
@@ -590,7 +590,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
         val compressor = compressedGen generate new Area{
           val predictionBranch =  iBusRspContext.hit && !iBusRspContext.hazard && iBusRspContext.line.branchWish(1)
-          val unalignedWordIssue = iBusRsp.output.valid && predictionBranch && decompressor.throw2Bytes && !decompressor.isInputHighRvc
+          val unalignedWordIssue = iBusRsp.output.valid && predictionBranch && iBusRspContext.line.last2Bytes && Mux(decompressor.unaligned, !decompressor.isInputHighRvc, decompressor.isInputLowRvc && !decompressor.isInputHighRvc)
 
           when(unalignedWordIssue){
             historyWrite.valid := True

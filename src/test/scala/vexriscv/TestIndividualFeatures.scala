@@ -628,13 +628,15 @@ class TestIndividualFeatures extends FunSuite {
     }
   }
 
-  val testId : Option[mutable.HashSet[Int]] = None
-  val seed = sys.env.getOrElse("VEXRISCV_REGRESSION_SEED", Random.nextLong().toString).toLong
-//
+  var testId : Option[mutable.HashSet[Int]] = None
+  var seed = sys.env.getOrElse("VEXRISCV_REGRESSION_SEED", Random.nextInt(1000000000).toString).toLong
+
 //  val testId = Some(mutable.HashSet(3,4,9,11,13,16,18,19,20,21))
-//    val testId = Some(mutable.HashSet(11))
-//  val testId = Some(mutable.HashSet(6))
-//  val seed = 9095713085965080531l
+//    val testId = Some(mutable.HashSet(15))
+//  seed = -7374992264756372315l
+//  testId = Some(mutable.HashSet(1,2,6,14,15,16,19))
+//  testId = Some(mutable.HashSet(1,2,6,14))
+//  testId = Some(mutable.HashSet(1))
 
 
   val rand = new Random(seed)
