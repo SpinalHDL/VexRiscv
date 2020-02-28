@@ -93,10 +93,10 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
   class FetchArea(pipeline : VexRiscv) extends Area {
     import pipeline._
     import pipeline.config._
-    val fetcherflushIt = stages.map(_.arbitration.flushNext).orR
+    val externalFlush = stages.map(_.arbitration.flushNext).orR
 
     def getFlushAt(s : Any, lastCond : Boolean = true): Bool = {
-      if(isDrivingDecode(s) && lastCond)  pipeline.decode.arbitration.isRemoved else fetcherflushIt
+      if(isDrivingDecode(s) && lastCond)  pipeline.decode.arbitration.isRemoved else externalFlush
     }
 
     //Arbitrate jump requests into pcLoad
@@ -208,7 +208,6 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         val input = Stream(UInt(32 bits))
         val output = Stream(UInt(32 bits))
         val halt = Bool()
-        val flush = Bool()
       })
 
       stages(0).input << fetchPc.output
@@ -222,16 +221,16 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         fetchPc.redo.payload := stages.last.input.payload
       }
 
-      stages.head.flush :=  False //getFlushAt(IBUS_RSP, stages.head == stages.last) || fetchFlush
+      val flush = (if(isDrivingDecode(IBUS_RSP)) pipeline.decode.arbitration.isRemoved || decode.arbitration.flushNext && !decode.arbitration.isStuck else externalFlush) || redoFetch
       for((s,sNext) <- (stages, stages.tail).zipped) {
-        val discardInputOnFlush = s != stages.head
-        sNext.flush := getFlushAt(IBUS_RSP, sNext == stages.last) || redoFetch
+        val sFlushed = if(s != stages.head) flush else False
+        val sNextFlushed = flush
         if(s == stages.head && pcRegReusedForSecondStage) {
-          sNext.input.arbitrationFrom(s.output.toEvent().m2sPipeWithFlush(sNext.flush, false, collapsBubble = false, flushInput = s.flush))
+          sNext.input.arbitrationFrom(s.output.toEvent().m2sPipeWithFlush(sNextFlushed, false, collapsBubble = false, flushInput = sFlushed))
           sNext.input.payload := fetchPc.pcReg
           fetchPc.pcRegPropagate setWhen(sNext.input.ready)
         } else {
-          sNext.input << s.output.m2sPipeWithFlush(sNext.flush, false, collapsBubble = false, flushInput = s.flush)
+          sNext.input << s.output.m2sPipeWithFlush(sNextFlushed, false, collapsBubble = false, flushInput = sFlushed)
         }
       }
 
@@ -294,14 +293,14 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
     def condApply[T](that : T, cond : Boolean)(func : (T) => T) = if(cond)func(that) else that
     val injector = new Area {
-      val inputBeforeStage = condApply(if (decodePcGen) decompressor.output else iBusRsp.output, injectorReadyCutGen)(_.s2mPipe(fetcherflushIt))
+      val inputBeforeStage = condApply(if (decodePcGen) decompressor.output else iBusRsp.output, injectorReadyCutGen)(_.s2mPipe(externalFlush))
       if (injectorReadyCutGen) {
         iBusRsp.readyForError.clearWhen(inputBeforeStage.valid) //Can't emit error if there is a instruction pending in the s2mPipe
         incomingInstruction setWhen (inputBeforeStage.valid)
       }
       val decodeInput = (if (injectorStage) {
         val flushStage = getFlushAt(INJECTOR_M2S)
-        val decodeInput = inputBeforeStage.m2sPipeWithFlush(flushStage, false, collapsBubble = false, flushInput = fetcherflushIt)
+        val decodeInput = inputBeforeStage.m2sPipeWithFlush(flushStage, false, collapsBubble = false, flushInput = externalFlush)
         decode.insert(INSTRUCTION_ANTICIPATED) := Mux(decode.arbitration.isStuck, decode.input(INSTRUCTION), inputBeforeStage.rsp.inst)
         iBusRsp.readyForError.clearWhen(decodeInput.valid) //Can't emit error when there is a instruction pending in the injector stage buffer
         incomingInstruction setWhen (decodeInput.valid)
@@ -458,7 +457,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
           }
           val fetchContext = DynamicContext()
           fetchContext.hazard := hazard
-          fetchContext.line := historyCache.readSync((fetchPc.output.payload >> 2).resized, iBusRsp.stages(0).output.ready || fetcherflushIt)
+          fetchContext.line := historyCache.readSync((fetchPc.output.payload >> 2).resized, iBusRsp.stages(0).output.ready || externalFlush)
 
           object PREDICTION_CONTEXT extends Stageable(DynamicContext())
           decode.insert(PREDICTION_CONTEXT) := stage1ToInjectorPipe(fetchContext)._3
