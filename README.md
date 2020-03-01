@@ -186,7 +186,7 @@ NOTES:
 
 [![Build Status](https://travis-ci.org/SpinalHDL/VexRiscv.svg?branch=master)](https://travis-ci.org/SpinalHDL/VexRiscv)
 
-To run tests (need the java, scala, verilator), just do :
+To run tests (need java, scala, verilator), just do :
 
 ```sh
 export VEXRISCV_REGRESSION_SEED=42
