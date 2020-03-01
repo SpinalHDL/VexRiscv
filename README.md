@@ -186,24 +186,47 @@ NOTES:
 
 [![Build Status](https://travis-ci.org/SpinalHDL/VexRiscv.svg?branch=master)](https://travis-ci.org/SpinalHDL/VexRiscv)
 
-To run tests (need the verilator simulator), go in the src/test/cpp/regression folder and run :
+To run tests (need the java, scala, verilator), just do :
 
 ```sh
-# To test the GenFull CPU
-# (Don't worry about the CSR test not passing, basicaly the GenFull isn't the truly full version of the CPU, some CSR features are disable in it)
-make clean run
-
-# To test the GenSmallest CPU
-make clean run IBUS=SIMPLE DBUS=SIMPLE CSR=no MMU=no DEBUG_PLUGIN=no MUL=no DIV=no
+export VEXRISCV_REGRESSION_SEED=42
+export VEXRISCV_REGRESSION_TEST_ID=
+sbt "testOnly vexriscv.TestIndividualFeatures"
 ```
 
-The self-test includes:
-- ISA tests from https://github.com/riscv/riscv-tests/tree/master/isa
+This will generate random VexRiscv configuration and test them with: 
+- ISA tests from https://github.com/riscv/riscv-tests/tree/master/isa and  https://github.com/riscv/riscv-compliance
 - Dhrystone benchmark
-- 24 FreeRTOS tests
+- Coremark benchmark
+- Zephyr os
+- Buildroot/Linux os
 - Some handwritten tests to check the CSR, debug module and MMU plugins
 
-You can enable FreeRTOS tests by adding `FREERTOS=yes` to the command line, but it will take time to run. Also, it uses THREAD_COUNT host CPU threads to run multiple regression in parallel.
+You can rerun some specific test by setting VEXRISCV_REGRESSION_TEST_ID by their id. For instance, if you want to rerun :
+- test_id_5_test_IBus_CachedS1024W1BPL32Relaxvexriscv.plugin.DYNAMIC_DBus_CachedS8192W2BPL16_MulDiv_MulDivFpga_Shift_FullLate_Branch_Late_Hazard_BypassAll_RegFile_SyncDR_Src__Csr_AllNoException_Decoder__Debug_None_DBus_NoMmu
+- test_id_9_test_IBus_Simple1S2InjStagevexriscv.plugin.STATIC_DBus_SimpleLate_MulDiv_MulDivFpgaSimple_Shift_FullEarly_Branch_Late_Hazard_Interlock_RegFile_AsyncER_Src_AddSubExecute_Csr_None_Decoder__Debug_None_DBus_NoMmu
+
+then :
+
+```
+export VEXRISCV_REGRESSION_TEST_ID=5,9
+```
+
+Also there is a few environnement variable that you can use to modulate the random generation : 
+
+| Parameters                                  | range              | description |
+| ------------------------------------------- | ------------------ | ----------- |
+| VEXRISCV_REGRESSION_SEED                    | Int                | Seed used to generate the random configurations |        
+| VEXRISCV_REGRESSION_TEST_ID                 | \[Int\[,\Int\]\*\] | Random configuration that should be keeped and tested |                        
+| VEXRISCV_REGRESSION_CONFIG_COUNT            | Int                | Number of random configurations |                        
+| VEXRISCV_REGRESSION_CONFIG_RVC_RATE         | 0.0-1.0            | Chance to generate a RVC config |                               
+| VEXRISCV_REGRESSION_CONFIG_LINUX_RATE       | 0.0-1.0            | Chance to generate a linux ready config |            
+| VEXRISCV_REGRESSION_CONFIG_MACHINE_OS_RATE  | 0.0-1.0            | Chance to generate a machine mode OS ready config |            
+| VEXRISCV_REGRESSION_LINUX_REGRESSION        | yes/no             | Enable the linux test |           
+| VEXRISCV_REGRESSION_COREMARK                | yes/no             | Enable the Coremark test |           
+| VEXRISCV_REGRESSION_ZEPHYR_COUNT            | Int                | Number of zephyr tests to run on capable configs |        
+| VEXRISCV_REGRESSION_CONFIG_DEMW_RATE        | 0.0-1.0            | Chance to generate a config with writeback stage |            
+| VEXRISCV_REGRESSION_CONFIG_DEM_RATE         | 0.0-1.0            | Chance to generate a config with memory stage |            
 
 ## Interactive debug of the simulated CPU via GDB OpenOCD and Verilator
 It's as described to run tests, but you just have to add `DEBUG_PLUGIN_EXTERNAL=yes` in the make arguments.

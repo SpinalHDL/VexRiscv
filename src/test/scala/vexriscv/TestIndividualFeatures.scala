@@ -3,7 +3,7 @@ package vexriscv
 import java.io.File
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.FunSuite
+import org.scalatest.{BeforeAndAfterAll, FunSuite, ParallelTestExecution}
 import spinal.core._
 import vexriscv.demo._
 import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
@@ -313,7 +313,7 @@ class SrcDimension extends VexRiscvDimension("Src") {
 }
 
 
-class IBusDimension extends VexRiscvDimension("IBus") {
+class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
 
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
@@ -322,7 +322,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
 
     if(r.nextDouble() < 0.5){
       val latency = r.nextInt(5) + 1
-      val compressed = r.nextBoolean()
+      val compressed = r.nextDouble() < rvcRate
       val injectorStage = r.nextBoolean() || latency == 1
       val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
       val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
@@ -345,7 +345,7 @@ class IBusDimension extends VexRiscvDimension("IBus") {
       }
     } else {
       val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-      val compressed = r.nextBoolean()
+      val compressed = r.nextDouble() < rvcRate
       val tighlyCoupled = r.nextBoolean() && !catchAll
 //      val tighlyCoupled = false
       val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
@@ -497,14 +497,14 @@ class MmuDimension extends VexRiscvDimension("DBus") {
 trait CatchAllPosition
 
 
-class CsrDimension(freertos : String, zephyr : String) extends VexRiscvDimension("Csr") {
+class CsrDimension(freertos : String, zephyr : String, linux : String) extends VexRiscvDimension("Csr") {
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
     val supervisor = universes.contains(VexRiscvUniverse.SUPERVISOR)
     if(supervisor){
       new VexRiscvPosition("Supervisor") with CatchAllPosition{
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.linuxFull(0x80000020l))
-        override def testParam = s"FREERTOS=$freertos ZEPHYR=$zephyr LINUX_REGRESSION=${sys.env.getOrElse("VEXRISCV_REGRESSION_LINUX_REGRESSION", "yes")} SUPERVISOR=yes"
+        override def testParam = s"FREERTOS=$freertos ZEPHYR=$zephyr LINUX_REGRESSION=$linux SUPERVISOR=yes"
       }
     } else if(catchAll){
       new VexRiscvPosition("MachineOs") with CatchAllPosition{
@@ -554,10 +554,35 @@ class DecoderDimension extends VexRiscvDimension("Decoder") {
 }
 
 
-
+//class TesterPlay extends FunSuite with ParallelTestExecution {
+//  def createTest(name : String): Unit ={
+//    test(name){
+//      for(i <- 0 to 4) {
+//        println(s"$name $i")
+//        Thread.sleep(2000)
+//      }
+//    }
+//  }
+//  List("a", "b","c").foreach(createTest)
+//}
 
 
 class TestIndividualFeatures extends FunSuite {
+  val testCount = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "100").toInt
+  val seed = sys.env.getOrElse("VEXRISCV_REGRESSION_SEED", Random.nextLong().toString).toLong
+  val testId : Set[Int] =  sys.env.get("VEXRISCV_REGRESSION_TEST_ID") match {
+    case Some(x) if x != "" => x.split(',').map(_.toInt).toSet
+    case _ => (0 until testCount).toSet
+  }
+  val rvcRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_RVC_RATE", "0.5").toDouble
+  val linuxRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_LINUX_RATE", "0.3").toDouble
+  val machineOsRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_MACHINE_OS_RATE", "0.5").toDouble
+  val linuxRegression = sys.env.getOrElse("VEXRISCV_REGRESSION_LINUX_REGRESSION", "yes")
+  val coremarkRegression = sys.env.getOrElse("VEXRISCV_REGRESSION_COREMARK", "yes")
+  val zephyrCount = sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")
+  val demwRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEMW_RATE", "0.6").toDouble
+  val demRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEM_RATE", "0.5").toDouble
+
   def doCmd(cmd: String): String = {
     val stdOut = new StringBuilder()
     class Logger extends ProcessLogger {
@@ -578,7 +603,7 @@ class TestIndividualFeatures extends FunSuite {
 
 
   val dimensions = List(
-    new IBusDimension,
+    new IBusDimension(rvcRate),
     new DBusDimension,
     new MulDivDimension,
     new ShiftDimension,
@@ -586,7 +611,7 @@ class TestIndividualFeatures extends FunSuite {
     new HazardDimension,
     new RegFileDimension,
     new SrcDimension,
-    new CsrDimension(/*sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "1")*/ "0", sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")), //Freertos old port software is broken
+    new CsrDimension(/*sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "1")*/ "0", zephyrCount, linuxRegression), //Freertos old port software is broken
     new DecoderDimension,
     new DebugDimension,
     new MmuDimension
@@ -612,15 +637,15 @@ class TestIndividualFeatures extends FunSuite {
     }
 
     val name = (if(noMemory) "noMemoryStage_" else "") + (if(noWriteback) "noWritebackStage_" else "") + positionsToApply.map(d => d.dimension.name + "_" + d.name).mkString("_")
-    test(prefix + name + "_gen") {
+    test(prefix + "gen_" + name) {
       gen
     }
 
 
-    test(prefix + name + "_test") {
+    test(prefix + "test_" + name) {
       println("START TEST " + prefix + name)
       val debug = true
-      val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=9999924910246l STOP_ON_ERROR=no FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${sys.env.getOrElse("VEXRISCV_REGRESSION_COREMARK", "yes")} THREAD_COUNT=${sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", 1)} ") + s" SEED=${testSeed} "
+      val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=1000000000000l STOP_ON_ERROR=no FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${coremarkRegression} THREAD_COUNT=1 ") + s" SEED=${testSeed} "
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
       println(testCmd)
       val str = doCmd(testCmd)
@@ -628,42 +653,33 @@ class TestIndividualFeatures extends FunSuite {
     }
   }
 
-  val testId : Option[mutable.HashSet[Int]] = None
-  val seed = sys.env.getOrElse("VEXRISCV_REGRESSION_SEED", Random.nextLong().toString).toLong
-//
-//  val testId = Some(mutable.HashSet(3,4,9,11,13,16,18,19,20,21))
-//    val testId = Some(mutable.HashSet(11))
-//  val testId = Some(mutable.HashSet(4, 11))
-//  val seed = 6592877339343561798l
-
-
   val rand = new Random(seed)
 
   test("Info"){
     println(s"MAIN_SEED=$seed")
   }
   println(s"Seed=$seed")
-  for(i <- 0 until sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "100").toInt){
+  for(i <- 0 until testCount){
     var positions : List[VexRiscvPosition] = null
     var universe = mutable.HashSet[VexRiscvUniverse]()
     if(rand.nextDouble() < 0.5) universe += VexRiscvUniverse.EXECUTE_RF
-    if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_LINUX_RATE", "0.3").toDouble > rand.nextDouble()) {
+    if(linuxRate > rand.nextDouble()) {
       universe += VexRiscvUniverse.CATCH_ALL
       universe += VexRiscvUniverse.MMU
       universe += VexRiscvUniverse.FORCE_MULDIV
       universe += VexRiscvUniverse.SUPERVISOR
-      if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEMW_RATE", "0.6").toDouble < rand.nextDouble()){
+      if(demwRate < rand.nextDouble()){
         universe += VexRiscvUniverse.NO_WRITEBACK
       }
     } else {
-      if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_MACHINE_OS_RATE", "0.5").toDouble > rand.nextDouble()) {
+      if(machineOsRate > rand.nextDouble()) {
         universe += VexRiscvUniverse.CATCH_ALL
-        if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEMW_RATE", "0.6").toDouble < rand.nextDouble()){
+        if(demwRate < rand.nextDouble()){
           universe += VexRiscvUniverse.NO_WRITEBACK
         }
       }
-      if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEMW_RATE", "0.6").toDouble > rand.nextDouble()){
-      }else if(sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEM_RATE", "0.5").toDouble > rand.nextDouble()){
+      if(demwRate > rand.nextDouble()){
+      }else if(demRate > rand.nextDouble()){
         universe += VexRiscvUniverse.NO_WRITEBACK
       } else {
         universe += VexRiscvUniverse.NO_WRITEBACK
@@ -676,8 +692,8 @@ class TestIndividualFeatures extends FunSuite {
     }while(!positions.forall(_.isCompatibleWith(positions)))
 
     val testSeed = rand.nextInt()
-    if(testId.isEmpty || testId.get.contains(i))
-      doTest(positions," random_" + i + "_", testSeed, universe)
+    if(testId.contains(i))
+      doTest(positions," test_id_" + i + "_", testSeed, universe)
     Hack.dCounter += 1
   }
 }
