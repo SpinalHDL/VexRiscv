@@ -2805,7 +2805,7 @@ public:
 	uint32_t regFileWriteRefIndex = 0;
 
 	TestA() : WorkspaceRegression("testA") {
-		loadHex("../../resources/hex/testA.hex");
+		loadHex(string(REGRESSION_PATH) + "../../resources/hex/testA.hex");
 	}
 
 	virtual void checks(){
@@ -2831,7 +2831,7 @@ public:
 	TestX28(string name, uint32_t *ref, uint32_t refSize) : WorkspaceRegression(name) {
 		this->ref = ref;
 		this->refSize = refSize;
-		loadHex("../../resources/hex/" + name + ".hex");
+		loadHex(string(REGRESSION_PATH) + "../../resources/hex/" + name + ".hex");
 	}
 
 	virtual void checks(){
@@ -2851,7 +2851,7 @@ public:
 class RiscvTest : public WorkspaceRegression{
 public:
 	RiscvTest(string name) : WorkspaceRegression(name) {
-		loadHex("../../resources/hex/" + name + ".hex");
+		loadHex(string(REGRESSION_PATH) + "../../resources/hex/" + name + ".hex");
 		bootAt(0x800000bcu);
 	}
 
@@ -2899,7 +2899,7 @@ public:
 		setIStall(iStall);
 		setDStall(dStall);
 		withRiscvRef();
-		loadHex("../../resources/hex/" + hexName + ".hex");
+		loadHex(string(REGRESSION_PATH) + "../../resources/hex/" + hexName + ".hex");
 		this->hexName = hexName;
 	}
 
@@ -2942,7 +2942,7 @@ public:
 	int out32Counter = 0;
 	Compliance(string name) : WorkspaceRegression(name) {
 		withRiscvRef();
-		loadHex("../../resources/hex/" + name + ".elf.hex");
+		loadHex(string(REGRESSION_PATH) + "../../resources/hex/" + name + ".elf.hex");
 		out32.open (name + ".out32");
 		this->name = name;
 	}
@@ -2963,7 +2963,7 @@ public:
 
 
 	virtual void pass(){
-		FILE *refFile = fopen((string("../../resources/ref/") + name + ".reference_output").c_str(), "r");
+		FILE *refFile = fopen((string(REGRESSION_PATH) + string("../../resources/ref/") + name + ".reference_output").c_str(), "r");
     	fseek(refFile, 0, SEEK_END);
     	uint32_t refSize = ftell(refFile);
     	fseek(refFile, 0, SEEK_SET);
@@ -3152,7 +3152,7 @@ public:
 
 
 	DebugPluginTest() : WorkspaceRegression("DebugPluginTest") {
-		loadHex("../../resources/hex/debugPlugin.hex");
+		loadHex(string(REGRESSION_PATH) + "../../resources/hex/debugPlugin.hex");
 		 pthread_create(&clientThreadId, NULL, &clientThreadWrapper, this);
 	}
 
@@ -3837,17 +3837,17 @@ int main(int argc, char **argv, char **env) {
 //			#endif
 
             #ifdef IBUS_CACHED
-                redo(REDO,WorkspaceRegression("icache").withRiscvRef()->loadHex("../raw/icache/build/icache.hex")->bootAt(0x80000000u)->run(50e3););
+                redo(REDO,WorkspaceRegression("icache").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../raw/icache/build/icache.hex")->bootAt(0x80000000u)->run(50e3););
             #endif
             #ifdef DBUS_CACHED
-                redo(REDO,WorkspaceRegression("dcache").loadHex("../raw/dcache/build/dcache.hex")->bootAt(0x80000000u)->run(2500e3););
+                redo(REDO,WorkspaceRegression("dcache").loadHex(string(REGRESSION_PATH) + "../raw/dcache/build/dcache.hex")->bootAt(0x80000000u)->run(2500e3););
             #endif
 
             #ifdef MMU
-                redo(REDO,WorkspaceRegression("mmu").withRiscvRef()->loadHex("../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
+                redo(REDO,WorkspaceRegression("mmu").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../raw/mmu/build/mmu.hex")->bootAt(0x80000000u)->run(50e3););
             #endif
             #ifdef SUPERVISOR
-                redo(REDO,WorkspaceRegression("deleg").withRiscvRef()->loadHex("../raw/deleg/build/deleg.hex")->bootAt(0x80000000u)->run(50e3););
+                redo(REDO,WorkspaceRegression("deleg").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../raw/deleg/build/deleg.hex")->bootAt(0x80000000u)->run(50e3););
             #endif
 
 			#ifdef DEBUG_PLUGIN
@@ -3858,20 +3858,20 @@ int main(int argc, char **argv, char **env) {
 		#endif
 
 		#ifdef CUSTOM_SIMD_ADD
-			redo(REDO,WorkspaceRegression("custom_simd_add").loadHex("../custom/simd_add/build/custom_simd_add.hex")->bootAt(0x00000000u)->run(50e3););
+			redo(REDO,WorkspaceRegression("custom_simd_add").loadHex(string(REGRESSION_PATH) + "../custom/simd_add/build/custom_simd_add.hex")->bootAt(0x00000000u)->run(50e3););
 		#endif
 
 		#ifdef CUSTOM_CSR
-			redo(REDO,WorkspaceRegression("custom_csr").loadHex("../custom/custom_csr/build/custom_csr.hex")->bootAt(0x00000000u)->run(50e3););
+			redo(REDO,WorkspaceRegression("custom_csr").loadHex(string(REGRESSION_PATH) + "../custom/custom_csr/build/custom_csr.hex")->bootAt(0x00000000u)->run(50e3););
 		#endif
 
 
 		#ifdef LRSC
-			redo(REDO,WorkspaceRegression("lrsc").withRiscvRef()->loadHex("../raw/lrsc/build/lrsc.hex")->bootAt(0x00000000u)->run(10e3););
+			redo(REDO,WorkspaceRegression("lrsc").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../raw/lrsc/build/lrsc.hex")->bootAt(0x00000000u)->run(10e3););
 		#endif
 
 		#ifdef AMO
-			redo(REDO,WorkspaceRegression("amo").withRiscvRef()->loadHex("../raw/amo/build/amo.hex")->bootAt(0x00000000u)->run(10e3););
+			redo(REDO,WorkspaceRegression("amo").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../raw/amo/build/amo.hex")->bootAt(0x00000000u)->run(10e3););
 		#endif
 
 		#ifdef DHRYSTONE
@@ -3910,7 +3910,7 @@ int main(int argc, char **argv, char **env) {
                     if(withStall == -1) break;
                 #endif
                 WorkspaceRegression("coremark_" + rv + (withStall  > 0 ? "_stall" : "_nostall")).withRiscvRef()
-                ->loadBin("../../resources/bin/coremark_" + rv + ".bin", 0x80000000)
+                ->loadBin(string(REGRESSION_PATH) + "../../resources/bin/coremark_" + rv + ".bin", 0x80000000)
                 ->bootAt(0x80000000)
                 ->setIStall(withStall > 0)
                 ->setDStall(withStall > 0)
@@ -3930,17 +3930,17 @@ int main(int argc, char **argv, char **env) {
 
             /*for(int redo = 0;redo < 4;redo++)*/{
                 for(const string &name : freeRtosTests){
-                    tasks.push_back([=]() { WorkspaceRegression(name + "_rv32i_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
-                    tasks.push_back([=]() { WorkspaceRegression(name + "_rv32i_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                    tasks.push_back([=]() { WorkspaceRegression(name + "_rv32i_O0").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../../resources/freertos/" + name + "_rv32i_O0.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                    tasks.push_back([=]() { WorkspaceRegression(name + "_rv32i_O3").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../../resources/freertos/" + name + "_rv32i_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #ifdef COMPRESSED
-//                        tasks.push_back([=]() { WorkspaceRegression(name + "_rv32ic_O0").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
-                        tasks.push_back([=]() { WorkspaceRegression(name + "_rv32ic_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                        tasks.push_back([=]() { WorkspaceRegression(name + "_rv32ic_O0").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../../resources/freertos/" + name + "_rv32ic_O0.hex")->bootAt(0x80000000u)->run(5e6*15);});
+                        tasks.push_back([=]() { WorkspaceRegression(name + "_rv32ic_O3").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../../resources/freertos/" + name + "_rv32ic_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
                     #endif
                     #if defined(MUL) && defined(DIV)
 //                        #ifdef COMPRESSED
-//                            tasks.push_back([=]() { WorkspaceRegression(name + "_rv32imac_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+//                            tasks.push_back([=]() { WorkspaceRegression(name + "_rv32imac_O3").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../../resources/freertos/" + name + "_rv32imac_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
 //                        #else
-                            tasks.push_back([=]() { WorkspaceRegression(name + "_rv32im_O3").withRiscvRef()->loadHex("../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
+                            tasks.push_back([=]() { WorkspaceRegression(name + "_rv32im_O3").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../../resources/freertos/" + name + "_rv32im_O3.hex")->bootAt(0x80000000u)->run(4e6*15);});
 //                        #endif
                     #endif
                 }
@@ -3967,12 +3967,12 @@ int main(int argc, char **argv, char **env) {
             /*for(int redo = 0;redo < 4;redo++)*/{
                 for(const string &name : zephyrTests){
                     #ifdef COMPRESSED
-                        tasks.push_back([=]() { ZephyrRegression(name + "_rv32ic").withRiscvRef()->loadHex("../../resources/VexRiscvRegressionData/sim/zephyr/" + name + "_rv32ic.hex")->bootAt(0x80000000u)->run(180e6);});
+                        tasks.push_back([=]() { ZephyrRegression(name + "_rv32ic").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../../resources/VexRiscvRegressionData/sim/zephyr/" + name + "_rv32ic.hex")->bootAt(0x80000000u)->run(180e6);});
                     #else
-                        tasks.push_back([=]() { ZephyrRegression(name + "_rv32i").withRiscvRef()->loadHex("../../resources/VexRiscvRegressionData/sim/zephyr/" + name + "_rv32i.hex")->bootAt(0x80000000u)->run(180e6);});
+                        tasks.push_back([=]() { ZephyrRegression(name + "_rv32i").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../../resources/VexRiscvRegressionData/sim/zephyr/" + name + "_rv32i.hex")->bootAt(0x80000000u)->run(180e6);});
                     #endif
                     #if defined(MUL) && defined(DIV)
-                            tasks.push_back([=]() { ZephyrRegression(name + "_rv32im").withRiscvRef()->loadHex("../../resources/VexRiscvRegressionData/sim/zephyr/" + name + "_rv32im.hex")->bootAt(0x80000000u)->run(180e6);});
+                            tasks.push_back([=]() { ZephyrRegression(name + "_rv32im").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../../resources/VexRiscvRegressionData/sim/zephyr/" + name + "_rv32im.hex")->bootAt(0x80000000u)->run(180e6);});
                     #endif
                 }
             }
@@ -3993,10 +3993,10 @@ int main(int argc, char **argv, char **env) {
         	    LinuxRegression soc("linux");
         	    #ifndef DEBUG_PLUGIN_EXTERNAL
         	    soc.withRiscvRef();
-        		soc.loadBin(EMULATOR, 0x80000000);
-        		soc.loadBin(VMLINUX,  0xC0000000);
-        		soc.loadBin(DTB,      0xC3000000);
-        		soc.loadBin(RAMDISK,  0xC2000000);
+        		soc.loadBin(string(REGRESSION_PATH) + EMULATOR, 0x80000000);
+        		soc.loadBin(string(REGRESSION_PATH) + VMLINUX,  0xC0000000);
+        		soc.loadBin(string(REGRESSION_PATH) + DTB,      0xC3000000);
+        		soc.loadBin(string(REGRESSION_PATH) + RAMDISK,  0xC2000000);
         		#endif
         		//soc.setIStall(true);
         		//soc.setDStall(true);
