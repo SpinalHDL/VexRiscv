@@ -1,9 +1,10 @@
 package vexriscv
 
-import java.io.File
+import java.io.{File, OutputStream}
+import java.util.concurrent.TimeUnit
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.{BeforeAndAfterAll, FunSuite, ParallelTestExecution}
+import org.scalatest.{BeforeAndAfterAll, FunSuite, ParallelTestExecution, Tag, Transformer}
 import spinal.core._
 import vexriscv.demo._
 import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
@@ -11,6 +12,8 @@ import vexriscv.plugin._
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.concurrent.duration.Duration
+import scala.concurrent.{Await, ExecutionContext, Future}
 import scala.sys.process._
 import scala.util.Random
 
@@ -534,6 +537,7 @@ class DebugDimension extends VexRiscvDimension("Debug") {
     },
     new VexRiscvPosition("Enable") {
       override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset")))
+      override def testParam = "CONCURRENT_OS_EXECUTIONS=yes"
     }
   ))
 }
@@ -553,21 +557,80 @@ class DecoderDimension extends VexRiscvDimension("Decoder") {
   }
 }
 
+object PlayFuture extends App{
+  implicit val ec = ExecutionContext.global
+  val x =  for(i <- 0 until 160) yield Future {
+    print(s"$i ")
+    Thread.sleep(1000)
+  }
 
-//class TesterPlay extends FunSuite with ParallelTestExecution {
-//  def createTest(name : String): Unit ={
-//    test(name){
-//      for(i <- 0 to 4) {
-//        println(s"$name $i")
-//        Thread.sleep(2000)
-//      }
-//    }
-//  }
-//  List("a", "b","c").foreach(createTest)
-//}
+  Thread.sleep(8000)
+}
+
+class MultithreadedFunSuite extends FunSuite {
+  implicit val ec = ExecutionContext.global
+  class Job(body : => Unit){
+    val originalOutput = Console.out
+    val buffer = mutable.Queue[Char]()
+    var bufferEnabled = true
+    def redirector() = new OutputStream{
+      override def write(i: Int): Unit = synchronized {
+        if(bufferEnabled) buffer += i.toChar
+        else originalOutput.print(i.toChar)
+      }
+    }
+    val future = Future{
+      Console.withOut(redirector()){
+        Console.withErr(redirector())(body)
+      }
+    }
+
+    def join(): Unit = {
+      Thread.sleep(50)
+      synchronized{
+        bufferEnabled = false
+        buffer.foreach(originalOutput.print)
+      }
+      Await.result(future, Duration.Inf)
+    }
+  }
+
+  override protected def test(testName: String, testTags: Tag*)(testFun: => Unit) {
+    val job = new Job(testFun)
+    super.test(testName, testTags :_*)(job.join())
+  }
+  protected def testSingleThread(testName: String, testTags: Tag*)(testFun: => Unit) {
+    super.test(testName, testTags :_*)(testFun)
+  }
+}
 
 
-class TestIndividualFeatures extends FunSuite {
+class FunTestPara extends MultithreadedFunSuite{
+  def createTest(name : String): Unit ={
+    test(name){
+      for(i <- 0 to 4) {
+        println(s"$name $i")
+        Thread.sleep(500)
+      }
+    }
+  }
+  (0 to 80).map(_.toString).foreach(createTest)
+}
+
+class FunTestPlay extends FunSuite {
+  def createTest(name : String): Unit ={
+    test(name){
+      Thread.sleep(500)
+      for(i <- 0 to 4) {
+        println(s"$name    $i")
+        Thread.sleep(500)
+      }
+    }
+  }
+  (0 to 80).map(_.toString).foreach(createTest)
+}
+
+class TestIndividualFeatures extends MultithreadedFunSuite {
   val testCount = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "100").toInt
   val seed = sys.env.getOrElse("VEXRISCV_REGRESSION_SEED", Random.nextLong().toString).toLong
   val testId : Set[Int] =  sys.env.get("VEXRISCV_REGRESSION_TEST_ID") match {
@@ -582,24 +645,8 @@ class TestIndividualFeatures extends FunSuite {
   val zephyrCount = sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")
   val demwRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEMW_RATE", "0.6").toDouble
   val demRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEM_RATE", "0.5").toDouble
+  val lock = new{}
 
-  def doCmd(cmd: String): String = {
-    val stdOut = new StringBuilder()
-    class Logger extends ProcessLogger {
-      override def err(s: => String): Unit = {
-        if (!s.startsWith("ar: creating ")) println(s)
-      }
-
-      override def out(s: => String): Unit = {
-        println(s)
-        stdOut ++= s
-      }
-
-      override def buffer[T](f: => T) = f
-    }
-    Process(cmd, new File("src/test/cpp/regression")).!(new Logger)
-    stdOut.toString()
-  }
 
 
   val dimensions = List(
@@ -617,12 +664,40 @@ class TestIndividualFeatures extends FunSuite {
     new MmuDimension
   )
 
+  var clockCounter = 0l
+  var startAt = System.currentTimeMillis()
   def doTest(positionsToApply : List[VexRiscvPosition], prefix : String = "", testSeed : Int, universes : mutable.HashSet[VexRiscvUniverse]): Unit ={
     val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
     val noWriteback = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
-    def gen = {
+    val name = (if(noMemory) "noMemoryStage_" else "") + (if(noWriteback) "noWritebackStage_" else "") + positionsToApply.map(d => d.dimension.name + "_" + d.name).mkString("_")
+    val workspace = "simWorkspace"
+    val project = s"$workspace/$prefix"
+    def doCmd(cmd: String): String = {
+      val stdOut = new StringBuilder()
+      class Logger extends ProcessLogger {
+        override def err(s: => String): Unit = {
+          if (!s.startsWith("ar: creating ")) println(s)
+        }
+        override def out(s: => String): Unit = {
+          println(s)
+          stdOut ++= s
+        }
+        override def buffer[T](f: => T) = f
+      }
+      Process(cmd, new File(project)).!(new Logger)
+      stdOut.toString()
+    }
+
+    test(prefix + name) {
+      println("START TEST " + prefix + name)
+
+      //Cleanup
+      FileUtils.deleteDirectory(new File(project))
+      FileUtils.forceMkdir(new File(project))
+
+      //Generate RTL
       FileUtils.deleteQuietly(new File("VexRiscv.v"))
-      SpinalVerilog{
+      SpinalConfig(targetDirectory = project).generateVerilog{
         val config = VexRiscvConfig(
           withMemoryStage = !noMemory,
           withWriteBackStage = !noWriteback,
@@ -634,22 +709,22 @@ class TestIndividualFeatures extends FunSuite {
         for (positionToApply <- positionsToApply) positionToApply.applyOn(config)
         new VexRiscv(config)
       }
-    }
 
-    val name = (if(noMemory) "noMemoryStage_" else "") + (if(noWriteback) "noWritebackStage_" else "") + positionsToApply.map(d => d.dimension.name + "_" + d.name).mkString("_")
-    test(prefix + "gen_" + name) {
-      gen
-    }
+      //Setup test
+      val files = List("main.cpp", "encoding.h" ,"makefile", "dhrystoneO3.logRef", "dhrystoneO3C.logRef","dhrystoneO3MC.logRef","dhrystoneO3M.logRef")
+      files.foreach(f => FileUtils.copyFileToDirectory(new File(s"src/test/cpp/regression/$f"), new File(project)))
 
-
-    test(prefix + "test_" + name) {
-      println("START TEST " + prefix + name)
+      //Test RTL
       val debug = true
-      val stdCmd = (s"make clean run WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=1000000000000l STOP_ON_ERROR=no FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${coremarkRegression} THREAD_COUNT=1 ") + s" SEED=${testSeed} "
+      val stdCmd = (s"make run REGRESSION_PATH=../../src/test/cpp/regression VEXRISCV_FILE=VexRiscv.v WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=1000000000000l STOP_ON_ERROR=no FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${coremarkRegression} THREAD_COUNT=1 ") + s" SEED=${testSeed} "
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
       println(testCmd)
       val str = doCmd(testCmd)
       assert(str.contains("REGRESSION SUCCESS") && !str.contains("Broken pipe"))
+      val pattern = "Had simulate ([0-9]+)".r
+      val hit = pattern.findFirstMatchIn(str)
+
+      lock.synchronized(clockCounter += hit.get.group(1).toLong)
     }
   }
 
@@ -693,7 +768,12 @@ class TestIndividualFeatures extends FunSuite {
 
     val testSeed = rand.nextInt()
     if(testId.contains(i))
-      doTest(positions," test_id_" + i + "_", testSeed, universe)
+      doTest(positions,"test_id_" + i + "_", testSeed, universe)
     Hack.dCounter += 1
+  }
+  testSingleThread("report"){
+    val time = (System.currentTimeMillis() - startAt)*1e-3
+    val clockPerSecond = (clockCounter/time*1e-3).toLong
+    println(s"Duration=${(time/60).toInt}mn clocks=${(clockCounter*1e-6).toLong}M clockPerSecond=${clockPerSecond}K")
   }
 }
