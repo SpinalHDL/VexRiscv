@@ -402,7 +402,7 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     //Writes
     when(tagsWriteCmd.valid && tagsWriteCmd.way(i)){
-      tags(tagsWriteCmd.address) := tagsWriteCmd.data
+      tags.write(tagsWriteCmd.address, tagsWriteCmd.data)
     }
     when(dataWriteCmd.valid && dataWriteCmd.way(i)){
       data.write(
