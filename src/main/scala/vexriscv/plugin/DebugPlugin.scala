@@ -217,8 +217,6 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
         //Assume nothing will stop the CPU in the decode stage
         when(decode.arbitration.isValid) {
           haltIt := True
-        }
-        when(execute.arbitration.isValid) {
           decode.arbitration.flushNext := True
         }
       }
