@@ -52,6 +52,8 @@ Composed of 2 stream :
 
 ### Probe bus
 
+Composed of 2 stream :
+
 | Name     | Direction | Description |
 |----------|-----------|----------|
 | probeCmd | M <- S    | Used for cache management |
@@ -98,7 +100,7 @@ Emitted on the readAck channel (master -> slave), it carry no information, just 
 
 | Name         | From command | Description |
 |--------------|---------------|----------|
-| readSuccess   | * | - |
+| readSuccess  | * | - |
 
 ### Write commands
 
