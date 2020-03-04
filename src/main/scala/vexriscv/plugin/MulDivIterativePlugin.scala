@@ -108,7 +108,7 @@ class MulDivIterativePlugin(genMul : Boolean = true,
 
       val div = ifGen(genDiv) (new Area{
         assert(isPow2(divUnrollFactor))
-
+        def area = this
         //register allocation
         def numerator = rs1(31 downto 0)
         def denominator = rs2
@@ -130,13 +130,13 @@ class MulDivIterativePlugin(genMul : Boolean = true,
                 numerator := inNumerator
                 remainder := inRemainder
               }
-              case _ => {
+              case _ => new Area {
                 val remainderShifted = (inRemainder ## inNumerator.msb).asUInt
                 val remainderMinusDenominator = remainderShifted - denominator
                 val outRemainder = !remainderMinusDenominator.msb ? remainderMinusDenominator.resize(32 bits) | remainderShifted.resize(32 bits)
                 val outNumerator = (inNumerator ## !remainderMinusDenominator.msb).asUInt.resize(32 bits)
                 stages(outNumerator, outRemainder, stage - 1)
-              }
+              }.setCompositeName(area, "stage_" + (divUnrollFactor-stage))
             }
 
             stages(numerator, remainder, divUnrollFactor)
