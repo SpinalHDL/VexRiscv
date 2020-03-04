@@ -5,9 +5,11 @@ Features :
 - Two data paths (read + write), but allow dirty/clean sharing by reusing the write data path
 - Allow multi level coherent interconnect
 - No ordering, but provide barrier
+- Allow cache-full and cache-less agents
 
+## Memory copy status
 
-## Memory copy flags
+Memory copy, in other words, cache line, have more states than non coherent systems :
 
 | Name          | Description |
 |---------------|-------------|
@@ -16,13 +18,14 @@ Features :
 | Owner/Lodger  | lodger => copy of the line, but no other responsibility, owner => the given cache is responsible to write back dirty data and answer probes with the data |
 | Clean/Dirty   | clean => match main memory, dirty => main memory need updates |
 
-All combination of those cache flag are valid. But if a cache line is invalid, the other flags have no meaning.
+All combination of those cache flag are valid. But if a cache line is invalid, the other status have no meaning.
 
-Later in the spec, memory copy state can be described as :
+Later in the spec, memory copy state can be described for example as :
 
 - VSOC for (Valid, Shared, Owner, Clean)
 - V-OC for (Valid, Shared or Unique, Owner, Clean)
 - !V-OC for NOT (Valid, Shared or Unique, Owner, Clean)
+- ...
 
 ## buses
 
@@ -70,11 +73,11 @@ Emitted on the readCmd channel (master -> slave)
 | readShared  | I---          | Get a memory copy as V--- | Want to read a uncached address |
 | readUnique  | I---          | Get a memory copy as VUO- | Want to write a uncached address |
 | readOnce    | I---          | Get a memory copy without coherency tracking | Instruction cache read |
-| makeInvalid | VS--          | Make other memory copy as I--- and make yourself VUO- | Want to write into a shared line |
+| makeUnique  | VS--          | Make other memory copy as I--- and make yourself VUO- | Want to write into a shared line |
 | readBarrier | N/A           | Ensure that the visibility of the memory operations of this channel do not cross the barrier | ISA fence |
 
-makeInvalid should be designed with care. There is a few corner cases : 
-- While a master has a inflight makeInvalid, a probe can change its state.
+makeUnique should be designed with care. There is a few corner cases : 
+- While a master has a inflight makeUnique, a probe can change its state, in such case, the makeUnique become weak and invalidation is canceled. This is usefull for multi level coherent interconnects.
 - Multi level coherent interconnect should be careful to properly move the ownership and not lose dirty data
 
 I'm not sure yet if we should add some barrier transactions to enforce
@@ -83,14 +86,13 @@ I'm not sure yet if we should add some barrier transactions to enforce
 
 Emitted on the readRsp channel (master <- slave)
 
-success, abort, error, data shared/unique clean/dirty owner/notOwner
+readSuccess, readError, data shared/unique clean/dirty owner/notOwner
 
-| Responses | From command | Description |
-|-----------|---------------|----------|
-| success   | makeInvalid, readBarrier | - |
-| abort     | makeInvalid | A concurrent makeInvalid toke over |
-| error     | readShared, readUnique, readOnce | Bad address |
-| readData  | readShared, readUnique, readOnce | Data + coherency flags (V???) |
+| Responses   | From command | Description |
+|-------------|---------------|----------|
+| readSuccess | makeUnique, readBarrier | - |
+| readError   | readShared, readUnique, readOnce | Bad address |
+| readData    | readShared, readUnique, readOnce | Data + coherency status (V???) |
 
 ### Read ack
 
@@ -108,6 +110,7 @@ Write commands can be emitted on the writeCmd channel (master -> slave)
 |--------------|---------------|----------|----------|
 | writeInvalid | V-O-          | Write the memory copy and update it status to I--- | Need to free the dirty cache line |
 | writeShare   | V-O-          | Write the memory copy but keep it as VSO- | A probe makeShared asked it |
+| writeUnique  | VUO-          | Write the memory copy but keep it as VUO- | A probe probeOnce need to read the data |
 | evict        | V---, !V-OD   | Notify the interconnect that the cache line is now I--- | Need to free a clean cache line |
 | writeBarrier | N/A           | Ensure that the visibility of the memory operations of this channel do not cross the barrier | ISA fence |
 
@@ -127,8 +130,11 @@ Probe commands can be emitted on the probeCmd channel (slave -> master)
 |-------------|-------------|---------------|
 | makeInvalid | Make the memory copy I--- | Another cache want to make his shared copy unique to write it |
 | makeShared  | Make the memory copy VS-- | Another cache want to read a memory block, so unique copy need to be shared |
+| probeOnce   | Read the V-O- memory copy | A non coherent agent did a readOnce  |
 
-Both makeInvalid and makeShared could result into one of the following probeSuccess, writeInvalid, writeShare. 
+makeInvalid and makeShared could result into one of the following probeSuccess, writeInvalid, writeShare
+
+probeOnce can result into one of the following probeSuccess, writeShare, writeUnique
 
 To help the slave matching the writeInvalid and writeShare generated from a probe, those request are tagged with a matching ID.  
 
