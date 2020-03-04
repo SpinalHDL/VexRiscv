@@ -114,12 +114,7 @@ object VexRiscvSynthesisBench {
     //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
 //    val rtls = List(smallAndProductive)
 
-    val targets = XilinxStdTargets(
-      vivadoArtix7Path = "/media/miaou/HD/linux/Xilinx/Vivado/2018.3/bin"
-    ) ++ AlteraStdTargets(
-      quartusCycloneIVPath = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin",
-      quartusCycloneVPath  = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin"
-    ) ++  IcestormStdTargets().take(1)
+    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
 
     //    val targets = IcestormStdTargets()
     Bench(rtls, targets, "/media/miaou/HD/linux/tmp/")
@@ -142,12 +137,7 @@ object BrieySynthesisBench {
 
     val rtls = List(briey)
 
-    val targets = XilinxStdTargets(
-      vivadoArtix7Path = "/media/miaou/HD/linux/Xilinx/Vivado/2018.3/bin"
-    ) ++ AlteraStdTargets(
-      quartusCycloneIVPath = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin",
-      quartusCycloneVPath  = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin"
-    )
+    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
 
     Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
   }
@@ -181,12 +171,7 @@ object MuraxSynthesisBench {
 
     val rtls = List(murax, muraxFast)
 
-    val targets = IcestormStdTargets().take(1) ++ XilinxStdTargets(
-      vivadoArtix7Path = "/media/miaou/HD/linux/Xilinx/Vivado/2018.3/bin"
-    ) ++ AlteraStdTargets(
-      quartusCycloneIVPath = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin",
-      quartusCycloneVPath  = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin"
-    )
+    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
 
     Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
   }
