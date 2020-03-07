@@ -84,6 +84,8 @@ Composed of 2 stream :
 
 Used by the interconnect to order master to change their memory copies status and get memory copies owners data. 
 
+Composed of 2 stream :
+
 | Name     | Direction | Description |
 |----------|-----------|----------|
 | probeCmd | M <- S    | Used for cache management |
@@ -129,7 +131,7 @@ Emitted on the readAck channel (master -> slave), it carry no information, just 
 
 | Name         | From command | Description |
 |--------------|---------------|----------|
-| readSuccess   | * | - |
+| readSuccess  | * | - |
 
 ### Write commands
 

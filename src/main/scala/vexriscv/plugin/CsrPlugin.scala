@@ -69,6 +69,7 @@ case class CsrPluginConfig(
                             midelegAccess       : CsrAccess = CsrAccess.NONE,
                             pipelineCsrRead     : Boolean = false,
                             pipelinedInterrupt  : Boolean = true,
+                            csrOhDecoder        : Boolean = true,
                             deterministicInteruptionEntry : Boolean = false, //Only used for simulatation purposes
                             wfiOutput           : Boolean = false
                           ){
@@ -263,7 +264,7 @@ case class CsrReadToWriteOverride(that : Data, bitOffset : Int) //Used for speci
 case class CsrOnWrite(doThat :() => Unit)
 case class CsrOnRead(doThat : () => Unit)
 case class CsrMapping() extends CsrInterface{
-  val mapping = mutable.HashMap[Int,ArrayBuffer[Any]]()
+  val mapping = mutable.LinkedHashMap[Int,ArrayBuffer[Any]]()
   def addMappingAt(address : Int,that : Any) = mapping.getOrElseUpdate(address,new ArrayBuffer[Any]) += that
   override def r(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrRead(that,bitOffset))
   override def w(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrWrite(that,bitOffset))
@@ -447,9 +448,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
 
     if(supervisorGen) {
-      redoInterface = pcManagerService.createJumpInterface(pipeline.execute)
-      redoInterface.valid := False
-      redoInterface.payload.assignDontCare()
+      redoInterface = pcManagerService.createJumpInterface(pipeline.execute, -1)
     }
 
     exceptionPendings = Vec(Bool, pipeline.stages.length)
@@ -643,10 +642,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         satpAccess(CSR.SATP, 31 -> satp.MODE, 22 -> satp.ASID, 0 -> satp.PPN)
 
 
-        if(supervisorGen) onWrite(CSR.SATP){
-          execute.arbitration.flushNext := True
-          redoInterface.valid := True
-          redoInterface.payload := execute.input(PC) + 4
+        if(supervisorGen) {
+          redoInterface.valid := False
+          redoInterface.payload := decode.input(PC)
+          onWrite(CSR.SATP){
+            execute.arbitration.flushNext := True
+            redoInterface.valid := True
+          }
         }
       }
     }
@@ -685,7 +687,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
 
       //Aggregate all exception port and remove required instructions
-      val exceptionPortCtrl = if(exceptionPortsInfos.nonEmpty) new Area{
+      val exceptionPortCtrl = exceptionPortsInfos.nonEmpty generate new Area{
         val firstStageIndexWithExceptionPort = exceptionPortsInfos.map(i => indexOf(i.stage)).min
         val exceptionValids = Vec(stages.map(s => Bool().setPartialName(s.getName())))
         val exceptionValidsRegs = Vec(stages.map(s => Reg(Bool).init(False).setPartialName(s.getName()))).allowUnsetRegToAvoidLatch
@@ -762,7 +764,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         //Avoid the PC register of the last stage to change durring an exception handleing (Used to fill Xepc)
         stages.last.dontSample.getOrElseUpdate(PC, ArrayBuffer[Bool]()) += exceptionValids.last
         exceptionPendings := exceptionValidsRegs
-      } else null
+      }
 
 
 
@@ -808,17 +810,29 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
       //Used to make the pipeline empty softly (for interrupts)
       val pipelineLiberator = new Area{
-        when(interrupt.valid && allowInterrupts){
-          decode.arbitration.haltByOther := decode.arbitration.isValid
+        val pcValids = Vec(RegInit(False), stagesFromExecute.length)
+        val active = interrupt.valid && allowInterrupts && decode.arbitration.isValid
+        when(active){
+          decode.arbitration.haltByOther := True
+          for((stage, reg, previous) <- (stagesFromExecute, pcValids, True :: pcValids.toList).zipped){
+            when(!stage.arbitration.isStuck){
+              reg := previous
+            }
+          }
+        }
+        when(!active || decode.arbitration.isRemoved) {
+          pcValids.foreach(_ := False)
         }
 
-        val done = !stagesFromExecute.map(_.arbitration.isValid).orR && fetcher.pcValid(mepcCaptureStage)
+//        val pcValids = for(stage <- stagesFromExecute) yield RegInit(False) clearWhen(!started) setWhen(!stage.arbitration.isValid)
+        val done = CombInit(pcValids.last)
         if(exceptionPortCtrl != null) done.clearWhen(exceptionPortCtrl.exceptionValidsRegs.tail.orR)
       }
 
       //Interrupt/Exception entry logic
       val interruptJump = Bool.addTag(Verilator.public)
       interruptJump := interrupt.valid && pipelineLiberator.done && allowInterrupts
+      if(pipelinedInterrupt) interrupt.valid clearWhen(interruptJump) //avoid double fireing
 
       val hadException = RegNext(exception) init(False)
       pipelineLiberator.done.clearWhen(hadException)
@@ -984,7 +998,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val imm = IMM(input(INSTRUCTION))
         def writeSrc = input(SRC1)
       //  val readDataValid = True
-        val readData = B(0, 32 bits)
+        val readData = Bits(32 bits)
         val writeInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE)
         val readInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE)
         val writeEnable = writeInstruction && ! blockedBySideEffects && !arbitration.isStuckByOthers// &&  readDataRegValid
@@ -1030,50 +1044,84 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
         //Translation of the csrMapping into real logic
         val csrAddress = input(INSTRUCTION)(csrRange)
-        Component.current.addPrePopTask(() => {
-          switch(csrAddress) {
-            for ((address, jobs) <- csrMapping.mapping) {
-              is(address) {
-                val withWrite = jobs.exists(j => j.isInstanceOf[CsrWrite] || j.isInstanceOf[CsrOnWrite])
-                val withRead = jobs.exists(j => j.isInstanceOf[CsrRead] || j.isInstanceOf[CsrOnRead])
-                if(withRead && withWrite) {
-                  illegalAccess := False
-                } else {
-                  if (withWrite) illegalAccess.clearWhen(input(CSR_WRITE_OPCODE))
-                  if (withRead) illegalAccess.clearWhen(input(CSR_READ_OPCODE))
-                }
+        Component.current.afterElaboration{
+          def doJobs(jobs : ArrayBuffer[Any]): Unit ={
+            val withWrite = jobs.exists(j => j.isInstanceOf[CsrWrite] || j.isInstanceOf[CsrOnWrite])
+            val withRead = jobs.exists(j => j.isInstanceOf[CsrRead] || j.isInstanceOf[CsrOnRead])
+            if(withRead && withWrite) {
+              illegalAccess := False
+            } else {
+              if (withWrite) illegalAccess.clearWhen(input(CSR_WRITE_OPCODE))
+              if (withRead) illegalAccess.clearWhen(input(CSR_READ_OPCODE))
+            }
 
-                when(writeEnable) {
-                  for (element <- jobs) element match {
-                    case element: CsrWrite => element.that.assignFromBits(writeData(element.bitOffset, element.that.getBitsWidth bits))
-                    case element: CsrOnWrite =>
-                      element.doThat()
-                    case _ =>
-                  }
-                }
+            when(writeEnable) {
+              for (element <- jobs) element match {
+                case element: CsrWrite => element.that.assignFromBits(writeData(element.bitOffset, element.that.getBitsWidth bits))
+                case element: CsrOnWrite =>
+                  element.doThat()
+                case _ =>
+              }
+            }
 
-                for (element <- jobs) element match {
-                  case element: CsrRead if element.that.getBitsWidth != 0 => readData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
-                  case _ =>
-                }
-
-                when(readEnable) {
-                  for (element <- jobs) element match {
-                    case element: CsrOnRead =>
-                      element.doThat()
-                    case _ =>
-                  }
-                }
+            when(readEnable) {
+              for (element <- jobs) element match {
+                case element: CsrOnRead =>
+                  element.doThat()
+                case _ =>
               }
             }
           }
 
-          switch(csrAddress) {
-            for ((address, jobs) <- csrMapping.mapping if jobs.exists(_.isInstanceOf[CsrReadToWriteOverride])) {
-              is(address) {
-                for (element <- jobs) element match {
-                  case element: CsrReadToWriteOverride if element.that.getBitsWidth != 0 => readToWriteData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
-                  case _ =>
+          def doJobsOverride(jobs : ArrayBuffer[Any]): Unit ={
+            for (element <- jobs) element match {
+              case element: CsrReadToWriteOverride if element.that.getBitsWidth != 0 => readToWriteData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
+              case _ =>
+            }
+          }
+
+          csrOhDecoder match {
+            case false => {
+              readData := 0
+              switch(csrAddress) {
+                for ((address, jobs) <- csrMapping.mapping) {
+                  is(address) {
+                    doJobs(jobs)
+                    for (element <- jobs) element match {
+                      case element: CsrRead if element.that.getBitsWidth != 0 => readData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
+                      case _ =>
+                    }
+                  }
+                }
+              }
+              switch(csrAddress) {
+                for ((address, jobs) <- csrMapping.mapping if jobs.exists(_.isInstanceOf[CsrReadToWriteOverride])) {
+                  is(address) {
+                    doJobsOverride(jobs)
+                  }
+                }
+              }
+            }
+            case true => {
+              val oh = csrMapping.mapping.keys.toList.distinct.map(address => address -> RegNextWhen(decode.input(INSTRUCTION)(csrRange) === address, !execute.arbitration.isStuck).setCompositeName(this, "csr_" + address)).toMap
+              val readDatas = ArrayBuffer[Bits]()
+              for ((address, jobs) <- csrMapping.mapping) {
+                when(oh(address)){
+                  doJobs(jobs)
+                }
+                if(jobs.exists(_.isInstanceOf[CsrRead])) {
+                  val masked = B(0, 32 bits)
+                  when(oh(address)) (for (element <- jobs) element match {
+                    case element: CsrRead if element.that.getBitsWidth != 0 => masked(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
+                    case _ =>
+                  })
+                  readDatas += masked
+                }
+              }
+              readData := readDatas.reduceBalancedTree(_ | _)
+              for ((address, jobs) <- csrMapping.mapping) {
+                when(oh(address)){
+                  doJobsOverride(jobs)
                 }
               }
             }
@@ -1081,7 +1129,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
           illegalAccess setWhen(privilege < csrAddress(9 downto 8).asUInt)
           illegalAccess clearWhen(!arbitration.isValid || !input(IS_CSR))
-        })
+        }
       }
     }
   }

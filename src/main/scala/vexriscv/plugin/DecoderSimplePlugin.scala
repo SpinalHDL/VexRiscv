@@ -172,7 +172,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false,
     }
 
     if(catchIllegalInstruction){
-      decodeExceptionPort.valid := arbitration.isValid && input(INSTRUCTION_READY) && !input(LEGAL_INSTRUCTION) // ?? HalitIt to alow decoder stage to wait valid data from 2 stages cache cache ??
+      decodeExceptionPort.valid := arbitration.isValid && !input(LEGAL_INSTRUCTION) // ?? HalitIt to alow decoder stage to wait valid data from 2 stages cache cache ??
       decodeExceptionPort.code := 2
       decodeExceptionPort.badAddr := input(INSTRUCTION).asUInt
     }

@@ -65,55 +65,54 @@ dhrystone binaries which fit inside a 4KB I$ and 4KB D$ (I already had this case
 The CPU configurations used below can be found in the `src/scala/vexriscv/demo` directory.
 
 ```
-VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass, no interrupt) ->
-    Artix 7     -> 233 Mhz 494 LUT 505 FF
-    Cyclone V   -> 193 Mhz 347 ALMs
-    Cyclone IV  -> 179 Mhz 730 LUT 494 FF
+VexRiscv small (RV32I, 0.52 DMIPS/Mhz, no datapath bypass, no interrupt) ->
+    Artix 7     -> 243 Mhz 504 LUT 505 FF 
+    Cyclone V   -> 174 Mhz 352 ALMs
+    Cyclone IV  -> 179 Mhz 731 LUT 494 FF 
     iCE40       -> 92 Mhz 1130 LC
 
-VexRiscv smallest (RV32I, 0.52 DMIPS/Mhz, no datapath bypass) ->
-    Artix 7     -> 232 Mhz 538 LUT 562 FF
-    Cyclone V   -> 189 Mhz 387 ALMs
-    Cyclone IV  -> 175 Mhz 829 LUT 550 FF
+VexRiscv small (RV32I, 0.52 DMIPS/Mhz, no datapath bypass) ->
+    Artix 7     -> 240 Mhz 556 LUT 566 FF 
+    Cyclone V   -> 194 Mhz 394 ALMs
+    Cyclone IV  -> 174 Mhz 831 LUT 555 FF 
     iCE40       -> 85 Mhz 1292 LC
 
 VexRiscv small and productive (RV32I, 0.82 DMIPS/Mhz)  ->
-    Artix 7     -> 226 Mhz 689 LUT 531 FF
-    Cyclone V   -> 145 Mhz 499 ALMs
-    Cyclone IV  -> 150 Mhz 1,111 LUT 525 FF
+    Artix 7     -> 232 Mhz 816 LUT 534 FF 
+    Cyclone V   -> 155 Mhz 492 ALMs
+    Cyclone IV  -> 155 Mhz 1,111 LUT 530 FF 
     iCE40       -> 63 Mhz 1596 LC
 
 VexRiscv small and productive with I$ (RV32I, 0.70 DMIPS/Mhz, 4KB-I$)  ->
-    Artix 7     -> 230 Mhz 734 LUT 564 FF
-    Cyclone V   -> 145 Mhz 511 ALMs
-    Cyclone IV  -> 144 Mhz 1,145 LUT 531 FF
+    Artix 7     -> 220 Mhz 730 LUT 570 FF 
+    Cyclone V   -> 142 Mhz 501 ALMs
+    Cyclone IV  -> 150 Mhz 1,139 LUT 536 FF 
     iCE40       -> 66 Mhz 1680 LC
 
 VexRiscv full no cache (RV32IM, 1.21 DMIPS/Mhz 2.30 Coremark/Mhz, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
-    Artix 7     -> 219 Mhz 1537 LUT 977 FF
-    Cyclone V   -> 139 Mhz 958 ALMs
-    Cyclone IV  -> 135 Mhz 2,011 LUT 968 FF
+    Artix 7     -> 216 Mhz 1418 LUT 949 FF 
+    Cyclone V   -> 133 Mhz 933 ALMs
+    Cyclone IV  -> 143 Mhz 2,076 LUT 972 FF 
 
 VexRiscv full (RV32IM, 1.21 DMIPS/Mhz 2.30 Coremark/Mhz with cache trashing, 4KB-I$,4KB-D$, single cycle barrel shifter, debug module, catch exceptions, static branch) ->
-    Artix 7     -> 193 Mhz 1706 LUT 1172 FF
-    Cyclone V   -> 144 Mhz 1,128 ALMs
-    Cyclone IV  -> 133 Mhz 2,298 LUT 1,096 FF
+    Artix 7     -> 199 Mhz 1840 LUT 1158 FF 
+    Cyclone V   -> 141 Mhz 1,166 ALMs
+    Cyclone IV  -> 131 Mhz 2,407 LUT 1,067 FF 
 
-VexRiscv full max dmips/mhz -> (RV32IM, 1.44 DMIPS/Mhz 2.70 Coremark/Mhz,, 16KB-I$,16KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch prediction in the fetch stage, branch and shift operations done in the Execute stage) ->
-    Artix 7     -> 140 Mhz 1767 LUT 1128 FF
-    Cyclone V   -> 90 Mhz 1,089 ALMs
-    Cyclone IV  -> 79 Mhz 2,336 LUT 1,048 FF
+VexRiscv full max perf (HZ*IPC) -> (RV32IM, 1.38 DMIPS/Mhz 2.57 Coremark/Mhz, 8KB-I$,8KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch prediction in the fetch stage, branch and shift operations done in the Execute stage) ->
+    Artix 7     -> 200 Mhz 1935 LUT 1216 FF 
+    Cyclone V   -> 130 Mhz 1,166 ALMs
+    Cyclone IV  -> 126 Mhz 2,484 LUT 1,120 FF 
 
 VexRiscv full with MMU (RV32IM, 1.24 DMIPS/Mhz 2.35 Coremark/Mhz, with cache trashing, 4KB-I$, 4KB-D$, single cycle barrel shifter, debug module, catch exceptions, dynamic branch, MMU) ->
-    Artix 7     -> 161 Mhz 1985 LUT 1585 FF
-    Cyclone V   -> 124 Mhz 1,319 ALMs
-    Cyclone IV  -> 122 Mhz 2,710 LUT 1,501 FF
+    Artix 7     -> 151 Mhz 2021 LUT 1541 FF 
+    Cyclone V   -> 124 Mhz 1,368 ALMs
+    Cyclone IV -> 128 Mhz 2,826 LUT 1,474 FF 
 
 VexRiscv linux balanced (RV32IMA, 1.21 DMIPS/Mhz 2.27 Coremark/Mhz, with cache trashing, 4KB-I$, 4KB-D$, single cycle barrel shifter, catch exceptions, static branch, MMU, Supervisor, Compatible with mainstream linux) ->
-    Artix 7     -> 170 Mhz 2530 LUT 2013 FF
-    Cyclone V   -> 125 Mhz 1,618 ALMs
-    Cyclone IV  -> 116 Mhz 3,314 LUT 2,016 FF
-
+    Artix 7     -> 180 Mhz 2883 LUT 2130 FF 
+    Cyclone V   -> 131 Mhz 1,764 ALMs
+    Cyclone IV  -> 121 Mhz 3,608 LUT 2,082 FF 
 ```
 
 The following configuration results in 1.44 DMIPS/MHz:
@@ -319,9 +318,9 @@ You can find some FPGA projects which instantiate the Briey SoC here (DE1-SoC, D
 Here are some measurements of Briey SoC timings and area :
 
 ```
-    Artix 7     -> 186 Mhz 3138 LUT 3328 FF
-    Cyclone V   -> 139 Mhz 2,175 ALMs
-    Cyclone IV  -> 129 Mhz 4,337 LUT 3,170 FF
+Artix 7     -> 181 Mhz 3220 LUT 3181 FF 
+Cyclone V   -> 142 Mhz 2,222 ALMs
+Cyclone IV  -> 130 Mhz 4,538 LUT 3,211 FF 
 ```
 
 ## Murax SoC
@@ -374,16 +373,16 @@ Here are some timing and area measurements of the Murax SoC:
 
 ```
 Murax interlocked stages (0.45 DMIPS/Mhz, 8 bits GPIO) ->
-  Artix 7    -> 215 Mhz 1044 LUT 1202 FF
-  Cyclone V  -> 173 Mhz 737 ALMs
-  Cyclone IV -> 144 Mhz 1,484 LUT 1,206 FF
-  iCE40      ->  64 Mhz 2422 LC (nextpnr)
+    Artix 7     -> 216 Mhz 1109 LUT 1201 FF 
+    Cyclone V   -> 182 Mhz 725 ALMs
+    Cyclone IV  -> 147 Mhz 1,551 LUT 1,223 FF 
+    iCE40       ->  64 Mhz 2422 LC (nextpnr)
 
 MuraxFast bypassed stages (0.65 DMIPS/Mhz, 8 bits GPIO) ->
-  Artix 7    -> 229 Mhz 1269 LUT 1302 FF
-  Cyclone V  -> 159 Mhz 864 ALMs
-  Cyclone IV -> 137 Mhz 1,688 LUT 1,241 FF
-  iCE40      ->  66 Mhz 2799 LC (nextpnr)
+    Artix 7     -> 224 Mhz 1278 LUT 1300 FF 
+    Cyclone V   -> 173 Mhz 867 ALMs
+    Cyclone IV  -> 143 Mhz 1,755 LUT 1,258 FF 
+    iCE40       ->  66 Mhz 2799 LC (nextpnr)
 ```
 
 Some scripts to generate the SoC and call the icestorm toolchain can be found here: `scripts/Murax/`

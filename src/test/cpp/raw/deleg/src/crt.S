@@ -10,11 +10,28 @@
     li x1, 0xF0011000; \
     li x2, value; \
     sw x2, 0(x1); \
+    nop; \
+    nop; \
+    nop; \
+    nop; \
+    nop; \
+    nop; \
+    nop; \
+    nop; \
+
 
 #define externalInterruptS(value) \
     li x1, 0xF0012000; \
     li x2, value; \
     sw x2, 0(x1); \
+    nop; \
+    nop; \
+    nop; \
+    nop; \
+    nop; \
+    nop; \
+    nop; \
+    nop; \
 
 
 
