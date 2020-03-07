@@ -117,7 +117,7 @@ object VexRiscvSynthesisBench {
     val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
 
     //    val targets = IcestormStdTargets()
-    Bench(rtls, targets, "/media/miaou/HD/linux/tmp/")
+    Bench(rtls, targets)
   }
 }
 
@@ -137,9 +137,9 @@ object BrieySynthesisBench {
 
     val rtls = List(briey)
 
-    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
+    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++ IcestormStdTargets().take(1)
 
-    Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
+    Bench(rtls, targets)
   }
 }
 
@@ -173,7 +173,7 @@ object MuraxSynthesisBench {
 
     val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
 
-    Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
+    Bench(rtls, targets)
   }
 }
 
