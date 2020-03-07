@@ -1,11 +1,34 @@
 # Coherent interface specification
 
 Features : 
-- 3 buses (write, read, probe) composed of 7 streams
+- 3 interface (write, read, probe) composed of 7 streams
 - Two data paths (read + write), but allow dirty/clean sharing by reusing the write data path
 - Allow multi level coherent interconnect
 - No ordering, but provide barrier
 - Allow cache-full and cache-less agents
+
+## A few hint to help reading the spec
+
+In order to make the spec more readable, there is some definitions :
+
+### Stream
+
+A stream is a primitive interface which carry transactions using a valid/ready handshake.
+
+### Memory copy
+
+To talk in a non abstract way, in a system with multiple caches, a given memory address can potentialy be loaded in multiple caches at the same time. So let's define that : 
+
+- The DDR memory is named `main memory`
+- Each cache line can be loaded with a part of the main memory, let's name that a `memory copy`
+
+### Master / Interconnect / Slave
+
+A master could be for instance a CPU cache, the side of the interconnect toward the main memory or toward a more general interconnect.
+
+A slave could be main memory, the side of the interconnect toward a CPU cache or toward a less general interconnect. 
+
+The spec will try to stay abstract and define the coherent interface as something which can be used between two agents (cpu, interconnect, main memory)
 
 ## Memory copy status
 
@@ -27,14 +50,16 @@ Later in the spec, memory copy state can be described for example as :
 - !V-OC for NOT (Valid, Shared or Unique, Owner, Clean)
 - ...
 
-## buses
+## Coherent interface
 
-One full interface is composed of 3 buses
-- write (M -> S)
-- read  (M -> S)
-- probe (M <- S)
+One full coherent interface is composed of 3 inner interfaces, them-self composed of 7 stream described bellow as `interfaceName (Side -> StreamName -> Side -> StreamName -> ...)` 
+- write (M -> writeCmd -> S -> writeRsp -> M)
+- read  (M -> readCmd- > S -> readRsp -> M -> readAck -> S)
+- probe (S -> probeCmd -> M -> probeRsp -> S)
 
-### Read bus
+### Read interface
+
+Used by masters to obtain new memory copies and make copies unique (used to write them).
 
 Composed of 3 stream :
 
@@ -42,9 +67,11 @@ Composed of 3 stream :
 |---------|-----------|----------|
 | readCmd | M -> S    | Emit memory read and cache management commands |
 | readRsp | M <- S    | Return some data and/or a status from readCmd |
-| readAck | M -> S    | Return ACK from readRsp |
+| readAck | M -> S    | Return ACK from readRsp to syncronize the interconnect status |
 
-### Write bus
+### Write interface
+
+Used by masters to write data back to the memory and notify the interconnect of memory copies eviction (used to keep potential directories updated).
 
 Composed of 2 stream :
 
@@ -53,7 +80,9 @@ Composed of 2 stream :
 | writeCmd | M -> S    | Emit memory writes and cache management commands |
 | writeRsp | M <- S    | Return a status from writeCmd |
 
-### Probe bus
+### Probe interface
+
+Used by the interconnect to order master to change their memory copies status and get memory copies owners data. 
 
 | Name     | Direction | Description |
 |----------|-----------|----------|
@@ -62,7 +91,7 @@ Composed of 2 stream :
 
 ## Transactions
 
-This chapter define transactions moving over the 3 previously defined buses.
+This chapter define transactions moving over the 3 previously defined interface (read/write/probe).
  
 ### Read commands
 
@@ -92,7 +121,7 @@ readSuccess, readError, data shared/unique clean/dirty owner/notOwner
 |-------------|---------------|----------|
 | readSuccess | makeUnique, readBarrier | - |
 | readError   | readShared, readUnique, readOnce | Bad address |
-| readData    | readShared, readUnique, readOnce | Data + coherency status (V???) |
+| readData    | readShared, readUnique, readOnce | Data + coherency status (V---) |
 
 ### Read ack
 
@@ -149,13 +178,15 @@ Emitted on the probeRsp channel (master -> slave), it carry no information, just
 
 ## Channel interlocking
 
-There is the streams priority (top => high priority, bottom => low priority )
+This is a delicate subject as if everything was permited, it would be easy to end up with deadlocks.
+
+There is the streams priority (top => high priority, bottom => low priority) A lower priority stream should not block a higher priority stream in order to avoid deadlocks.
 - writeCmd, writeRsp, readRsp, readAck, probeRsp. Nothing should realy block them excepted bandwidth
 - probeCmd. Can be blocked by inflight/generated writes
 - readCmd. Can be blocked by inflight/generated probes
 
 In other words : 
 
-Masters can wait the completion of inflight writes before answering probes.
-Slaves can emit probes and wait their completion before answering reads.
-Slaves can wait on readAck incomming from generated readRsp before at all times
+Masters can emit writeCmd and wait their writeRsp completion before answering probes commands.
+Slaves can emit probeCmd and wait their proveRsp completion before answering reads.
+Slaves can emit readRsp and wait on their readAck completion before doing anything else
