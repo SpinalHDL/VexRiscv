@@ -490,8 +490,7 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     //Evict the cache after reset logics
     val flusher = new Area {
-      val valid = RegInit(True)
-      mmuRsp.physicalAddress init (0)
+      val valid = RegInit(False)
       when(valid) {
         tagsWriteCmd.valid := valid
         tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
@@ -506,7 +505,10 @@ class DataCache(p : DataCacheConfig) extends Component{
       }
 
       io.cpu.flush.ready := False
-      when(io.cpu.flush.valid && !io.cpu.execute.isValid && !io.cpu.memory.isValid && !io.cpu.writeBack.isValid && !io.cpu.redo){
+      val start = RegInit(True) //Used to relax timings
+      start := !start && io.cpu.flush.valid && !io.cpu.execute.isValid && !io.cpu.memory.isValid && !io.cpu.writeBack.isValid && !io.cpu.redo
+
+      when(start){
         io.cpu.flush.ready := True
         mmuRsp.physicalAddress.getDrivingReg(lineRange) := 0
         valid := True
