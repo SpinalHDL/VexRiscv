@@ -201,7 +201,6 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
         execute.arbitration.haltByOther := True
         busReadDataReg := execute.input(PC).asBits
         when(stagesFromExecute.tail.map(_.arbitration.isValid).orR === False){
-          iBusFetcher.flushIt()
           iBusFetcher.haltIt()
           execute.arbitration.flushIt   := True
           execute.arbitration.flushNext := True
@@ -214,10 +213,11 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
         iBusFetcher.haltIt()
       }
 
-      when(stepIt && iBusFetcher.incoming()) {
-        iBusFetcher.haltIt()
+      when(stepIt) {
+        //Assume nothing will stop the CPU in the decode stage
         when(decode.arbitration.isValid) {
           haltIt := True
+          decode.arbitration.flushNext := True
         }
       }
 

@@ -114,7 +114,7 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
   val mmuBus  = MemoryTranslatorBus()
   val physicalAddress = UInt(p.addressWidth bits)
   val cacheMiss, error, mmuRefilling, mmuException, isUser  = ifGen(!p.twoCycleCache)(Bool)
-  val haltIt  = Bool
+  val haltIt  = Bool() //Used to wait on the MMU rsp busy
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved, pc)

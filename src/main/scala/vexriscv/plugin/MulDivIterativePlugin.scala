@@ -108,7 +108,7 @@ class MulDivIterativePlugin(genMul : Boolean = true,
 
       val div = ifGen(genDiv) (new Area{
         assert(isPow2(divUnrollFactor))
-
+        def area = this
         //register allocation
         def numerator = rs1(31 downto 0)
         def denominator = rs2
@@ -130,13 +130,13 @@ class MulDivIterativePlugin(genMul : Boolean = true,
                 numerator := inNumerator
                 remainder := inRemainder
               }
-              case _ => {
+              case _ => new Area {
                 val remainderShifted = (inRemainder ## inNumerator.msb).asUInt
                 val remainderMinusDenominator = remainderShifted - denominator
                 val outRemainder = !remainderMinusDenominator.msb ? remainderMinusDenominator.resize(32 bits) | remainderShifted.resize(32 bits)
                 val outNumerator = (inNumerator ## !remainderMinusDenominator.msb).asUInt.resize(32 bits)
                 stages(outNumerator, outRemainder, stage - 1)
-              }
+              }.setCompositeName(area, "stage_" + (divUnrollFactor-stage))
             }
 
             stages(numerator, remainder, divUnrollFactor)
@@ -167,7 +167,7 @@ class MulDivIterativePlugin(genMul : Boolean = true,
       }
 
       if(dhrystoneOpt) {
-        execute.insert(FAST_DIV_VALID) := execute.input(IS_DIV) && execute.input(INSTRUCTION)(13 downto 12) === "00" && !execute.input(RS1).msb && !execute.input(RS2).msb && execute.input(RS1).asUInt < 16 && execute.input(RS2).asUInt < 16 && execute.input(RS2) =/= 0
+        execute.insert(FAST_DIV_VALID) := execute.input(IS_DIV) && execute.input(INSTRUCTION)(13 downto 12) === B"00" && !execute.input(RS1).msb && !execute.input(RS2).msb && execute.input(RS1).asUInt < 16 && execute.input(RS2).asUInt < 16 && execute.input(RS2) =/= 0
         execute.insert(FAST_DIV_VALUE) := (0 to 15).flatMap(n => (0 to 15).map(d => U(if (d == 0) 0 else n / d, 4 bits))).read(U(execute.input(RS1)(3 downto 0)) @@ U(execute.input(RS2)(3 downto 0))) //(U(execute.input(RS1)(3 downto 0)) / U(execute.input(RS2)(3 downto 0))
         when(execute.input(FAST_DIV_VALID)) {
           execute.output(IS_DIV) := False

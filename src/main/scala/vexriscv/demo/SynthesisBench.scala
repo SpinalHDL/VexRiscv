@@ -4,8 +4,9 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.eda.bench._
 import spinal.lib.eda.icestorm.IcestormStdTargets
+import spinal.lib.io.InOutWrapper
 import vexriscv.VexRiscv
-import vexriscv.plugin.{DecoderSimplePlugin}
+import vexriscv.plugin.DecoderSimplePlugin
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
@@ -96,7 +97,7 @@ object VexRiscvSynthesisBench {
     }
 
     val full = new Rtl {
-      override def getName(): String = "VexRiscv full"
+      override def getName(): String = "VexRiscv full with MMU"
       override def getRtlPath(): String = "VexRiscvFull.v"
       SpinalVerilog(wrap(GenFull.cpu()).setDefinitionName(getRtlPath().split("\\.").head))
     }
@@ -113,15 +114,10 @@ object VexRiscvSynthesisBench {
     //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
 //    val rtls = List(smallAndProductive)
 
-    val targets = XilinxStdTargets(
-      vivadoArtix7Path = "/media/miaou/HD/linux/Xilinx/Vivado/2018.3/bin"
-    ) ++ AlteraStdTargets(
-      quartusCycloneIVPath = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin",
-      quartusCycloneVPath  = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin"
-    ) ++  IcestormStdTargets().take(1)
+    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
 
     //    val targets = IcestormStdTargets()
-    Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
+    Bench(rtls, targets)
   }
 }
 
@@ -132,7 +128,7 @@ object BrieySynthesisBench {
       override def getName(): String = "Briey"
       override def getRtlPath(): String = "Briey.v"
       SpinalVerilog({
-        val briey = new Briey(BrieyConfig.default).setDefinitionName(getRtlPath().split("\\.").head)
+        val briey = InOutWrapper(new Briey(BrieyConfig.default).setDefinitionName(getRtlPath().split("\\.").head))
         briey.io.axiClk.setName("clk")
         briey
       })
@@ -141,14 +137,9 @@ object BrieySynthesisBench {
 
     val rtls = List(briey)
 
-    val targets = XilinxStdTargets(
-      vivadoArtix7Path = "/media/miaou/HD/linux/Xilinx/Vivado/2018.3/bin"
-    ) ++ AlteraStdTargets(
-      quartusCycloneIVPath = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin",
-      quartusCycloneVPath  = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin"
-    )
+    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++ IcestormStdTargets().take(1)
 
-    Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
+    Bench(rtls, targets)
   }
 }
 
@@ -161,7 +152,7 @@ object MuraxSynthesisBench {
       override def getName(): String = "Murax"
       override def getRtlPath(): String = "Murax.v"
       SpinalVerilog({
-        val murax = new Murax(MuraxConfig.default.copy(gpioWidth = 8)).setDefinitionName(getRtlPath().split("\\.").head)
+        val murax = InOutWrapper(new Murax(MuraxConfig.default.copy(gpioWidth = 8)).setDefinitionName(getRtlPath().split("\\.").head))
         murax.io.mainClk.setName("clk")
         murax
       })
@@ -172,7 +163,7 @@ object MuraxSynthesisBench {
       override def getName(): String = "MuraxFast"
       override def getRtlPath(): String = "MuraxFast.v"
       SpinalVerilog({
-        val murax = new Murax(MuraxConfig.fast.copy(gpioWidth = 8)).setDefinitionName(getRtlPath().split("\\.").head)
+        val murax = InOutWrapper(new Murax(MuraxConfig.fast.copy(gpioWidth = 8)).setDefinitionName(getRtlPath().split("\\.").head))
         murax.io.mainClk.setName("clk")
         murax
       })
@@ -180,14 +171,9 @@ object MuraxSynthesisBench {
 
     val rtls = List(murax, muraxFast)
 
-    val targets = IcestormStdTargets().take(1) ++ XilinxStdTargets(
-      vivadoArtix7Path = "/media/miaou/HD/linux/Xilinx/Vivado/2018.3/bin"
-    ) ++ AlteraStdTargets(
-      quartusCycloneIVPath = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin",
-      quartusCycloneVPath  = "/media/miaou/HD/linux/intelFPGA_lite/18.1/quartus/bin"
-    )
+    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
 
-    Bench(rtls, targets, "/media/miaou/HD/linux/tmp")
+    Bench(rtls, targets)
   }
 }
 

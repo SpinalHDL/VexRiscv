@@ -1,5 +1,6 @@
 DEBUG?=no
-
+REGRESSION_PATH?=./
+VEXRISCV_FILE?=../../../../VexRiscv.v
 IBUS?=CACHED
 IBUS_TC?=no
 DBUS?=CACHED
@@ -38,6 +39,7 @@ STOP_ON_ERROR?=no
 COREMARK=no
 WITH_USER_IO?=no
 
+ADDCFLAGS += -CFLAGS -DREGRESSION_PATH='\"$(REGRESSION_PATH)/\"'
 ADDCFLAGS += -CFLAGS -DIBUS_${IBUS}
 ADDCFLAGS += -CFLAGS -DDBUS_${DBUS}
 ADDCFLAGS += -CFLAGS -DREDO=${REDO}
@@ -107,11 +109,11 @@ endif
 
 
 
-ifneq ($(shell grep timerInterrupt ../../../../VexRiscv.v -w),)
+ifneq ($(shell grep timerInterrupt ${VEXRISCV_FILE} -w),)
     ADDCFLAGS += -CFLAGS -DTIMER_INTERRUPT
 endif
 
-ifneq ($(shell grep externalInterrupt ../../../../VexRiscv.v -w),)
+ifneq ($(shell grep externalInterrupt ${VEXRISCV_FILE} -w),)
 ifneq ($(EXTERNAL_INTERRUPT),no)
     ADDCFLAGS += -CFLAGS -DEXTERNAL_INTERRUPT
 endif
@@ -267,10 +269,9 @@ all: clean run
 run: compile
 	./obj_dir/VVexRiscv
 
-verilate: ../../../../VexRiscv.v
-	rm -f VexRiscv.v*.bin
-	cp ../../../../VexRiscv.v*.bin . | true
-	verilator -cc  ../../../../VexRiscv.v  -O3 -CFLAGS -std=c++11 -LDFLAGS -pthread  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-UNOPTFLAT -Wno-WIDTH --x-assign unique --exe main.cpp
+verilate: ${VEXRISCV_FILE}
+	cp ${VEXRISCV_FILE}*.bin . | true
+	verilator -cc  ${VEXRISCV_FILE}  -O3 -CFLAGS -std=c++11 -LDFLAGS -pthread  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-UNOPTFLAT -Wno-WIDTH --x-assign unique --exe main.cpp
  	
 compile: verilate
 	make  -j${THREAD_COUNT} -C obj_dir/ -f VVexRiscv.mk VVexRiscv

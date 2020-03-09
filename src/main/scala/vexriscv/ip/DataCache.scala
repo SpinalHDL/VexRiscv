@@ -259,7 +259,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     val cmdBridge = Stream (DataCacheMemCmd(p))
     val isBurst = cmdBridge.length =/= 0
     cmdBridge.valid := cmd.valid
-    cmdBridge.address := (isBurst ? (cmd.address(31 downto widthOf(counter) + 2) @@ counter @@ "00") | (cmd.address(31 downto 2) @@ "00"))
+    cmdBridge.address := (isBurst ? (cmd.address(31 downto widthOf(counter) + 2) @@ counter @@ U"00") | (cmd.address(31 downto 2) @@ U"00"))
     cmdBridge.wr := cmd.wr
     cmdBridge.mask := cmd.mask
     cmdBridge.data := cmd.data
@@ -278,8 +278,8 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
     bus.ADR := cmdBridge.address >> 2
     bus.CTI := Mux(isBurst, cmdBridge.last ? B"111" | B"010", B"000")
-    bus.BTE := "00"
-    bus.SEL := cmdBridge.wr ? cmdBridge.mask | "1111"
+    bus.BTE := B"00"
+    bus.SEL := cmdBridge.wr ? cmdBridge.mask | B"1111"
     bus.WE  := cmdBridge.wr
     bus.DAT_MOSI := cmdBridge.data
 
@@ -402,7 +402,7 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     //Writes
     when(tagsWriteCmd.valid && tagsWriteCmd.way(i)){
-      tags(tagsWriteCmd.address) := tagsWriteCmd.data
+      tags.write(tagsWriteCmd.address, tagsWriteCmd.data)
     }
     when(dataWriteCmd.valid && dataWriteCmd.way(i)){
       data.write(
@@ -490,8 +490,7 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     //Evict the cache after reset logics
     val flusher = new Area {
-      val valid = RegInit(True)
-      mmuRsp.physicalAddress init (0)
+      val valid = RegInit(False)
       when(valid) {
         tagsWriteCmd.valid := valid
         tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
@@ -506,7 +505,10 @@ class DataCache(p : DataCacheConfig) extends Component{
       }
 
       io.cpu.flush.ready := False
-      when(io.cpu.flush.valid && !io.cpu.execute.isValid && !io.cpu.memory.isValid && !io.cpu.writeBack.isValid && !io.cpu.redo){
+      val start = RegInit(True) //Used to relax timings
+      start := !start && io.cpu.flush.valid && !io.cpu.execute.isValid && !io.cpu.memory.isValid && !io.cpu.writeBack.isValid && !io.cpu.redo
+
+      when(start){
         io.cpu.flush.ready := True
         mmuRsp.physicalAddress.getDrivingReg(lineRange) := 0
         valid := True
