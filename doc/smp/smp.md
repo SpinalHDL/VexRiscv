@@ -57,6 +57,11 @@ One full coherent interface is composed of 3 inner interfaces, them-self compose
 - read  (M -> readCmd- > S -> readRsp -> M -> readAck -> S)
 - probe (S -> probeCmd -> M -> probeRsp -> S)
 
+The following streams could physically be merges in order to reduce the number of arbitration : 
+
+- writeCmd, probeRsp, readAck
+- writeRsp, readRsp
+
 ### Read interface
 
 Used by masters to obtain new memory copies and make copies unique (used to write them).
@@ -67,7 +72,7 @@ Composed of 3 stream :
 |---------|-----------|----------|
 | readCmd | M -> S    | Emit memory read and cache management commands |
 | readRsp | M <- S    | Return some data and/or a status from readCmd |
-| readAck | M -> S    | Return ACK from readRsp to syncronize the interconnect status |
+| readAck | M -> S    | Return ACK from readRsp to synchronize the interconnect status |
 
 ### Write interface
 
@@ -192,3 +197,20 @@ In other words :
 Masters can emit writeCmd and wait their writeRsp completion before answering probes commands.
 Slaves can emit probeCmd and wait their proveRsp completion before answering reads.
 Slaves can emit readRsp and wait on their readAck completion before doing anything else
+
+## Interface subsets
+
+There is a few cases where you could need a specific subset of the coherent interface :
+- Instruction caches do not necessarily need to maintain the coherency with the memory system.
+- DMA need to read and write the memory system, but are cache-less (no probe)
+
+### ReadOnly interface without maintained coherency
+
+Such interface is only composed of the read bus on which the readCmd stream can only use readOnce requests 
+
+
+### WriteOnly interface
+
+In such interface, there is no read/probe buses, but only a writeCmd and a writeRsp stream. The writeCmd will invalidate other memory copies, then write into the memory while the writeRsp will return a writeSuccess/writeError status.
+
+
