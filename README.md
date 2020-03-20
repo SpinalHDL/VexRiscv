@@ -57,7 +57,7 @@ For commercial support, please contact spinalhdl@gmail.com.
 
 ## Area usage and maximal frequency
 
-The following numbers were obtained by synthesizing the CPU as toplevel without any specific synthesis options to save area or to get better maximal frequency (neutral).<br>
+The following numbers were obtained by synthesizing the CPU as toplevel on the fastest speed grade without any specific synthesis options to save area or to get better maximal frequency (neutral).<br>
 The clock constraint is set to an unattainable value, which tends to increase the design area.<br>
 The dhrystone benchmark was compiled with the `-O3 -fno-inline` option.<br>
 All the cached configurations have some cache trashing during the dhrystone benchmark except the `VexRiscv full max perf` one. This, of course, reduces the performance. It is possible to produce
