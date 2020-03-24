@@ -550,7 +550,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
       val medeleg = supervisorGen generate new Area {
         val IAM, IAF, II, LAM, LAF, SAM, SAF, EU, ES, IPF, LPF, SPF = RegInit(False)
-        val mapping = mutable.HashMap(0 -> IAM, 1 -> IAF, 2 -> II, 4 -> LAM, 5 -> LAF, 6 -> SAM, 7 -> SAF, 8 -> EU, 9 -> ES, 12 -> IPF, 13 -> LPF, 15 -> SPF)
+        val mapping = mutable.LinkedHashMap(0 -> IAM, 1 -> IAF, 2 -> II, 4 -> LAM, 5 -> LAF, 6 -> SAM, 7 -> SAF, 8 -> EU, 9 -> ES, 12 -> IPF, 13 -> LPF, 15 -> SPF)
       }
       val mideleg = supervisorGen generate new Area {
         val ST, SE, SS = RegInit(False)
@@ -776,7 +776,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val code = if(pipelinedInterrupt) Reg(UInt(trapCodeWidth bits)) else UInt(trapCodeWidth bits).assignDontCare()
         var privilegs = if (supervisorGen) List(1, 3) else List(3)
         val targetPrivilege = if(pipelinedInterrupt) Reg(UInt(2 bits)) else UInt(2 bits).assignDontCare()
-        val privilegeAllowInterrupts = mutable.HashMap[Int, Bool]()
+        val privilegeAllowInterrupts = mutable.LinkedHashMap[Int, Bool]()
         if (supervisorGen) privilegeAllowInterrupts += 1 -> ((sstatus.SIE && privilege === U"01") || privilege < U"01")
         privilegeAllowInterrupts += 3 -> (mstatus.MIE || privilege < U"11")
         while (privilegs.nonEmpty) {

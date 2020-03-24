@@ -61,15 +61,15 @@ class Stage() extends Area{
   }
 
 
-  val inputs   = mutable.HashMap[Stageable[Data],Data]()
-  val outputs  = mutable.HashMap[Stageable[Data],Data]()
-  val signals  = mutable.HashMap[Stageable[Data],Data]()
-  val inserts  = mutable.HashMap[Stageable[Data],Data]()
+  val inputs   = mutable.LinkedHashMap[Stageable[Data],Data]()
+  val outputs  = mutable.LinkedHashMap[Stageable[Data],Data]()
+  val signals  = mutable.LinkedHashMap[Stageable[Data],Data]()
+  val inserts  = mutable.LinkedHashMap[Stageable[Data],Data]()
 
-  val inputsDefault   = mutable.HashMap[Stageable[Data],Data]()
-  val outputsDefault  = mutable.HashMap[Stageable[Data],Data]()
+  val inputsDefault   = mutable.LinkedHashMap[Stageable[Data],Data]()
+  val outputsDefault  = mutable.LinkedHashMap[Stageable[Data],Data]()
 
-  val dontSample      = mutable.HashMap[Stageable[_], ArrayBuffer[Bool]]()
+  val dontSample      = mutable.LinkedHashMap[Stageable[_], ArrayBuffer[Bool]]()
 
   def dontSampleStageable(s : Stageable[_], cond : Bool): Unit ={
     dontSample.getOrElseUpdate(s, ArrayBuffer[Bool]()) += cond
