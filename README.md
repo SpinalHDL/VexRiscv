@@ -824,6 +824,12 @@ This plugin implements the register file.
 
 This register file use a `don't care` read-during-write policy, so the bypassing/hazard plugin should take care of this.
 
+If you get a `Missing inserts : INSTRUCTION_ANTICIPATE` error, that's because the RegFilePlugin is configured to use SYNC memory read ports to access the register file, but the IBus plugin configuration can't provide the instruction's register file read address one cycle before the decode stage. To workaround that you can :
+
+- Configure the RegFilePlugin to implement the register file read in a asyncronus manner (ASYNC), if your target device support such things
+- If you use the IBusSimplePlugin, you need to enable the injectorStage configuration
+- If you use the IBusCachedPlugin, you can either enable the injectorStage, or set twoCycleCache + twoCycleRam to false.
+
 #### HazardSimplePlugin
 
 This plugin checks the pipeline instruction dependencies and, if necessary or possible, will stop the instruction in the decoding stage or bypass the instruction results
