@@ -469,7 +469,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       val atomic = withLrSc generate new Area{
         val reserved = RegInit(False)
         insert(ATOMIC_HIT) := reserved
-        when(arbitration.isFiring &&  input(MEMORY_ENABLE) && input(MEMORY_ATOMIC) && !input(MMU_FAULT) && !skipCmd){
+        when(arbitration.isFiring &&  input(MEMORY_ENABLE) && input(MEMORY_ATOMIC) && (if(mmuBus != null) !input(MMU_FAULT) else True) && !skipCmd){
           reserved := !input(MEMORY_STORE)
         }
         when(input(MEMORY_STORE) && input(MEMORY_ATOMIC) && !input(ATOMIC_HIT)){
