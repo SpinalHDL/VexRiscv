@@ -464,7 +464,6 @@ public:
 	        cout << hex <<  " a7=0x" << regs[17] << " a0=0x" << regs[10] << " a1=0x" << regs[11] << " a2=0x" << regs[12] << dec << endl;
 	    }
 #endif
-	    lrscReserved = false;
 		//Check leguality of the interrupt
 		if(interrupt) {
 			bool hit = false;
@@ -835,7 +834,6 @@ public:
 						status.mpie = 1;
 						status.mpp = 0;
 						pcWrite(mepc);
-						lrscReserved = false;
 					}break;
 					case 0x10200073:{ //SRET
 						if(privilege < 1){ ilegalInstruction(); return;}
@@ -844,7 +842,6 @@ public:
 						status.spie = 1;
 						status.spp = 0;
 						pcWrite(sepc);
-						lrscReserved = false;
 					}break;
 					case 0x00000073:{ //ECALL
 						trap(0, 8+privilege, 0x00000073); //To follow the VexRiscv area saving implementation
@@ -909,6 +906,7 @@ public:
 							if(hit){
 								dWrite(pAddr, 4, i32_rs2);
 							}
+							lrscReserved = false;
 							rfWrite(rd32, !hit);
 							pcWrite(pc + 4);
 						}

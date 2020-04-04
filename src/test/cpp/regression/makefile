@@ -278,5 +278,4 @@ compile: verilate
  	
 clean:
 	rm -rf obj_dir
-	rm -f VexRiscv.v*.bin
  	

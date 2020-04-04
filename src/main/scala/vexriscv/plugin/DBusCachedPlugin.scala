@@ -254,7 +254,6 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
       cache.io.cpu.writeBack.address := U(input(REGFILE_WRITE_DATA))
-      if(withLrSc) cache.io.cpu.writeBack.clearLrsc := service(classOf[IContextSwitching]).isContextSwitching
 
       redoBranch.valid := False
       redoBranch.payload := input(PC)

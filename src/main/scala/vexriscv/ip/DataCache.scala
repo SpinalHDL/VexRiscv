@@ -25,13 +25,16 @@ case class DataCacheConfig(cacheSize : Int,
                            tagSizeShift : Int = 0, //Used to force infering ram
                            withLrSc : Boolean = false,
                            withAmo : Boolean = false,
+                           withSmp : Boolean = false,
                            mergeExecuteMemory : Boolean = false){
   assert(!(mergeExecuteMemory && (earlyDataMux || earlyWaysHits)))
   assert(!(earlyDataMux && !earlyWaysHits))
   def burstSize = bytePerLine*8/memDataWidth
   val burstLength = bytePerLine/(memDataWidth/8)
   def catchSomething = catchUnaligned || catchIllegal || catchAccessError
-
+  def withInternalAmo = withAmo && !withSmp
+  def withInternalLrSc = withLrSc && !withSmp
+  def withExternalLrSc = withLrSc && withSmp
   def getAxi4SharedConfig() = Axi4Config(
     addressWidth = addressWidth,
     dataWidth = memDataWidth,
@@ -133,15 +136,13 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   val isWrite = Bool
   val data = Bits(p.cpuDataWidth bit)
   val address = UInt(p.addressWidth bit)
-  val mmuException, unalignedAccess , accessError = Bool
-  val clearLrsc = ifGen(p.withLrSc) {Bool}
+  val mmuException, unalignedAccess, accessError = Bool
 
   //  val exceptionBus = if(p.catchSomething) Flow(ExceptionCause()) else null
 
   override def asMaster(): Unit = {
     out(isValid,isStuck,isUser, address)
     in(haltIt, data, mmuException, unalignedAccess, accessError, isWrite)
-    outWithNull(clearLrsc)
   }
 }
 
@@ -169,11 +170,13 @@ case class DataCacheMemCmd(p : DataCacheConfig) extends Bundle{
   val data = Bits(p.memDataWidth bits)
   val mask = Bits(p.memDataWidth/8 bits)
   val length = UInt(log2Up(p.burstLength) bits)
+  val exclusive = p.withSmp generate Bool()
   val last = Bool
 }
 case class DataCacheMemRsp(p : DataCacheConfig) extends Bundle{
   val data = Bits(p.memDataWidth bit)
   val error = Bool
+  val exclusive = p.withSmp generate Bool()
 }
 
 case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave{
@@ -516,19 +519,17 @@ class DataCache(p : DataCacheConfig) extends Component{
     }
 
 
-    val lrsc = withLrSc generate new Area{
+    val lrSc = withLrSc generate new Area{
       val reserved = RegInit(False)
-      when(io.cpu.writeBack.isValid && !io.cpu.writeBack.isStuck && !io.cpu.redo && request.isLrsc && !request.wr){
-        reserved := True
-      }
-      when(io.cpu.writeBack.clearLrsc){
-        reserved := False
+      when(io.cpu.writeBack.isValid && !io.cpu.writeBack.isStuck && request.isLrsc
+            && !io.cpu.redo && !io.cpu.writeBack.mmuException && !io.cpu.writeBack.unalignedAccess && !io.cpu.writeBack.accessError){
+        reserved := !request.wr
       }
     }
 
     val requestDataBypass = CombInit(request.data)
     val isAmo = if(withAmo) request.isAmo else False
-    val amo = withAmo generate new Area{
+    val internalAmo = withInternalAmo generate new Area{
       def rf = request.data
       def mem = dataMux
 
@@ -550,6 +551,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     }
 
 
+
     val memCmdSent = RegInit(False) setWhen (io.mem.cmd.ready) clearWhen (!io.cpu.writeBack.isStuck)
     io.cpu.redo := False
     io.cpu.writeBack.accessError := False
@@ -564,9 +566,10 @@ class DataCache(p : DataCacheConfig) extends Component{
     io.mem.cmd.wr := request.wr
     io.mem.cmd.mask := mask
     io.mem.cmd.data := requestDataBypass
+    if(withExternalLrSc) io.mem.cmd.exclusive := request.isLrsc || request.isAmo
 
     when(io.cpu.writeBack.isValid) {
-      when(mmuRsp.isIoAccess) {
+      when(mmuRsp.isIoAccess || (if(withExternalLrSc) request.isLrsc else False)) {
         io.cpu.writeBack.haltIt.clearWhen(request.wr ? io.mem.cmd.ready | io.mem.rsp.valid)
 
         io.mem.cmd.valid := !memCmdSent
@@ -574,7 +577,7 @@ class DataCache(p : DataCacheConfig) extends Component{
         io.mem.cmd.length := 0
         io.mem.cmd.last := True
 
-        if(withLrSc) when(request.isLrsc && !lrsc.reserved){
+        if(withInternalLrSc) when(request.isLrsc && !lrSc.reserved){
           io.mem.cmd.valid := False
           io.cpu.writeBack.haltIt := False
         }
@@ -595,7 +598,7 @@ class DataCache(p : DataCacheConfig) extends Component{
           io.cpu.writeBack.haltIt clearWhen(!request.wr || io.mem.cmd.ready)
 
           if(withAmo) when(isAmo){
-            when(!amo.resultRegValid) {
+            when(!internalAmo.resultRegValid) {
               io.mem.cmd.valid := False
               dataWriteCmd.valid := False
               io.cpu.writeBack.haltIt := True
@@ -608,7 +611,7 @@ class DataCache(p : DataCacheConfig) extends Component{
             if(withAmo) io.mem.cmd.valid := False
           }
 
-          if(withLrSc) when(request.isLrsc && !lrsc.reserved){
+          if(withInternalLrSc) when(request.isLrsc && !lrSc.reserved){
             io.mem.cmd.valid := False
             dataWriteCmd.valid := False
             io.cpu.writeBack.haltIt := False
@@ -648,12 +651,12 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     if(withLrSc){
       when(request.isLrsc && request.wr){
-        io.cpu.writeBack.data := (!lrsc.reserved).asBits.resized
+        io.cpu.writeBack.data := (!lrSc.reserved).asBits.resized
       }
     }
     if(withAmo){
       when(request.isAmo){
-        requestDataBypass := amo.resultReg
+        requestDataBypass := internalAmo.resultReg
       }
     }
   }

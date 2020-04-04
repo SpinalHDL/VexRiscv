@@ -436,7 +436,7 @@ class DBusDimension extends VexRiscvDimension("DBus") {
         cacheSize = 512 << r.nextInt(5)
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
-      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "")) {
+      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "")) {
         override def testParam = "DBUS=CACHED " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")
 
         override def applyOn(config: VexRiscvConfig): Unit = {
