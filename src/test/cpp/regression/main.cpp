@@ -376,6 +376,7 @@ public:
 
 
 	bool lrscReserved;
+	uint32_t lrscReservedAddress;
 
 	RiscvGolden() {
 		pc = 0x80000000;
@@ -891,6 +892,7 @@ public:
 							    trap(0, 5, address);
 							} else {
 								lrscReserved = true;
+								lrscReservedAddress = pAddr;
 								rfWrite(rd32, data);
 								pcWrite(pc + 4);
 							}
@@ -902,7 +904,7 @@ public:
 							trap(0, 6, address);
 						} else {
 							if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
-							bool hit = lrscReserved;
+							bool hit = lrscReserved && lrscReservedAddress == pAddr;
 							if(hit){
 								dWrite(pAddr, 4, i32_rs2);
 							}
@@ -1407,7 +1409,7 @@ public:
 	virtual void pass(){ throw success();}
 	virtual void fail(){ throw std::exception();}
     virtual void fillSimELements();
-	void dump(int i){
+	void dump(uint64_t i){
 		#ifdef TRACE
 		if(i == TRACE_START && i != 0) cout << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "START TRACE" << endl;
 		if(i >= TRACE_START) tfp->dump(i);
@@ -2344,16 +2346,6 @@ public:
 	}
 
 	virtual void preCycle(){
-	    VL_IN8(io_cpu_execute_isValid,0,0);
-	    VL_IN8(io_cpu_execute_isStuck,0,0);
-	    VL_IN8(io_cpu_execute_args_kind,0,0);
-	    VL_IN8(io_cpu_execute_args_wr,0,0);
-	    VL_IN8(io_cpu_execute_args_size,1,0);
-	    VL_IN8(io_cpu_execute_args_forceUncachedAccess,0,0);
-	    VL_IN8(io_cpu_execute_args_clean,0,0);
-	    VL_IN8(io_cpu_execute_args_invalidate,0,0);
-	    VL_IN8(io_cpu_execute_args_way,0,0);
-
 		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
             if(top->dBus_cmd_payload_wr){
                 #ifndef SMP
@@ -2378,9 +2370,11 @@ public:
                     ws->dBusAccess(top->dBus_cmd_payload_address  + beat * 4,0,2,0,&rsp.data,&rsp.error);
                     rsp.last = beat == top->dBus_cmd_payload_length;
                     #ifdef SMP
-                        rsp.exclusive = true;
-                        reservationValid = true;
-                        reservationAddress = top->dBus_cmd_payload_address;
+                        if(top->dBus_cmd_payload_exclusive){
+                            rsp.exclusive = true;
+                            reservationValid = true;
+                            reservationAddress = top->dBus_cmd_payload_address;
+                        }
                     #endif
                     rsps.push(rsp);
                 }
