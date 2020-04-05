@@ -26,6 +26,7 @@ case class DataCacheConfig(cacheSize : Int,
                            withLrSc : Boolean = false,
                            withAmo : Boolean = false,
                            withSmp : Boolean = false,
+                           pendingMax : Int = 64,
                            mergeExecuteMemory : Boolean = false){
   assert(!(mergeExecuteMemory && (earlyDataMux || earlyWaysHits)))
   assert(!(earlyDataMux && !earlyWaysHits))
@@ -91,12 +92,12 @@ object DataCacheCpuExecute{
 case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterSlave{
   val isValid = Bool
   val address = UInt(p.addressWidth bit)
-  //  val haltIt = Bool
+  val haltIt = Bool
   val args = DataCacheCpuExecuteArgs(p)
 
   override def asMaster(): Unit = {
     out(isValid, args, address)
-    //    in(haltIt)
+    in(haltIt)
   }
 }
 
@@ -441,6 +442,22 @@ class DataCache(p : DataCacheConfig) extends Component{
     ret
   }
 
+
+  io.cpu.execute.haltIt := False
+
+  val rspSync = True
+  val pending = withSmp generate new Area{
+    val counter = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
+    counter := counter + U(io.mem.cmd.fire && io.mem.cmd.last) - U(io.mem.rsp.valid)
+
+    val full = RegNext(counter.msb)
+    val last = counter === 1
+
+    io.cpu.execute.haltIt setWhen(full)
+    rspSync clearWhen(!last)
+  }
+
+
   val stage0 = new Area{
     val mask = io.cpu.execute.size.mux (
       U(0)    -> B"0001",
@@ -566,11 +583,14 @@ class DataCache(p : DataCacheConfig) extends Component{
     io.mem.cmd.wr := request.wr
     io.mem.cmd.mask := mask
     io.mem.cmd.data := requestDataBypass
-    if(withExternalLrSc) io.mem.cmd.exclusive := request.isLrsc || request.isAmo
+    if(withExternalLrSc) io.mem.cmd.exclusive := request.isLrsc || (if(withAmo) request.isAmo else False)
 
     when(io.cpu.writeBack.isValid) {
       when(mmuRsp.isIoAccess || (if(withExternalLrSc) request.isLrsc else False)) {
-        io.cpu.writeBack.haltIt.clearWhen(request.wr ? io.mem.cmd.ready | io.mem.rsp.valid)
+        val waitResponse = !request.wr
+        if(withExternalLrSc) waitResponse setWhen(request.isLrsc)
+
+        io.cpu.writeBack.haltIt.clearWhen(waitResponse ? (io.mem.rsp.valid && rspSync) | io.mem.cmd.ready)
 
         io.mem.cmd.valid := !memCmdSent
         io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
@@ -636,6 +656,12 @@ class DataCache(p : DataCacheConfig) extends Component{
       io.cpu.writeBack.data :=  dataMux
       if(catchAccessError) io.cpu.writeBack.accessError := (waysHits & B(tagsReadRsp.map(_.error))) =/= 0
     }
+    if(withLrSc) when(request.isLrsc && request.wr){
+      io.cpu.writeBack.data := B(!lrSc.reserved || !io.mem.rsp.exclusive).resized
+    }
+    if(withAmo) when(request.isAmo){
+      requestDataBypass := internalAmo.resultReg
+    }
 
     //remove side effects on exceptions
     when(mmuRsp.refilling || io.cpu.writeBack.accessError || io.cpu.writeBack.mmuException || io.cpu.writeBack.unalignedAccess){
@@ -649,16 +675,8 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     assert(!(io.cpu.writeBack.isValid && !io.cpu.writeBack.haltIt && io.cpu.writeBack.isStuck), "writeBack stuck by another plugin is not allowed")
 
-    if(withLrSc){
-      when(request.isLrsc && request.wr){
-        io.cpu.writeBack.data := (!lrSc.reserved).asBits.resized
-      }
-    }
-    if(withAmo){
-      when(request.isAmo){
-        requestDataBypass := internalAmo.resultReg
-      }
-    }
+
+
   }
 
   val loader = new Area{
@@ -669,7 +687,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     val waysAllocator = Reg(Bits(wayCount bits)) init(1)
     val error = RegInit(False)
 
-    when(valid && io.mem.rsp.valid){
+    when(valid && io.mem.rsp.valid && rspSync){
       dataWriteCmd.valid := True
       dataWriteCmd.address := baseAddress(lineRange) @@ counter
       dataWriteCmd.data := io.mem.rsp.data

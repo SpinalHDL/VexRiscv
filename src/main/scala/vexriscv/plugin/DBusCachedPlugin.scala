@@ -204,7 +204,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
 
       cache.io.cpu.flush.valid := arbitration.isValid && input(MEMORY_MANAGMENT)
-      arbitration.haltItself setWhen(cache.io.cpu.flush.isStall)
+      arbitration.haltItself setWhen(cache.io.cpu.flush.isStall || cache.io.cpu.execute.haltIt)
 
       if(withLrSc) {
         cache.io.cpu.execute.args.isLrsc := False
