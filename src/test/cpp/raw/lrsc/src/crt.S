@@ -25,8 +25,19 @@ notExternalInterrupt:
     csrw mepc, x29
     mret
 
+flush:
+    li t0, 0x20000000
+    li t1,     0x1000
+    li t2,         32
+flushLoop:
+    lw t3, 0(t0)
+    add t0, t0, t1
+    addi t2,t2,-1
+    bnez  t2, flushLoop
+    ret
+
 _start:
-//Test 1  SC on unreserved area should fail and not write memory
+test1: //Test 1  SC on unreserved area should fail and not write memory
     li x28, 1
     li a0, 0x10000000
     li a1, 100
@@ -39,7 +50,7 @@ _start:
     lw a4, 0(a0)
     bne a3, a4, fail
 
-//Test 2 SC on another unreserved area should fail and not write memory
+test2: //Test 2 SC on another unreserved area should fail and not write memory
     li x28, 2
     li a0, 0x10000004
     li a1, 103
@@ -51,9 +62,12 @@ _start:
     bne a2, a4, fail
     lw a4, 0(a0)
     bne a3, a4, fail
+    call flush
+    lw a4, 0(a0)
+    bne a3, a4, fail
 
 
-//Test 3 retrying SC on unreserved area should fail and not write memory
+test3: //Test 3 retrying SC on unreserved area should fail and not write memory
     li x28, 3
     li a0, 0x10000004
     li a1, 103
@@ -64,9 +78,12 @@ _start:
     bne a2, a4, fail
     lw a4, 0(a0)
     bne a3, a4, fail
+    call flush
+    lw a4, 0(a0)
+    bne a3, a4, fail
 
 
-//Test 4  SC on reserved area should pass and should be written write memory
+test4: //Test 4  SC on reserved area should pass and should be written write memory
     li x28, 4
     li a0, 0x10000008
     li a1, 106
@@ -79,9 +96,12 @@ _start:
     bne a2, x0, fail
     lw a4, 0(a0)
     bne a1, a4, fail
+    call flush
+    lw a4, 0(a0)
+    bne a1, a4, fail
 
 
-//Test 5  redo SC on reserved area should fail
+test5: //Test 5  redo SC on reserved area should fail
     li x28, 5
     li a0, 0x10000008
     li a1, 109
@@ -90,6 +110,9 @@ _start:
     sw a3, 0(a0)
     sc.w a2, a1, (a0)
     beq a2, x0, fail
+    lw a4, 0(a0)
+    bne a3, a4, fail
+    call flush
     lw a4, 0(a0)
     bne a3, a4, fail
 
@@ -131,7 +154,7 @@ test7:
     bne a5, a4, fail*/
 
 
-//Test 9  SC should pass after a context switching
+test9: //Test 9  SC should pass after a context switching
     li x28, 9
     li a0, 0x10000100
     li a1, 123
@@ -143,6 +166,9 @@ test7:
     sc.w a5, a1, (a0)
     li a4, 0
     bne a5, a4, fail
+    lw a4, 0(a0)
+    bne a1, a4, fail
+    call flush
     lw a4, 0(a0)
     bne a1, a4, fail
 

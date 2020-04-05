@@ -1409,7 +1409,7 @@ public:
     virtual void fillSimELements();
 	void dump(int i){
 		#ifdef TRACE
-		if(i == TRACE_START && i != 0) cout << "START TRACE" << endl;
+		if(i == TRACE_START && i != 0) cout << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "START TRACE" << endl;
 		if(i >= TRACE_START) tfp->dump(i);
 		#endif
 	}
@@ -1518,7 +1518,7 @@ public:
 				currentTime = i;
 
                 #ifdef FLOW_INFO
-                    if(i % 2000000 == 0) cout << "PROGRESS TRACE_START=" << i << endl;
+                    if(i % 2000000 == 0) cout << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "PROGRESS TRACE_START=" << i << endl;
                 #endif
 
 
@@ -2314,16 +2314,25 @@ public:
 #ifdef DBUS_CACHED
 
 //#include "VVexRiscv_DataCache.h"
+#include <queue>
+
+struct DBusCachedTask{
+	uint32_t data;
+	bool error;
+	bool last;
+	bool exclusive;
+};
 
 class DBusCached : public SimElement{
 public:
-	uint32_t address;
-	bool error_next = false;
-	uint32_t pendingCount = 0;
-	bool wr;
+	queue<DBusCachedTask> rsps;
+
+	bool reservationValid = false;
+	uint32_t reservationAddress;
 
 	Workspace *ws;
 	VVexRiscv* top;
+
 	DBusCached(Workspace* ws){
 		this->ws = ws;
 		this->top = ws->top;
@@ -2345,41 +2354,63 @@ public:
 	    VL_IN8(io_cpu_execute_args_invalidate,0,0);
 	    VL_IN8(io_cpu_execute_args_way,0,0);
 
-//		if(top->VexRiscv->dataCache_1->io_cpu_execute_isValid && !top->VexRiscv->dataCache_1->io_cpu_execute_isStuck
-//				&& top->VexRiscv->dataCache_1->io_cpu_execute_args_wr){
-//			if(top->VexRiscv->dataCache_1->io_cpu_execute_args_address == 0x80025978)
-//				cout << "WR 0x80025978 = " << hex << setw(8) << top->VexRiscv->dataCache_1->io_cpu_execute_args_data << endl;
-//			if(top->VexRiscv->dataCache_1->io_cpu_execute_args_address == 0x8002596c)
-//				cout << "WR 0x8002596c = " << hex << setw(8) << top->VexRiscv->dataCache_1->io_cpu_execute_args_data << endl;
-//		}
 		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
-			if(pendingCount == 0){
-				pendingCount = top->dBus_cmd_payload_length+1;
-				address = top->dBus_cmd_payload_address;
-				wr = top->dBus_cmd_payload_wr;
-			}
-			if(top->dBus_cmd_payload_wr){
-				ws->dBusAccess(address,top->dBus_cmd_payload_wr,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&error_next);
-				address += 4;
-				pendingCount--;
-			}
+            if(top->dBus_cmd_payload_wr){
+                #ifndef SMP
+                    bool error;
+                    ws->dBusAccess(top->dBus_cmd_payload_address,1,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&error);
+                #else
+                    bool cancel = false;
+                    DBusCachedTask rsp;
+                    if(top->dBus_cmd_payload_exclusive){
+                        bool hit = reservationValid && reservationAddress == top->dBus_cmd_payload_address;
+                        rsp.exclusive = hit;
+                        cancel = !hit;
+                        reservationValid = false;
+                    }
+                    if(!cancel) ws->dBusAccess(top->dBus_cmd_payload_address,1,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&rsp.error);
+                    rsp.last = true;
+                    rsps.push(rsp);
+                #endif
+            } else {
+                for(int beat = 0;beat <= top->dBus_cmd_payload_length;beat++){
+                    DBusCachedTask rsp;
+                    ws->dBusAccess(top->dBus_cmd_payload_address  + beat * 4,0,2,0,&rsp.data,&rsp.error);
+                    rsp.last = beat == top->dBus_cmd_payload_length;
+                    #ifdef SMP
+                        rsp.exclusive = true;
+                        reservationValid = true;
+                        reservationAddress = top->dBus_cmd_payload_address;
+                    #endif
+                    rsps.push(rsp);
+                }
+            }
 		}
 	}
 
 	virtual void postCycle(){
-		if(pendingCount != 0 && !wr && (!ws->dStall || VL_RANDOM_I(7) < 100)){
-			ws->dBusAccess(address,0,2,0,&top->dBus_rsp_payload_data,&error_next);
-			top->dBus_rsp_payload_error = error_next;
+
+		if(!rsps.empty() && (!ws->dStall || VL_RANDOM_I(7) < 100)){
+			DBusCachedTask rsp = rsps.front();
+			rsps.pop();
 			top->dBus_rsp_valid = 1;
-			address += 4;
-			pendingCount--;
+			top->dBus_rsp_payload_error = rsp.error;
+			top->dBus_rsp_payload_data = rsp.data;
+			top->dBus_rsp_payload_last = rsp.last;
+            #ifdef SMP
+            top->dBus_rsp_payload_exclusive = rsp.exclusive;
+            #endif
 		} else{
 			top->dBus_rsp_valid = 0;
 			top->dBus_rsp_payload_data = VL_RANDOM_I(32);
 			top->dBus_rsp_payload_error = VL_RANDOM_I(1);
+			top->dBus_rsp_payload_last = VL_RANDOM_I(1);
+            #ifdef SMP
+            top->dBus_rsp_payload_exclusive = VL_RANDOM_I(1);
+            #endif
 		}
 
-		top->dBus_cmd_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1) && (pendingCount == 0 || wr);
+		top->dBus_cmd_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
 	}
 };
 #endif

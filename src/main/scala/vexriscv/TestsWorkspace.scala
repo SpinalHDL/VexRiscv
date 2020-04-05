@@ -26,29 +26,40 @@ import vexriscv.ip._
 import spinal.lib.bus.avalon.AvalonMM
 import spinal.lib.eda.altera.{InterruptReceiverTag, ResetEmitterTag}
 
+
+//make clean all SEED=42 MMU=no STOP_ON_ERROR=yes SMP=yes SUPERVISOR=yes REDO=10 DHRYSTONE=no LRSC=yes LINUX_REGRESSION=yes TRACE=yes TRACE_START=1000000000000l FLOW_INFO=no
 object TestsWorkspace {
   def main(args: Array[String]) {
     def configFull = {
       val config = VexRiscvConfig(
         plugins = List(
-          //          new IBusSimplePlugin(
-          //            resetVector = 0x80000000l,
-          //            cmdForkOnSecondStage = false,
-          //            cmdForkPersistence = false,
-          //            prediction = NONE,
-          //            historyRamSizeLog2 = 10,
-          //            catchAccessFault = false,
-          //            compressedGen = false,
-          //            busLatencyMin = 1,
-          //            injectorStage = true
-          //          ),
+          new MmuPlugin(
+            ioRange = x => x(31 downto 28) === 0xF
+          ),
+          //Uncomment the whole IBusSimplePlugin and comment IBusCachedPlugin if you want uncached iBus config
+          //        new IBusSimplePlugin(
+          //          resetVector = 0x80000000l,
+          //          cmdForkOnSecondStage = false,
+          //          cmdForkPersistence = false,
+          //          prediction = DYNAMIC_TARGET,
+          //          historyRamSizeLog2 = 10,
+          //          catchAccessFault = true,
+          //          compressedGen = true,
+          //          busLatencyMin = 1,
+          //          injectorStage = true,
+          //          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
+          //            portTlbSize = 4
+          //          )
+          //        ),
+
+          //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
           new IBusCachedPlugin(
             resetVector = 0x80000000l,
             compressedGen = false,
-            prediction = NONE,
-            injectorStage = true,
+            prediction = STATIC,
+            injectorStage = false,
             config = InstructionCacheConfig(
-              cacheSize = 4096,
+              cacheSize = 4096*1,
               bytePerLine = 32,
               wayCount = 1,
               addressWidth = 32,
@@ -59,20 +70,28 @@ object TestsWorkspace {
               asyncTagMemory = false,
               twoCycleRam = false,
               twoCycleCache = true
+              //          )
             ),
-            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+            memoryTranslatorPortConfig = MmuPortConfig(
               portTlbSize = 4
             )
           ),
-//          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
-          //          new DBusSimplePlugin(
-          //            catchAddressMisaligned = true,
-          //            catchAccessFault = false,
-          //            earlyInjection = false
-          //          ),
+          //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
+          //        new DBusSimplePlugin(
+          //          catchAddressMisaligned = true,
+          //          catchAccessFault = true,
+          //          earlyInjection = false,
+          //          withLrSc = true,
+          //          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
+          //            portTlbSize = 4
+          //          )
+          //        ),
           new DBusCachedPlugin(
+            dBusCmdMasterPipe = true,
+            dBusCmdSlavePipe = true,
+            dBusRspSlavePipe = true,
             config = new DataCacheConfig(
-              cacheSize         = 4096,
+              cacheSize         = 4096*1,
               bytePerLine       = 32,
               wayCount          = 1,
               addressWidth      = 32,
@@ -81,33 +100,34 @@ object TestsWorkspace {
               catchAccessError  = true,
               catchIllegal      = true,
               catchUnaligned    = true,
-              withLrSc = true
+              withLrSc = true,
+              withAmo = false,
+              withSmp = true
+              //          )
             ),
-            //            memoryTranslatorPortConfig = null
-            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-              portTlbSize = 6
+            memoryTranslatorPortConfig = MmuPortConfig(
+              portTlbSize = 4
             )
           ),
-          //          new StaticMemoryTranslatorPlugin(
+
+          //          new MemoryTranslatorPlugin(
+          //            tlbSize = 32,
+          //            virtualRange = _(31 downto 28) === 0xC,
           //            ioRange      = _(31 downto 28) === 0xF
           //          ),
-          new MemoryTranslatorPlugin(
-            tlbSize = 32,
-            virtualRange = _(31 downto 28) === 0xC,
-            ioRange      = _(31 downto 28) === 0xF
-          ),
+
           new DecoderSimplePlugin(
             catchIllegalInstruction = true
           ),
           new RegFilePlugin(
-            regFileReadyKind = plugin.ASYNC,
+            regFileReadyKind = plugin.SYNC,
             zeroBoot = true
           ),
           new IntAluPlugin,
           new SrcPlugin(
             separatedAddSub = false
           ),
-          new FullBarrelShifterPlugin(earlyInjection = true),
+          new FullBarrelShifterPlugin(earlyInjection = false),
           //        new LightShifterPlugin,
           new HazardSimplePlugin(
             bypassExecute           = true,
@@ -128,7 +148,7 @@ object TestsWorkspace {
             divUnrollFactor = 1
           ),
           //          new DivPlugin,
-          new CsrPlugin(CsrPluginConfig.all(0x80000020l)),
+          new CsrPlugin(CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = false)),
           //          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
           //             CsrPluginConfig(
           //            catchIllegalAccess = false,
@@ -154,9 +174,9 @@ object TestsWorkspace {
           //          )),
           new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
           new BranchPlugin(
-            earlyBranch = true,
+            earlyBranch = false,
             catchAddressMisaligned = true,
-            fenceiGenAsAJump = true
+            fenceiGenAsAJump = false
           ),
           new YamlPlugin("cpu0.yaml")
         )

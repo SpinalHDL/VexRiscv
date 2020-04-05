@@ -15,6 +15,7 @@ CSR_SKIP_TEST?=no
 EBREAK?=no
 FENCEI?=no
 MMU?=yes
+SMP?=no
 SEED?=no
 LRSC?=no
 AMO?=no
@@ -215,6 +216,10 @@ endif
 
 ifeq ($(MMU),yes)
 	ADDCFLAGS += -CFLAGS -DMMU
+endif
+
+ifeq ($(SMP),yes)
+	ADDCFLAGS += -CFLAGS -DSMP
 endif
 
 ifeq ($(MUL),yes)
