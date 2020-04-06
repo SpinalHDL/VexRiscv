@@ -716,7 +716,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite {
 
       //Test RTL
       val debug = true
-      val stdCmd = (s"make run REGRESSION_PATH=../../src/test/cpp/regression VEXRISCV_FILE=VexRiscv.v WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=1000000000000l FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${coremarkRegression} THREAD_COUNT=1 ") + s" SEED=${testSeed} "
+      val stdCmd = (s"make run REGRESSION_PATH=../../src/test/cpp/regression VEXRISCV_FILE=VexRiscv.v WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=1000000000ll FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${coremarkRegression} THREAD_COUNT=1 ") + s" SEED=${testSeed} "
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
       println(testCmd)
       val str = doCmd(testCmd)

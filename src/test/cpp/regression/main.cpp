@@ -904,7 +904,11 @@ public:
 							trap(0, 6, address);
 						} else {
 							if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
-							bool hit = lrscReserved && lrscReservedAddress == pAddr;
+							#ifdef SMP
+                            bool hit = lrscReserved && lrscReservedAddress == pAddr;
+                            #else
+                            bool hit = lrscReserved;
+                            #endif
 							if(hit){
 								dWrite(pAddr, 4, i32_rs2);
 							}
