@@ -1782,7 +1782,7 @@ public:
 
     virtual void dutPutChar(char c){
         if(*hit == c) hit++; else hit = target;
-        if(*hit == NULL) {
+        if(*hit == 0) {
             cout  << endl << "T=" << i <<endl;
             cout << endl;
             pass();
@@ -2338,6 +2338,7 @@ public:
 
 	Workspace *ws;
 	VVexRiscv* top;
+    DBusCachedTask rsp;
 
 	DBusCached(Workspace* ws){
 		this->ws = ws;
@@ -2370,7 +2371,6 @@ public:
                 #endif
             } else {
                 for(int beat = 0;beat <= top->dBus_cmd_payload_length;beat++){
-                    DBusCachedTask rsp;
                     ws->dBusAccess(top->dBus_cmd_payload_address  + beat * 4,0,2,0,&rsp.data,&rsp.error);
                     rsp.last = beat == top->dBus_cmd_payload_length;
                     #ifdef SMP
