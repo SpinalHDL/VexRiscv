@@ -57,7 +57,7 @@ For commercial support, please contact spinalhdl@gmail.com.
 
 ## Area usage and maximal frequency
 
-The following numbers were obtained by synthesizing the CPU as toplevel without any specific synthesis options to save area or to get better maximal frequency (neutral).<br>
+The following numbers were obtained by synthesizing the CPU as toplevel on the fastest speed grade without any specific synthesis options to save area or to get better maximal frequency (neutral).<br>
 The clock constraint is set to an unattainable value, which tends to increase the design area.<br>
 The dhrystone benchmark was compiled with the `-O3 -fno-inline` option.<br>
 All the cached configurations have some cache trashing during the dhrystone benchmark except the `VexRiscv full max perf` one. This, of course, reduces the performance. It is possible to produce
@@ -823,6 +823,12 @@ This plugin implements the register file.
 | zeroBoot | Boolean | Load all registers with zeroes at the beginning of the simulation to keep everything deterministic in logs/traces|
 
 This register file use a `don't care` read-during-write policy, so the bypassing/hazard plugin should take care of this.
+
+If you get a `Missing inserts : INSTRUCTION_ANTICIPATE` error, that's because the RegFilePlugin is configured to use SYNC memory read ports to access the register file, but the IBus plugin configuration can't provide the instruction's register file read address one cycle before the decode stage. To workaround that you can :
+
+- Configure the RegFilePlugin to implement the register file read in a asyncronus manner (ASYNC), if your target device support such things
+- If you use the IBusSimplePlugin, you need to enable the injectorStage configuration
+- If you use the IBusCachedPlugin, you can either enable the injectorStage, or set twoCycleCache + twoCycleRam to false.
 
 #### HazardSimplePlugin
 
