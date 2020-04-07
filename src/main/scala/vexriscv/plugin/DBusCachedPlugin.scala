@@ -31,6 +31,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   assert(!(memoryTranslatorPortConfig != null && config.cacheSize/config.wayCount > 4096), "When the D$ is used with MMU, each way can't be bigger than a page (4096 bytes)")
 
   var dBus  : DataCacheMemBus = null
+  var inv : DataCacheInvalidateBus = null
   var mmuBus : MemoryTranslatorBus = null
   var exceptionBus : Flow[ExceptionCause] = null
   var privilegeService : PrivilegeService = null
@@ -161,6 +162,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     import pipeline.config._
 
     dBus = master(DataCacheMemBus(this.config)).setName("dBus")
+    inv  = withInvalidate generate slave(DataCacheInvalidateBus(this.config))
 
     val cache = new DataCache(this.config.copy(
       mergeExecuteMemory = writeBack == null
@@ -171,6 +173,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     def cmdBuf = optionPipe(dBusCmdSlavePipe, cache.io.mem.cmd)(_.s2mPipe())
     dBus.cmd << optionPipe(dBusCmdMasterPipe, cmdBuf)(_.m2sPipe())
     cache.io.mem.rsp << optionPipe(dBusRspSlavePipe,dBus.rsp)(_.m2sPipe())
+    cache.io.inv <> inv
 
     pipeline plug new Area{
       //Memory bandwidth counter

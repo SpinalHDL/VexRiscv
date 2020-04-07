@@ -15,7 +15,7 @@ CSR_SKIP_TEST?=no
 EBREAK?=no
 FENCEI?=no
 MMU?=yes
-SMP?=no
+DBUS_EXCLUSIVE?=no
 SEED?=no
 LRSC?=no
 AMO?=no
@@ -218,8 +218,8 @@ ifeq ($(MMU),yes)
 	ADDCFLAGS += -CFLAGS -DMMU
 endif
 
-ifeq ($(SMP),yes)
-	ADDCFLAGS += -CFLAGS -DSMP
+ifeq ($(DBUS_EXCLUSIVE),yes)
+	ADDCFLAGS += -CFLAGS -DDBUS_EXCLUSIVE
 endif
 
 ifeq ($(MUL),yes)

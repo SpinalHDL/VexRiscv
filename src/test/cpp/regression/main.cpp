@@ -904,7 +904,7 @@ public:
 							trap(0, 6, address);
 						} else {
 							if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
-							#ifdef SMP
+							#ifdef DBUS_EXCLUSIVE
                             bool hit = lrscReserved && lrscReservedAddress == pAddr;
                             #else
                             bool hit = lrscReserved;
@@ -2353,7 +2353,7 @@ public:
 	virtual void preCycle(){
 		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
             if(top->dBus_cmd_payload_wr){
-                #ifndef SMP
+                #ifndef DBUS_EXCLUSIVE
                     bool error;
                     ws->dBusAccess(top->dBus_cmd_payload_address,1,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&error);
                 #else
@@ -2373,7 +2373,7 @@ public:
                 for(int beat = 0;beat <= top->dBus_cmd_payload_length;beat++){
                     ws->dBusAccess(top->dBus_cmd_payload_address  + beat * 4,0,2,0,&rsp.data,&rsp.error);
                     rsp.last = beat == top->dBus_cmd_payload_length;
-                    #ifdef SMP
+                    #ifdef DBUS_EXCLUSIVE
                         if(top->dBus_cmd_payload_exclusive){
                             rsp.exclusive = true;
                             reservationValid = true;
@@ -2395,7 +2395,7 @@ public:
 			top->dBus_rsp_payload_error = rsp.error;
 			top->dBus_rsp_payload_data = rsp.data;
 			top->dBus_rsp_payload_last = rsp.last;
-            #ifdef SMP
+            #ifdef DBUS_EXCLUSIVE
             top->dBus_rsp_payload_exclusive = rsp.exclusive;
             #endif
 		} else{
@@ -2403,7 +2403,7 @@ public:
 			top->dBus_rsp_payload_data = VL_RANDOM_I(32);
 			top->dBus_rsp_payload_error = VL_RANDOM_I(1);
 			top->dBus_rsp_payload_last = VL_RANDOM_I(1);
-            #ifdef SMP
+            #ifdef DBUS_EXCLUSIVE
             top->dBus_rsp_payload_exclusive = VL_RANDOM_I(1);
             #endif
 		}
