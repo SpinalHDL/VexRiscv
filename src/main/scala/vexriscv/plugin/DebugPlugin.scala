@@ -213,18 +213,17 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
         iBusFetcher.haltIt()
       }
 
-      when(stepIt) {
-        //Assume nothing will stop the CPU in the decode stage
+      when(stepIt && iBusFetcher.incoming()) {
+        iBusFetcher.haltIt()
         when(decode.arbitration.isValid) {
           haltIt := True
-          decode.arbitration.flushNext := True
         }
       }
 
       //Avoid having two C instruction executed in a single step
       if(pipeline(RVC_GEN)){
         val cleanStep = RegNext(stepIt && decode.arbitration.isFiring) init(False)
-        decode.arbitration.removeIt setWhen(cleanStep)
+        execute.arbitration.flushNext setWhen(cleanStep)
       }
 
       io.resetOut := RegNext(resetIt)
