@@ -173,7 +173,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     def cmdBuf = optionPipe(dBusCmdSlavePipe, cache.io.mem.cmd)(_.s2mPipe())
     dBus.cmd << optionPipe(dBusCmdMasterPipe, cmdBuf)(_.m2sPipe())
     cache.io.mem.rsp << optionPipe(dBusRspSlavePipe,dBus.rsp)(_.m2sPipe())
-    cache.io.inv <> inv
+    if(withInvalidate) cache.io.inv <> inv
 
     pipeline plug new Area{
       //Memory bandwidth counter
