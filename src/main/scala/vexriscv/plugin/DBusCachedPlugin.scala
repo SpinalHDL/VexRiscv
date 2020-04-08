@@ -213,7 +213,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         val ff = input(INSTRUCTION)(31 downto 20).as(FenceFlags())
         if(withWriteResponse){
           hazard setWhen(input(MEMORY_FENCE) && (ff.PS && ff.SL)) //Manage write to read hit ordering (ensure invalidation timings)
-//          Not required as LR SC AMO naturaly enforce ordering
+//          Not required as LR SC AMO emited on the memory bus enforce the ordering, + it bypass the cache
 //          when(input(INSTRUCTION)(26 downto 25) =/= 0){
 //            if(withLrSc) hazard setWhen(input(MEMORY_LRSC))
 //            if(withAmo)  hazard setWhen(input(MEMORY_AMO))

@@ -629,6 +629,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     if(withExternalLrSc) io.mem.cmd.exclusive := request.isLrsc || (if(withAmo) request.isAmo else False)
 
     val bypassCache = mmuRsp.isIoAccess || (if(withExternalLrSc) request.isLrsc else False)
+    val isAmoCached = if(withInternalAmo) isAmo else False
 
     when(io.cpu.writeBack.isValid) {
       when(bypassCache) {
@@ -646,7 +647,7 @@ class DataCache(p : DataCacheConfig) extends Component{
           io.cpu.writeBack.haltIt := False
         }
       } otherwise {
-        when(waysHit || request.wr && !isAmo) {   //Do not require a cache refill ?
+        when(waysHit || request.wr && !isAmoCached) {   //Do not require a cache refill ?
           cpuWriteToCache := True
 
           //Write through
@@ -655,7 +656,7 @@ class DataCache(p : DataCacheConfig) extends Component{
           io.mem.cmd.length := 0
           io.cpu.writeBack.haltIt clearWhen(!request.wr || io.mem.cmd.ready)
 
-          if(withAmo) when(isAmo){
+          if(withInternalAmo) when(isAmo){
             when(!internalAmo.resultRegValid) {
               io.mem.cmd.valid := False
               dataWriteCmd.valid := False
@@ -664,7 +665,7 @@ class DataCache(p : DataCacheConfig) extends Component{
           }
 
           //On write to read dataColisions
-          when((!request.wr || isAmo) && (dataColisions & waysHits) =/= 0){
+          when((!request.wr || isAmoCached) && (dataColisions & waysHits) =/= 0){
             io.cpu.redo := True
             if(withAmo) io.mem.cmd.valid := False
           }
