@@ -50,6 +50,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
   object MEMORY_LRSC extends Stageable(Bool)
   object MEMORY_AMO extends Stageable(Bool)
+  object MEMORY_FENCE extends Stageable(Bool)
+  object MEMORY_FENCE_DECODED extends Stageable(Bool)
   object IS_DBUS_SHARING extends Stageable(Bool())
   object MEMORY_VIRTUAL_ADDRESS extends Stageable(UInt(32 bits))
 
@@ -143,7 +145,13 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       MEMORY_MANAGMENT -> True
     ))
 
-    decoderService.add(FENCE, Nil)
+    withWriteResponse match {
+      case false => decoderService.add(FENCE, Nil)
+      case true => {
+        decoderService.addDefault(MEMORY_FENCE, False)
+        decoderService.add(FENCE, List(MEMORY_FENCE -> True))
+      }
+    }
 
     mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA ,memoryTranslatorPortConfig)
     redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(if(pipeline.writeBack != null) pipeline.writeBack else pipeline.memory)
@@ -189,6 +197,30 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       when(mmuBus.busy && arbitration.isValid && input(MEMORY_ENABLE)) {
         arbitration.haltItself := True
       }
+
+      case class FenceFlags() extends Bundle {
+        val SW,SR,SO,SI,PW,PR,PO,PI = Bool()
+        val FM = Bits(4 bits)
+
+        def SL = SR || SI
+        def SS = SW || SO
+        def PL = PR || PI
+        def PS = PW || PO
+      }
+
+      val fence = new Area{
+        val hazard = False
+        val ff = input(INSTRUCTION)(31 downto 20).as(FenceFlags())
+        if(withWriteResponse){
+          hazard setWhen(input(MEMORY_FENCE) && (ff.PS && ff.SL)) //Manage write to read hit ordering (ensure invalidation timings)
+//          Not required as LR SC AMO naturaly enforce ordering
+//          when(input(INSTRUCTION)(26 downto 25) =/= 0){
+//            if(withLrSc) hazard setWhen(input(MEMORY_LRSC))
+//            if(withAmo)  hazard setWhen(input(MEMORY_AMO))
+//          }
+        }
+        insert(MEMORY_FENCE_DECODED) := hazard
+      }
     }
 
     execute plug new Area {
@@ -207,6 +239,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
 
       cache.io.cpu.flush.valid := arbitration.isValid && input(MEMORY_MANAGMENT)
+      cache.io.cpu.execute.fence := arbitration.isValid && input(MEMORY_FENCE_DECODED)
       arbitration.haltItself setWhen(cache.io.cpu.flush.isStall || cache.io.cpu.execute.haltIt)
 
       if(withLrSc) {

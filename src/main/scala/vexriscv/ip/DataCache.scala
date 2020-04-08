@@ -31,6 +31,7 @@ case class DataCacheConfig(cacheSize : Int,
                            mergeExecuteMemory : Boolean = false){
   assert(!(mergeExecuteMemory && (earlyDataMux || earlyWaysHits)))
   assert(!(earlyDataMux && !earlyWaysHits))
+  def withWriteResponse = withExclusive
   def burstSize = bytePerLine*8/memDataWidth
   val burstLength = bytePerLine/(memDataWidth/8)
   def catchSomething = catchUnaligned || catchIllegal || catchAccessError
@@ -95,9 +96,10 @@ case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterS
   val address = UInt(p.addressWidth bit)
   val haltIt = Bool
   val args = DataCacheCpuExecuteArgs(p)
+  val fence = Bool()
 
   override def asMaster(): Unit = {
-    out(isValid, args, address)
+    out(isValid, args, address, fence)
     in(haltIt)
   }
 }
@@ -490,6 +492,12 @@ class DataCache(p : DataCacheConfig) extends Component{
     ) |<< io.cpu.execute.address(1 downto 0)
     val dataColisions = collisionProcess(io.cpu.execute.address(lineRange.high downto wordRange.low), mask)
     val wayInvalidate = B(0, wayCount bits) //Used if invalidate enabled
+
+    if(withWriteResponse) when(io.cpu.execute.fence){
+      when(pending.counter =/= 0 || io.cpu.memory.isValid || io.cpu.writeBack.isValid){
+        io.cpu.execute.haltIt := True
+      }
+    }
   }
 
   val stageA = new Area{
