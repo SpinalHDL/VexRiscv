@@ -4,6 +4,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.eda.bench._
 import spinal.lib.eda.icestorm.IcestormStdTargets
+import spinal.lib.eda.xilinx.VivadoFlow
 import spinal.lib.io.InOutWrapper
 import vexriscv.VexRiscv
 import vexriscv.plugin.DecoderSimplePlugin
@@ -49,6 +50,42 @@ object VexRiscvSynthesisBench {
 //      top
 //    }
 
+    val twoStage = new Rtl {
+      override def getName(): String = "VexRiscv two stages"
+      override def getRtlPath(): String = "VexRiscvTwoStages.v"
+      SpinalVerilog(wrap(GenTwoStage.cpu(
+        withMulDiv = false,
+        bypass = false,
+        barrielShifter = false
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+    val twoStageBarell = new Rtl {
+      override def getName(): String = "VexRiscv two stages with barriel"
+      override def getRtlPath(): String = "VexRiscvTwoStagesBar.v"
+      SpinalVerilog(wrap(GenTwoStage.cpu(
+        withMulDiv = false,
+        bypass = true,
+        barrielShifter = true
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+    val twoStageMulDiv = new Rtl {
+      override def getName(): String = "VexRiscv two stages with Mul Div"
+      override def getRtlPath(): String = "VexRiscvTwoStagesMD.v"
+      SpinalVerilog(wrap(GenTwoStage.cpu(
+        withMulDiv = true,
+        bypass = false,
+        barrielShifter = false
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+    val twoStageAll = new Rtl {
+      override def getName(): String = "VexRiscv two stages with Mul Div fast"
+      override def getRtlPath(): String = "VexRiscvTwoStagesMDfast.v"
+      SpinalVerilog(wrap(GenTwoStage.cpu(
+        withMulDiv = true,
+        bypass = true,
+        barrielShifter = true
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
     val smallestNoCsr = new Rtl {
       override def getName(): String = "VexRiscv smallest no CSR"
       override def getRtlPath(): String = "VexRiscvSmallestNoCsr.v"
@@ -109,13 +146,63 @@ object VexRiscvSynthesisBench {
       SpinalConfig(inlineRom = true).generateVerilog(wrap(new VexRiscv(LinuxGen.configFull(false, true))).setDefinitionName(getRtlPath().split("\\.").head))
     }
 
-    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced)
-//    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache)
-    //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
-//    val rtls = List(smallAndProductive)
-
-    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
-
+    val rtls = List(twoStage, twoStageBarell, twoStageMulDiv, twoStageAll, smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced)
+//    val rtls = List(twoStage, twoStageBarell, twoStageMulDiv, twoStageAll)
+//    val rtls = List(smallest)
+    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)  ++ List(
+      new Target {
+        override def getFamilyName(): String = "Kintex UltraScale"
+        override def synthesise(rtl: Rtl, workspace: String): Report = {
+          VivadoFlow(
+            frequencyTarget = 50 MHz,
+            vivadoPath=sys.env.getOrElse("VIVADO_ARTIX_7_BIN", null),
+            workspacePath=workspace + "_area",
+            toplevelPath=rtl.getRtlPath(),
+            family=getFamilyName(),
+            device="xcku035-fbva900-3-e"
+          )
+        }
+      },
+      new Target {
+        override def getFamilyName(): String = "Kintex UltraScale"
+        override def synthesise(rtl: Rtl, workspace: String): Report = {
+          VivadoFlow(
+            frequencyTarget = 800 MHz,
+            vivadoPath=sys.env.getOrElse("VIVADO_ARTIX_7_BIN", null),
+            workspacePath=workspace + "_fmax",
+            toplevelPath=rtl.getRtlPath(),
+            family=getFamilyName(),
+            device="xcku035-fbva900-3-e"
+          )
+        }
+      },
+      new Target {
+        override def getFamilyName(): String = "Kintex UltraScale+"
+        override def synthesise(rtl: Rtl, workspace: String): Report = {
+          VivadoFlow(
+            frequencyTarget = 50 MHz,
+            vivadoPath=sys.env.getOrElse("VIVADO_ARTIX_7_BIN", null),
+            workspacePath=workspace + "_area",
+            toplevelPath=rtl.getRtlPath(),
+            family=getFamilyName(),
+            device="xcku3p-ffvd900-3-e"
+          )
+        }
+      },
+      new Target {
+        override def getFamilyName(): String = "Kintex UltraScale+"
+        override def synthesise(rtl: Rtl, workspace: String): Report = {
+          VivadoFlow(
+            frequencyTarget = 800 MHz,
+            vivadoPath=sys.env.getOrElse("VIVADO_ARTIX_7_BIN", null),
+            workspacePath=workspace + "_fmax",
+            toplevelPath=rtl.getRtlPath(),
+            family=getFamilyName(),
+            device="xcku3p-ffvd900-3-e"
+          )
+        }
+      }
+    )
     //    val targets = IcestormStdTargets()
     Bench(rtls, targets)
   }
