@@ -926,6 +926,10 @@ public:
                         int32_t  src = i32_rs2;
                         int32_t readValue;
 
+                        #ifdef DBUS_EXCLUSIVE
+                        lrscReserved = false;
+                        #endif
+
                         uint32_t pAddr;
 						if(v2p(addr, &pAddr, READ_WRITE)){ trap(0, 15, addr); return; }
                         if(dRead(pAddr, 4, (uint32_t*)&readValue)){
@@ -2358,7 +2362,6 @@ public:
                     ws->dBusAccess(top->dBus_cmd_payload_address,1,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&error);
                 #else
                     bool cancel = false;
-                    DBusCachedTask rsp;
                     if(top->dBus_cmd_payload_exclusive){
                         bool hit = reservationValid && reservationAddress == top->dBus_cmd_payload_address;
                         rsp.exclusive = hit;

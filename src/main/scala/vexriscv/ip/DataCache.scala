@@ -38,6 +38,7 @@ case class DataCacheConfig(cacheSize : Int,
   def withInternalAmo = withAmo && !withExclusive
   def withInternalLrSc = withLrSc && !withExclusive
   def withExternalLrSc = withLrSc && withExclusive
+  def withExternalAmo = withAmo && withExclusive
   def getAxi4SharedConfig() = Axi4Config(
     addressWidth = addressWidth,
     dataWidth = memDataWidth,
@@ -133,20 +134,21 @@ case class DataCacheCpuMemory(p : DataCacheConfig) extends Bundle with IMasterSl
 
 
 case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMasterSlave{
-  val isValid = Bool
-  val isStuck = Bool
-  val isUser = Bool
-  val haltIt = Bool
-  val isWrite = Bool
+  val isValid = Bool()
+  val isStuck = Bool()
+  val isUser = Bool()
+  val haltIt = Bool()
+  val isWrite = Bool()
   val data = Bits(p.cpuDataWidth bit)
   val address = UInt(p.addressWidth bit)
-  val mmuException, unalignedAccess, accessError = Bool
+  val mmuException, unalignedAccess, accessError = Bool()
+  val keepMemRspData = Bool() //Used by external AMO to avoid having an internal buffer
 
   //  val exceptionBus = if(p.catchSomething) Flow(ExceptionCause()) else null
 
   override def asMaster(): Unit = {
     out(isValid,isStuck,isUser, address)
-    in(haltIt, data, mmuException, unalignedAccess, accessError, isWrite)
+    in(haltIt, data, mmuException, unalignedAccess, accessError, isWrite, keepMemRspData)
   }
 }
 
@@ -364,8 +366,12 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
 }
 
+object DataCacheExternalAmoStates extends SpinalEnum{
+  val LR_CMD, LR_RSP, SC_CMD, SC_RSP = newElement();
+}
 
-class DataCache(p : DataCacheConfig) extends Component{
+//If external amo, mem rsp should stay
+class DataCache(val p : DataCacheConfig) extends Component{
   import p._
   assert(cpuDataWidth == memDataWidth)
 
@@ -572,7 +578,7 @@ class DataCache(p : DataCacheConfig) extends Component{
     }
 
 
-    val lrSc = withLrSc generate new Area{
+    val lrSc = withInternalLrSc generate new Area{
       val reserved = RegInit(False)
       when(io.cpu.writeBack.isValid && !io.cpu.writeBack.isStuck && request.isLrsc
             && !io.cpu.redo && !io.cpu.writeBack.mmuException && !io.cpu.writeBack.unalignedAccess && !io.cpu.writeBack.accessError){
@@ -580,12 +586,16 @@ class DataCache(p : DataCacheConfig) extends Component{
       }
     }
 
-    val requestDataBypass = CombInit(request.data)
     val isAmo = if(withAmo) request.isAmo else False
-    val internalAmo = withInternalAmo generate new Area{
-      def rf = request.data
-      def mem = dataMux
+    val isAmoCached = if(withInternalAmo) isAmo else False
+    val isExternalLsrc = if(withExternalLrSc) request.isLrsc else False
+    val isExternalAmo  = if(withExternalAmo)  request.isAmo  else False
 
+    val requestDataBypass = CombInit(request.data)
+    import DataCacheExternalAmoStates._
+    val amo = withAmo generate new Area{
+      def rf = request.data
+      def mem = if(withInternalAmo) dataMux else io.mem.rsp.data
       val compare = request.amoCtrl.alu.msb
       val unsigned = request.amoCtrl.alu(2 downto 1) === B"11"
       val addSub = (rf.asSInt + Mux(compare, ~mem, mem).asSInt + Mux(compare, S(1), S(0))).asBits
@@ -599,8 +609,17 @@ class DataCache(p : DataCacheConfig) extends Component{
         B"011"  -> (rf & mem),
         default -> (selectRf ? rf | mem)
       )
-      val resultRegValid = RegNext(True) clearWhen(!io.cpu.writeBack.isStuck)
-      val resultReg = RegNext(result)
+//      val resultRegValid = RegNext(True) clearWhen(!io.cpu.writeBack.isStuck)
+//      val resultReg = RegNext(result)
+      val resultReg = Reg(Bits(32 bits))
+
+      val internal = withInternalAmo generate new Area{
+        val resultRegValid = RegNext(io.cpu.writeBack.isStuck)
+        resultReg := result
+      }
+      val external = !withInternalAmo generate new Area{
+        val state = RegInit(LR_CMD)
+      }
     }
 
 
@@ -620,27 +639,58 @@ class DataCache(p : DataCacheConfig) extends Component{
     io.cpu.writeBack.isWrite := request.wr
 
     io.mem.cmd.valid := False
-    io.mem.cmd.address.assignDontCare()
-    io.mem.cmd.length.assignDontCare()
+    io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
+    io.mem.cmd.length := 0
     io.mem.cmd.last := True
     io.mem.cmd.wr := request.wr
     io.mem.cmd.mask := mask
     io.mem.cmd.data := requestDataBypass
-    if(withExternalLrSc) io.mem.cmd.exclusive := request.isLrsc || (if(withAmo) request.isAmo else False)
+    if(withExternalLrSc) io.mem.cmd.exclusive := request.isLrsc || isAmo
 
-    val bypassCache = mmuRsp.isIoAccess || (if(withExternalLrSc) request.isLrsc else False)
-    val isAmoCached = if(withInternalAmo) isAmo else False
 
+    val bypassCache = mmuRsp.isIoAccess || isExternalLsrc || isExternalAmo
+
+    io.cpu.writeBack.keepMemRspData := False
     when(io.cpu.writeBack.isValid) {
-      when(bypassCache) {
+      when(isExternalAmo){
+        if(withExternalAmo) switch(amo.external.state){
+          is(LR_CMD){
+            io.mem.cmd.valid := True
+            io.mem.cmd.wr := False
+            when(io.mem.cmd.ready) {
+              amo.external.state := LR_RSP
+            }
+          }
+          is(LR_RSP){
+            when(io.mem.rsp.valid && pending.last) {
+              amo.external.state := SC_CMD
+              amo.resultReg := amo.result
+            }
+          }
+          is(SC_CMD){
+            io.mem.cmd.valid := True
+            when(io.mem.cmd.ready) {
+              amo.external.state := SC_RSP
+            }
+          }
+          is(SC_RSP){
+            io.cpu.writeBack.keepMemRspData := True
+            when(io.mem.rsp.valid) {
+              amo.external.state := LR_CMD
+              when(io.mem.rsp.exclusive){ //Success
+                cpuWriteToCache := True
+                io.cpu.writeBack.haltIt := False
+              }
+            }
+          }
+        }
+      } elsewhen(mmuRsp.isIoAccess || isExternalLsrc) {
         val waitResponse = !request.wr
         if(withExternalLrSc) waitResponse setWhen(request.isLrsc)
 
         io.cpu.writeBack.haltIt.clearWhen(waitResponse ? (io.mem.rsp.valid && rspSync) | io.mem.cmd.ready)
 
         io.mem.cmd.valid := !memCmdSent
-        io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
-        io.mem.cmd.length := 0
 
         if(withInternalLrSc) when(request.isLrsc && !lrSc.reserved){
           io.mem.cmd.valid := False
@@ -657,7 +707,7 @@ class DataCache(p : DataCacheConfig) extends Component{
           io.cpu.writeBack.haltIt clearWhen(!request.wr || io.mem.cmd.ready)
 
           if(withInternalAmo) when(isAmo){
-            when(!internalAmo.resultRegValid) {
+            when(!amo.internal.resultRegValid) {
               io.mem.cmd.valid := False
               dataWriteCmd.valid := False
               io.cpu.writeBack.haltIt := True
@@ -696,17 +746,14 @@ class DataCache(p : DataCacheConfig) extends Component{
     }
 
     if(withLrSc) when(request.isLrsc && request.wr){
-      val success = CombInit(lrSc.reserved)
-      if(withExternalLrSc) success clearWhen(!io.mem.rsp.exclusive)
-
+      val success = if(withInternalLrSc)lrSc.reserved else io.mem.rsp.exclusive
       io.cpu.writeBack.data := B(!success).resized
-
       if(withExternalLrSc) when(io.cpu.writeBack.isValid && io.mem.rsp.valid && rspSync && success && waysHit){
         cpuWriteToCache := True
       }
     }
     if(withAmo) when(request.isAmo){
-      requestDataBypass := internalAmo.resultReg
+      requestDataBypass := amo.resultReg
     }
 
     //remove side effects on exceptions
@@ -716,13 +763,11 @@ class DataCache(p : DataCacheConfig) extends Component{
       dataWriteCmd.valid := False
       loaderValid := False
       io.cpu.writeBack.haltIt := False
+      if(withExternalAmo) amo.external.state := LR_CMD
     }
     io.cpu.redo setWhen(io.cpu.writeBack.isValid && mmuRsp.refilling)
 
     assert(!(io.cpu.writeBack.isValid && !io.cpu.writeBack.haltIt && io.cpu.writeBack.isStuck), "writeBack stuck by another plugin is not allowed")
-
-
-
   }
 
   val loader = new Area{

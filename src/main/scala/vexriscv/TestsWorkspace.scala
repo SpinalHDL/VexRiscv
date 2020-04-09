@@ -101,7 +101,7 @@ object TestsWorkspace {
               catchIllegal      = true,
               catchUnaligned    = true,
               withLrSc = true,
-              withAmo = false,
+              withAmo = true,
               withExclusive = true,
               withInvalidate = true
               //          )

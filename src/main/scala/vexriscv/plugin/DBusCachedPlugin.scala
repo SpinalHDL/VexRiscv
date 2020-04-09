@@ -26,7 +26,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
                        relaxedMemoryTranslationRegister : Boolean = false,
                        csrInfo : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService {
   import config._
-
+  assert(!(config.withExternalAmo && !dBusRspSlavePipe))
   assert(isPow2(cacheSize))
   assert(!(memoryTranslatorPortConfig != null && config.cacheSize/config.wayCount > 4096), "When the D$ is used with MMU, each way can't be bigger than a page (4096 bytes)")
 
@@ -180,7 +180,20 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     def optionPipe[T](cond : Boolean, on : T)(f : T => T) : T = if(cond) f(on) else on
     def cmdBuf = optionPipe(dBusCmdSlavePipe, cache.io.mem.cmd)(_.s2mPipe())
     dBus.cmd << optionPipe(dBusCmdMasterPipe, cmdBuf)(_.m2sPipe())
-    cache.io.mem.rsp << optionPipe(dBusRspSlavePipe,dBus.rsp)(_.m2sPipe())
+    cache.io.mem.rsp << (dBusRspSlavePipe match {
+      case false => dBus.rsp
+      case true if !withExternalAmo => dBus.rsp.m2sPipe()
+      case true if  withExternalAmo => {
+        val rsp = Flow (DataCacheMemRsp(cache.p))
+        rsp.valid := RegNext(dBus.rsp.valid)
+        rsp.exclusive := RegNext(dBus.rsp.exclusive)
+        rsp.error := RegNext(dBus.rsp.error)
+        rsp.last := RegNext(dBus.rsp.last)
+        rsp.data := RegNextWhen(dBus.rsp.data, dBus.rsp.valid && !cache.io.cpu.writeBack.keepMemRspData)
+        rsp
+      }
+    })
+
     if(withInvalidate) cache.io.inv <> inv
 
     pipeline plug new Area{
