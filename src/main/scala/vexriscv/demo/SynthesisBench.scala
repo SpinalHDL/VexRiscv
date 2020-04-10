@@ -146,8 +146,15 @@ object VexRiscvSynthesisBench {
       SpinalConfig(inlineRom = true).generateVerilog(wrap(new VexRiscv(LinuxGen.configFull(false, true))).setDefinitionName(getRtlPath().split("\\.").head))
     }
 
-    val rtls = List(twoStage, twoStageBarell, twoStageMulDiv, twoStageAll, smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced)
-//    val rtls = List(twoStage, twoStageBarell, twoStageMulDiv, twoStageAll)
+    val linuxBalancedSmp = new Rtl {
+      override def getName(): String = "VexRiscv linux balanced SMP"
+      override def getRtlPath(): String = "VexRiscvLinuxBalancedSmp.v"
+      SpinalConfig(inlineRom = true).generateVerilog(wrap(new VexRiscv(LinuxGen.configFull(false, true, withSmp = true))).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
+
+//    val rtls = List(twoStage, twoStageBarell, twoStageMulDiv, twoStageAll, smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced, linuxBalancedSmp)
+    val rtls = List(linuxBalanced, linuxBalancedSmp)
 //    val rtls = List(smallest)
     val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)  ++ List(
       new Target {
