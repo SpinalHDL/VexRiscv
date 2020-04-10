@@ -1106,6 +1106,7 @@ public:
 	#ifdef TRACE
 	VerilatedVcdC* tfp;
 	#endif
+	bool allowInvalidate = true;
 
 	uint32_t seed;
 
@@ -1305,6 +1306,14 @@ public:
 		return this;
     }
 
+    Workspace* withInvalidation(){
+        allowInvalidate = true;
+        return this;
+    }
+    Workspace* withoutInvalidation(){
+        allowInvalidate = false;
+        return this;
+    }
     virtual bool isPerifRegion(uint32_t addr) { return false; }
     virtual bool isMmuRegion(uint32_t addr) { return true;}
     virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
@@ -1777,7 +1786,8 @@ public:
 
 
 	uint32_t regFileWriteRefIndex = 0;
-	char *target = "PROJECT EXECUTION SUCCESSFUL", *hit = target;
+	const char *target = "PROJECT EXECUTION SUCCESSFUL";
+	const char *hit = target;
 
 	ZephyrRegression(string name) : WorkspaceRegression(name) {
             cout << endl << endl;
@@ -2336,6 +2346,7 @@ struct DBusCachedTask{
 class DBusCached : public SimElement{
 public:
 	queue<DBusCachedTask> rsps;
+	queue<uint32_t> invalidationHint;
 
 	bool reservationValid = false;
 	uint32_t reservationAddress;
@@ -2385,6 +2396,14 @@ public:
                     #endif
                     rsps.push(rsp);
                 }
+
+                #ifdef DBUS_INVALIDATE
+                    if(ws->allowInvalidate){
+                        if(VL_RANDOM_I(7) < 100){
+                            invalidationHint.push(top->dBus_cmd_payload_address + VL_RANDOM_I(5));
+                        }
+                    }
+                #endif
             }
 		}
 	}
@@ -2410,8 +2429,24 @@ public:
             top->dBus_rsp_payload_exclusive = VL_RANDOM_I(1);
             #endif
 		}
-
 		top->dBus_cmd_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
+
+        #ifdef DBUS_INVALIDATE
+            if(ws->allowInvalidate){
+                if(top->dBus_inv_cmd_ready) top->dBus_inv_cmd_valid = 0;
+                if(top->dBus_inv_cmd_valid == 0 && VL_RANDOM_I(7) < 10){
+                    top->dBus_inv_cmd_valid = invalidationHint.empty() == 0;
+                    if(!invalidationHint.empty()){
+                        top->dBus_inv_cmd_payload_address = invalidationHint.front();
+                        invalidationHint.pop();
+                    } else {
+                        top->dBus_inv_cmd_payload_address = VL_RANDOM_I(32);
+                    }
+                }
+            }
+		    top->dBus_inv_rsp_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
+        #endif
+
 	}
 };
 #endif

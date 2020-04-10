@@ -59,6 +59,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     import Riscv._
     import pipeline.config._
 
+    dBus = master(DataCacheMemBus(this.config)).setName("dBus")
+    inv  = withInvalidate generate slave(DataCacheInvalidateBus(this.config)).setName("dBus_inv")
+
     val decoderService = pipeline.service(classOf[DecoderService])
 
     val stdActions = List[(Stageable[_ <: BaseType],Any)](
@@ -169,8 +172,6 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     import pipeline._
     import pipeline.config._
 
-    dBus = master(DataCacheMemBus(this.config)).setName("dBus")
-    inv  = withInvalidate generate slave(DataCacheInvalidateBus(this.config))
 
     val cache = new DataCache(this.config.copy(
       mergeExecuteMemory = writeBack == null

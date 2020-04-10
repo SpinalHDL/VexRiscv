@@ -581,7 +581,7 @@ class DataCache(val p : DataCacheConfig) extends Component{
     val lrSc = withInternalLrSc generate new Area{
       val reserved = RegInit(False)
       when(io.cpu.writeBack.isValid && !io.cpu.writeBack.isStuck && request.isLrsc
-            && !io.cpu.redo && !io.cpu.writeBack.mmuException && !io.cpu.writeBack.unalignedAccess && !io.cpu.writeBack.accessError){
+        && !io.cpu.redo && !io.cpu.writeBack.mmuException && !io.cpu.writeBack.unalignedAccess && !io.cpu.writeBack.accessError){
         reserved := !request.wr
       }
     }
@@ -609,8 +609,8 @@ class DataCache(val p : DataCacheConfig) extends Component{
         B"011"  -> (rf & mem),
         default -> (selectRf ? rf | mem)
       )
-//      val resultRegValid = RegNext(True) clearWhen(!io.cpu.writeBack.isStuck)
-//      val resultReg = RegNext(result)
+      //      val resultRegValid = RegNext(True) clearWhen(!io.cpu.writeBack.isStuck)
+      //      val resultReg = RegNext(result)
       val resultReg = Reg(Bits(32 bits))
 
       val internal = withInternalAmo generate new Area{
@@ -778,6 +778,7 @@ class DataCache(val p : DataCacheConfig) extends Component{
     val waysAllocator = Reg(Bits(wayCount bits)) init(1)
     val error = RegInit(False)
     val kill = False
+    val killReg = RegInit(False) setWhen(kill)
 
     when(valid && io.mem.rsp.valid && rspLast){
       dataWriteCmd.valid := True
@@ -789,19 +790,22 @@ class DataCache(val p : DataCacheConfig) extends Component{
       counter.increment()
     }
 
+    val done = CombInit(counter.willOverflow)
+    if(withInvalidate) done setWhen(valid && pending.counter === 0) //Used to solve invalidate write request at the same time
 
-    when(counter.willOverflow){
+    when(done){
       valid := False
 
       //Update tags
       tagsWriteCmd.valid := True
       tagsWriteCmd.address := baseAddress(lineRange)
-      tagsWriteCmd.data.valid := True
+      tagsWriteCmd.data.valid := !(kill || killReg)
       tagsWriteCmd.data.address := baseAddress(tagRange)
-      tagsWriteCmd.data.error := error || io.mem.rsp.error
+      tagsWriteCmd.data.error := error || (io.mem.rsp.valid && io.mem.rsp.error)
       tagsWriteCmd.way := waysAllocator
 
       error := False
+      killReg := False
     }
 
     when(!valid){
@@ -810,24 +814,18 @@ class DataCache(val p : DataCacheConfig) extends Component{
 
     io.cpu.redo setWhen(valid)
     stageB.mmuRspFreeze setWhen(stageB.loaderValid || valid)
-
-    when(kill){
-      valid := False
-      error := False
-      tagsWriteCmd.valid := False
-      counter.clear()
-    }
   }
 
   val invalidate = withInvalidate generate new Area{
-    val loaderReadToWriteConflict = False
+    val readToWriteConflict = False
     val s0 = new Area{
-      val input = io.inv.cmd.haltWhen(loaderReadToWriteConflict)
+      val input = io.inv.cmd.haltWhen(readToWriteConflict)
       tagsInvReadCmd.valid := input.fire
       tagsInvReadCmd.payload := input.address(lineRange)
 
-      val loaderHit = loader.valid && input.address(hitRange) === loader.baseAddress(hitRange)
-      when(loaderHit){
+      val loaderTagHit = input.address(tagRange) === loader.baseAddress(tagRange)
+      val loaderLineHit =  input.address(lineRange) === loader.baseAddress(lineRange)
+      when(input.valid && loader.valid && loaderLineHit && loaderTagHit){
         loader.kill := True
       }
     }
@@ -835,12 +833,13 @@ class DataCache(val p : DataCacheConfig) extends Component{
       val input = s0.input.stage()
       val loaderValid = RegNextWhen(loader.valid, s0.input.ready)
       val loaderWay = RegNextWhen(loader.waysAllocator, s0.input.ready)
-      val loaderHit = RegNextWhen(s0.loaderHit, s0.input.ready)
+      val loaderTagHit = RegNextWhen(s0.loaderTagHit, s0.input.ready)
+      val loaderLineHit = RegNextWhen(s0.loaderLineHit, s0.input.ready)
 
       var wayHits = B(ways.map(way => (input.address(tagRange) === way.tagsInvReadRsp.address && way.tagsInvReadRsp.valid)))
 
       //Handle invalider read during loader write hazard
-      when(loaderValid && !loaderHit){
+      when(loaderValid && loaderLineHit && !loaderTagHit){
         wayHits \= wayHits & ~loaderWay
       }
     }
@@ -850,14 +849,19 @@ class DataCache(val p : DataCacheConfig) extends Component{
       val wayHit = wayHits.orR
 
       when(input.valid) {
-        stage0.wayInvalidate := wayHits
+        //Manage invalidate write during cpu read hazard
+        when(input.address(lineRange) === io.cpu.execute.address(lineRange)) {
+          stage0.wayInvalidate := wayHits
+        }
 
+        //Invalidate cache tag
         when(wayHit) {
           tagsWriteCmd.valid := True
           tagsWriteCmd.address := input.address(lineRange)
           tagsWriteCmd.data.valid := False
           tagsWriteCmd.way := wayHits
-          loaderReadToWriteConflict := input.address(lineRange) === s0.input.address(lineRange)
+          readToWriteConflict := input.address(lineRange) === s0.input.address(lineRange)
+          loader.done := False //Hold loader tags write
         }
       }
       io.inv.rsp.arbitrationFrom(input)

@@ -27,7 +27,7 @@ import spinal.lib.bus.avalon.AvalonMM
 import spinal.lib.eda.altera.{InterruptReceiverTag, ResetEmitterTag}
 
 
-//make clean all SEED=42 MMU=no STOP_ON_ERROR=yes DBUS_EXCLUSIVE=yes SUPERVISOR=yes REDO=10 DHRYSTONE=no LRSC=yes LINUX_REGRESSION=yes TRACE=yes TRACE_START=1000000000000l FLOW_INFO=no
+//make clean all SEED=42 MMU=no STOP_ON_ERROR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes SUPERVISOR=yes REDO=0 DHRYSTONE=no LRSC=yes AMO=yes LINUX_REGRESSION=yes TRACE=yes TRACE_START=9546629800l FLOW_INFO=ye
 object TestsWorkspace {
   def main(args: Array[String]) {
     def configFull = {
