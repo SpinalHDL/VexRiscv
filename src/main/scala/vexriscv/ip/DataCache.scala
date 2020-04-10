@@ -817,9 +817,8 @@ class DataCache(val p : DataCacheConfig) extends Component{
   }
 
   val invalidate = withInvalidate generate new Area{
-    val readToWriteConflict = False
     val s0 = new Area{
-      val input = io.inv.cmd.haltWhen(readToWriteConflict)
+      val input = io.inv.cmd
       tagsInvReadCmd.valid := input.fire
       tagsInvReadCmd.payload := input.address(lineRange)
 
@@ -835,8 +834,9 @@ class DataCache(val p : DataCacheConfig) extends Component{
       val loaderWay = RegNextWhen(loader.waysAllocator, s0.input.ready)
       val loaderTagHit = RegNextWhen(s0.loaderTagHit, s0.input.ready)
       val loaderLineHit = RegNextWhen(s0.loaderLineHit, s0.input.ready)
+      val invalidations = Bits(wayCount bits)
 
-      var wayHits = B(ways.map(way => (input.address(tagRange) === way.tagsInvReadRsp.address && way.tagsInvReadRsp.valid)))
+      var wayHits = B(ways.map(way => (input.address(tagRange) === way.tagsInvReadRsp.address && way.tagsInvReadRsp.valid))) & ~invalidations
 
       //Handle invalider read during loader write hazard
       when(loaderValid && loaderLineHit && !loaderTagHit){
@@ -860,12 +860,14 @@ class DataCache(val p : DataCacheConfig) extends Component{
           tagsWriteCmd.address := input.address(lineRange)
           tagsWriteCmd.data.valid := False
           tagsWriteCmd.way := wayHits
-          readToWriteConflict := input.address(lineRange) === s0.input.address(lineRange)
           loader.done := False //Hold loader tags write
         }
       }
       io.inv.rsp.arbitrationFrom(input)
       io.inv.rsp.hit := wayHit
+
+      //Manage invalidation read during write hazard
+      s1.invalidations := RegNext(input.valid ? wayHits | 0)
     }
   }
 }
