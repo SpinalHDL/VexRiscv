@@ -2399,7 +2399,7 @@ public:
 
                 #ifdef DBUS_INVALIDATE
                     if(ws->allowInvalidate){
-                        if(VL_RANDOM_I(7) < 100){
+                        if(VL_RANDOM_I(7) < 10){
                             invalidationHint.push(top->dBus_cmd_payload_address + VL_RANDOM_I(5));
                         }
                     }
@@ -2434,8 +2434,8 @@ public:
         #ifdef DBUS_INVALIDATE
             if(ws->allowInvalidate){
                 if(top->dBus_inv_cmd_ready) top->dBus_inv_cmd_valid = 0;
-                if(top->dBus_inv_cmd_valid == 0 && VL_RANDOM_I(7) < 10){
-                    top->dBus_inv_cmd_valid = invalidationHint.empty() == 0;
+                if(top->dBus_inv_cmd_valid == 0 && VL_RANDOM_I(7) < 5){
+                    top->dBus_inv_cmd_valid = 1;
                     if(!invalidationHint.empty()){
                         top->dBus_inv_cmd_payload_address = invalidationHint.front();
                         invalidationHint.pop();
