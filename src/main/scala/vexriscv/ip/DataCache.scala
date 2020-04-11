@@ -185,30 +185,29 @@ case class DataCacheMemRsp(p : DataCacheConfig) extends Bundle{
   val error = Bool
   val exclusive = p.withExclusive generate Bool()
 }
-case class DataCacheInvalidateCmd(p : DataCacheConfig) extends Bundle{
+case class DataCacheInv(p : DataCacheConfig) extends Bundle{
+  val enable = Bool()
   val address = UInt(p.addressWidth bit)
 }
-case class DataCacheInvalidateRsp(p : DataCacheConfig) extends Bundle{
+case class DataCacheAck(p : DataCacheConfig) extends Bundle{
   val hit = Bool()
-}
-
-case class DataCacheInvalidateBus(p : DataCacheConfig) extends Bundle with IMasterSlave {
-  val cmd = Stream(DataCacheInvalidateCmd(p))
-  val rsp = Stream(DataCacheInvalidateRsp(p))
-
-  override def asMaster(): Unit = {
-    master(cmd)
-    slave(rsp)
-  }
 }
 
 case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave{
   val cmd = Stream (DataCacheMemCmd(p))
   val rsp = Flow (DataCacheMemRsp(p))
 
+  val inv = p.withInvalidate generate Stream(DataCacheInv(p))
+  val ack = p.withInvalidate generate Stream(DataCacheAck(p))
+
   override def asMaster(): Unit = {
     master(cmd)
     slave(rsp)
+
+    if(p.withInvalidate) {
+      slave(inv)
+      master(ack)
+    }
   }
 
   def toAxi4Shared(stageCmd : Boolean = false, pendingWritesMax  : Int = 7): Axi4Shared = {
@@ -353,13 +352,25 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     bus.cmd.data := cmd.data
     bus.cmd.length := (cmd.length << 2) | 3 //TODO better sub word access
     bus.cmd.mask := cmd.mask
+    if(p.withExclusive) bus.cmd.exclusive := cmd.exclusive
 
     cmd.ready := bus.cmd.ready
 
     rsp.valid := bus.rsp.valid && !bus.rsp.context(0)
     rsp.data  := bus.rsp.data
     rsp.error := bus.rsp.isError
+    if(p.withExclusive) rsp.exclusive := bus.rsp.exclusive
     bus.rsp.ready := True
+
+    if(p.withInvalidate){
+      bus.ack.arbitrationFrom(ack)
+      //TODO manage lenght ?
+      inv.address := bus.inv.address
+//      inv.opcode := bus.inv.opcode
+      ???
+
+      bus.ack.arbitrationFrom(ack)
+    }
 
     bus
   }
@@ -378,7 +389,6 @@ class DataCache(val p : DataCacheConfig) extends Component{
   val io = new Bundle{
     val cpu = slave(DataCacheCpuBus(p))
     val mem = master(DataCacheMemBus(p))
-    val inv = withInvalidate generate slave(DataCacheInvalidateBus(p))
   }
 
   val haltCpu = False
@@ -818,13 +828,13 @@ class DataCache(val p : DataCacheConfig) extends Component{
 
   val invalidate = withInvalidate generate new Area{
     val s0 = new Area{
-      val input = io.inv.cmd
+      val input = io.mem.inv
       tagsInvReadCmd.valid := input.fire
       tagsInvReadCmd.payload := input.address(lineRange)
 
       val loaderTagHit = input.address(tagRange) === loader.baseAddress(tagRange)
       val loaderLineHit =  input.address(lineRange) === loader.baseAddress(lineRange)
-      when(input.valid && loader.valid && loaderLineHit && loaderTagHit){
+      when(input.valid && input.enable && loader.valid && loaderLineHit && loaderTagHit){
         loader.kill := True
       }
     }
@@ -848,7 +858,7 @@ class DataCache(val p : DataCacheConfig) extends Component{
       val wayHits = RegNextWhen(s1.wayHits, s1.input.ready)
       val wayHit = wayHits.orR
 
-      when(input.valid) {
+      when(input.valid && input.enable) {
         //Manage invalidate write during cpu read hazard
         when(input.address(lineRange) === io.cpu.execute.address(lineRange)) {
           stage0.wayInvalidate := wayHits
@@ -863,11 +873,11 @@ class DataCache(val p : DataCacheConfig) extends Component{
           loader.done := False //Hold loader tags write
         }
       }
-      io.inv.rsp.arbitrationFrom(input)
-      io.inv.rsp.hit := wayHit
+      io.mem.ack.arbitrationFrom(input)
+      io.mem.ack.hit := wayHit
 
       //Manage invalidation read during write hazard
-      s1.invalidations := RegNext(input.valid ? wayHits | 0)
+      s1.invalidations := RegNext((input.valid && input.enable) ? wayHits | 0)
     }
   }
 }

@@ -2433,18 +2433,19 @@ public:
 
         #ifdef DBUS_INVALIDATE
             if(ws->allowInvalidate){
-                if(top->dBus_inv_cmd_ready) top->dBus_inv_cmd_valid = 0;
-                if(top->dBus_inv_cmd_valid == 0 && VL_RANDOM_I(7) < 5){
-                    top->dBus_inv_cmd_valid = 1;
+                if(top->dBus_inv_ready) top->dBus_inv_valid = 0;
+                if(top->dBus_inv_valid == 0 && VL_RANDOM_I(7) < 5){
+                    top->dBus_inv_valid = 1;
+                    top->dBus_inv_payload_enable = VL_RANDOM_I(7) < 100;
                     if(!invalidationHint.empty()){
-                        top->dBus_inv_cmd_payload_address = invalidationHint.front();
+                        top->dBus_inv_payload_address = invalidationHint.front();
                         invalidationHint.pop();
                     } else {
-                        top->dBus_inv_cmd_payload_address = VL_RANDOM_I(32);
+                        top->dBus_inv_payload_address = VL_RANDOM_I(32);
                     }
                 }
             }
-		    top->dBus_inv_rsp_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
+		    top->dBus_ack_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
         #endif
 
 	}
