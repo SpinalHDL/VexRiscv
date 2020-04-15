@@ -184,7 +184,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       case true if !withExternalAmo => dBus.rsp.m2sPipe()
       case true if  withExternalAmo => {
         val rsp = Flow (DataCacheMemRsp(cache.p))
-        rsp.valid := RegNext(dBus.rsp.valid)
+        rsp.valid := RegNext(dBus.rsp.valid) init(False)
         rsp.exclusive := RegNext(dBus.rsp.exclusive)
         rsp.error := RegNext(dBus.rsp.error)
         rsp.last := RegNext(dBus.rsp.last)
@@ -194,8 +194,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     })
 
     if(withInvalidate) {
-      cache.io.mem.inv << dBus.inv
-      cache.io.mem.ack >> dBus.ack
+      cache.io.mem.inv  << dBus.inv
+      cache.io.mem.ack  >> dBus.ack
+      cache.io.mem.sync << dBus.sync
     }
 
     pipeline plug new Area{

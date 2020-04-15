@@ -80,11 +80,16 @@ case class DataCacheConfig(cacheSize : Int,
     dataWidth = 32,
     lengthWidth = log2Up(this.bytePerLine),
     sourceWidth = 0,
-    contextWidth = 1,
+    contextWidth = if(!withWriteResponse) 1 else 0,
     canRead = true,
     canWrite = true,
     alignment  = BmbParameter.BurstAlignement.LENGTH,
-    maximumPendingTransactionPerId = Int.MaxValue
+    maximumPendingTransactionPerId = Int.MaxValue,
+    canInvalidate = withInvalidate,
+    canSync = withInvalidate,
+    canExclusive = withExclusive,
+    invalidateLength = log2Up(this.bytePerLine),
+    invalidateAlignment = BmbParameter.BurstAlignement.LENGTH
   )
 }
 
@@ -193,12 +198,17 @@ case class DataCacheAck(p : DataCacheConfig) extends Bundle{
   val hit = Bool()
 }
 
+case class DataCacheSync(p : DataCacheConfig) extends Bundle{
+
+}
+
 case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave{
   val cmd = Stream (DataCacheMemCmd(p))
   val rsp = Flow (DataCacheMemRsp(p))
 
   val inv = p.withInvalidate generate Stream(DataCacheInv(p))
   val ack = p.withInvalidate generate Stream(DataCacheAck(p))
+  val sync = p.withInvalidate generate Stream(DataCacheSync(p))
 
   override def asMaster(): Unit = {
     master(cmd)
@@ -207,6 +217,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     if(p.withInvalidate) {
       slave(inv)
       master(ack)
+      slave(sync)
     }
   }
 
@@ -342,11 +353,11 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
   def toBmb() : Bmb = {
     val pipelinedMemoryBusConfig = p.getBmbParameter()
-    val bus = Bmb(pipelinedMemoryBusConfig)
+    val bus = Bmb(pipelinedMemoryBusConfig).setCompositeName(this,"toBmb", true)
 
     bus.cmd.valid := cmd.valid
     bus.cmd.last := cmd.last
-    bus.cmd.context(0) := cmd.wr
+    if(!p.withWriteResponse) bus.cmd.context(0) := cmd.wr
     bus.cmd.opcode := (cmd.wr ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
     bus.cmd.address := cmd.address.resized
     bus.cmd.data := cmd.data
@@ -356,21 +367,32 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
     cmd.ready := bus.cmd.ready
 
-    rsp.valid := bus.rsp.valid && !bus.rsp.context(0)
+    rsp.valid := bus.rsp.valid
+    if(!p.withWriteResponse) rsp.valid clearWhen(bus.rsp.context(0))
     rsp.data  := bus.rsp.data
     rsp.error := bus.rsp.isError
+    rsp.last := bus.rsp.last
     if(p.withExclusive) rsp.exclusive := bus.rsp.exclusive
     bus.rsp.ready := True
 
     if(p.withInvalidate){
-      bus.ack.arbitrationFrom(ack)
-      //TODO manage lenght ?
+      inv.arbitrationFrom(bus.inv)
       inv.address := bus.inv.address
-//      inv.opcode := bus.inv.opcode
-      ???
+      inv.enable  := bus.inv.all
 
       bus.ack.arbitrationFrom(ack)
+
+      sync.arbitrationFrom(bus.sync)
+
+//      bus.ack.arbitrationFrom(ack)
+//      //TODO manage lenght ?
+//      inv.address := bus.inv.address
+////      inv.opcode := bus.inv.opcode
+//      ???
+//
+//      bus.ack.arbitrationFrom(ack)
     }
+
 
     bus
   }
@@ -440,8 +462,9 @@ class DataCache(val p : DataCacheConfig) extends Component{
 
     //Reads
     val tagsReadRsp = tags.readSync(tagsReadCmd.payload, tagsReadCmd.valid && !io.cpu.memory.isStuck)
-    val tagsInvReadRsp = withInvalidate generate tags.readSync(tagsInvReadCmd.payload, tagsReadCmd.valid && !io.cpu.memory.isStuck)
     val dataReadRsp = data.readSync(dataReadCmd.payload, dataReadCmd.valid && !io.cpu.memory.isStuck)
+
+    val tagsInvReadRsp = withInvalidate generate tags.readSync(tagsInvReadCmd.payload, tagsInvReadCmd.valid)
 
     //Writes
     when(tagsWriteCmd.valid && tagsWriteCmd.way(i)){
@@ -494,9 +517,22 @@ class DataCache(val p : DataCacheConfig) extends Component{
     val full = RegNext(counter.msb)
     val last = counter === 1
 
+    if(!withInvalidate) {
+      io.cpu.execute.haltIt setWhen(full)
+    }
+
+    rspSync clearWhen (!last || !memCmdSent)
+    rspLast clearWhen (!last)
+  }
+
+  val sync = withInvalidate generate new Area{
+    io.mem.sync.ready := True
+
+    val counter = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
+    counter := counter + U(io.mem.cmd.fire && io.mem.cmd.wr) - U(io.mem.sync.fire)
+
+    val full = RegNext(counter.msb)
     io.cpu.execute.haltIt setWhen(full)
-    rspSync clearWhen(!last || !memCmdSent)
-    rspLast clearWhen(!last)
   }
 
 
@@ -509,9 +545,12 @@ class DataCache(val p : DataCacheConfig) extends Component{
     val dataColisions = collisionProcess(io.cpu.execute.address(lineRange.high downto wordRange.low), mask)
     val wayInvalidate = B(0, wayCount bits) //Used if invalidate enabled
 
-    if(withWriteResponse) when(io.cpu.execute.fence){
-      when(pending.counter =/= 0 || io.cpu.memory.isValid || io.cpu.writeBack.isValid){
-        io.cpu.execute.haltIt := True
+    when(io.cpu.execute.fence){
+      val counter = if(withInvalidate) sync.counter else if(withWriteResponse) pending.counter else null
+      if(counter != null){
+        when(counter =/= 0 || io.cpu.memory.isValid || io.cpu.writeBack.isValid){
+          io.cpu.execute.haltIt := True
+        }
       }
     }
   }
@@ -563,16 +602,19 @@ class DataCache(val p : DataCacheConfig) extends Component{
     //Evict the cache after reset logics
     val flusher = new Area {
       val valid = RegInit(False)
+      val hold = False
       when(valid) {
         tagsWriteCmd.valid := valid
         tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
         tagsWriteCmd.way.setAll()
         tagsWriteCmd.data.valid := False
         io.cpu.writeBack.haltIt := True
-        when(mmuRsp.physicalAddress(lineRange) =/= wayLineCount - 1) {
-          mmuRsp.physicalAddress.getDrivingReg(lineRange) := mmuRsp.physicalAddress(lineRange) + 1
-        } otherwise {
-          valid := False
+        when(!hold) {
+          when(mmuRsp.physicalAddress(lineRange) =/= wayLineCount - 1) {
+            mmuRsp.physicalAddress.getDrivingReg(lineRange) := mmuRsp.physicalAddress(lineRange) + 1
+          } otherwise {
+            valid := False
+          }
         }
       }
 
@@ -867,6 +909,7 @@ class DataCache(val p : DataCacheConfig) extends Component{
         //Invalidate cache tag
         when(wayHit) {
           tagsWriteCmd.valid := True
+          stageB.flusher.hold := True
           tagsWriteCmd.address := input.address(lineRange)
           tagsWriteCmd.data.valid := False
           tagsWriteCmd.way := wayHits
