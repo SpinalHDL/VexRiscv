@@ -96,7 +96,7 @@ case class DebugExtensionIo() extends Bundle with IMasterSlave{
 
 
 
-class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : Int = 0) extends Plugin[VexRiscv] {
+class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : Int = 0) extends Plugin[VexRiscv] {
 
   var io : DebugExtensionIo = null
   val injectionAsks = ArrayBuffer[(Stage, Bool)]()

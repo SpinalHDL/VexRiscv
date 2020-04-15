@@ -251,7 +251,7 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
 
   def toBmb() : Bmb = {
     val busParameter = p.getBmbParameter
-    val bus = Bmb(busParameter)
+    val bus = Bmb(busParameter).setCompositeName(this,"toBmb", true)
     bus.cmd.arbitrationFrom(cmd)
     bus.cmd.opcode := Bmb.Cmd.Opcode.READ
     bus.cmd.address := cmd.address.resized

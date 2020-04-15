@@ -2350,6 +2350,7 @@ public:
 
 	bool reservationValid = false;
 	uint32_t reservationAddress;
+	uint32_t pendingSync = 0;
 
 	Workspace *ws;
 	VVexRiscv* top;
@@ -2363,11 +2364,17 @@ public:
 	virtual void onReset(){
 		top->dBus_cmd_ready = 1;
 		top->dBus_rsp_valid = 0;
+		top->dBus_inv_valid = 0;
+		top->dBus_ack_ready = 0;
+		top->dBus_sync_valid = 0;
 	}
 
 	virtual void preCycle(){
 		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
             if(top->dBus_cmd_payload_wr){
+                #ifdef DBUS_INVALIDATE
+                    pendingSync += 1;
+                #endif
                 #ifndef DBUS_EXCLUSIVE
                     bool error;
                     ws->dBusAccess(top->dBus_cmd_payload_address,1,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&error);
@@ -2406,6 +2413,11 @@ public:
                 #endif
             }
 		}
+		#ifdef DBUS_INVALIDATE
+            if(top->dBus_sync_valid && top->dBus_sync_ready){
+                pendingSync -= 1;
+            }
+        #endif
 	}
 
 	virtual void postCycle(){
@@ -2446,6 +2458,10 @@ public:
                 }
             }
 		    top->dBus_ack_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
+		    if(top->dBus_sync_ready) top->dBus_sync_valid = 0;
+		    if(top->dBus_sync_valid == 0 && pendingSync != 0 && (ws->dStall ? VL_RANDOM_I(7) < 80 : 1) ){
+		        top->dBus_sync_valid = 1;
+            }
         #endif
 
 	}
