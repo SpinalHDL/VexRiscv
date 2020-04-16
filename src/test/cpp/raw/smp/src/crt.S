@@ -58,49 +58,44 @@ barrier_amo_test:
 
 
 
-
+#define ENTRY_PHASE t4
 barrier_amo:
     report(a0, REPORT_BARRIER_START)
-    la t0, barrier_amo_value
+    lw ENTRY_PHASE, barrier_phase
+    la t0, barrier_value
     li t1, 1
-    amoadd.w x0, t1, (t0)
+    amoadd.w t0, t1, (t0)
+    addi t0, t0, 1
     lw t1, thread_count
+    bne t0, t1, barrier_amo_wait
+    addi t0,ENTRY_PHASE,1
+    sw x0, barrier_value, t1
+    sw t0, barrier_phase, t1
 barrier_amo_wait:
-    lw t2, (t0)
-    bne t2, t1, barrier_amo_wait
+    lw t0, barrier_phase
+    beq t0, ENTRY_PHASE, barrier_amo_wait
     report(a0, REPORT_BARRIER_END)
-barrier_amo_reset:
-    csrr t0, mhartid
-    bnez t0, barrier_amo_reset_wait
-    sw x0, barrier_amo_value, t0
     ret
-barrier_amo_reset_wait:
-    lw t0, barrier_amo_value
-    bnez t0, barrier_amo_reset_wait
-    ret
-    
+
 barrier_lrsc:
-    report(a0, REPORT_BARRIER_START)
-    la t0, barrier_lrsc_value
+   report(a0, REPORT_BARRIER_START)
+   lw ENTRY_PHASE, barrier_phase
+   la t0, barrier_value
 barrier_lrsc_try:
-    lr.w t1, (t0)
-    addi t1, t1, 1
-    sc.w t1, t1, (t0)
-    bnez t1, barrier_lrsc_try
-    lw t1, thread_count
+   lr.w t1, (t0)
+   addi t1, t1, 1
+   sc.w t2, t1, (t0)
+   bnez t2, barrier_lrsc_try
+   lw t0, thread_count
+   bne t0, t1, barrier_lrsc_wait
+   addi t0,ENTRY_PHASE,1
+   sw x0, barrier_value, t1
+   sw t0, barrier_phase, t1
 barrier_lrsc_wait:
-    lw t2, (t0)
-    bne t2, t1, barrier_lrsc_wait
-    report(a0, REPORT_BARRIER_END)
-barrier_lrsc_reset:
-    csrr t0, mhartid
-    bnez t0, barrier_lrsc_reset_wait
-    sw x0, barrier_lrsc_value, t0
-    ret
-barrier_lrsc_reset_wait:
-    lw t0, barrier_lrsc_value
-    bnez t0, barrier_lrsc_reset_wait
-    ret
+   lw t0, barrier_phase
+   beq t0, ENTRY_PHASE, barrier_lrsc_wait
+   report(a0, REPORT_BARRIER_END)
+   ret
 
 
 
@@ -125,6 +120,5 @@ sleep:
 
 
 thread_count: .word 0
-shared_memory_1: .word 0
-barrier_amo_value: .word 0
-barrier_lrsc_value: .word 0
+barrier_value: .word 0
+barrier_phase: .word 0

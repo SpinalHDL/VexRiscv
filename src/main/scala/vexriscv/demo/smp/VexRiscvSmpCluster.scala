@@ -11,6 +11,7 @@ import vexriscv.plugin.{BranchPlugin, CsrPlugin, CsrPluginConfig, DBusCachedPlug
 import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
 
 import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
 
 
 case class VexRiscvSmpClusterParameter( cpuConfigs : Seq[VexRiscvConfig])
@@ -262,17 +263,17 @@ object VexRiscvSmpClusterGen {
     if(id == 0) config.plugins += new DebugPlugin(null)
     config
   }
-  def vexRiscvCluster() = VexRiscvSmpCluster(
+  def vexRiscvCluster(cpuCount : Int) = VexRiscvSmpCluster(
     debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn")),
     p = VexRiscvSmpClusterParameter(
-      cpuConfigs = List.tabulate(4) {
+      cpuConfigs = List.tabulate(cpuCount) {
         vexRiscvConfig(_)
       }
     )
   )
   def main(args: Array[String]): Unit = {
     SpinalVerilog {
-      vexRiscvCluster()
+      vexRiscvCluster(4)
     }
   }
 }
@@ -294,19 +295,41 @@ object VexRiscvSmpClusterTest extends App{
   simConfig.allOptimisation
   simConfig.addSimulatorFlag("--threads 1")
 
-  simConfig.compile(VexRiscvSmpClusterGen.vexRiscvCluster()).doSimUntilVoid(seed = 42){dut =>
-    SimTimeout(10000*10)
+  val cpuCount = 4
+  simConfig.compile(VexRiscvSmpClusterGen.vexRiscvCluster(cpuCount)).doSimUntilVoid(seed = 42){dut =>
+    SimTimeout(10000*10*cpuCount)
     dut.clockDomain.forkSimSpeedPrinter(1.0)
     dut.clockDomain.forkStimulus(10)
     dut.debugClockDomain.forkStimulus(10)
 
-    val hartCount = dut.cpus.size
 
     JtagTcp(dut.io.jtag, 100)
 
     val withStall = false
     val cpuEnd = Array.fill(dut.p.cpuConfigs.size)(false)
     val barriers = mutable.HashMap[Int, Int]()
+
+    var reportWatchdog = 0
+    periodicaly(10000*10){
+      assert(reportWatchdog != 0)
+      reportWatchdog = 0
+    }
+
+    case class Report(hart : Int, code : Int, data : Int){
+      override def toString: String = {
+        f"CPU:$hart%2d h${code}%3x -> $data%3d"
+      }
+    }
+    val reports = ArrayBuffer.fill(cpuCount)(ArrayBuffer[Report]())
+    onSimEnd{
+      for((list, hart) <- reports.zipWithIndex){
+        println(f"\n\n**** CPU $hart%2d ****")
+        for((report, reportId) <- list.zipWithIndex){
+          println(f"  $reportId%3d : h${report.code}%3x -> ${report.data}%3d")
+        }
+      }
+    }
+
     val ram = new BmbMemoryAgent(0x100000000l){
       var writeData = 0
       override def setByte(address: Long, value: Byte): Unit = {
@@ -316,25 +339,31 @@ object VexRiscvSmpClusterTest extends App{
         writeData = (writeData & ~mask) | ((value.toInt << (byteId*8)) & mask)
         if(byteId != 3) return
         val offset = (address & ~0xF0000000l)-3
-        println(s"W[0x${offset.toHexString}] = $writeData")
+//        println(s"W[0x${offset.toHexString}] = $writeData @${simTime()}")
         offset match {
           case _ if offset >= 0x8000000 && offset < 0x9000000 => {
-            val hart = ((offset & 0xFF0000) >> 16).toInt
-            val code = (offset & 0x00FFFF).toInt
-            val data = writeData
+            val report = Report(
+              hart = ((offset & 0xFF0000) >> 16).toInt,
+              code = (offset & 0x00FFFF).toInt,
+              data = writeData
+            )
+            println(report)
+            reports(report.hart) += report
+            reportWatchdog += 1
+            import report._
             import SmpTest._
             code match {
               case REPORT_THREAD_ID => assert(data == hart)
-              case REPORT_THREAD_COUNT => assert(data == hartCount)
+              case REPORT_THREAD_COUNT => assert(data == cpuCount)
               case REPORT_END => assert(data == 0); assert(cpuEnd(hart) == false); cpuEnd(hart) = true; if(!cpuEnd.exists(_ == false)) simSuccess()
               case REPORT_BARRIER_START => {
                 val counter = barriers.getOrElse(data, 0)
-                assert(counter < hartCount)
+                assert(counter < cpuCount)
                 barriers(data) = counter + 1
               }
               case REPORT_BARRIER_END => {
                 val counter = barriers.getOrElse(data, 0)
-                assert(counter == hartCount)
+                assert(counter == cpuCount)
               }
             }
           }
