@@ -1,19 +1,20 @@
-#define REPORT_OFFSET 0xF0000000
-#define REPORT_THREAD_ID 0
-#define REPORT_THREAD_COUNT 1
-#define REPORT_SUCCESS 2
-#define REPORT_FAILURE 3
+#define REPORT_OFFSET 0xF8000000
+#define REPORT_THREAD_ID 0x00
+#define REPORT_THREAD_COUNT 0x04
+#define REPORT_END 0x08
+#define REPORT_BARRIER_START 0x0C
+#define REPORT_BARRIER_END   0x10
 
 #define report(reg, id) \
-    li a0, id*4; \
-    sw reg, 0(a0); \
+    li t0, REPORT_OFFSET+id; \
+    csrr t1, mhartid; \
+    slli t1, t1, 16; \
+    add t0, t0, t1; \
+    sw reg, 0(t0); \
 
 _start:
-
-    #define HART_ID x20
-    csrr HART_ID, mhartid
-    la a0, test1_data
-    report(a0, REPORT_THREAD_ID)
+    csrr s0, mhartid
+    report(s0, REPORT_THREAD_ID)
 
 
 count_thread_start:
@@ -29,16 +30,88 @@ count_thread_wait:
     call sleep
     lw s1, thread_count
     bne s1, s0, count_thread_wait
-    report(s1, REPORT_THREAD_ID)
+    report(s1, REPORT_THREAD_COUNT)
+
+
+barrier_amo_test:
+    li a0, 1
+    call barrier_amo
+    li a0, 2
+    call barrier_amo
+    li a0, 3
+    call barrier_amo
+
+    li a0, 4
+    call barrier_lrsc
+    li a0, 5
+    call barrier_lrsc
+    li a0, 6
+    call barrier_lrsc
+
+    li a0, 7
+    call barrier_amo
+    li a0, 8
+    call barrier_lrsc
+
 
     j success
 
+
+
+
+barrier_amo:
+    report(a0, REPORT_BARRIER_START)
+    la t0, barrier_amo_value
+    li t1, 1
+    amoadd.w x0, t1, (t0)
+    lw t1, thread_count
+barrier_amo_wait:
+    lw t2, (t0)
+    bne t2, t1, barrier_amo_wait
+    report(a0, REPORT_BARRIER_END)
+barrier_amo_reset:
+    csrr t0, mhartid
+    bnez t0, barrier_amo_reset_wait
+    sw x0, barrier_amo_value, t0
+    ret
+barrier_amo_reset_wait:
+    lw t0, barrier_amo_value
+    bnez t0, barrier_amo_reset_wait
+    ret
+    
+barrier_lrsc:
+    report(a0, REPORT_BARRIER_START)
+    la t0, barrier_lrsc_value
+barrier_lrsc_try:
+    lr.w t1, (t0)
+    addi t1, t1, 1
+    sc.w t1, t1, (t0)
+    bnez t1, barrier_lrsc_try
+    lw t1, thread_count
+barrier_lrsc_wait:
+    lw t2, (t0)
+    bne t2, t1, barrier_lrsc_wait
+    report(a0, REPORT_BARRIER_END)
+barrier_lrsc_reset:
+    csrr t0, mhartid
+    bnez t0, barrier_lrsc_reset_wait
+    sw x0, barrier_lrsc_value, t0
+    ret
+barrier_lrsc_reset_wait:
+    lw t0, barrier_lrsc_value
+    bnez t0, barrier_lrsc_reset_wait
+    ret
+
+
+
 success:
-    report(x0, REPORT_SUCCESS)
+    li s0, 0
+    report(s0, REPORT_END)
     j end
 
 failure:
-    report(x0, REPORT_FAILURE)
+    li s0, 1
+    report(s0, REPORT_END)
     j end
 
 end:
@@ -53,18 +126,5 @@ sleep:
 
 thread_count: .word 0
 shared_memory_1: .word 0
-
-test1_data: .word 11
-test2_data: .word 22
-test3_data: .word 73
-test4_data: .word 58
-test5_data: .word 56
-test6_data: .word 75
-test7_data: .word 56
-test8_data: .word 83
-test9_data: .word 33
-test10_data: .word -65
-test11_data: .word -87
-test12_data: .word -55
-test13_data: .word 0xFFFF0004
-test14_data: .word 0xFFFF0005
+barrier_amo_value: .word 0
+barrier_lrsc_value: .word 0

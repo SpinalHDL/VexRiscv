@@ -10,6 +10,8 @@ import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionC
 import vexriscv.plugin.{BranchPlugin, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
 import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
 
+import scala.collection.mutable
+
 
 case class VexRiscvSmpClusterParameter( cpuConfigs : Seq[VexRiscvConfig])
 
@@ -27,7 +29,8 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
 
   val io = new Bundle {
     val dMem = master(Bmb(dMemParameter))
-    val iMem = master(Bmb(iMemParameter))
+//    val iMem = master(Bmb(iMemParameter))
+    val iMems = Vec(master(Bmb(iMemParameter)), p.cpuConfigs.size)
     val timerInterrupts = in Bits(p.cpuConfigs.size bits)
     val externalInterrupts = in Bits(p.cpuConfigs.size bits)
     val externalSupervisorInterrupts = in Bits(p.cpuConfigs.size bits)
@@ -87,18 +90,19 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
 
   io.dMem << invalidateMonitor.io.output
 
-  val iBusArbiter = BmbArbiter(
-    p = iBusArbiterParameter,
-    portCount = cpus.size,
-    pendingRspMax = 64,
-    lowerFirstPriority = false,
-    inputsWithInv = cpus.map(_ => true),
-    inputsWithSync = cpus.map(_ => true),
-    pendingInvMax = 16
-  )
-
-  (iBusArbiter.io.inputs, cpus).zipped.foreach(_ << _.iBus)
-  io.iMem << iBusArbiter.io.output
+//  val iBusArbiter = BmbArbiter(
+//    p = iBusArbiterParameter,
+//    portCount = cpus.size,
+//    pendingRspMax = 64,
+//    lowerFirstPriority = false,
+//    inputsWithInv = cpus.map(_ => true),
+//    inputsWithSync = cpus.map(_ => true),
+//    pendingInvMax = 16
+//  )
+//
+//  (iBusArbiter.io.inputs, cpus).zipped.foreach(_ << _.iBus)
+//  io.iMem << iBusArbiter.io.output
+  (io.iMems, cpus).zipped.foreach(_ << _.iBus)
 }
 
 
@@ -274,6 +278,14 @@ object VexRiscvSmpClusterGen {
 }
 
 
+object SmpTest{
+  val REPORT_OFFSET = 0xF8000000
+  val REPORT_THREAD_ID = 0x00
+  val REPORT_THREAD_COUNT = 0x04
+  val REPORT_END = 0x08
+  val REPORT_BARRIER_START = 0x0C
+  val REPORT_BARRIER_END   = 0x10
+}
 object VexRiscvSmpClusterTest extends App{
   import spinal.core.sim._
 
@@ -282,21 +294,57 @@ object VexRiscvSmpClusterTest extends App{
   simConfig.allOptimisation
   simConfig.addSimulatorFlag("--threads 1")
 
-  simConfig.compile(VexRiscvSmpClusterGen.vexRiscvCluster()).doSim(seed = 42){dut =>
+  simConfig.compile(VexRiscvSmpClusterGen.vexRiscvCluster()).doSimUntilVoid(seed = 42){dut =>
+    SimTimeout(10000*10)
     dut.clockDomain.forkSimSpeedPrinter(1.0)
     dut.clockDomain.forkStimulus(10)
     dut.debugClockDomain.forkStimulus(10)
 
+    val hartCount = dut.cpus.size
 
     JtagTcp(dut.io.jtag, 100)
 
-    val ram = new BmbMemoryAgent(0x100000000l)
-    ram.addPort(dut.io.iMem,0,dut.clockDomain,true)
-    ram.addPort(dut.io.dMem,0,dut.clockDomain,true)
+    val withStall = false
+    val cpuEnd = Array.fill(dut.p.cpuConfigs.size)(false)
+    val barriers = mutable.HashMap[Int, Int]()
+    val ram = new BmbMemoryAgent(0x100000000l){
+      var writeData = 0
+      override def setByte(address: Long, value: Byte): Unit = {
+        if((address & 0xF0000000l) != 0xF0000000l) return  super.setByte(address, value)
+        val byteId = address & 3
+        val mask = 0xFF << (byteId*8)
+        writeData = (writeData & ~mask) | ((value.toInt << (byteId*8)) & mask)
+        if(byteId != 3) return
+        val offset = (address & ~0xF0000000l)-3
+        println(s"W[0x${offset.toHexString}] = $writeData")
+        offset match {
+          case _ if offset >= 0x8000000 && offset < 0x9000000 => {
+            val hart = ((offset & 0xFF0000) >> 16).toInt
+            val code = (offset & 0x00FFFF).toInt
+            val data = writeData
+            import SmpTest._
+            code match {
+              case REPORT_THREAD_ID => assert(data == hart)
+              case REPORT_THREAD_COUNT => assert(data == hartCount)
+              case REPORT_END => assert(data == 0); assert(cpuEnd(hart) == false); cpuEnd(hart) = true; if(!cpuEnd.exists(_ == false)) simSuccess()
+              case REPORT_BARRIER_START => {
+                val counter = barriers.getOrElse(data, 0)
+                assert(counter < hartCount)
+                barriers(data) = counter + 1
+              }
+              case REPORT_BARRIER_END => {
+                val counter = barriers.getOrElse(data, 0)
+                assert(counter == hartCount)
+              }
+            }
+          }
+        }
+      }
+    }
+    dut.io.iMems.foreach(ram.addPort(_,0,dut.clockDomain,true, withStall)) //Moarr powaaaaa
+//    ram.addPort(dut.io.iMem,0,dut.clockDomain,true, withStall)
+    ram.addPort(dut.io.dMem,0,dut.clockDomain,true, withStall)
 
     ram.memory.loadBin(0x80000000l, "src/test/cpp/raw/smp/build/smp.bin")
-
-    sleep(10000*10)
-    simSuccess()
   }
 }
