@@ -3,3 +3,4 @@
 *.elf
 *.o
 *.hex
+!*.bin
