@@ -4,6 +4,8 @@ import spinal.core._
 
 
 object Riscv{
+  def misaToInt(values : String) = values.toLowerCase.map(e => 1 << (e-'a')).reduce(_ | _)
+
   def funct7Range = 31 downto 25
   def rdRange = 11 downto 7
   def funct3Range = 14 downto 12

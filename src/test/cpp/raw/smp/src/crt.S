@@ -26,7 +26,7 @@ count_thread_start:
 count_thread_wait:
     //Wait everybody
     lw s0, thread_count
-    li a0, 200
+    li a0, 400
     call sleep
     lw s1, thread_count
     bne s1, s0, count_thread_wait

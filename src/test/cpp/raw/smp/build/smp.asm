@@ -21,7 +21,7 @@ Disassembly of section .crt_section:
 80000028 <count_thread_wait>:
 80000028:	00000417          	auipc	s0,0x0
 8000002c:	1c442403          	lw	s0,452(s0) # 800001ec <thread_count>
-80000030:	0c800513          	li	a0,200
+80000030:	19000513          	li	a0,400
 80000034:	1ac000ef          	jal	ra,800001e0 <sleep>
 80000038:	00000497          	auipc	s1,0x0
 8000003c:	1b44a483          	lw	s1,436(s1) # 800001ec <thread_count>
