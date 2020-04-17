@@ -419,7 +419,7 @@ object VexRiscvSmpClusterTestInfrastructure{
   }
   def init(dut : VexRiscvSmpCluster): Unit ={
     import spinal.core.sim._
-    dut.clockDomain.forkSimSpeedPrinter(1.0)
+//    dut.clockDomain.forkSimSpeedPrinter(1.0)
     dut.clockDomain.forkStimulus(10)
     dut.debugClockDomain.forkStimulus(10)
     JtagTcp(dut.io.jtag, 100)
