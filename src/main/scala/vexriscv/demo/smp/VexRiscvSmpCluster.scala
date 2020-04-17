@@ -388,6 +388,10 @@ object VexRiscvSmpClusterTestInfrastructure{
       onWrite(PUTC)(data => print(data.toChar))
 //      onWrite(GETC)(data => System.in.read().toInt)
 
+      dut.io.softwareInterrupts #= 0
+      dut.io.timerInterrupts #= 0
+      dut.io.externalInterrupts #= 0
+      dut.io.externalSupervisorInterrupts #= 0
       onRead(CLINT_TIME_ADDR)(simTime().toInt)
       onRead(CLINT_TIME_ADDR+4)((simTime() >> 32).toInt)
       for(hartId <- 0 until cpuCount){
@@ -458,7 +462,7 @@ object VexRiscvSmpClusterOpenSbi extends App{
   simConfig.allOptimisation
   simConfig.addSimulatorFlag("--threads 1")
 
-  val cpuCount = 4
+  val cpuCount = 16
   val withStall = false
 
   simConfig.compile(VexRiscvSmpClusterGen.vexRiscvCluster(cpuCount)).doSimUntilVoid(seed = 42){dut =>
