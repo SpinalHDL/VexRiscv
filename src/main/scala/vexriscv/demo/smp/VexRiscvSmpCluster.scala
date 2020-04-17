@@ -462,7 +462,7 @@ object VexRiscvSmpClusterOpenSbi extends App{
   simConfig.allOptimisation
   simConfig.addSimulatorFlag("--threads 1")
 
-  val cpuCount = 16
+  val cpuCount = 4
   val withStall = false
 
   simConfig.compile(VexRiscvSmpClusterGen.vexRiscvCluster(cpuCount)).doSimUntilVoid(seed = 42){dut =>
