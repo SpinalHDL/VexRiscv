@@ -383,17 +383,32 @@ object VexRiscvSmpClusterTestInfrastructure{
 
       val clint = new {
         val cmp = Array.fill(cpuCount)(0l)
+        var time = 0l
+        periodicaly(100){
+          time += 10
+          var timerInterrupts = 0l
+          for(i <- 0 until cpuCount){
+            if(cmp(i) < time) timerInterrupts |= 1l << i
+          }
+          dut.io.timerInterrupts #= timerInterrupts
+        }
+
+//        delayed(200*1000000){
+//          dut.io.softwareInterrupts #= 0xE
+//          enableSimWave()
+//          println("force IPI")
+//        }
       }
 
       onWrite(PUTC)(data => print(data.toChar))
-//      onWrite(GETC)(data => System.in.read().toInt)
+      onRead(GETC)( if(System.in.available() != 0) System.in.read() else -1)
 
       dut.io.softwareInterrupts #= 0
       dut.io.timerInterrupts #= 0
       dut.io.externalInterrupts #= 0
       dut.io.externalSupervisorInterrupts #= 0
-      onRead(CLINT_TIME_ADDR)(simTime().toInt)
-      onRead(CLINT_TIME_ADDR+4)((simTime() >> 32).toInt)
+      onRead(CLINT_TIME_ADDR)(clint.time.toInt)
+      onRead(CLINT_TIME_ADDR+4)((clint.time >> 32).toInt)
       for(hartId <- 0 until cpuCount){
         onWrite(CLINT_IPI_ADDR + hartId*4) {data =>
           val mask = 1l << hartId
@@ -402,19 +417,11 @@ object VexRiscvSmpClusterTestInfrastructure{
         }
         onRead(CLINT_CMP_ADDR + hartId*8)(clint.cmp(hartId).toInt)
         onRead(CLINT_CMP_ADDR + hartId*8+4)((clint.cmp(hartId) >> 32).toInt)
-        onWrite(CLINT_CMP_ADDR + hartId*8)(data => clint.cmp(hartId) = (clint.cmp(hartId) & 0xFFFFFFFF00000000l) | data)
-        onWrite(CLINT_CMP_ADDR + hartId*8+4)(data => (clint.cmp(hartId) & 0x00000000FFFFFFFFl) | (data << 32))
+        onWrite(CLINT_CMP_ADDR + hartId*8){data => clint.cmp(hartId) = (clint.cmp(hartId) & 0xFFFFFFFF00000000l) | data}
+        onWrite(CLINT_CMP_ADDR + hartId*8+4){data => clint.cmp(hartId) = (clint.cmp(hartId) & 0x00000000FFFFFFFFl) | (data.toLong << 32)}
       }
 
-      var time = 0l
-      periodicaly(100){
-        time += 10
-        var timerInterrupts = 0l
-        for(i <- 0 until cpuCount){
-          if(clint.cmp(i) < time) timerInterrupts |= 1l << i
-        }
-        dut.io.timerInterrupts #= timerInterrupts
-      }
+
 
     }
     dut.io.iMems.foreach(ram.addPort(_,0,dut.clockDomain,true, withStall))
@@ -423,7 +430,6 @@ object VexRiscvSmpClusterTestInfrastructure{
   }
   def init(dut : VexRiscvSmpCluster): Unit ={
     import spinal.core.sim._
-//    dut.clockDomain.forkSimSpeedPrinter(1.0)
     dut.clockDomain.forkStimulus(10)
     dut.debugClockDomain.forkStimulus(10)
     JtagTcp(dut.io.jtag, 100)
@@ -465,10 +471,41 @@ object VexRiscvSmpClusterOpenSbi extends App{
   val cpuCount = 4
   val withStall = false
 
-  simConfig.compile(VexRiscvSmpClusterGen.vexRiscvCluster(cpuCount)).doSimUntilVoid(seed = 42){dut =>
+  simConfig.workspaceName("rawr_4c").compile(VexRiscvSmpClusterGen.vexRiscvCluster(cpuCount)).doSimUntilVoid(seed = 42){dut =>
+//    dut.clockDomain.forkSimSpeedPrinter(1.0)
     VexRiscvSmpClusterTestInfrastructure.init(dut)
     val ram = VexRiscvSmpClusterTestInfrastructure.ram(dut)
-    ram.memory.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_payload.bin")
-//    ram.memory.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin")
+//    ram.memory.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_payload.bin")
+    ram.memory.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin")
+    ram.memory.loadBin(0xC0000000l, "../buildroot/output/images/Image")
+    ram.memory.loadBin(0xC1000000l, "../buildroot/output/images/dtb")
+    ram.memory.loadBin(0xC2000000l, "../buildroot/output/images/rootfs.cpio")
+
+//    fork{
+//      disableSimWave()
+//      val atMs = 130
+//      val durationMs = 15
+//      sleep(atMs*1000000)
+//      enableSimWave()
+//      println("** enableSimWave **")
+//      sleep(durationMs*1000000)
+//      println("** disableSimWave **")
+//      while(true) {
+//        disableSimWave()
+//        sleep(100000 * 10)
+//        enableSimWave()
+//        sleep(  100 * 10)
+//      }
+////      simSuccess()
+//    }
+
+    fork{
+      while(true) {
+        disableSimWave()
+        sleep(100000 * 10)
+        enableSimWave()
+        sleep(  100 * 10)
+      }
+    }
   }
 }
