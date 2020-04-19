@@ -514,6 +514,7 @@ class DataCache(val p : DataCacheConfig) extends Component{
     val counter = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
     counter := counter + U(io.mem.cmd.fire && io.mem.cmd.last) - U(io.mem.rsp.valid  && io.mem.rsp.last)
 
+    val consistent = counter === 0
     val full = RegNext(counter.msb)
     val last = counter === 1
 
@@ -533,6 +534,8 @@ class DataCache(val p : DataCacheConfig) extends Component{
 
     val full = RegNext(counter.msb)
     io.cpu.execute.haltIt setWhen(full)
+
+    val consistent = counter === 0
   }
 
 
@@ -546,9 +549,9 @@ class DataCache(val p : DataCacheConfig) extends Component{
     val wayInvalidate = B(0, wayCount bits) //Used if invalidate enabled
 
     when(io.cpu.execute.fence){
-      val counter = if(withInvalidate) sync.counter else if(withWriteResponse) pending.counter else null
-      if(counter != null){
-        when(counter =/= 0 || io.cpu.memory.isValid || io.cpu.writeBack.isValid){
+      val consistent = if(withInvalidate) sync.consistent else if(withWriteResponse) pending.consistent else null
+      if(consistent != null){
+        when(!consistent || io.cpu.memory.isValid && io.cpu.memory.isWrite || io.cpu.writeBack.isValid && io.cpu.memory.isWrite){
           io.cpu.execute.haltIt := True
         }
       }
