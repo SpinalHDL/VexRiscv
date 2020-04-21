@@ -8,7 +8,6 @@ import spinal.lib.bus.bmb.sim.BmbMemoryAgent
 import spinal.lib.bus.bmb.{Bmb, BmbArbiter, BmbDecoder, BmbExclusiveMonitor, BmbInvalidateMonitor, BmbParameter}
 import spinal.lib.com.jtag.Jtag
 import spinal.lib.com.jtag.sim.JtagTcp
-import vexriscv.demo.smp.VexRiscvSmpClusterTest.{cpuCount, withStall}
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCacheConfig}
 import vexriscv.plugin.{BranchPlugin, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
 import vexriscv.{Riscv, VexRiscv, VexRiscvConfig, plugin}
@@ -301,7 +300,7 @@ object VexRiscvSmpClusterTestInfrastructure{
   val CLINT_CMP_ADDR = CLINT_ADDR+0x4000
   val CLINT_TIME_ADDR = CLINT_ADDR+0xBFF8
 
-  def ram(dut : VexRiscvSmpCluster) = {
+  def ram(dut : VexRiscvSmpCluster, withStall : Boolean) = {
     import spinal.core.sim._
     val cpuCount = dut.cpus.size
     val ram = new BmbMemoryAgent(0x100000000l){
@@ -479,7 +478,7 @@ object VexRiscvSmpClusterTest extends App{
     SimTimeout(100000000l*10*cpuCount)
     dut.clockDomain.forkSimSpeedPrinter(1.0)
     VexRiscvSmpClusterTestInfrastructure.init(dut)
-    val ram = VexRiscvSmpClusterTestInfrastructure.ram(dut)
+    val ram = VexRiscvSmpClusterTestInfrastructure.ram(dut, withStall)
     ram.memory.loadBin(0x80000000l, "src/test/cpp/raw/smp/build/smp.bin")
     periodicaly(20000*10){
       assert(ram.reportWatchdog != 0)
@@ -505,7 +504,7 @@ object VexRiscvSmpClusterOpenSbi extends App{
   simConfig.workspaceName("rawr_4c").compile(VexRiscvSmpClusterGen.vexRiscvCluster(cpuCount)).doSimUntilVoid(seed = 42){dut =>
 //    dut.clockDomain.forkSimSpeedPrinter(1.0)
     VexRiscvSmpClusterTestInfrastructure.init(dut)
-    val ram = VexRiscvSmpClusterTestInfrastructure.ram(dut)
+    val ram = VexRiscvSmpClusterTestInfrastructure.ram(dut, withStall)
 //    ram.memory.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_payload.bin")
     ram.memory.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin")
     ram.memory.loadBin(0xC0000000l, "../buildroot/output/images/Image")
