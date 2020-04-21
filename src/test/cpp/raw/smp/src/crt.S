@@ -1,4 +1,4 @@
-#define CONSISTENCY_REDO_COUNT 10
+#define CONSISTENCY_REDO_COUNT 50
 
 
 #define REPORT_OFFSET 0xF8000000
@@ -59,6 +59,51 @@ barrier_amo_test:
 
 
     lw gp, barrier_allocator
+
+consistancy_test1:
+    la t0, consistancy_init_load
+    sw t0, consistancy_init_call, t1
+    la t0, consistancy_do_simple_fence
+    sw t0, consistancy_do_call, t1
+    la t0, consistancy_test2
+    sw t0, consistancy_done_call, t1
+    j consistancy_start
+
+consistancy_test2:
+    la t0, consistancy_init_load
+    sw t0, consistancy_init_call, t1
+    la t0, consistancy_do_rl_fence
+    sw t0, consistancy_do_call, t1
+    la t0, success
+    sw t0, consistancy_done_call, t1
+    j consistancy_start
+
+
+consistancy_init_load:
+    lw s3, (s1) //Help getting the cache loaded for the consistancy check
+    j consistancy_do_init_done
+
+consistancy_do_simple_fence:
+    //Consistancy check : write to read ordering on two thread
+    sw s2, (s0)
+    fence w,r
+    lw s3, (s1)
+    sw s3, 64(s0)
+    j consistancy_join
+
+consistancy_do_rl_fence:
+    //Consistancy check : write to read ordering on two thread
+    sw s2, (s0)
+    lr.w.rl s3, (s1)
+    sw s3, 64(s0)
+    j consistancy_join
+
+
+consistancy_start:
+    mv a0, gp
+    addi gp, gp, 1
+    call barrier_lrsc
+    sw x0, consistancy_all_tested, t0
 consistancy_loop:
     //Sync
     mv a0, gp
@@ -91,17 +136,17 @@ consistancy_hart_not_involved:
     j consistancy_join
 
 consistancy_do:
+    lw t0, consistancy_init_call
+    jalr t0
+consistancy_do_init_done:
     li s2, 666
     mv a0, gp
     addi gp, gp, 1
-    lw s3, (s1) //Help getting the cache loaded for the consistancy check
     call barrier_lrsc
 
-    //Consistancy check : write to read ordering on two thread
-    sw s2, (s0)
-    fence w,r
-    lw s3, (s1)
-    sw s3, 64(s0)
+
+    lw t0, consistancy_do_call
+    jalr t0
 
 consistancy_join:
     fence rw, rw //ensure updated values
@@ -144,7 +189,11 @@ consistancy_increment_fence:
     j consistancy_loop
 
 consistancy_passed:
-    j success
+    lw s0, consistancy_done_call
+    mv a0, gp
+    addi gp, gp, 1
+    call barrier_lrsc
+    jalr s0
 
 
 
@@ -235,3 +284,4 @@ consistancy_a_readed: .word 0
 .align   6 //Same cache line
 consistancy_init_call: .word 0
 consistancy_do_call: .word 0
+consistancy_done_call: .word 0

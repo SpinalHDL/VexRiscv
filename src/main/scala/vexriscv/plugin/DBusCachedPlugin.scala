@@ -236,7 +236,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
             if(withLrSc) insert(MEMORY_FENCE_BACK) setWhen(input(MEMORY_LRSC))
             if(withAmo)  insert(MEMORY_FENCE_BACK) setWhen(input(MEMORY_AMO))
           }
-          when(input(INSTRUCTION)(25)) { //RL but a bit pessimistic as could be MEMORY_FENCE_BACK when the memory op isn't a read
+          when(input(INSTRUCTION)(25)) { //RL but a bit pessimistic as it could be MEMORY_FENCE_BACK when the memory op isn't a read
             if(withLrSc) insert(MEMORY_FENCE_FRONT) setWhen(input(MEMORY_LRSC))
             if(withAmo)  insert(MEMORY_FENCE_FRONT) setWhen(input(MEMORY_AMO))
           }

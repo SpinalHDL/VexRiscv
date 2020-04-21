@@ -488,7 +488,9 @@ object VexRiscvSmpClusterTest extends App{
   }
 }
 
-
+// echo "echo 10000 | dhrystone >> log" > test
+// time sh test &
+// top -b -n 1
 object VexRiscvSmpClusterOpenSbi extends App{
   import spinal.core.sim._
 
