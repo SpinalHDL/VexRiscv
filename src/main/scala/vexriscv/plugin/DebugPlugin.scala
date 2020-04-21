@@ -1,7 +1,7 @@
 package vexriscv.plugin
 
-import spinal.lib.com.jtag.Jtag
-import spinal.lib.system.debugger.{JtagBridge, SystemDebugger, SystemDebuggerConfig}
+import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
+import spinal.lib.system.debugger.{JtagBridge, JtagBridgeNoTap, SystemDebugger, SystemDebuggerConfig, SystemDebuggerMemBus}
 import vexriscv.plugin.IntAluPlugin.{ALU_CTRL, AluCtrlEnum}
 import vexriscv._
 import vexriscv.ip._
@@ -63,6 +63,18 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
     bus
   }
 
+  def from(c : SystemDebuggerConfig) : SystemDebuggerMemBus = {
+    val mem = SystemDebuggerMemBus(c)
+    cmd.valid          := mem.cmd.valid
+    cmd.wr             := mem.cmd.wr
+    cmd.data           := mem.cmd.data
+    cmd.address        := mem.cmd.address.resized
+    mem.cmd.ready      := cmd.ready
+    mem.rsp.valid      := RegNext(cmd.fire).init(False)
+    mem.rsp.payload    := rsp.data
+    mem
+  }
+
   def fromJtag(): Jtag ={
     val jtagConfig = SystemDebuggerConfig(
       memAddressWidth = 32,
@@ -72,15 +84,23 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
     val jtagBridge = new JtagBridge(jtagConfig)
     val debugger = new SystemDebugger(jtagConfig)
     debugger.io.remote <> jtagBridge.io.remote
-    debugger.io.mem.cmd.valid           <> cmd.valid
-    debugger.io.mem.cmd.ready           <> cmd.ready
-    debugger.io.mem.cmd.wr              <> cmd.wr
-    cmd.address := debugger.io.mem.cmd.address.resized
-    debugger.io.mem.cmd.data            <> cmd.data
-    debugger.io.mem.rsp.valid           <> RegNext(cmd.fire).init(False)
-    debugger.io.mem.rsp.payload         <> rsp.data
+    debugger.io.mem <> this.from(jtagConfig)
 
     jtagBridge.io.jtag
+  }
+
+  def fromJtagInstructionCtrl(jtagClockDomain : ClockDomain): JtagTapInstructionCtrl ={
+    val jtagConfig = SystemDebuggerConfig(
+      memAddressWidth = 32,
+      memDataWidth    = 32,
+      remoteCmdWidth  = 1
+    )
+    val jtagBridge = new JtagBridgeNoTap(jtagConfig, jtagClockDomain)
+    val debugger = new SystemDebugger(jtagConfig)
+    debugger.io.remote <> jtagBridge.io.remote
+    debugger.io.mem <> this.from(jtagConfig)
+
+    jtagBridge.io.ctrl
   }
 }
 

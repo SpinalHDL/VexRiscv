@@ -401,7 +401,7 @@ public:
 		sdramIo->ADDR            = &top->io_sdram_ADDR           ;
 		sdramIo->DQ_read         = (CData*)&top->io_sdram_DQ_read        ;
 		sdramIo->DQ_write        = (CData*)&top->io_sdram_DQ_write       ;
-		sdramIo->DQ_writeEnable = &top->io_sdram_DQ_writeEnable;
+		sdramIo->DQ_writeEnable = (CData*)&top->io_sdram_DQ_writeEnable;
 		Sdram *sdram = new Sdram(sdramConfig, sdramIo);
 
 		axiClk->add(sdram);
