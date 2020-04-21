@@ -292,6 +292,7 @@ object VexRiscvSmpClusterTestInfrastructure{
   val REPORT_END = 0x08
   val REPORT_BARRIER_START = 0x0C
   val REPORT_BARRIER_END   = 0x10
+  val REPORT_CONSISTENCY_VALUES = 0x14
 
   val PUTC = 0x00
   val GETC = 0x04
@@ -310,14 +311,7 @@ object VexRiscvSmpClusterTestInfrastructure{
         }
       }
       val reports = ArrayBuffer.fill(cpuCount)(ArrayBuffer[Report]())
-      onSimEnd{
-        for((list, hart) <- reports.zipWithIndex){
-          println(f"\n\n**** CPU $hart%2d ****")
-          for((report, reportId) <- list.zipWithIndex){
-            println(f"  $reportId%3d : ${report.code}%3x -> ${report.data}%3d")
-          }
-        }
-      }
+
 
       val writeTable = mutable.HashMap[Int, Int => Unit]()
       val readTable = mutable.HashMap[Int, () => Int]()
@@ -329,6 +323,24 @@ object VexRiscvSmpClusterTestInfrastructure{
       var reportWatchdog = 0
       val cpuEnd = Array.fill(cpuCount)(false)
       val barriers = mutable.HashMap[Int, Int]()
+      var consistancyCounter = 0
+      var consistancyLast = 0
+      var consistancyA = 0
+      var consistancyB = 0
+      var consistancyAB = 0
+      var consistancyNone = 0
+
+      onSimEnd{
+        for((list, hart) <- reports.zipWithIndex){
+          println(f"\n\n**** CPU $hart%2d ****")
+          for((report, reportId) <- list.zipWithIndex){
+            println(f"  $reportId%3d : ${report.code}%3x -> ${report.data}%3d")
+          }
+        }
+
+        println(s"consistancy NONE:$consistancyNone A:$consistancyA B:$consistancyB AB:$consistancyAB")
+      }
+
       override def setByte(address: Long, value: Byte): Unit = {
         if((address & 0xF0000000l) != 0xF0000000l) return  super.setByte(address, value)
         val byteId = address & 3
@@ -344,7 +356,7 @@ object VexRiscvSmpClusterTestInfrastructure{
               code = (offset & 0x00FFFF).toInt,
               data = writeData
             )
-            println(report)
+//            println(report)
             reports(report.hart) += report
             reportWatchdog += 1
             import report._
@@ -360,6 +372,21 @@ object VexRiscvSmpClusterTestInfrastructure{
               case REPORT_BARRIER_END => {
                 val counter = barriers.getOrElse(data, 0)
                 assert(counter == cpuCount)
+              }
+              case REPORT_CONSISTENCY_VALUES => consistancyCounter match {
+                case 0 => {
+                  consistancyCounter = 1
+                  consistancyLast = data
+                }
+                case 1 => {
+                  consistancyCounter =  0
+                  (data, consistancyLast) match {
+                    case (666, 0) => consistancyA += 1
+                    case (0, 666) => consistancyB += 1
+                    case (666, 666)  => consistancyAB += 1
+                    case (0,0) => consistancyNone += 1; simFailure("Consistancy issue :(")
+                  }
+                }
               }
             }
           }
@@ -440,7 +467,7 @@ object VexRiscvSmpClusterTest extends App{
   import spinal.core.sim._
 
   val simConfig = SimConfig
-//  simConfig.withWave
+  simConfig.withWave
   simConfig.allOptimisation
   simConfig.addSimulatorFlag("--threads 1")
 
@@ -448,7 +475,9 @@ object VexRiscvSmpClusterTest extends App{
   val withStall = true
 
   simConfig.compile(VexRiscvSmpClusterGen.vexRiscvCluster(cpuCount)).doSimUntilVoid(seed = 42){dut =>
-    SimTimeout(10000*10*cpuCount)
+    disableSimWave()
+    SimTimeout(100000000l*10*cpuCount)
+    dut.clockDomain.forkSimSpeedPrinter(1.0)
     VexRiscvSmpClusterTestInfrastructure.init(dut)
     val ram = VexRiscvSmpClusterTestInfrastructure.ram(dut)
     ram.memory.loadBin(0x80000000l, "src/test/cpp/raw/smp/build/smp.bin")

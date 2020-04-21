@@ -102,10 +102,10 @@ case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterS
   val address = UInt(p.addressWidth bit)
   val haltIt = Bool
   val args = DataCacheCpuExecuteArgs(p)
-  val fence = Bool()
+  val totalyConsistent = Bool()
 
   override def asMaster(): Unit = {
-    out(isValid, args, address, fence)
+    out(isValid, args, address, totalyConsistent)
     in(haltIt)
   }
 }
@@ -129,9 +129,10 @@ case class DataCacheCpuMemory(p : DataCacheConfig) extends Bundle with IMasterSl
   val isWrite = Bool
   val address = UInt(p.addressWidth bit)
   val mmuBus  = MemoryTranslatorBus()
+  val fenceValid = Bool()
 
   override def asMaster(): Unit = {
-    out(isValid, isStuck, isRemoved, address)
+    out(isValid, isStuck, isRemoved, address, fenceValid)
     in(isWrite)
     slave(mmuBus)
   }
@@ -148,11 +149,13 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   val address = UInt(p.addressWidth bit)
   val mmuException, unalignedAccess, accessError = Bool()
   val keepMemRspData = Bool() //Used by external AMO to avoid having an internal buffer
+  val fenceValid = Bool()
+  val fenceFire = Bool()
 
   //  val exceptionBus = if(p.catchSomething) Flow(ExceptionCause()) else null
 
   override def asMaster(): Unit = {
-    out(isValid,isStuck,isUser, address)
+    out(isValid,isStuck,isUser, address, fenceValid, fenceFire)
     in(haltIt, data, mmuException, unalignedAccess, accessError, isWrite, keepMemRspData)
   }
 }
@@ -514,7 +517,7 @@ class DataCache(val p : DataCacheConfig) extends Component{
     val counter = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
     counter := counter + U(io.mem.cmd.fire && io.mem.cmd.last) - U(io.mem.rsp.valid  && io.mem.rsp.last)
 
-    val consistent = counter === 0
+    val done = counter === 0
     val full = RegNext(counter.msb)
     val last = counter === 1
 
@@ -529,14 +532,24 @@ class DataCache(val p : DataCacheConfig) extends Component{
   val sync = withInvalidate generate new Area{
     io.mem.sync.ready := True
 
-    val counter = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
-    counter := counter + U(io.mem.cmd.fire && io.mem.cmd.wr) - U(io.mem.sync.fire)
+    val pendingSync = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
+    val pendingSyncNext = pendingSync + U(io.mem.cmd.fire && io.mem.cmd.wr) - U(io.mem.sync.fire)
+    pendingSync := pendingSyncNext
 
-    val full = RegNext(counter.msb)
+    val full = RegNext(pendingSync.msb)
     io.cpu.execute.haltIt setWhen(full)
 
-    val consistent = counter === 0
+
+    val incoerentSync = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
+    incoerentSync := incoerentSync - U(io.mem.sync.fire && incoerentSync =/= 0)
+    when(io.cpu.writeBack.fenceValid){ incoerentSync := pendingSyncNext }
+
+
+    val totalyConsistent = pendingSync === 0
+    val fenceConsistent = incoerentSync === 0
   }
+
+
 
 
   val stage0 = new Area{
@@ -548,10 +561,14 @@ class DataCache(val p : DataCacheConfig) extends Component{
     val dataColisions = collisionProcess(io.cpu.execute.address(lineRange.high downto wordRange.low), mask)
     val wayInvalidate = B(0, wayCount bits) //Used if invalidate enabled
 
-    when(io.cpu.execute.fence){
-      val consistent = if(withInvalidate) sync.consistent else if(withWriteResponse) pending.consistent else null
-      if(consistent != null){
-        when(!consistent || io.cpu.memory.isValid && io.cpu.memory.isWrite || io.cpu.writeBack.isValid && io.cpu.memory.isWrite){
+    val isAmo = if(withAmo) io.cpu.execute.isAmo else False
+
+    //Ensure write to read consistency
+    val consistancyCheck = (withInvalidate || withWriteResponse) generate new Area {
+      val fenceConsistent =  (if(withInvalidate) sync.fenceConsistent else pending.done) && !io.cpu.writeBack.fenceValid && !io.cpu.memory.fenceValid //Pessimistic fence tracking
+      val totalyConsistent = (if(withInvalidate) sync.totalyConsistent else pending.done) && !(io.cpu.memory.isValid && io.cpu.memory.isWrite) && !(io.cpu.writeBack.isValid && io.cpu.memory.isWrite)
+      when(io.cpu.execute.isValid && (!io.cpu.execute.args.wr || isAmo)){
+        when(!fenceConsistent || io.cpu.execute.totalyConsistent && !totalyConsistent){
           io.cpu.execute.haltIt := True
         }
       }
@@ -631,7 +648,6 @@ class DataCache(val p : DataCacheConfig) extends Component{
         valid := True
       }
     }
-
 
     val lrSc = withInternalLrSc generate new Area{
       val reserved = RegInit(False)
@@ -923,7 +939,7 @@ class DataCache(val p : DataCacheConfig) extends Component{
       io.mem.ack.hit := wayHit
 
       //Manage invalidation read during write hazard
-      s1.invalidations := RegNext((input.valid && input.enable) ? wayHits | 0)
+      s1.invalidations := RegNextWhen((input.valid && input.enable && input.address(lineRange) === s0.input.address(lineRange)) ? wayHits | 0, s0.input.ready)
     }
   }
 }

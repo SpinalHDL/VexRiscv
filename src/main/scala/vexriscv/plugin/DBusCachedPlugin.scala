@@ -50,7 +50,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   object MEMORY_LRSC extends Stageable(Bool)
   object MEMORY_AMO extends Stageable(Bool)
   object MEMORY_FENCE extends Stageable(Bool)
-  object MEMORY_FENCE_DECODED extends Stageable(Bool)
+  object MEMORY_FENCE_FRONT extends Stageable(Bool)
+  object MEMORY_FENCE_BACK extends Stageable(Bool)
   object IS_DBUS_SHARING extends Stageable(Bool())
   object MEMORY_VIRTUAL_ADDRESS extends Stageable(UInt(32 bits))
 
@@ -224,17 +225,22 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         def PS = PW || PO
       }
 
+      //Manage write to read hit ordering (ensure invalidation timings)
       val fence = new Area{
-        val hazard = False
+        insert(MEMORY_FENCE_FRONT) := False
+        insert(MEMORY_FENCE_BACK) := False
         val ff = input(INSTRUCTION)(31 downto 20).as(FenceFlags())
         if(withWriteResponse){
-          hazard setWhen(input(MEMORY_FENCE) && (ff.PS && ff.SL)) //Manage write to read hit ordering (ensure invalidation timings)
-          when(input(INSTRUCTION)(26 downto 25) =/= 0){
-            if(withLrSc) hazard setWhen(input(MEMORY_LRSC))
-            if(withAmo)  hazard setWhen(input(MEMORY_AMO))
+          insert(MEMORY_FENCE_BACK) setWhen(input(MEMORY_FENCE) && (ff.PS && ff.SL))
+          when(input(INSTRUCTION)(26)) { //AQ
+            if(withLrSc) insert(MEMORY_FENCE_BACK) setWhen(input(MEMORY_LRSC))
+            if(withAmo)  insert(MEMORY_FENCE_BACK) setWhen(input(MEMORY_AMO))
+          }
+          when(input(INSTRUCTION)(25)) { //RL but a bit pessimistic as could be MEMORY_FENCE_BACK when the memory op isn't a read
+            if(withLrSc) insert(MEMORY_FENCE_FRONT) setWhen(input(MEMORY_LRSC))
+            if(withAmo)  insert(MEMORY_FENCE_FRONT) setWhen(input(MEMORY_AMO))
           }
         }
-        insert(MEMORY_FENCE_DECODED) := hazard
       }
     }
 
@@ -254,7 +260,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
 
       cache.io.cpu.flush.valid := arbitration.isValid && input(MEMORY_MANAGMENT)
-      cache.io.cpu.execute.fence := arbitration.isValid && input(MEMORY_FENCE_DECODED)
+      cache.io.cpu.execute.totalyConsistent := arbitration.isValid && input(MEMORY_FENCE_FRONT)
       arbitration.haltItself setWhen(cache.io.cpu.flush.isStall || cache.io.cpu.execute.haltIt)
 
       if(withLrSc) {
@@ -296,6 +302,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
       cache.io.cpu.memory.mmuBus <> mmuBus
       cache.io.cpu.memory.mmuBus.rsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
+
+      cache.io.cpu.memory.fenceValid := arbitration.isValid && input(MEMORY_FENCE_BACK)
     }
 
     val managementStage = stages.last
@@ -305,6 +313,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
       cache.io.cpu.writeBack.address := U(input(REGFILE_WRITE_DATA))
+
+      cache.io.cpu.writeBack.fenceValid := arbitration.isValid && input(MEMORY_FENCE_BACK)
+      cache.io.cpu.writeBack.fenceFire  := arbitration.isFiring && input(MEMORY_FENCE_BACK)
 
       redoBranch.valid := False
       redoBranch.payload := input(PC)
