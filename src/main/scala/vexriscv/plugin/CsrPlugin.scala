@@ -83,6 +83,46 @@ object CsrPluginConfig{
   def all : CsrPluginConfig = all(0x00000020l)
   def small : CsrPluginConfig = small(0x00000020l)
   def smallest : CsrPluginConfig = smallest(0x00000020l)
+
+  def openSbi(hartId : Int, misa : Int) = CsrPluginConfig(
+    catchIllegalAccess  = true,
+    mvendorid           = 0,
+    marchid             = 0,
+    mimpid              = 0,
+    mhartid             = hartId,
+    misaExtensionsInit  = misa,
+    misaAccess          = CsrAccess.READ_ONLY,
+    mtvecAccess         = CsrAccess.READ_WRITE,   //Could have been WRITE_ONLY :(
+    mtvecInit           = null,
+    mepcAccess          = CsrAccess.READ_WRITE,
+    mscratchGen         = true,
+    mcauseAccess        = CsrAccess.READ_ONLY,
+    mbadaddrAccess      = CsrAccess.READ_ONLY,
+    mcycleAccess        = CsrAccess.NONE,
+    minstretAccess      = CsrAccess.NONE,
+    ucycleAccess        = CsrAccess.NONE,
+    wfiGenAsWait        = true,
+    ecallGen            = true,
+    xtvecModeGen        = false,
+    noCsrAlu            = false,
+    wfiGenAsNop         = false,
+    ebreakGen           = false, //TODO
+    userGen             = true,
+    supervisorGen       = true,
+    sscratchGen         = true,
+    stvecAccess         = CsrAccess.READ_WRITE,
+    sepcAccess          = CsrAccess.READ_WRITE,
+    scauseAccess        = CsrAccess.READ_WRITE,
+    sbadaddrAccess      = CsrAccess.READ_WRITE,
+    scycleAccess        = CsrAccess.NONE,
+    sinstretAccess      = CsrAccess.NONE,
+    satpAccess          = CsrAccess.NONE,
+    medelegAccess       = CsrAccess.READ_WRITE,  //Could have been WRITE_ONLY :(
+    midelegAccess       = CsrAccess.READ_WRITE,  //Could have been WRITE_ONLY :(
+    pipelineCsrRead     = false,
+    deterministicInteruptionEntry  = false
+  )
+
   def linuxMinimal(mtVecInit : BigInt) = CsrPluginConfig(
     catchIllegalAccess  = true,
     mvendorid           = 1,
