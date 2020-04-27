@@ -567,7 +567,7 @@ class DataCache(val p : DataCacheConfig) extends Component{
     val consistancyCheck = (withInvalidate || withWriteResponse) generate new Area {
       val fenceConsistent =  (if(withInvalidate) sync.fenceConsistent else pending.done) && !io.cpu.writeBack.fenceValid && !io.cpu.memory.fenceValid //Pessimistic fence tracking
       val totalyConsistent = (if(withInvalidate) sync.totalyConsistent else pending.done) && !(io.cpu.memory.isValid && io.cpu.memory.isWrite) && !(io.cpu.writeBack.isValid && io.cpu.memory.isWrite)
-      when(io.cpu.execute.isValid && (!io.cpu.execute.args.wr || isAmo)){
+      when(io.cpu.execute.isValid /*&& (!io.cpu.execute.args.wr || isAmo)*/){
         when(!fenceConsistent || io.cpu.execute.totalyConsistent && !totalyConsistent){
           io.cpu.execute.haltIt := True
         }
