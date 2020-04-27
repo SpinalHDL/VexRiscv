@@ -27,7 +27,7 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
   val dMemParameter = BmbInvalidateMonitor.outputParameter(invalidateMonitorParameter)
 
   val iBusParameter = p.cpuConfigs.head.plugins.find(_.isInstanceOf[IBusCachedPlugin]).get.asInstanceOf[IBusCachedPlugin].config.getBmbParameter()
-  val iBusArbiterParameter = iBusParameter.copy(sourceWidth = log2Up(p.cpuConfigs.size))
+  val iBusArbiterParameter = iBusParameter//.copy(sourceWidth = log2Up(p.cpuConfigs.size))
   val iMemParameter = iBusArbiterParameter
 
   val io = new Bundle {
@@ -72,20 +72,19 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
   val dBusArbiter = BmbArbiter(
     p = dBusArbiterParameter,
     portCount = cpus.size,
-    pendingRspMax = 64,
     lowerFirstPriority = false,
     inputsWithInv = cpus.map(_ => true),
     inputsWithSync = cpus.map(_ => true),
     pendingInvMax = 16
   )
 
-  (dBusArbiter.io.inputs, cpus).zipped.foreach(_ << _.dBus)
+  (dBusArbiter.io.inputs, cpus).zipped.foreach(_ << _.dBus.pipelined(invValid = true, ackValid = true, syncValid = true))
 
   val exclusiveMonitor = BmbExclusiveMonitor(
     inputParameter = exclusiveMonitorParameter,
     pendingWriteMax = 64
   )
-  exclusiveMonitor.io.input << dBusArbiter.io.output
+  exclusiveMonitor.io.input << dBusArbiter.io.output.pipelined(cmdValid = true, cmdReady = true, rspValid = true)
 
   val invalidateMonitor = BmbInvalidateMonitor(
     inputParameter = invalidateMonitorParameter,
@@ -113,11 +112,13 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
 
 
 object VexRiscvSmpClusterGen {
-  def vexRiscvConfig(id : Int) = {
+  def vexRiscvConfig(hartId : Int,
+                     ioRange : UInt => Bool = (x => x(31 downto 28) === 0xF),
+                     resetVector : Long = 0x80000000l) = {
     val config = VexRiscvConfig(
       plugins = List(
         new MmuPlugin(
-          ioRange = x => x(31 downto 28) === 0xF
+          ioRange = ioRange
         ),
         //Uncomment the whole IBusSimplePlugin and comment IBusCachedPlugin if you want uncached iBus config
         //        new IBusSimplePlugin(
@@ -137,10 +138,11 @@ object VexRiscvSmpClusterGen {
 
         //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
         new IBusCachedPlugin(
-          resetVector = 0x80000000l,
+          resetVector = resetVector,
           compressedGen = false,
           prediction = STATIC,
           injectorStage = false,
+          relaxedPcCalculation = true,
           config = InstructionCacheConfig(
             cacheSize = 4096*1,
             bytePerLine = 32,
@@ -151,7 +153,7 @@ object VexRiscvSmpClusterGen {
             catchIllegalAccess = true,
             catchAccessFault = true,
             asyncTagMemory = false,
-            twoCycleRam = false,
+            twoCycleRam = true,
             twoCycleCache = true
             //          )
           ),
@@ -173,6 +175,7 @@ object VexRiscvSmpClusterGen {
           dBusCmdMasterPipe = true,
           dBusCmdSlavePipe = true,
           dBusRspSlavePipe = true,
+          relaxedMemoryTranslationRegister = true,
           config = new DataCacheConfig(
             cacheSize         = 4096*1,
             bytePerLine       = 32,
@@ -204,8 +207,9 @@ object VexRiscvSmpClusterGen {
           catchIllegalInstruction = true
         ),
         new RegFilePlugin(
-          regFileReadyKind = plugin.SYNC,
-          zeroBoot = true
+          regFileReadyKind = plugin.ASYNC,
+          zeroBoot = true,
+          x0Init = false
         ),
         new IntAluPlugin,
         new SrcPlugin(
@@ -232,39 +236,17 @@ object VexRiscvSmpClusterGen {
           divUnrollFactor = 1
         ),
         //          new DivPlugin,
-        new CsrPlugin(CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = false, mhartid = id, misaExtensionsInit = Riscv.misaToInt("imas"))),
-        //          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
-        //             CsrPluginConfig(
-        //            catchIllegalAccess = false,
-        //            mvendorid      = null,
-        //            marchid        = null,
-        //            mimpid         = null,
-        //            mhartid        = null,
-        //            misaExtensionsInit = 0,
-        //            misaAccess     = CsrAccess.READ_ONLY,
-        //            mtvecAccess    = CsrAccess.WRITE_ONLY,
-        //            mtvecInit      = 0x80000020l,
-        //            mepcAccess     = CsrAccess.READ_WRITE,
-        //            mscratchGen    = true,
-        //            mcauseAccess   = CsrAccess.READ_ONLY,
-        //            mbadaddrAccess = CsrAccess.READ_ONLY,
-        //            mcycleAccess   = CsrAccess.NONE,
-        //            minstretAccess = CsrAccess.NONE,
-        //            ecallGen       = true,
-        //            ebreakGen      = true,
-        //            wfiGenAsWait   = false,
-        //            wfiGenAsNop    = true,
-        //            ucycleAccess   = CsrAccess.NONE
-        //          )),
+        new CsrPlugin(CsrPluginConfig.openSbi(hartId = hartId, misa = Riscv.misaToInt("imas"))),
+
         new BranchPlugin(
           earlyBranch = false,
           catchAddressMisaligned = true,
           fenceiGenAsAJump = false
         ),
-        new YamlPlugin(s"cpu$id.yaml")
+        new YamlPlugin(s"cpu$hartId.yaml")
       )
     )
-    if(id == 0) config.plugins += new DebugPlugin(null)
+    if(hartId == 0) config.plugins += new DebugPlugin(null)
     config
   }
   def vexRiscvCluster(cpuCount : Int) = VexRiscvSmpCluster(
@@ -441,8 +423,8 @@ object VexRiscvSmpClusterTestInfrastructure{
           val value = (dut.io.softwareInterrupts.toLong & ~mask) | (if(data == 1) mask else 0)
           dut.io.softwareInterrupts #= value
         }
-        onRead(CLINT_CMP_ADDR + hartId*8)(clint.cmp(hartId).toInt)
-        onRead(CLINT_CMP_ADDR + hartId*8+4)((clint.cmp(hartId) >> 32).toInt)
+//        onRead(CLINT_CMP_ADDR + hartId*8)(clint.cmp(hartId).toInt)
+//        onRead(CLINT_CMP_ADDR + hartId*8+4)((clint.cmp(hartId) >> 32).toInt)
         onWrite(CLINT_CMP_ADDR + hartId*8){data => clint.cmp(hartId) = (clint.cmp(hartId) & 0xFFFFFFFF00000000l) | data}
         onWrite(CLINT_CMP_ADDR + hartId*8+4){data => clint.cmp(hartId) = (clint.cmp(hartId) & 0x00000000FFFFFFFFl) | (data.toLong << 32)}
       }
@@ -490,6 +472,13 @@ object VexRiscvSmpClusterTest extends App{
 // echo "echo 10000 | dhrystone >> log" > test
 // time sh test &
 // top -b -n 1
+
+// TODO
+// litex cluster should use out of order decoder
+// MultiChannelFifo.toStream arbitration
+// BmbDecoderOutOfOrder arbitration
+// DataCache to bmb invalidation that are more than single line
+// update fence w to w
 object VexRiscvSmpClusterOpenSbi extends App{
   import spinal.core.sim._
 
