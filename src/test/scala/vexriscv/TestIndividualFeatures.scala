@@ -427,8 +427,10 @@ class DBusDimension extends VexRiscvDimension("DBus") {
       var cacheSize = 0
       var wayCount = 0
       val withLrSc = catchAll
-      val withAmo = catchAll && r.nextBoolean()
-      val dBusRspSlavePipe, relaxedMemoryTranslationRegister = r.nextBoolean()
+      val withSmp = withLrSc && r.nextBoolean()
+      val withAmo = catchAll && r.nextBoolean() || withSmp
+      val dBusRspSlavePipe = r.nextBoolean() || withSmp
+      val relaxedMemoryTranslationRegister = r.nextBoolean()
       val earlyWaysHits = r.nextBoolean() && !noWriteBack
       val dBusCmdMasterPipe, dBusCmdSlavePipe = false //As it create test bench issues
 
@@ -436,8 +438,8 @@ class DBusDimension extends VexRiscvDimension("DBus") {
         cacheSize = 512 << r.nextInt(5)
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
-      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "")) {
-        override def testParam = "DBUS=CACHED " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")
+      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "") + (if(withSmp) "Smp " else "")) {
+        override def testParam = "DBUS=CACHED " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")  + (if(withSmp) "DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes " else "")
 
         override def applyOn(config: VexRiscvConfig): Unit = {
           config.plugins += new DBusCachedPlugin(
@@ -453,7 +455,9 @@ class DBusDimension extends VexRiscvDimension("DBus") {
               catchUnaligned = catchAll,
               withLrSc = withLrSc,
               withAmo = withAmo,
-              earlyWaysHits = earlyWaysHits
+              earlyWaysHits = earlyWaysHits,
+              withExclusive = withSmp,
+              withInvalidate = withSmp
             ),
             dBusCmdMasterPipe = dBusCmdMasterPipe,
             dBusCmdSlavePipe = dBusCmdSlavePipe,
