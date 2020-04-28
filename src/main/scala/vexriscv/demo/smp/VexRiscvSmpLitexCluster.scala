@@ -6,7 +6,9 @@ import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig, WishboneSlaveFactory}
 import spinal.lib.com.jtag.Jtag
 import spinal.lib._
 import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
+import spinal.lib.eda.bench.Bench
 import spinal.lib.misc.Clint
+import vexriscv.demo.smp.VexRiscvLitexSmpClusterOpenSbi.{cpuCount, parameter}
 import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
 import vexriscv.{VexRiscv, VexRiscvConfig}
 import vexriscv.plugin.{CsrPlugin, DBusCachedPlugin, DebugPlugin, IBusCachedPlugin}
@@ -157,6 +159,32 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
   val peripheralWishbone = peripheralArbiter.io.output.toWishbone()
   io.peripheral << peripheralWishbone
 }
+object VexRiscvLitexSmpClusterGen extends App {
+  val cpuCount = 4
+  val withStall = false
+
+  def parameter = VexRiscvLitexSmpClusterParameter(
+    cluster = VexRiscvSmpClusterParameter(
+      cpuConfigs = List.tabulate(cpuCount) { hartId =>
+        vexRiscvConfig(
+          hartId = hartId,
+          ioRange =  address => address.msb,
+          resetVector = 0
+        )
+      }
+    ),
+    liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
+    liteDramMapping = SizeMapping(0x40000000l, 0x40000000l)
+  )
+
+  def dutGen = VexRiscvLitexSmpCluster(
+    p = parameter,
+    debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
+  )
+
+  SpinalVerilog(Bench.compressIo(dutGen))
+
+}
 
 
 object VexRiscvLitexSmpClusterOpenSbi extends App{
@@ -180,7 +208,7 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
           )
         }
       ),
-      liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 32),
+      liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
       liteDramMapping = SizeMapping(0x40000000l, 0x40000000l)
     )
 

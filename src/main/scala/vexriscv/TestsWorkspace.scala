@@ -64,7 +64,7 @@ object TestsWorkspace {
               wayCount = 1,
               addressWidth = 32,
               cpuDataWidth = 32,
-              memDataWidth = 32,
+              memDataWidth = 128,
               catchIllegalAccess = true,
               catchAccessFault = true,
               asyncTagMemory = false,
