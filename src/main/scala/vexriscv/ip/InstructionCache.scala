@@ -70,7 +70,7 @@ case class InstructionCacheConfig( cacheSize : Int,
 
   def getBmbParameter() = BmbParameter(
     addressWidth = 32,
-    dataWidth = 32,
+    dataWidth = memDataWidth,
     lengthWidth = log2Up(this.bytePerLine),
     sourceWidth = 0,
     contextWidth = 0,
@@ -278,7 +278,6 @@ case class InstructionCacheFlushBus() extends Bundle with IMasterSlave{
 
 class InstructionCache(p : InstructionCacheConfig) extends Component{
   import p._
-  assert(cpuDataWidth == memDataWidth, "Need testing")
   val io = new Bundle{
     val flush = in Bool()
     val cpu = slave(InstructionCacheCpuBus(p))
@@ -287,7 +286,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
   val lineWidth = bytePerLine*8
   val lineCount = cacheSize/bytePerLine
-  val wordWidth = Math.max(memDataWidth,32)
+  val wordWidth = cpuDataWidth
   val wordWidthLog2 = log2Up(wordWidth)
   val wordPerLine = lineWidth/wordWidth
   val memWordPerLine = lineWidth/memDataWidth
@@ -295,7 +294,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
   val bytePerMemWord = memDataWidth/8
   val wayLineCount = lineCount/wayCount
   val wayLineLog2 = log2Up(wayLineCount)
-  val wayWordCount = wayLineCount * wordPerLine
+  val wayMemWordCount = wayLineCount * memWordPerLine
 
   val tagRange = addressWidth-1 downto log2Up(wayLineCount*bytePerLine)
   val lineRange = tagRange.low-1 downto log2Up(bytePerLine)
@@ -314,7 +313,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
   val ways = Seq.fill(wayCount)(new Area{
     val tags = Mem(LineTag(),wayLineCount)
-    val datas = Mem(Bits(memDataWidth bits),wayWordCount)
+    val datas = Mem(Bits(memDataWidth bits),wayMemWordCount)
 
     if(preResetFlush){
       tags.initBigInt(List.fill(wayLineCount)(BigInt(0)))

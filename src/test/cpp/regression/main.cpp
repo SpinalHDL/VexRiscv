@@ -2026,10 +2026,15 @@ public:
                 ws->fail();
             }
             #endif
-			ws->iBusAccess(address,&top->iBus_rsp_payload_data,&error);
+            error = false;
+            for(int idx = 0;idx < IBUS_DATA_WIDTH/32;idx++){
+                bool localError;
+			    ws->iBusAccess(address+idx*4,((uint32_t*)&top->iBus_rsp_payload_data)+idx,&localError);
+			    error |= localError;
+            }
 			top->iBus_rsp_payload_error = error;
-			pendingCount--;
-			address = address + 4;
+			pendingCount-=IBUS_DATA_WIDTH/32;
+			address = address + IBUS_DATA_WIDTH/8;
 			top->iBus_rsp_valid = 1;
 		}
 		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100 && pendingCount == 0;

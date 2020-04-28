@@ -354,7 +354,8 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
       val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
       val relaxedPcCalculation, twoCycleCache, injectorStage = r.nextBoolean()
       val twoCycleRam = r.nextBoolean() && twoCycleCache
-      val bytePerLine = List(8,16,32,64)(r.nextInt(4))
+      val memDataWidth = List(32,64,128)(r.nextInt(3))
+      val bytePerLine = Math.max(memDataWidth/8, List(8,16,32,64)(r.nextInt(4)))
       var cacheSize = 0
       var wayCount = 0
       do{
@@ -362,8 +363,8 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
 
-      new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")+ (if(tighlyCoupled)"Tc" else "")) with InstructionAnticipatedPosition{
-        override def testParam = "IBUS=CACHED" + (if(compressed) " COMPRESSED=yes" else "") + (if(tighlyCoupled)" IBUS_TC=yes" else "")
+      new VexRiscvPosition(s"Cached${memDataWidth}d" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")+ (if(tighlyCoupled)"Tc" else "")) with InstructionAnticipatedPosition{
+        override def testParam = s"IBUS=CACHED IBUS_DATA_WIDTH=$memDataWidth" + (if(compressed) " COMPRESSED=yes" else "") + (if(tighlyCoupled)" IBUS_TC=yes" else "")
         override def applyOn(config: VexRiscvConfig): Unit = {
           val p = new IBusCachedPlugin(
             resetVector = 0x80000000l,
@@ -378,7 +379,7 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
               wayCount = wayCount,
               addressWidth = 32,
               cpuDataWidth = 32,
-              memDataWidth = 32,
+              memDataWidth = memDataWidth,
               catchIllegalAccess = catchAll,
               catchAccessFault = catchAll,
               asyncTagMemory = false,
