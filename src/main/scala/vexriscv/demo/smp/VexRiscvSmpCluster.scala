@@ -479,6 +479,7 @@ object VexRiscvSmpClusterTest extends App{
 // BmbDecoderOutOfOrder arbitration
 // DataCache to bmb invalidation that are more than single line
 // update fence w to w
+// DBusCachedPlugin dBusAccess execute.isValid := True is induce a longe combinatorial path to check conditions, D$ execute valid => execute haltIt
 object VexRiscvSmpClusterOpenSbi extends App{
   import spinal.core.sim._
 

@@ -2364,9 +2364,11 @@ public:
 	virtual void onReset(){
 		top->dBus_cmd_ready = 1;
 		top->dBus_rsp_valid = 0;
+		#ifdef DBUS_INVALIDATE
 		top->dBus_inv_valid = 0;
 		top->dBus_ack_ready = 0;
 		top->dBus_sync_valid = 0;
+		#endif
 	}
 
 	virtual void preCycle(){
