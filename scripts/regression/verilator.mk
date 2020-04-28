@@ -3,7 +3,7 @@
 
 verilator/configure:
 	rm -rf verilator*
-	wget https://www.veripool.org/ftp/verilator-4.012.tgz
+	wget https://www.veripool.org/ftp/verilator-4.032.tgz
 	tar xvzf verilator*.t*gz
 	mv verilator-4.012 verilator
 
