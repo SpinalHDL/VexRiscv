@@ -22,6 +22,7 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    asyncTagMemory : Boolean,
                                    twoCycleCache : Boolean = true,
                                    twoCycleRam : Boolean = false,
+                                   twoCycleRamInnerMux : Boolean = false,
                                    preResetFlush : Boolean = false,
                                    bypassGen : Boolean = false ){
 
@@ -404,7 +405,8 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
         }else {
           way.tags.readSync(io.cpu.prefetch.pc(lineRange), !io.cpu.fetch.isStuck)
         }
-        val data = way.datas.readSync(io.cpu.prefetch.pc(lineRange.high downto memWordRange.low), !io.cpu.fetch.isStuck)
+        val dataMem = way.datas.readSync(io.cpu.prefetch.pc(lineRange.high downto memWordRange.low), !io.cpu.fetch.isStuck)
+        val data = if(!twoCycleRamInnerMux) dataMem.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(memWordToCpuWordRange)) else dataMem
       }
     }
 
@@ -415,7 +417,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       val id = OHToUInt(hits)
       val error = read.waysValues.map(_.tag.error).read(id)
       val data = read.waysValues.map(_.data).read(id)
-      val word = if(cpuDataWidth == memDataWidth) CombInit(data) else data.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(memWordToCpuWordRange))
+      val word = if(cpuDataWidth == memDataWidth || !twoCycleRamInnerMux) CombInit(data) else data.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(memWordToCpuWordRange))
       io.cpu.fetch.data := (if(p.bypassGen) (io.cpu.fetch.dataBypassValid ? io.cpu.fetch.dataBypass | word) else word)
       if(twoCycleCache){
         io.cpu.decode.data := RegNextWhen(io.cpu.fetch.data,!io.cpu.decode.isStuck)
@@ -423,7 +425,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }
 
     if(twoCycleRam && wayCount == 1){
-      val cacheData = if(cpuDataWidth == memDataWidth) CombInit(read.waysValues.head.data) else read.waysValues.head.data.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(memWordToCpuWordRange))
+      val cacheData = if(cpuDataWidth == memDataWidth || !twoCycleRamInnerMux) CombInit(read.waysValues.head.data) else read.waysValues.head.data.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(memWordToCpuWordRange))
       io.cpu.fetch.data := (if(p.bypassGen) (io.cpu.fetch.dataBypassValid ? io.cpu.fetch.dataBypass | cacheData) else cacheData)
     }
 
@@ -459,7 +461,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       val id = OHToUInt(hits)
       val error = tags(id).error
       val data = fetchStage.read.waysValues.map(way => stage(way.data)).read(id)
-      val word = if(cpuDataWidth == memDataWidth) data else data.subdivideIn(cpuDataWidth bits).read(io.cpu.decode.pc(memWordToCpuWordRange))
+      val word = if(cpuDataWidth == memDataWidth || !twoCycleRamInnerMux) data else data.subdivideIn(cpuDataWidth bits).read(io.cpu.decode.pc(memWordToCpuWordRange))
       if(p.bypassGen) when(stage(io.cpu.fetch.dataBypassValid)){
         word := stage(io.cpu.fetch.dataBypass)
       }

@@ -354,6 +354,7 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
       val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
       val relaxedPcCalculation, twoCycleCache, injectorStage = r.nextBoolean()
       val twoCycleRam = r.nextBoolean() && twoCycleCache
+      val twoCycleRamInnerMux = r.nextBoolean() && twoCycleRam
       val memDataWidth = List(32,64,128)(r.nextInt(3))
       val bytePerLine = Math.max(memDataWidth/8, List(8,16,32,64)(r.nextInt(4)))
       var cacheSize = 0
@@ -384,7 +385,8 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
               catchAccessFault = catchAll,
               asyncTagMemory = false,
               twoCycleRam = twoCycleRam,
-              twoCycleCache = twoCycleCache
+              twoCycleCache = twoCycleCache,
+              twoCycleRamInnerMux = twoCycleRamInnerMux
             )
           )
           if(tighlyCoupled) p.newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0))
