@@ -145,7 +145,7 @@ object VexRiscvSmpClusterGen {
           relaxedPcCalculation = true,
           config = InstructionCacheConfig(
             cacheSize = 4096*1,
-            bytePerLine = 32,
+            bytePerLine = 64,
             wayCount = 1,
             addressWidth = 32,
             cpuDataWidth = 32,

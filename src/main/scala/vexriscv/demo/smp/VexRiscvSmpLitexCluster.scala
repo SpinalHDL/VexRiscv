@@ -148,8 +148,9 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
   iBusDecoder.io.input << iBusArbiter.io.output
   io.iMem.fromBmb(iBusDecoder.io.outputs(1))
 
+  val peripheralAccessLength = Math.max(iBusDecoder.io.outputs(0).p.lengthWidth, dBusDecoder.io.outputs(0).p.lengthWidth)
   val peripheralArbiter = BmbArbiter(
-    p = dBusDecoder.io.outputs(0).p.copy(sourceWidth = dBusDecoder.io.outputs(0).p.sourceWidth + 1),
+    p = dBusDecoder.io.outputs(0).p.copy(sourceWidth = dBusDecoder.io.outputs(0).p.sourceWidth + 1, lengthWidth = peripheralAccessLength),
     portCount = 2,
     lowerFirstPriority = true
   )
