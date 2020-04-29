@@ -564,12 +564,13 @@ class DataCache(val p : DataCacheConfig) extends Component{
     val isAmo = if(withAmo) io.cpu.execute.isAmo else False
 
     //Ensure write to read consistency
+    val consistancyIssue = False
     val consistancyCheck = (withInvalidate || withWriteResponse) generate new Area {
       val fenceConsistent =  (if(withInvalidate) sync.fenceConsistent else pending.done) && !io.cpu.writeBack.fenceValid && (if(mergeExecuteMemory) True else !io.cpu.memory.fenceValid) //Pessimistic fence tracking
       val totalyConsistent = (if(withInvalidate) sync.totalyConsistent else pending.done) && (if(mergeExecuteMemory) True else !(io.cpu.memory.isValid && io.cpu.memory.isWrite)) && !(io.cpu.writeBack.isValid && io.cpu.memory.isWrite)
       when(io.cpu.execute.isValid /*&& (!io.cpu.execute.args.wr || isAmo)*/){
         when(!fenceConsistent || io.cpu.execute.totalyConsistent && !totalyConsistent){
-          io.cpu.execute.haltIt := True
+          consistancyIssue := True
         }
       }
     }
@@ -588,6 +589,7 @@ class DataCache(val p : DataCacheConfig) extends Component{
     val wayHits = earlyWaysHits generate ways.map(way => (io.cpu.memory.mmuBus.rsp.physicalAddress(tagRange) === way.tagsReadRsp.address && way.tagsReadRsp.valid))
     val dataMux = earlyDataMux generate MuxOH(wayHits, ways.map(_.dataReadRsp))
     val wayInvalidate = stagePipe(stage0. wayInvalidate)
+    val consistancyIssue = stagePipe(stage0.consistancyIssue)
     val dataColisions = if(mergeExecuteMemory){
       stagePipe(stage0.dataColisions)
     } else {
@@ -605,6 +607,7 @@ class DataCache(val p : DataCacheConfig) extends Component{
     val tagsReadRsp = ways.map(w => ramPipe(w.tagsReadRsp))
     val dataReadRsp = !earlyDataMux generate ways.map(w => ramPipe(w.dataReadRsp))
     val wayInvalidate = stagePipe(stageA. wayInvalidate)
+    val consistancyIssue = stagePipe(stageA.consistancyIssue)
     val dataColisions = stagePipe(stageA.dataColisions)
     val waysHitsBeforeInvalidate = if(earlyWaysHits) stagePipe(B(stageA.wayHits)) else B(tagsReadRsp.map(tag => mmuRsp.physicalAddress(tagRange) === tag.address && tag.valid).asBits())
     val waysHits = waysHitsBeforeInvalidate & ~wayInvalidate
@@ -651,8 +654,7 @@ class DataCache(val p : DataCacheConfig) extends Component{
 
     val lrSc = withInternalLrSc generate new Area{
       val reserved = RegInit(False)
-      when(io.cpu.writeBack.isValid && !io.cpu.writeBack.isStuck && request.isLrsc
-        && !io.cpu.redo && !io.cpu.writeBack.mmuException && !io.cpu.writeBack.unalignedAccess && !io.cpu.writeBack.accessError){
+      when(io.cpu.writeBack.isValid && !io.cpu.writeBack.isStuck && request.isLrsc){
         reserved := !request.wr
       }
     }
@@ -828,15 +830,16 @@ class DataCache(val p : DataCacheConfig) extends Component{
     }
 
     //remove side effects on exceptions
-    when(mmuRsp.refilling || io.cpu.writeBack.accessError || io.cpu.writeBack.mmuException || io.cpu.writeBack.unalignedAccess){
+    when(consistancyIssue || mmuRsp.refilling || io.cpu.writeBack.accessError || io.cpu.writeBack.mmuException || io.cpu.writeBack.unalignedAccess){
       io.mem.cmd.valid := False
       tagsWriteCmd.valid := False
       dataWriteCmd.valid := False
       loaderValid := False
       io.cpu.writeBack.haltIt := False
+      if(withInternalLrSc) lrSc.reserved := lrSc.reserved
       if(withExternalAmo) amo.external.state := LR_CMD
     }
-    io.cpu.redo setWhen(io.cpu.writeBack.isValid && mmuRsp.refilling)
+    io.cpu.redo setWhen(io.cpu.writeBack.isValid && (mmuRsp.refilling || consistancyIssue))
 
     assert(!(io.cpu.writeBack.isValid && !io.cpu.writeBack.haltIt && io.cpu.writeBack.isStuck), "writeBack stuck by another plugin is not allowed")
   }
