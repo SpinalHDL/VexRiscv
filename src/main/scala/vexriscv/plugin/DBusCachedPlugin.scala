@@ -314,7 +314,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         }
 
         when(arbitration.isValid && (input(MEMORY_FENCE) || aquire)){
-          memory.arbitration.haltByOther := True //Ensure that the fence affect the memory stage instruction by stoping it
+          mmuAndBufferStage.arbitration.haltByOther := True //Ensure that the fence affect the memory stage instruction by stoping it
         }
       }
 
