@@ -249,11 +249,11 @@ object VexRiscvSmpClusterGen {
     if(hartId == 0) config.plugins += new DebugPlugin(null)
     config
   }
-  def vexRiscvCluster(cpuCount : Int) = VexRiscvSmpCluster(
+  def vexRiscvCluster(cpuCount : Int, resetVector : Long = 0x80000000l) = VexRiscvSmpCluster(
     debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn")),
     p = VexRiscvSmpClusterParameter(
       cpuConfigs = List.tabulate(cpuCount) {
-        vexRiscvConfig(_)
+        vexRiscvConfig(_, resetVector = resetVector)
       }
     )
   )
@@ -440,7 +440,10 @@ object VexRiscvSmpClusterTestInfrastructure{
     import spinal.core.sim._
     dut.clockDomain.forkStimulus(10)
     dut.debugClockDomain.forkStimulus(10)
-    JtagTcp(dut.io.jtag, 100)
+//    JtagTcp(dut.io.jtag, 100)
+    dut.io.jtag.tck #= false
+    dut.io.jtag.tdi #= false
+    dut.io.jtag.tms #= false
   }
 }
 
@@ -491,11 +494,17 @@ object VexRiscvSmpClusterOpenSbi extends App{
   val cpuCount = 4
   val withStall = false
 
-  simConfig.workspaceName("rawr_4c").compile(VexRiscvSmpClusterGen.vexRiscvCluster(cpuCount)).doSimUntilVoid(seed = 42){dut =>
+  simConfig.workspaceName("rawr_4c").compile(VexRiscvSmpClusterGen.vexRiscvCluster(cpuCount, resetVector = 0x80000000l)).doSimUntilVoid(seed = 42){dut =>
 //    dut.clockDomain.forkSimSpeedPrinter(1.0)
     VexRiscvSmpClusterTestInfrastructure.init(dut)
     val ram = VexRiscvSmpClusterTestInfrastructure.ram(dut, withStall)
 //    ram.memory.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_payload.bin")
+
+//    ram.memory.loadBin(0x40F00000l, "/media/data/open/litex_smp/litex_vexriscv_smp/images/fw_jump.bin")
+//    ram.memory.loadBin(0x40000000l, "/media/data/open/litex_smp/litex_vexriscv_smp/images/Image")
+//    ram.memory.loadBin(0x40EF0000l, "/media/data/open/litex_smp/litex_vexriscv_smp/images/dtb")
+//    ram.memory.loadBin(0x41000000l, "/media/data/open/litex_smp/litex_vexriscv_smp/images/rootfs.cpio")
+
     ram.memory.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin")
     ram.memory.loadBin(0xC0000000l, "../buildroot/output/images/Image")
     ram.memory.loadBin(0xC1000000l, "../buildroot/output/images/dtb")
