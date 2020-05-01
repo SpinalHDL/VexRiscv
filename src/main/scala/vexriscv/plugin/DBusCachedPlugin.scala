@@ -50,8 +50,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   object MEMORY_LRSC extends Stageable(Bool)
   object MEMORY_AMO extends Stageable(Bool)
   object MEMORY_FENCE extends Stageable(Bool)
-  object MEMORY_FENCE_FRONT extends Stageable(Bool)
-  object MEMORY_FENCE_BACK extends Stageable(Bool)
+  object MEMORY_FORCE_CONSTISTENCY extends Stageable(Bool)
   object IS_DBUS_SHARING extends Stageable(Bool())
   object MEMORY_VIRTUAL_ADDRESS extends Stageable(UInt(32 bits))
 
@@ -215,31 +214,13 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         arbitration.haltItself := True
       }
 
-      case class FenceFlags() extends Bundle {
-        val SW,SR,SO,SI,PW,PR,PO,PI = Bool()
-        val FM = Bits(4 bits)
-
-        def SL = SR || SI
-        def SS = SW || SO
-        def PL = PR || PI
-        def PS = PW || PO
-      }
 
       //Manage write to read hit ordering (ensure invalidation timings)
-      val fence = new Area{
-        insert(MEMORY_FENCE_FRONT) := False
-        insert(MEMORY_FENCE_BACK) := False
-        val ff = input(INSTRUCTION)(31 downto 20).as(FenceFlags())
-        if(withWriteResponse){
-          insert(MEMORY_FENCE_BACK) setWhen(input(MEMORY_FENCE) && (ff.PS && ff.SL))
-          when(input(INSTRUCTION)(26)) { //AQ
-            if(withLrSc) insert(MEMORY_FENCE_BACK) setWhen(input(MEMORY_LRSC))
-            if(withAmo)  insert(MEMORY_FENCE_BACK) setWhen(input(MEMORY_AMO))
-          }
-          when(input(INSTRUCTION)(25)) { //RL
-            if(withLrSc) insert(MEMORY_FENCE_FRONT) setWhen(input(MEMORY_LRSC))
-            if(withAmo)  insert(MEMORY_FENCE_FRONT) setWhen(input(MEMORY_AMO))
-          }
+      val fence = new Area {
+        insert(MEMORY_FORCE_CONSTISTENCY) := False
+        when(input(INSTRUCTION)(25)) { //RL
+          if (withLrSc) insert(MEMORY_FORCE_CONSTISTENCY) setWhen (input(MEMORY_LRSC))
+          if (withAmo) insert(MEMORY_FORCE_CONSTISTENCY) setWhen (input(MEMORY_AMO))
         }
       }
     }
@@ -260,7 +241,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
 
       cache.io.cpu.flush.valid := arbitration.isValid && input(MEMORY_MANAGMENT)
-      cache.io.cpu.execute.totalyConsistent := arbitration.isValid && input(MEMORY_FENCE_FRONT)
+      cache.io.cpu.execute.args.totalyConsistent := input(MEMORY_FORCE_CONSTISTENCY)
       arbitration.haltItself setWhen(cache.io.cpu.flush.isStall || cache.io.cpu.execute.haltIt)
 
       if(withLrSc) {
@@ -302,8 +283,6 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
       cache.io.cpu.memory.mmuBus <> mmuBus
       cache.io.cpu.memory.mmuBus.rsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
-
-      cache.io.cpu.memory.fenceValid := arbitration.isValid && input(MEMORY_FENCE_BACK)
     }
 
     val managementStage = stages.last
@@ -314,8 +293,30 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
       cache.io.cpu.writeBack.address := U(input(REGFILE_WRITE_DATA))
 
-      cache.io.cpu.writeBack.fenceValid := arbitration.isValid && input(MEMORY_FENCE_BACK)
-      cache.io.cpu.writeBack.fenceFire  := arbitration.isFiring && input(MEMORY_FENCE_BACK)
+      val fence = if(withInvalidate) {
+        cache.io.cpu.writeBack.fence := input(INSTRUCTION)(31 downto 20).as(FenceFlags())
+        val aquire = False
+        if(withWriteResponse) when(input(INSTRUCTION)(26)) { //AQ
+          if(withLrSc) when(input(MEMORY_LRSC)){
+            aquire := True
+          }
+          if(withAmo) when(input(MEMORY_AMO)){
+            aquire := True
+          }
+        }
+
+        when(aquire){
+          cache.io.cpu.writeBack.fence.forceAll()
+        }
+
+        when(!input(MEMORY_FENCE) || !arbitration.isFiring){
+          cache.io.cpu.writeBack.fence.clearAll()
+        }
+
+        when(arbitration.isValid && (input(MEMORY_FENCE) || aquire)){
+          memory.arbitration.haltByOther := True //Ensure that the fence affect the memory stage instruction by stoping it
+        }
+      }
 
       redoBranch.valid := False
       redoBranch.payload := input(PC)

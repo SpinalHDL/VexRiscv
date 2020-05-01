@@ -103,7 +103,8 @@ object TestsWorkspace {
               withLrSc = true,
               withAmo = true,
               withExclusive = true,
-              withInvalidate = true
+              withInvalidate = true,
+              pendingMax = 32
               //          )
             ),
             memoryTranslatorPortConfig = MmuPortConfig(
