@@ -274,19 +274,18 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
   cluster.io.timerInterrupts <> B(clint.harts.map(_.timerInterrupt))
   cluster.io.softwareInterrupts <> B(clint.harts.map(_.softwareInterrupt))
 
-  //TODO
-//  val dBusDecoder = BmbDecoderOutOfOrder(
-//    p            = cluster.io.dMem.p,
-//    mappings     = Seq(DefaultMapping, p.liteDramMapping),
-//    capabilities = Seq(cluster.io.dMem.p, cluster.io.dMem.p),
-//    pendingRspTransactionMax = 32
-//  )
-  val dBusDecoder = BmbDecoder(
+  val dBusDecoder = BmbDecoderOutOfOrder(
     p            = cluster.io.dMem.p,
     mappings     = Seq(DefaultMapping, p.liteDramMapping),
     capabilities = Seq(cluster.io.dMem.p, cluster.io.dMem.p),
-    pendingMax = 31
+    pendingRspTransactionMax = 32
   )
+//  val dBusDecoder = BmbDecoderOut(
+//    p            = cluster.io.dMem.p,
+//    mappings     = Seq(DefaultMapping, p.liteDramMapping),
+//    capabilities = Seq(cluster.io.dMem.p, cluster.io.dMem.p),
+//    pendingMax = 31
+//  )
   dBusDecoder.io.input << cluster.io.dMem.pipelined(cmdValid = true, cmdReady = true, rspValid = true)
   val dMemBridge = io.dMem.fromBmb(dBusDecoder.io.outputs(1), wdataFifoSize = 32, rdataFifoSize = 32)
 
