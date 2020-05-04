@@ -577,8 +577,7 @@ object PlayFuture extends App{
 
 class MultithreadedFunSuite(threadCount : Int) extends FunSuite {
   val finalThreadCount = if(threadCount > 0) threadCount else {
-    val systemInfo = new oshi.SystemInfo
-    systemInfo.getHardware.getProcessor.getLogicalProcessorCount
+    new oshi.SystemInfo().getHardware.getProcessor.getLogicalProcessorCount
   }
   implicit val ec = ExecutionContext.fromExecutorService(
     new ForkJoinPool(finalThreadCount, ForkJoinPool.defaultForkJoinWorkerThreadFactory, null, true)
