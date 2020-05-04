@@ -510,6 +510,39 @@ object VexRiscvSmpClusterOpenSbi extends App{
     ram.memory.loadBin(0xC1000000l, "../buildroot/output/images/dtb")
     ram.memory.loadBin(0xC2000000l, "../buildroot/output/images/rootfs.cpio")
 
+    import spinal.core.sim._
+    var iMemReadBytes, dMemReadBytes, dMemWriteBytes = 0l
+    var reportTimer = 0
+    var reportCycle = 0
+
+    import java.io._
+    val csv = new PrintWriter(new File("bench.csv" ))
+    csv.write(s"reportCycle,iMemReadBytes,dMemReadBytes,dMemWriteBytes\n")
+    dut.clockDomain.onSamplings{
+      dut.io.iMems.foreach{ iMem =>
+        if(iMem.cmd.valid.toBoolean && iMem.cmd.ready.toBoolean){
+          iMemReadBytes += iMem.cmd.length.toInt+1
+        }
+      }
+      if(dut.io.dMem.cmd.valid.toBoolean && dut.io.dMem.cmd.ready.toBoolean){
+        if(dut.io.dMem.cmd.opcode.toInt == Bmb.Cmd.Opcode.WRITE){
+          dMemWriteBytes += dut.io.dMem.cmd.length.toInt+1
+        }else {
+          dMemReadBytes += dut.io.dMem.cmd.length.toInt+1
+        }
+      }
+      reportTimer = reportTimer + 1
+      reportCycle = reportCycle + 1
+      if(reportTimer == 100000){
+        reportTimer = 0
+//        println(f"\n** c=${reportCycle} ir=${iMemReadBytes*1e-6}%5.2f dr=${dMemReadBytes*1e-6}%5.2f dw=${dMemWriteBytes*1e-6}%5.2f **\n")
+
+        csv.write(s"$reportCycle,$iMemReadBytes,$dMemReadBytes,$dMemWriteBytes\n")
+        csv.flush()
+      }
+    }
+
+
 //    fork{
 //      disableSimWave()
 //      val atMs = 130
