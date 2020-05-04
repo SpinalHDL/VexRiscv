@@ -2028,7 +2028,7 @@ public:
             #endif
             error = false;
             for(int idx = 0;idx < IBUS_DATA_WIDTH/32;idx++){
-                bool localError;
+                bool localError = false;
 			    ws->iBusAccess(address+idx*4,((uint32_t*)&top->iBus_rsp_payload_data)+idx,&localError);
 			    error |= localError;
             }
@@ -2342,7 +2342,7 @@ public:
 #include <queue>
 
 struct DBusCachedTask{
-	uint32_t data;
+	char data[DBUS_DATA_WIDTH/8];
 	bool error;
 	bool last;
 	bool exclusive;
@@ -2386,21 +2386,43 @@ public:
                     bool error;
                     ws->dBusAccess(top->dBus_cmd_payload_address,1,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&error);
                 #else
-                    bool cancel = false;
+                    bool cancel = false, error = false;
                     if(top->dBus_cmd_payload_exclusive){
                         bool hit = reservationValid && reservationAddress == top->dBus_cmd_payload_address;
                         rsp.exclusive = hit;
                         cancel = !hit;
                         reservationValid = false;
                     }
-                    if(!cancel) ws->dBusAccess(top->dBus_cmd_payload_address,1,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&rsp.error);
+                    if(!cancel) {
+                        for(int idx = 0;idx < 1;idx++){
+                            bool localError = false;
+                            ws->dBusAccess(top->dBus_cmd_payload_address+idx*4,1,2,top->dBus_cmd_payload_mask >> idx*4,((uint32_t*)&top->dBus_cmd_payload_data)+idx, &localError);
+                            error |= localError;
+
+                             //printf("%d ", (int)localError);
+                        }
+                    }
+
+                   // printf("%x %d\n", top->dBus_cmd_payload_address, (int)error);
                     rsp.last = true;
+                    rsp.error = error;
                     rsps.push(rsp);
                 #endif
             } else {
-                for(int beat = 0;beat <= top->dBus_cmd_payload_length;beat++){
-                    ws->dBusAccess(top->dBus_cmd_payload_address  + beat * 4,0,2,0,&rsp.data,&rsp.error);
-                    rsp.last = beat == top->dBus_cmd_payload_length;
+                bool error = false;
+                uint32_t beatCount = top->dBus_cmd_payload_length*32/DBUS_DATA_WIDTH;
+                for(int beat = 0;beat <= beatCount;beat++){
+                    if(top->dBus_cmd_payload_length == 0){
+                        uint32_t sel = (top->dBus_cmd_payload_address >> 2) & (DBUS_DATA_WIDTH/32-1);
+                        ws->dBusAccess(top->dBus_cmd_payload_address,0,2,0,((uint32_t*)rsp.data) + sel,&error);
+                    } else {
+                        for(int idx = 0;idx < DBUS_DATA_WIDTH/32;idx++){
+                            bool localError = false;
+                            ws->dBusAccess(top->dBus_cmd_payload_address + beat * DBUS_DATA_WIDTH/8 + idx*4,0,2,0,((uint32_t*)rsp.data)+idx, &localError);
+                            error |= localError;
+                        }
+                    }
+                    rsp.last = beat == beatCount;
                     #ifdef DBUS_EXCLUSIVE
                         if(top->dBus_cmd_payload_exclusive){
                             rsp.exclusive = true;
@@ -2408,6 +2430,7 @@ public:
                             reservationAddress = top->dBus_cmd_payload_address;
                         }
                     #endif
+                    rsp.error = error;
                     rsps.push(rsp);
                 }
 
@@ -2434,14 +2457,18 @@ public:
 			rsps.pop();
 			top->dBus_rsp_valid = 1;
 			top->dBus_rsp_payload_error = rsp.error;
-			top->dBus_rsp_payload_data = rsp.data;
+            for(int idx = 0;idx < DBUS_DATA_WIDTH/32;idx++){
+                ((uint32_t*)&top->dBus_rsp_payload_data)[idx] = ((uint32_t*)rsp.data)[idx];
+            }
 			top->dBus_rsp_payload_last = rsp.last;
             #ifdef DBUS_EXCLUSIVE
             top->dBus_rsp_payload_exclusive = rsp.exclusive;
             #endif
 		} else{
 			top->dBus_rsp_valid = 0;
-			top->dBus_rsp_payload_data = VL_RANDOM_I(32);
+            for(int idx = 0;idx < DBUS_DATA_WIDTH/32;idx++){
+			    ((uint32_t*)&top->dBus_rsp_payload_data)[idx] = VL_RANDOM_I(32);
+			}
 			top->dBus_rsp_payload_error = VL_RANDOM_I(1);
 			top->dBus_rsp_payload_last = VL_RANDOM_I(1);
             #ifdef DBUS_EXCLUSIVE

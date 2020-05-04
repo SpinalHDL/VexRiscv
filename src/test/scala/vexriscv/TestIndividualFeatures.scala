@@ -1,7 +1,7 @@
 package vexriscv
 
 import java.io.{File, OutputStream}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ForkJoinPool, TimeUnit}
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfterAll, FunSuite, ParallelTestExecution, Tag, Transformer}
@@ -426,7 +426,8 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 //        override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
       }
     } else {
-      val bytePerLine = List(8,16,32,64)(r.nextInt(4))
+      val memDataWidth = List(32,64,128)(r.nextInt(3))
+      val bytePerLine = Math.max(memDataWidth/8, List(8,16,32,64)(r.nextInt(4)))
       var cacheSize = 0
       var wayCount = 0
       val withLrSc = catchAll
@@ -441,8 +442,8 @@ class DBusDimension extends VexRiscvDimension("DBus") {
         cacheSize = 512 << r.nextInt(5)
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
-      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "") + (if(withSmp) "Smp " else "")) {
-        override def testParam = "DBUS=CACHED " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")  + (if(withSmp) "DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes " else "")
+      new VexRiscvPosition(s"Cached${memDataWidth}d" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "") + (if(withSmp) "Smp " else "")) {
+        override def testParam = s"DBUS=CACHED DBUS_DATA_WIDTH=$memDataWidth " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")  + (if(withSmp) "DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes " else "")
 
         override def applyOn(config: VexRiscvConfig): Unit = {
           config.plugins += new DBusCachedPlugin(
@@ -452,7 +453,7 @@ class DBusDimension extends VexRiscvDimension("DBus") {
               wayCount = wayCount,
               addressWidth = 32,
               cpuDataWidth = 32,
-              memDataWidth = 32,
+              memDataWidth = memDataWidth,
               catchAccessError = catchAll,
               catchIllegal = catchAll,
               catchUnaligned = catchAll,
@@ -574,8 +575,14 @@ object PlayFuture extends App{
   Thread.sleep(8000)
 }
 
-class MultithreadedFunSuite extends FunSuite {
-  implicit val ec = ExecutionContext.global
+class MultithreadedFunSuite(threadCount : Int) extends FunSuite {
+  val finalThreadCount = if(threadCount > 0) threadCount else {
+    val systemInfo = new oshi.SystemInfo
+    systemInfo.getHardware.getProcessor.getLogicalProcessorCount
+  }
+  implicit val ec = ExecutionContext.fromExecutorService(
+    new ForkJoinPool(finalThreadCount, ForkJoinPool.defaultForkJoinWorkerThreadFactory, null, true)
+  )
   class Job(body : => Unit){
     val originalOutput = Console.out
     val buffer = mutable.Queue[Char]()
@@ -612,7 +619,7 @@ class MultithreadedFunSuite extends FunSuite {
 }
 
 
-class FunTestPara extends MultithreadedFunSuite{
+class FunTestPara extends MultithreadedFunSuite(3){
   def createTest(name : String): Unit ={
     test(name){
       for(i <- 0 to 4) {
@@ -624,20 +631,20 @@ class FunTestPara extends MultithreadedFunSuite{
   (0 to 80).map(_.toString).foreach(createTest)
 }
 
-class FunTestPlay extends FunSuite {
-  def createTest(name : String): Unit ={
-    test(name){
-      Thread.sleep(500)
-      for(i <- 0 to 4) {
-        println(s"$name    $i")
-        Thread.sleep(500)
-      }
-    }
-  }
-  (0 to 80).map(_.toString).foreach(createTest)
-}
+//class FunTestPlay extends FunSuite {
+//  def createTest(name : String): Unit ={
+//    test(name){
+//      Thread.sleep(500)
+//      for(i <- 0 to 4) {
+//        println(s"$name    $i")
+//        Thread.sleep(500)
+//      }
+//    }
+//  }
+//  (0 to 80).map(_.toString).foreach(createTest)
+//}
 
-class TestIndividualFeatures extends MultithreadedFunSuite {
+class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", "0").toInt) {
   val testCount = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "100").toInt
   val seed = sys.env.getOrElse("VEXRISCV_REGRESSION_SEED", Random.nextLong().toString).toLong
   val testId : Set[Int] =  sys.env.get("VEXRISCV_REGRESSION_TEST_ID") match {

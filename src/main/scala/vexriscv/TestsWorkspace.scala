@@ -27,7 +27,7 @@ import spinal.lib.bus.avalon.AvalonMM
 import spinal.lib.eda.altera.{InterruptReceiverTag, ResetEmitterTag}
 
 
-//make clean all SEED=42 MMU=no STOP_ON_ERROR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes SUPERVISOR=yes REDO=0 DHRYSTONE=no LRSC=yes AMO=yes LINUX_REGRESSION=yes TRACE=yes TRACE_START=9546629800l FLOW_INFO=ye
+// make clean all SEED=42 MMU=no STOP_ON_ERROR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes SUPERVISOR=yes REDO=1 DHRYSTONE=yes LRSC=yes AMO=yes LINUX_REGRESSION=yes TRACE=yes TRACE_START=1000000000 FLOW_INFO=ye IBUS_DATA_WIDTH=128  DBUS_DATA_WIDTH=128
 object TestsWorkspace {
   def main(args: Array[String]) {
     def configFull = {
@@ -60,7 +60,7 @@ object TestsWorkspace {
             injectorStage = false,
             config = InstructionCacheConfig(
               cacheSize = 4096*1,
-              bytePerLine = 32,
+              bytePerLine = 64,
               wayCount = 1,
               addressWidth = 32,
               cpuDataWidth = 32,
@@ -92,11 +92,11 @@ object TestsWorkspace {
             dBusRspSlavePipe = true,
             config = new DataCacheConfig(
               cacheSize         = 4096*1,
-              bytePerLine       = 32,
+              bytePerLine       = 64,
               wayCount          = 1,
               addressWidth      = 32,
               cpuDataWidth      = 32,
-              memDataWidth      = 32,
+              memDataWidth      = 128,
               catchAccessError  = true,
               catchIllegal      = true,
               catchUnaligned    = true,
