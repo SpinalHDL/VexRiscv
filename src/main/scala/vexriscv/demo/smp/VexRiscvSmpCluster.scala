@@ -8,7 +8,7 @@ import spinal.lib.bus.bmb.sim.BmbMemoryAgent
 import spinal.lib.bus.bmb.{Bmb, BmbArbiter, BmbDecoder, BmbExclusiveMonitor, BmbInvalidateMonitor, BmbParameter}
 import spinal.lib.com.jtag.Jtag
 import spinal.lib.com.jtag.sim.JtagTcp
-import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCacheConfig}
+import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
 import vexriscv.plugin.{BranchPlugin, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
 import vexriscv.{Riscv, VexRiscv, VexRiscvConfig, plugin}
 
@@ -491,10 +491,21 @@ object VexRiscvSmpClusterOpenSbi extends App{
   simConfig.allOptimisation
   simConfig.addSimulatorFlag("--threads 1")
 
-  val cpuCount = 4
+  val cpuCount = 1
   val withStall = false
 
-  simConfig.workspaceName("rawr_4c").compile(VexRiscvSmpClusterGen.vexRiscvCluster(cpuCount, resetVector = 0x80000000l)).doSimUntilVoid(seed = 42){dut =>
+  def gen = {
+    val dut = VexRiscvSmpClusterGen.vexRiscvCluster(cpuCount, resetVector = 0x80000000l)
+    dut.cpus.foreach{cpu =>
+      cpu.core.children.foreach{
+        case cache : InstructionCache => cache.io.cpu.decode.simPublic()
+        case _ =>
+      }
+    }
+    dut
+  }
+
+  simConfig.workspaceName("rawr_4c").compile(gen).doSimUntilVoid(seed = 42){dut =>
 //    dut.clockDomain.forkSimSpeedPrinter(1.0)
     VexRiscvSmpClusterTestInfrastructure.init(dut)
     val ram = VexRiscvSmpClusterTestInfrastructure.ram(dut, withStall)
@@ -511,17 +522,39 @@ object VexRiscvSmpClusterOpenSbi extends App{
     ram.memory.loadBin(0xC2000000l, "../buildroot/output/images/rootfs.cpio")
 
     import spinal.core.sim._
-    var iMemReadBytes, dMemReadBytes, dMemWriteBytes = 0l
+    var iMemReadBytes, dMemReadBytes, dMemWriteBytes, iMemSequencial,iMemRequests = 0l
     var reportTimer = 0
     var reportCycle = 0
 
     import java.io._
     val csv = new PrintWriter(new File("bench.csv" ))
-    csv.write(s"reportCycle,iMemReadBytes,dMemReadBytes,dMemWriteBytes\n")
+    val iMemCtx = Array.tabulate(cpuCount)(i => new {
+      var sequencialPrediction = 0l
+      val cache = dut.cpus(i).core.children.find(_.isInstanceOf[InstructionCache]).head.asInstanceOf[InstructionCache].io.cpu.decode
+    })
+    csv.write(s"reportCycle,iMemReadBytes,dMemReadBytes,dMemWriteBytes,miaou,asd\n")
     dut.clockDomain.onSamplings{
-      dut.io.iMems.foreach{ iMem =>
-        if(iMem.cmd.valid.toBoolean && iMem.cmd.ready.toBoolean){
-          iMemReadBytes += iMem.cmd.length.toInt+1
+      for(i <- 0 until cpuCount; iMem = dut.io.iMems(i); ctx = iMemCtx(i)){
+//        if(iMem.cmd.valid.toBoolean && iMem.cmd.ready.toBoolean){
+//          val length = iMem.cmd.length.toInt + 1
+//          val address = iMem.cmd.address.toLong
+//          iMemReadBytes += length
+//          iMemRequests += 1
+//        }
+        if(ctx.cache.isValid.toBoolean && !ctx.cache.mmuRefilling.toBoolean && !ctx.cache.mmuException.toBoolean){
+          val address = ctx.cache.physicalAddress.toLong
+          val length = ctx.cache.p.bytePerLine.toLong
+          val mask = ~(length-1)
+          if(ctx.cache.cacheMiss.toBoolean) {
+            iMemReadBytes += length
+            iMemRequests += 1
+            if ((address & mask) == (ctx.sequencialPrediction & mask)) {
+              iMemSequencial += 1
+            }
+          }
+          if(!ctx.cache.isStuck.toBoolean) {
+            ctx.sequencialPrediction = address + length
+          }
         }
       }
       if(dut.io.dMem.cmd.valid.toBoolean && dut.io.dMem.cmd.ready.toBoolean){
@@ -533,12 +566,18 @@ object VexRiscvSmpClusterOpenSbi extends App{
       }
       reportTimer = reportTimer + 1
       reportCycle = reportCycle + 1
-      if(reportTimer == 100000){
+      if(reportTimer == 400000){
         reportTimer = 0
 //        println(f"\n** c=${reportCycle} ir=${iMemReadBytes*1e-6}%5.2f dr=${dMemReadBytes*1e-6}%5.2f dw=${dMemWriteBytes*1e-6}%5.2f **\n")
 
-        csv.write(s"$reportCycle,$iMemReadBytes,$dMemReadBytes,$dMemWriteBytes\n")
+        csv.write(s"$reportCycle,$iMemReadBytes,$dMemReadBytes,$dMemWriteBytes,$iMemRequests,$iMemSequencial\n")
         csv.flush()
+        reportCycle = 0
+        iMemReadBytes = 0
+        dMemReadBytes = 0
+        dMemWriteBytes = 0
+        iMemRequests = 0
+        iMemSequencial = 0
       }
     }
 
