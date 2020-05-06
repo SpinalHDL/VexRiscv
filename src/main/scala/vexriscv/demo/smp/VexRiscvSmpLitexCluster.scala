@@ -180,10 +180,11 @@ case class BmbToLiteDram(bmbParameter : BmbParameter,
   io.output.cmd.we := cmdFork.isWrite
 
   if(bmbParameter.canWrite) {
-    val fifo = dataFork.throwWhen(dataFork.isRead).queue(wdataFifoSize)
-    io.output.wdata.arbitrationFrom(fifo)
-    io.output.wdata.data := fifo.data
-    io.output.wdata.we := fifo.mask
+    val wData = Stream(LiteDramNativeWData(liteDramParameter))
+    wData.arbitrationFrom(dataFork.throwWhen(dataFork.isRead))
+    wData.data := dataFork.data
+    wData.we := dataFork.mask
+    io.output.wdata << wData.queue(wdataFifoSize)
   } else {
     dataFork.ready := True
     io.output.wdata.valid := False
@@ -305,7 +306,13 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
     pendingMax   = 15
   )
   iBusDecoder.io.input << iBusArbiter.io.output
-  val iMemBridge = io.iMem.fromBmb(iBusDecoder.io.outputs(1), wdataFifoSize = 0, rdataFifoSize = 32)
+
+  val iMem = LiteDramNative(p.liteDram)
+  val iMemBridge = iMem.fromBmb(iBusDecoder.io.outputs(1), wdataFifoSize = 0, rdataFifoSize = 32)
+  iMem.cmd   >-> io.iMem.cmd
+  iMem.wdata >> io.iMem.wdata
+  iMem.rdata << io.iMem.rdata
+
 
   val peripheralAccessLength = Math.max(iBusDecoder.io.outputs(0).p.lengthWidth, dBusDecoder.io.outputs(0).p.lengthWidth)
   val peripheralArbiter = BmbArbiter(
@@ -316,7 +323,7 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
   peripheralArbiter.io.inputs(0) << iBusDecoder.io.outputs(0).resize(dataWidth = 32).pipelined(cmdHalfRate = true, rspValid = true)
   peripheralArbiter.io.inputs(1) << dBusDecoder.io.outputs(0).resize(dataWidth = 32).pipelined(cmdHalfRate = true, rspValid = true)
 
-  val peripheralWishbone = peripheralArbiter.io.output.toWishbone()
+  val peripheralWishbone = peripheralArbiter.io.output.pipelined(cmdValid = true).toWishbone()
   io.peripheral << peripheralWishbone
 }
 
@@ -343,8 +350,8 @@ object VexRiscvLitexSmpClusterGen extends App {
     debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
   )
 
-//  SpinalVerilog(Bench.compressIo(dutGen))
-  SpinalVerilog(dutGen)
+  SpinalVerilog(Bench.compressIo(dutGen))
+//  SpinalVerilog(dutGen)
 
 }
 
