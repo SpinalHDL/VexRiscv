@@ -48,7 +48,7 @@ class MmuPlugin(ioRange : UInt => Bool,
 
   override def newTranslationPort(priority : Int,args : Any): MemoryTranslatorBus = {
     val config = args.asInstanceOf[MmuPortConfig]
-    val port = MmuPort(MemoryTranslatorBus(config.portTlbSize),priority, config, portsInfo.length)
+    val port = MmuPort(MemoryTranslatorBus(MemoryTranslatorBusParameter(wayCount = config.portTlbSize)),priority, config, portsInfo.length)
     portsInfo += port
     port.bus
   }

@@ -392,7 +392,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     import pipeline._
     import pipeline.config._
 
-    object MMU_RSP extends Stageable(MemoryTranslatorRsp(mmuBus.rsp.wayCount))
+    object MMU_RSP extends Stageable(MemoryTranslatorRsp(mmuBus.p))
 
     dBus = master(DBusSimpleBus()).setName("dBus")
 

@@ -175,7 +175,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       this.config.copy(
         mergeExecuteMemory = writeBack == null
       ),
-      tlbWayCount = mmuBus.rsp.wayCount
+      mmuParameter = mmuBus.p
     )
 
     //Interconnect the plugin dBus with the cache dBus with some optional pipelining

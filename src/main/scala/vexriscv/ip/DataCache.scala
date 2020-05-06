@@ -125,13 +125,13 @@ case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
   val totalyConsistent = Bool() //Only for AMO/LRSC
 }
 
-case class DataCacheCpuMemory(p : DataCacheConfig, tlbWayCount : Int) extends Bundle with IMasterSlave{
+case class DataCacheCpuMemory(p : DataCacheConfig, mmu : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave{
   val isValid = Bool
   val isStuck = Bool
   val isRemoved = Bool
   val isWrite = Bool
   val address = UInt(p.addressWidth bit)
-  val mmuBus  = MemoryTranslatorBus(tlbWayCount)
+  val mmuBus  = MemoryTranslatorBus(mmu)
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved, address)
@@ -175,9 +175,9 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   }
 }
 
-case class DataCacheCpuBus(p : DataCacheConfig, tlbWayCount : Int) extends Bundle with IMasterSlave{
+case class DataCacheCpuBus(p : DataCacheConfig, mmu : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave{
   val execute   = DataCacheCpuExecute(p)
-  val memory    = DataCacheCpuMemory(p, tlbWayCount)
+  val memory    = DataCacheCpuMemory(p, mmu)
   val writeBack = DataCacheCpuWriteBack(p)
 
   val redo = Bool()
@@ -423,11 +423,11 @@ object DataCacheExternalAmoStates extends SpinalEnum{
 }
 
 //If external amo, mem rsp should stay
-class DataCache(val p : DataCacheConfig, tlbWayCount : Int) extends Component{
+class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParameter) extends Component{
   import p._
 
   val io = new Bundle{
-    val cpu = slave(DataCacheCpuBus(p, tlbWayCount))
+    val cpu = slave(DataCacheCpuBus(p, mmuParameter))
     val mem = master(DataCacheMemBus(p))
   }
 

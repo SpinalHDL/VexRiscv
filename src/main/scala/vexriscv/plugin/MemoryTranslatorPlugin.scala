@@ -23,7 +23,7 @@ class MemoryTranslatorPlugin(tlbSize : Int,
 
   override def newTranslationPort(priority : Int,args : Any): MemoryTranslatorBus = {
     val config = args.asInstanceOf[MemoryTranslatorPortConfig]
-    val port = MemoryTranslatorPort(MemoryTranslatorBus(0),priority, config/*,exceptionBus*/)
+    val port = MemoryTranslatorPort(MemoryTranslatorBus(MemoryTranslatorBusParameter(wayCount = 0)),priority, config/*,exceptionBus*/)
     portsInfo += port
     port.bus
   }
