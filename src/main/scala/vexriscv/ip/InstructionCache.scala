@@ -104,7 +104,7 @@ trait InstructionCacheCommons{
   val cacheMiss, error,  mmuRefilling, mmuException, isUser : Bool
 }
 
-case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle with IMasterSlave with InstructionCacheCommons {
+case class InstructionCacheCpuFetch(p : InstructionCacheConfig, tlbWayCount : Int) extends Bundle with IMasterSlave with InstructionCacheCommons {
   val isValid = Bool()
   val isStuck = Bool()
   val isRemoved = Bool()
@@ -112,7 +112,7 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
   val data = Bits(p.cpuDataWidth bits)
   val dataBypassValid = p.bypassGen generate Bool()
   val dataBypass = p.bypassGen generate Bits(p.cpuDataWidth bits)
-  val mmuBus  = MemoryTranslatorBus()
+  val mmuBus  = MemoryTranslatorBus(tlbWayCount)
   val physicalAddress = UInt(p.addressWidth bits)
   val cacheMiss, error, mmuRefilling, mmuException, isUser  = ifGen(!p.twoCycleCache)(Bool)
   val haltIt  = Bool() //Used to wait on the MMU rsp busy
@@ -141,9 +141,9 @@ case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle 
   }
 }
 
-case class InstructionCacheCpuBus(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
+case class InstructionCacheCpuBus(p : InstructionCacheConfig, tlbWayCount : Int) extends Bundle with IMasterSlave{
   val prefetch = InstructionCacheCpuPrefetch(p)
-  val fetch = InstructionCacheCpuFetch(p)
+  val fetch = InstructionCacheCpuFetch(p, tlbWayCount)
   val decode = InstructionCacheCpuDecode(p)
   val fill = Flow(UInt(p.addressWidth bits))
 
@@ -277,11 +277,11 @@ case class InstructionCacheFlushBus() extends Bundle with IMasterSlave{
   }
 }
 
-class InstructionCache(p : InstructionCacheConfig) extends Component{
+class InstructionCache(p : InstructionCacheConfig, tlbWayCount : Int) extends Component{
   import p._
   val io = new Bundle{
     val flush = in Bool()
-    val cpu = slave(InstructionCacheCpuBus(p))
+    val cpu = slave(InstructionCacheCpuBus(p, tlbWayCount))
     val mem = master(InstructionCacheMemBus(p))
   }
 

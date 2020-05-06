@@ -436,13 +436,14 @@ class DBusDimension extends VexRiscvDimension("DBus") {
       val dBusRspSlavePipe = r.nextBoolean() || withSmp
       val relaxedMemoryTranslationRegister = r.nextBoolean()
       val earlyWaysHits = r.nextBoolean() && !noWriteBack
+      val directTlbHit = r.nextBoolean() && mmuConfig.isInstanceOf[MmuPortConfig]
       val dBusCmdMasterPipe, dBusCmdSlavePipe = false //As it create test bench issues
 
       do{
         cacheSize = 512 << r.nextInt(5)
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
-      new VexRiscvPosition(s"Cached${memDataWidth}d" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "") + (if(withSmp) "Smp " else "")) {
+      new VexRiscvPosition(s"Cached${memDataWidth}d" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "") + (if(withSmp) "Smp " else "") + (if(directTlbHit) "Dtlb " else "")) {
         override def testParam = s"DBUS=CACHED DBUS_DATA_WIDTH=$memDataWidth " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")  + (if(withSmp) "DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes " else "")
 
         override def applyOn(config: VexRiscvConfig): Unit = {
@@ -461,7 +462,8 @@ class DBusDimension extends VexRiscvDimension("DBus") {
               withAmo = withAmo,
               earlyWaysHits = earlyWaysHits,
               withExclusive = withSmp,
-              withInvalidate = withSmp
+              withInvalidate = withSmp,
+              directTlbHit = directTlbHit
             ),
             dBusCmdMasterPipe = dBusCmdMasterPipe,
             dBusCmdSlavePipe = dBusCmdSlavePipe,

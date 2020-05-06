@@ -47,7 +47,8 @@ class MmuPlugin(ioRange : UInt => Bool,
   val portsInfo = ArrayBuffer[MmuPort]()
 
   override def newTranslationPort(priority : Int,args : Any): MemoryTranslatorBus = {
-    val port = MmuPort(MemoryTranslatorBus(),priority,args.asInstanceOf[MmuPortConfig], portsInfo.length)
+    val config = args.asInstanceOf[MmuPortConfig]
+    val port = MmuPort(MemoryTranslatorBus(config.portTlbSize),priority, config, portsInfo.length)
     portsInfo += port
     port.bus
   }
@@ -71,7 +72,7 @@ class MmuPlugin(ioRange : UInt => Bool,
     val csrService = pipeline.service(classOf[CsrInterface])
 
     //Sorted by priority
-    val sortedPortsInfo = portsInfo.sortWith((a,b) => a.priority > b.priority)
+    val sortedPortsInfo = portsInfo.sortBy(_.priority)
 
     case class CacheLine() extends Bundle {
       val valid, exception, superPage = Bool
@@ -137,6 +138,12 @@ class MmuPlugin(ioRange : UInt => Bool,
         }
         port.bus.rsp.isIoAccess := ioRange(port.bus.rsp.physicalAddress)
 
+        port.bus.rsp.bypassTranslation := !requireMmuLockup
+        for(wayId <- 0 until port.args.portTlbSize){
+          port.bus.rsp.ways(wayId).sel := cacheHits(wayId)
+          port.bus.rsp.ways(wayId).physical := cache(wayId).physicalAddress(1) @@ (cache(wayId).superPage ? port.bus.cmd.virtualAddress(21 downto 12) | cache(wayId).physicalAddress(0)) @@ port.bus.cmd.virtualAddress(11 downto 0)
+        }
+
         // Avoid keeping any invalid line in the cache after an exception.
         // https://github.com/riscv/riscv-linux/blob/8fe28cb58bcb235034b64cbbb7550a8a43fd88be/arch/riscv/include/asm/pgtable.h#L276
         when(service(classOf[IContextSwitching]).isContextSwitching) {
@@ -154,21 +161,23 @@ class MmuPlugin(ioRange : UInt => Bool,
         }
         val state = RegInit(State.IDLE)
         val vpn = Reg(Vec(UInt(10 bits), UInt(10 bits)))
-        val portId = Reg(UInt(log2Up(portsInfo.length) bits))
+        val portSortedOh = Reg(Bits(portsInfo.length bits))
         case class PTE() extends Bundle {
           val V, R, W ,X, U, G, A, D = Bool()
           val RSW = Bits(2 bits)
           val PPN0 = UInt(10 bits)
           val PPN1 = UInt(12 bits)
         }
+
+        val dBusRspStaged = dBusAccess.rsp.stage()
         val dBusRsp = new Area{
           val pte = PTE()
-          pte.assignFromBits(dBusAccess.rsp.data)
-          val exception = !pte.V || (!pte.R && pte.W) || dBusAccess.rsp.error
+          pte.assignFromBits(dBusRspStaged.data)
+          val exception = !pte.V || (!pte.R && pte.W) || dBusRspStaged.error
           val leaf = pte.R || pte.X
         }
 
-        val pteBuffer = RegNextWhen(dBusRsp.pte, dBusAccess.rsp.valid && !dBusAccess.rsp.redo)
+        val pteBuffer = RegNextWhen(dBusRsp.pte, dBusRspStaged.valid && !dBusRspStaged.redo)
 
         dBusAccess.cmd.valid := False
         dBusAccess.cmd.write := False
@@ -176,16 +185,25 @@ class MmuPlugin(ioRange : UInt => Bool,
         dBusAccess.cmd.address.assignDontCare()
         dBusAccess.cmd.data.assignDontCare()
         dBusAccess.cmd.writeMask.assignDontCare()
+
+        val refills = OHMasking.last(B(sortedPortsInfo.map(port => port.bus.cmd.isValid && port.bus.rsp.refilling)))
         switch(state){
           is(State.IDLE){
-            for(port <- portsInfo.sortBy(_.priority)){
-              when(port.bus.cmd.isValid && port.bus.rsp.refilling){
-                vpn(1) := port.bus.cmd.virtualAddress(31 downto 22)
-                vpn(0) := port.bus.cmd.virtualAddress(21 downto 12)
-                portId := port.id
-                state := State.L1_CMD
-              }
+            when(refills.orR){
+              portSortedOh := refills
+              state := State.L1_CMD
+              val address = MuxOH(refills, sortedPortsInfo.map(_.bus.cmd.virtualAddress))
+              vpn(1) := address(31 downto 22)
+              vpn(0) := address(21 downto 12)
             }
+//            for(port <- portsInfo.sortBy(_.priority)){
+//              when(port.bus.cmd.isValid && port.bus.rsp.refilling){
+//                vpn(1) := port.bus.cmd.virtualAddress(31 downto 22)
+//                vpn(0) := port.bus.cmd.virtualAddress(21 downto 12)
+//                portId := port.id
+//                state := State.L1_CMD
+//              }
+//            }
           }
           is(State.L1_CMD){
             dBusAccess.cmd.valid := True
@@ -195,12 +213,12 @@ class MmuPlugin(ioRange : UInt => Bool,
             }
           }
           is(State.L1_RSP){
-            when(dBusAccess.rsp.valid){
+            when(dBusRspStaged.valid){
               state := State.L0_CMD
               when(dBusRsp.leaf || dBusRsp.exception){
                 state := State.IDLE
               }
-              when(dBusAccess.rsp.redo){
+              when(dBusRspStaged.redo){
                 state := State.L1_CMD
               }
             }
@@ -213,22 +231,22 @@ class MmuPlugin(ioRange : UInt => Bool,
             }
           }
           is(State.L0_RSP){
-            when(dBusAccess.rsp.valid) {
+            when(dBusRspStaged.valid) {
               state := State.IDLE
-              when(dBusAccess.rsp.redo){
+              when(dBusRspStaged.redo){
                 state := State.L0_CMD
               }
             }
           }
         }
 
-        for(port <- ports) {
-          port.handle.bus.busy := state =/= State.IDLE && portId === port.id
+        for((port, id) <- sortedPortsInfo.zipWithIndex) {
+          port.bus.busy := state =/= State.IDLE && portSortedOh(id)
         }
 
-        when(dBusAccess.rsp.valid && !dBusAccess.rsp.redo && (dBusRsp.leaf || dBusRsp.exception)){
-          for(port <- ports){
-            when(portId === port.id) {
+        when(dBusRspStaged.valid && !dBusRspStaged.redo && (dBusRsp.leaf || dBusRsp.exception)){
+          for((port, id) <- ports.zipWithIndex) {
+            when(portSortedOh(id)) {
               port.entryToReplace.increment()
               for ((line, lineId) <- port.cache.zipWithIndex) {
                 when(port.entryToReplace === lineId){

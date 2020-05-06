@@ -298,7 +298,6 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
   object ALIGNEMENT_FAULT extends Stageable(Bool)
   object MMU_FAULT extends Stageable(Bool)
-  object MMU_RSP extends Stageable(MemoryTranslatorRsp())
   object MEMORY_ATOMIC extends Stageable(Bool)
   object ATOMIC_HIT extends Stageable(Bool)
   object MEMORY_STORE extends Stageable(Bool)
@@ -392,6 +391,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
+
+    object MMU_RSP extends Stageable(MemoryTranslatorRsp(mmuBus.rsp.wayCount))
 
     dBus = master(DBusSimpleBus()).setName("dBus")
 

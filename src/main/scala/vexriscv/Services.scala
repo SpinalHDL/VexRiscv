@@ -68,17 +68,24 @@ case class MemoryTranslatorCmd() extends Bundle{
   val virtualAddress  = UInt(32 bits)
   val bypassTranslation = Bool
 }
-case class MemoryTranslatorRsp() extends Bundle{
+case class MemoryTranslatorRsp(wayCount : Int) extends Bundle{
   val physicalAddress = UInt(32 bits)
   val isIoAccess = Bool
   val allowRead, allowWrite, allowExecute = Bool
   val exception = Bool
   val refilling = Bool
+  val bypassTranslation = Bool
+  val ways = Vec(MemoryTranslatorRspWay(), wayCount)
+}
+case class MemoryTranslatorRspWay() extends Bundle{
+  val sel = Bool()
+  val physical = UInt(32 bits)
 }
 
-case class MemoryTranslatorBus() extends Bundle with IMasterSlave{
+
+case class MemoryTranslatorBus(wayCount : Int) extends Bundle with IMasterSlave{
   val cmd = MemoryTranslatorCmd()
-  val rsp = MemoryTranslatorRsp()
+  val rsp = MemoryTranslatorRsp(wayCount)
   val end = Bool
   val busy = Bool
 

@@ -171,9 +171,12 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     import pipeline.config._
 
 
-    val cache = new DataCache(this.config.copy(
-      mergeExecuteMemory = writeBack == null
-    ))
+    val cache = new DataCache(
+      this.config.copy(
+        mergeExecuteMemory = writeBack == null
+      ),
+      tlbWayCount = mmuBus.rsp.wayCount
+    )
 
     //Interconnect the plugin dBus with the cache dBus with some optional pipelining
     def optionPipe[T](cond : Boolean, on : T)(f : T => T) : T = if(cond) f(on) else on

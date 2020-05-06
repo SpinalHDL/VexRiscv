@@ -28,6 +28,7 @@ case class DataCacheConfig(cacheSize : Int,
                            withExclusive : Boolean = false,
                            withInvalidate : Boolean = false,
                            pendingMax : Int = 32,
+                           directTlbHit : Boolean = false,
                            mergeExecuteMemory : Boolean = false){
   assert(!(mergeExecuteMemory && (earlyDataMux || earlyWaysHits)))
   assert(!(earlyDataMux && !earlyWaysHits))
@@ -124,13 +125,13 @@ case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
   val totalyConsistent = Bool() //Only for AMO/LRSC
 }
 
-case class DataCacheCpuMemory(p : DataCacheConfig) extends Bundle with IMasterSlave{
+case class DataCacheCpuMemory(p : DataCacheConfig, tlbWayCount : Int) extends Bundle with IMasterSlave{
   val isValid = Bool
   val isStuck = Bool
   val isRemoved = Bool
   val isWrite = Bool
   val address = UInt(p.addressWidth bit)
-  val mmuBus  = MemoryTranslatorBus()
+  val mmuBus  = MemoryTranslatorBus(tlbWayCount)
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved, address)
@@ -174,9 +175,9 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   }
 }
 
-case class DataCacheCpuBus(p : DataCacheConfig) extends Bundle with IMasterSlave{
+case class DataCacheCpuBus(p : DataCacheConfig, tlbWayCount : Int) extends Bundle with IMasterSlave{
   val execute   = DataCacheCpuExecute(p)
-  val memory    = DataCacheCpuMemory(p)
+  val memory    = DataCacheCpuMemory(p, tlbWayCount)
   val writeBack = DataCacheCpuWriteBack(p)
 
   val redo = Bool()
@@ -422,11 +423,11 @@ object DataCacheExternalAmoStates extends SpinalEnum{
 }
 
 //If external amo, mem rsp should stay
-class DataCache(val p : DataCacheConfig) extends Component{
+class DataCache(val p : DataCacheConfig, tlbWayCount : Int) extends Component{
   import p._
 
   val io = new Bundle{
-    val cpu = slave(DataCacheCpuBus(p))
+    val cpu = slave(DataCacheCpuBus(p, tlbWayCount))
     val mem = master(DataCacheMemBus(p))
   }
 
@@ -537,11 +538,12 @@ class DataCache(val p : DataCacheConfig) extends Component{
   val memCmdSent = RegInit(False) setWhen (io.mem.cmd.ready) clearWhen (!io.cpu.writeBack.isStuck)
   val pending = withExclusive generate new Area{
     val counter = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
-    counter := counter + U(io.mem.cmd.fire && io.mem.cmd.last) - U(io.mem.rsp.valid  && io.mem.rsp.last)
+    val counterNext = counter + U(io.mem.cmd.fire && io.mem.cmd.last) - U(io.mem.rsp.valid  && io.mem.rsp.last)
+    counter := counterNext
 
-    val done = counter === 0
-    val full = RegNext(counter.msb)
-    val last = counter === 1
+    val done = RegNext(counterNext === 0)
+    val full = RegNext(counter.msb)       //Has margin
+    val last = RegNext(counterNext === 1) //Equivalent to counter === 1 but pipelined
 
     if(!withInvalidate) {
       io.cpu.execute.haltIt setWhen(full)
@@ -643,7 +645,19 @@ class DataCache(val p : DataCacheConfig) extends Component{
       }
     }
 
-    val wayHits = earlyWaysHits generate ways.map(way => (io.cpu.memory.mmuBus.rsp.physicalAddress(tagRange) === way.tagsReadRsp.address && way.tagsReadRsp.valid))
+    val wayHits = earlyWaysHits generate Bits(wayCount bits)
+    val indirectTlbHitGen = (earlyWaysHits && !directTlbHit) generate new Area {
+      wayHits := B(ways.map(way => (io.cpu.memory.mmuBus.rsp.physicalAddress(tagRange) === way.tagsReadRsp.address && way.tagsReadRsp.valid)))
+    }
+    val directTlbHitGen = (earlyWaysHits && directTlbHit) generate new Area {
+      val wayTlbHits = for (way <- ways) yield for (tlb <- io.cpu.memory.mmuBus.rsp.ways) yield {
+        way.tagsReadRsp.address === tlb.physical(tagRange) && tlb.sel
+      }
+      val translatedHits = B(wayTlbHits.map(_.orR))
+      val bypassHits = B(ways.map(_.tagsReadRsp.address === io.cpu.memory.address(tagRange)))
+      wayHits := (io.cpu.memory.mmuBus.rsp.bypassTranslation ? bypassHits | translatedHits) & B(ways.map(_.tagsReadRsp.valid))
+    }
+
     val dataMux = earlyDataMux generate MuxOH(wayHits, ways.map(_.dataReadRsp))
     val wayInvalidate = stagePipe(stage0. wayInvalidate)
     val dataColisions = if(mergeExecuteMemory){

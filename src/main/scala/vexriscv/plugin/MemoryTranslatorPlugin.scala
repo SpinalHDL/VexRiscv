@@ -22,8 +22,8 @@ class MemoryTranslatorPlugin(tlbSize : Int,
   val portsInfo = ArrayBuffer[MemoryTranslatorPort]()
 
   override def newTranslationPort(priority : Int,args : Any): MemoryTranslatorBus = {
-//    val exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(stage)
-    val port = MemoryTranslatorPort(MemoryTranslatorBus(),priority,args.asInstanceOf[MemoryTranslatorPortConfig]/*,exceptionBus*/)
+    val config = args.asInstanceOf[MemoryTranslatorPortConfig]
+    val port = MemoryTranslatorPort(MemoryTranslatorBus(0),priority, config/*,exceptionBus*/)
     portsInfo += port
     port.bus
   }

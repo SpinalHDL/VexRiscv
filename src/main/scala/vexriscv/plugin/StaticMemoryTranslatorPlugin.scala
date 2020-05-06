@@ -11,8 +11,7 @@ class StaticMemoryTranslatorPlugin(ioRange : UInt => Bool) extends Plugin[VexRis
   val portsInfo = ArrayBuffer[StaticMemoryTranslatorPort]()
 
   override def newTranslationPort(priority : Int,args : Any): MemoryTranslatorBus = {
-//    val exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(stage)
-    val port = StaticMemoryTranslatorPort(MemoryTranslatorBus(),priority)
+    val port = StaticMemoryTranslatorPort(MemoryTranslatorBus(0),priority)
     portsInfo += port
     port.bus
   }
