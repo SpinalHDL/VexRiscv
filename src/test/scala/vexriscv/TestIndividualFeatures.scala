@@ -321,9 +321,12 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-    val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
+    val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
+    val noWriteBack = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
+
 
     if(r.nextDouble() < 0.5){
+      val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
       val latency = r.nextInt(5) + 1
       val compressed = r.nextDouble() < rvcRate
       val injectorStage = r.nextBoolean() || latency == 1
@@ -347,6 +350,9 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
         override def instructionAnticipatedOk() = injectorStage
       }
     } else {
+      val twoStageMmu = r.nextBoolean()
+      val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig(portTlbSize = 4, latency = if(twoStageMmu) 1 else 0, earlyRequireMmuLockup = Random.nextBoolean() && twoStageMmu, earlyCacheHits = Random.nextBoolean() && twoStageMmu) else null
+
       val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
       val compressed = r.nextDouble() < rvcRate
       val tighlyCoupled = r.nextBoolean() && !catchAll

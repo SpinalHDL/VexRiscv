@@ -112,16 +112,15 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig, mmuParameter : M
   val data = Bits(p.cpuDataWidth bits)
   val dataBypassValid = p.bypassGen generate Bool()
   val dataBypass = p.bypassGen generate Bits(p.cpuDataWidth bits)
-  val mmuBus  = MemoryTranslatorBus(mmuParameter)
+  val mmuRsp  = MemoryTranslatorRsp(mmuParameter)
   val physicalAddress = UInt(p.addressWidth bits)
   val cacheMiss, error, mmuRefilling, mmuException, isUser  = ifGen(!p.twoCycleCache)(Bool)
-  val haltIt  = Bool() //Used to wait on the MMU rsp busy
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved, pc)
-    inWithNull(error,mmuRefilling,mmuException,data, cacheMiss,physicalAddress, haltIt)
+    inWithNull(error,mmuRefilling,mmuException,data, cacheMiss,physicalAddress)
     outWithNull(isUser, dataBypass, dataBypassValid)
-    slaveWithNull(mmuBus)
+    out(mmuRsp)
   }
 }
 
@@ -321,7 +320,6 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
     }
   })
 
-  io.cpu.fetch.haltIt := io.cpu.fetch.mmuBus.busy
 
   val lineLoader = new Area{
     val fire = False
@@ -412,7 +410,7 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
 
 
     val hit = (!twoCycleRam) generate new Area{
-      val hits = read.waysValues.map(way => way.tag.valid && way.tag.address === io.cpu.fetch.mmuBus.rsp.physicalAddress(tagRange))
+      val hits = read.waysValues.map(way => way.tag.valid && way.tag.address === io.cpu.fetch.mmuRsp.physicalAddress(tagRange))
       val valid = Cat(hits).orR
       val id = OHToUInt(hits)
       val error = read.waysValues.map(_.tag.error).read(id)
@@ -429,14 +427,10 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
       io.cpu.fetch.data := (if(p.bypassGen) (io.cpu.fetch.dataBypassValid ? io.cpu.fetch.dataBypass | cacheData) else cacheData)
     }
 
-    io.cpu.fetch.mmuBus.cmd.last.isValid := io.cpu.fetch.isValid
-    io.cpu.fetch.mmuBus.cmd.last.virtualAddress := io.cpu.fetch.pc
-    io.cpu.fetch.mmuBus.cmd.last.bypassTranslation := False
-    io.cpu.fetch.mmuBus.end := !io.cpu.fetch.isStuck || io.cpu.fetch.isRemoved
-    io.cpu.fetch.physicalAddress := io.cpu.fetch.mmuBus.rsp.physicalAddress
+    io.cpu.fetch.physicalAddress := io.cpu.fetch.mmuRsp.physicalAddress
 
     val resolution = ifGen(!twoCycleCache)( new Area{
-      val mmuRsp = io.cpu.fetch.mmuBus.rsp
+      val mmuRsp = io.cpu.fetch.mmuRsp
 
       io.cpu.fetch.cacheMiss := !hit.valid
       io.cpu.fetch.error := hit.error
@@ -449,7 +443,7 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
 
   val decodeStage = ifGen(twoCycleCache) (new Area{
     def stage[T <: Data](that : T) = RegNextWhen(that,!io.cpu.decode.isStuck)
-    val mmuRsp = stage(io.cpu.fetch.mmuBus.rsp)
+    val mmuRsp = stage(io.cpu.fetch.mmuRsp)
 
     val hit = if(!twoCycleRam) new Area{
       val valid = stage(fetchStage.hit.valid)
