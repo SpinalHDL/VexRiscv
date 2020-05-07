@@ -449,9 +449,10 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       insert(FORMAL_MEM_WDATA) := dBus.cmd.payload.data
 
       val mmu = (mmuBus != null) generate new Area {
-        mmuBus.cmd.isValid := arbitration.isValid && input(MEMORY_ENABLE)
-        mmuBus.cmd.virtualAddress := input(SRC_ADD).asUInt
-        mmuBus.cmd.bypassTranslation := False
+        mmuBus.cmd.last.isValid := arbitration.isValid && input(MEMORY_ENABLE)
+        mmuBus.cmd.last.isStuck := arbitration.isStuck
+        mmuBus.cmd.last.virtualAddress := input(SRC_ADD).asUInt
+        mmuBus.cmd.last.bypassTranslation := False
         mmuBus.end := !arbitration.isStuck || arbitration.isRemoved
         dBus.cmd.address := mmuBus.rsp.physicalAddress
 

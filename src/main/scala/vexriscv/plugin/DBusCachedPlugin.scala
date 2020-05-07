@@ -170,6 +170,10 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     import pipeline._
     import pipeline.config._
 
+    val twoStageMmu = mmuBus.p.latency match {
+      case 0 => false
+      case 1 => true
+    }
 
     val cache = new DataCache(
       this.config.copy(
@@ -242,6 +246,12 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       )
       cache.io.cpu.execute.args.size := size
 
+      if(twoStageMmu) {
+        mmuBus.cmd(0).isValid := cache.io.cpu.execute.isValid
+        mmuBus.cmd(0).isStuck := arbitration.isStuck
+        mmuBus.cmd(0).virtualAddress := cache.io.cpu.execute.address
+        mmuBus.cmd(0).bypassTranslation := False
+      }
 
       cache.io.cpu.flush.valid := arbitration.isValid && input(MEMORY_MANAGMENT)
       cache.io.cpu.execute.args.totalyConsistent := input(MEMORY_FORCE_CONSTISTENCY)
@@ -281,11 +291,15 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
       cache.io.cpu.memory.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.memory.isStuck := arbitration.isStuck
-      cache.io.cpu.memory.isRemoved := arbitration.removeIt
       cache.io.cpu.memory.address := (if(relaxedMemoryTranslationRegister) input(MEMORY_VIRTUAL_ADDRESS) else if(mmuAndBufferStage == execute) cache.io.cpu.execute.address else U(input(REGFILE_WRITE_DATA)))
 
-      cache.io.cpu.memory.mmuBus <> mmuBus
-      cache.io.cpu.memory.mmuBus.rsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
+      mmuBus.cmd.last.isValid := cache.io.cpu.memory.isValid
+      mmuBus.cmd.last.isStuck := cache.io.cpu.memory.isStuck
+      mmuBus.cmd.last.virtualAddress := cache.io.cpu.memory.address
+      mmuBus.cmd.last.bypassTranslation := False
+      mmuBus.end := !arbitration.isStuck || arbitration.removeIt
+      cache.io.cpu.memory.mmuRsp := mmuBus.rsp
+      cache.io.cpu.memory.mmuRsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
     }
 
     val managementStage = stages.last
@@ -397,9 +411,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         }
       }
       execute.insert(IS_DBUS_SHARING) := dBusAccess.cmd.fire
+      mmuBus.cmd.last.bypassTranslation setWhen(mmuAndBufferStage.input(IS_DBUS_SHARING))
+      if(twoStageMmu) mmuBus.cmd(0).bypassTranslation setWhen(execute.input(IS_DBUS_SHARING))
 
-
-      mmuBus.cmd.bypassTranslation setWhen(mmuAndBufferStage.input(IS_DBUS_SHARING))
       if(mmuAndBufferStage != execute) (cache.io.cpu.memory.isValid setWhen(mmuAndBufferStage.input(IS_DBUS_SHARING)))
       cache.io.cpu.writeBack.isValid setWhen(managementStage.input(IS_DBUS_SHARING))
       dBusAccess.rsp.valid := managementStage.input(IS_DBUS_SHARING) && !cache.io.cpu.writeBack.isWrite && (cache.io.cpu.redo || !cache.io.cpu.writeBack.haltIt)

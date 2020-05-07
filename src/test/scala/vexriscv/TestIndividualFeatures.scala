@@ -405,13 +405,12 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-    val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
     val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
     val noWriteBack = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
 
 
-
     if(r.nextDouble() < 0.4 || noMemory){
+      val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4, latency = 0) else null
       val withLrSc = catchAll
       val earlyInjection = r.nextBoolean() && !universes.contains(VexRiscvUniverse.NO_WRITEBACK)
       new VexRiscvPosition("Simple" + (if(earlyInjection) "Early" else "Late")) {
@@ -426,6 +425,8 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 //        override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
       }
     } else {
+      val twoStageMmu = r.nextBoolean() && !noMemory && !noWriteBack
+      val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig(portTlbSize = 4, latency = if(twoStageMmu) 1 else 0, earlyRequireMmuLockup = Random.nextBoolean() && twoStageMmu, earlyCacheHits = Random.nextBoolean() && twoStageMmu) else null
       val memDataWidth = List(32,64,128)(r.nextInt(3))
       val bytePerLine = Math.max(memDataWidth/8, List(8,16,32,64)(r.nextInt(4)))
       var cacheSize = 0
@@ -443,7 +444,7 @@ class DBusDimension extends VexRiscvDimension("DBus") {
         cacheSize = 512 << r.nextInt(5)
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
-      new VexRiscvPosition(s"Cached${memDataWidth}d" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "") + (if(withSmp) "Smp " else "") + (if(directTlbHit) "Dtlb " else "")) {
+      new VexRiscvPosition(s"Cached${memDataWidth}d" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "") + (if(withSmp) "Smp " else "") + (if(directTlbHit) "Dtlb " else "") + (if(twoStageMmu) "Tsmmu " else "")) {
         override def testParam = s"DBUS=CACHED DBUS_DATA_WIDTH=$memDataWidth " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")  + (if(withSmp) "DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes " else "")
 
         override def applyOn(config: VexRiscvConfig): Unit = {

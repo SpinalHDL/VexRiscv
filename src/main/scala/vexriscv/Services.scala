@@ -65,6 +65,7 @@ trait RegFileService{
 
 case class MemoryTranslatorCmd() extends Bundle{
   val isValid = Bool
+  val isStuck = Bool
   val virtualAddress  = UInt(32 bits)
   val bypassTranslation = Bool
 }
@@ -82,9 +83,9 @@ case class MemoryTranslatorRspWay() extends Bundle{
   val physical = UInt(32 bits)
 }
 
-case class MemoryTranslatorBusParameter(wayCount : Int)
+case class MemoryTranslatorBusParameter(wayCount : Int = 0, latency : Int = 0)
 case class MemoryTranslatorBus(p : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave{
-  val cmd = MemoryTranslatorCmd()
+  val cmd = Vec(MemoryTranslatorCmd(), p.latency + 1)
   val rsp = MemoryTranslatorRsp(p)
   val end = Bool
   val busy = Bool

@@ -124,7 +124,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
     import pipeline.config._
 
     pipeline plug new FetchArea(pipeline) {
-      val cache = new InstructionCache(IBusCachedPlugin.this.config.copy(bypassGen = tightlyGen), mmuBus.p)
+      val cache = new InstructionCache(IBusCachedPlugin.this.config.copy(bypassGen = tightlyGen), if(mmuBus != null) mmuBus.p else MemoryTranslatorBusParameter(0,0))
       iBus = master(new InstructionCacheMemBus(IBusCachedPlugin.this.config)).setName("iBus")
       iBus <> cache.io.mem
       iBus.cmd.address.allowOverride := cache.io.mem.cmd.address
@@ -251,7 +251,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
       if (mmuBus != null) {
         cache.io.cpu.fetch.mmuBus <> mmuBus
       } else {
-        cache.io.cpu.fetch.mmuBus.rsp.physicalAddress := cache.io.cpu.fetch.mmuBus.cmd.virtualAddress
+        cache.io.cpu.fetch.mmuBus.rsp.physicalAddress := cache.io.cpu.fetch.mmuBus.cmd.last.virtualAddress
         cache.io.cpu.fetch.mmuBus.rsp.allowExecute := True
         cache.io.cpu.fetch.mmuBus.rsp.allowRead := True
         cache.io.cpu.fetch.mmuBus.rsp.allowWrite := True

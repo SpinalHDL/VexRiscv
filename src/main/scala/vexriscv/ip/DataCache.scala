@@ -128,15 +128,14 @@ case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
 case class DataCacheCpuMemory(p : DataCacheConfig, mmu : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave{
   val isValid = Bool
   val isStuck = Bool
-  val isRemoved = Bool
   val isWrite = Bool
   val address = UInt(p.addressWidth bit)
-  val mmuBus  = MemoryTranslatorBus(mmu)
+  val mmuRsp  = MemoryTranslatorRsp(mmu)
 
   override def asMaster(): Unit = {
-    out(isValid, isStuck, isRemoved, address)
+    out(isValid, isStuck, address)
     in(isWrite)
-    slave(mmuBus)
+    out(mmuRsp)
   }
 }
 
@@ -619,10 +618,6 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
     def stagePipe[T <: Data](that : T) = if(mergeExecuteMemory) CombInit(that) else RegNextWhen(that, !io.cpu.memory.isStuck)
     val request = stagePipe(io.cpu.execute.args)
     val mask = stagePipe(stage0.mask)
-    io.cpu.memory.mmuBus.cmd.isValid := io.cpu.memory.isValid
-    io.cpu.memory.mmuBus.cmd.virtualAddress := io.cpu.memory.address
-    io.cpu.memory.mmuBus.cmd.bypassTranslation := False
-    io.cpu.memory.mmuBus.end := !io.cpu.memory.isStuck || io.cpu.memory.isRemoved
     io.cpu.memory.isWrite := request.wr
 
     val isAmo = if(withAmo) request.isAmo else False
@@ -634,8 +629,8 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
       val o = CombInit(sync.w2o.busy)
       val i = CombInit(sync.w2i.busy)
 
-      val s = io.cpu.memory.mmuBus.rsp.isIoAccess ? o | w
-      val l = io.cpu.memory.mmuBus.rsp.isIoAccess ? i | r
+      val s = io.cpu.memory.mmuRsp.isIoAccess ? o | w
+      val l = io.cpu.memory.mmuRsp.isIoAccess ? i | r
 
       when(isAmo? (s || l) | (request.wr ? s | l)){
         hazard := True
@@ -647,15 +642,15 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
 
     val wayHits = earlyWaysHits generate Bits(wayCount bits)
     val indirectTlbHitGen = (earlyWaysHits && !directTlbHit) generate new Area {
-      wayHits := B(ways.map(way => (io.cpu.memory.mmuBus.rsp.physicalAddress(tagRange) === way.tagsReadRsp.address && way.tagsReadRsp.valid)))
+      wayHits := B(ways.map(way => (io.cpu.memory.mmuRsp.physicalAddress(tagRange) === way.tagsReadRsp.address && way.tagsReadRsp.valid)))
     }
     val directTlbHitGen = (earlyWaysHits && directTlbHit) generate new Area {
-      val wayTlbHits = for (way <- ways) yield for (tlb <- io.cpu.memory.mmuBus.rsp.ways) yield {
+      val wayTlbHits = for (way <- ways) yield for (tlb <- io.cpu.memory.mmuRsp.ways) yield {
         way.tagsReadRsp.address === tlb.physical(tagRange) && tlb.sel
       }
       val translatedHits = B(wayTlbHits.map(_.orR))
       val bypassHits = B(ways.map(_.tagsReadRsp.address === io.cpu.memory.address(tagRange)))
-      wayHits := (io.cpu.memory.mmuBus.rsp.bypassTranslation ? bypassHits | translatedHits) & B(ways.map(_.tagsReadRsp.valid))
+      wayHits := (io.cpu.memory.mmuRsp.bypassTranslation ? bypassHits | translatedHits) & B(ways.map(_.tagsReadRsp.valid))
     }
 
     val dataMux = earlyDataMux generate MuxOH(wayHits, ways.map(_.dataReadRsp))
@@ -673,7 +668,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
     def ramPipe[T <: Data](that : T) = if(mergeExecuteMemory) CombInit(that) else  RegNextWhen(that, !io.cpu.writeBack.isStuck)
     val request = RegNextWhen(stageA.request, !io.cpu.writeBack.isStuck)
     val mmuRspFreeze = False
-    val mmuRsp = RegNextWhen(io.cpu.memory.mmuBus.rsp, !io.cpu.writeBack.isStuck && !mmuRspFreeze)
+    val mmuRsp = RegNextWhen(io.cpu.memory.mmuRsp, !io.cpu.writeBack.isStuck && !mmuRspFreeze)
     val tagsReadRsp = ways.map(w => ramPipe(w.tagsReadRsp))
     val dataReadRsp = !earlyDataMux generate ways.map(w => ramPipe(w.dataReadRsp))
     val wayInvalidate = stagePipe(stageA. wayInvalidate)

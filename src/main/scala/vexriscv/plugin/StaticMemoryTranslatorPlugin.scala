@@ -26,7 +26,7 @@ class StaticMemoryTranslatorPlugin(ioRange : UInt => Bool) extends Plugin[VexRis
 
     val core = pipeline plug new Area {
       val ports = for ((port, portId) <- portsInfo.zipWithIndex) yield new Area {
-        port.bus.rsp.physicalAddress := port.bus.cmd.virtualAddress
+        port.bus.rsp.physicalAddress := port.bus.cmd.last.virtualAddress
         port.bus.rsp.allowRead := True
         port.bus.rsp.allowWrite := True
         port.bus.rsp.allowExecute := True

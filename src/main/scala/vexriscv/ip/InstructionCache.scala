@@ -429,9 +429,9 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
       io.cpu.fetch.data := (if(p.bypassGen) (io.cpu.fetch.dataBypassValid ? io.cpu.fetch.dataBypass | cacheData) else cacheData)
     }
 
-    io.cpu.fetch.mmuBus.cmd.isValid := io.cpu.fetch.isValid
-    io.cpu.fetch.mmuBus.cmd.virtualAddress := io.cpu.fetch.pc
-    io.cpu.fetch.mmuBus.cmd.bypassTranslation := False
+    io.cpu.fetch.mmuBus.cmd.last.isValid := io.cpu.fetch.isValid
+    io.cpu.fetch.mmuBus.cmd.last.virtualAddress := io.cpu.fetch.pc
+    io.cpu.fetch.mmuBus.cmd.last.bypassTranslation := False
     io.cpu.fetch.mmuBus.end := !io.cpu.fetch.isStuck || io.cpu.fetch.isRemoved
     io.cpu.fetch.physicalAddress := io.cpu.fetch.mmuBus.rsp.physicalAddress
 

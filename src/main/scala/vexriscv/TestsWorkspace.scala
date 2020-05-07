@@ -73,7 +73,8 @@ object TestsWorkspace {
               //          )
             ),
             memoryTranslatorPortConfig = MmuPortConfig(
-              portTlbSize = 4
+              portTlbSize = 4,
+              latency = 0
             )
           ),
           //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
@@ -108,7 +109,8 @@ object TestsWorkspace {
               //          )
             ),
             memoryTranslatorPortConfig = MmuPortConfig(
-              portTlbSize = 4
+              portTlbSize = 4,
+              latency = 1
             )
           ),
 
