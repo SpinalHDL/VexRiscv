@@ -305,7 +305,7 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
     capabilities = Seq(iBusArbiterParameter, iBusArbiterParameter),
     pendingMax   = 15
   )
-  iBusDecoder.io.input << iBusArbiter.io.output
+  iBusDecoder.io.input << iBusArbiter.io.output.pipelined(cmdValid = true)
 
   val iMem = LiteDramNative(p.liteDram)
   val iMemBridge = iMem.fromBmb(iBusDecoder.io.outputs(1), wdataFifoSize = 0, rdataFifoSize = 32)
@@ -350,8 +350,8 @@ object VexRiscvLitexSmpClusterGen extends App {
     debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
   )
 
-  SpinalVerilog(Bench.compressIo(dutGen))
-//  SpinalVerilog(dutGen)
+//  SpinalVerilog(Bench.compressIo(dutGen))
+  SpinalVerilog(dutGen)
 
 }
 
