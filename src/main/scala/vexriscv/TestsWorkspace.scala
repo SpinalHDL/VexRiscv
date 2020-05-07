@@ -68,13 +68,15 @@ object TestsWorkspace {
               catchIllegalAccess = true,
               catchAccessFault = true,
               asyncTagMemory = false,
-              twoCycleRam = false,
+              twoCycleRam = true,
               twoCycleCache = true
               //          )
             ),
             memoryTranslatorPortConfig = MmuPortConfig(
               portTlbSize = 4,
-              latency = 0
+              latency = 1,
+              earlyRequireMmuLockup = true,
+              earlyCacheHits = true
             )
           ),
           //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
@@ -110,7 +112,9 @@ object TestsWorkspace {
             ),
             memoryTranslatorPortConfig = MmuPortConfig(
               portTlbSize = 4,
-              latency = 1
+              latency = 1,
+              earlyRequireMmuLockup = true,
+              earlyCacheHits = true
             )
           ),
 

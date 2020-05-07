@@ -9,7 +9,7 @@ import spinal.lib.bus.bmb.{Bmb, BmbArbiter, BmbDecoder, BmbExclusiveMonitor, Bmb
 import spinal.lib.com.jtag.Jtag
 import spinal.lib.com.jtag.sim.JtagTcp
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
-import vexriscv.plugin.{BranchPlugin, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
+import vexriscv.plugin.{BranchPlugin, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
 import vexriscv.{Riscv, VexRiscv, VexRiscvConfig, plugin}
 
 import scala.collection.mutable
@@ -141,6 +141,8 @@ object VexRiscvSmpClusterGen {
           resetVector = resetVector,
           compressedGen = false,
           prediction = STATIC,
+          historyRamSizeLog2 = 9,
+          relaxPredictorAddress = true,
           injectorStage = false,
           relaxedPcCalculation = true,
           config = InstructionCacheConfig(
@@ -153,12 +155,15 @@ object VexRiscvSmpClusterGen {
             catchIllegalAccess = true,
             catchAccessFault = true,
             asyncTagMemory = false,
-            twoCycleRam = true,
+            twoCycleRam = false,
             twoCycleCache = true
             //          )
           ),
           memoryTranslatorPortConfig = MmuPortConfig(
-            portTlbSize = 4
+            portTlbSize = 4,
+            latency = 1,
+            earlyRequireMmuLockup = true,
+            earlyCacheHits = true
           )
         ),
         //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
