@@ -8,6 +8,7 @@ import vexriscv.plugin.IntAluPlugin.{ALU_BITWISE_CTRL, ALU_CTRL, AluBitwiseCtrlE
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable
+import spinal.core.sim._
 
 /**
   * Created by spinalvm on 21.03.17.
@@ -874,7 +875,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       interruptJump := interrupt.valid && pipelineLiberator.done && allowInterrupts
       if(pipelinedInterrupt) interrupt.valid clearWhen(interruptJump) //avoid double fireing
 
-      val hadException = RegNext(exception) init(False)
+      val hadException = RegNext(exception) init(False) addTag(Verilator.public)
       pipelineLiberator.done.clearWhen(hadException)
 
 

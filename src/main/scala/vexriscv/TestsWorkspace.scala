@@ -28,6 +28,7 @@ import spinal.lib.eda.altera.{InterruptReceiverTag, ResetEmitterTag}
 
 
 // make clean all SEED=42 MMU=no STOP_ON_ERROR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes SUPERVISOR=yes REDO=1 DHRYSTONE=yes LRSC=yes AMO=yes LINUX_REGRESSION=yes TRACE=yes TRACE_START=1000000000 FLOW_INFO=ye IBUS_DATA_WIDTH=128  DBUS_DATA_WIDTH=128
+//make clean all SEED=42 MMU=no STOP_ON_ERROR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes SUPERVISOR=yes REDO=1 DHRYSTONE=yes LRSC=yes AMO=yes  TRACE=yes TRACE_START=1000000000 FLOW_INFO=ye IBUS_DATA_WIDTH=128  DBUS_DATA_WIDTH=128 LINUX_SOC_SMP=yes VMLINUX=../../../../../buildroot/output/images/Image RAMDISK=../../../../../buildroot/output/images/rootfs.cpio  DTB=../../../../../buildroot/output/images/dtb EMULATOR=../../../../../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin
 object TestsWorkspace {
   def main(args: Array[String]) {
     def configFull = {
@@ -156,7 +157,7 @@ object TestsWorkspace {
             divUnrollFactor = 1
           ),
           //          new DivPlugin,
-          new CsrPlugin(CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = false)),
+          new CsrPlugin(CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = false, misaExtensionsInit = Riscv.misaToInt("imas"))),
           //          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
           //             CsrPluginConfig(
           //            catchIllegalAccess = false,

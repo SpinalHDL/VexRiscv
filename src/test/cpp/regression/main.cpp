@@ -390,7 +390,7 @@ public:
 		mcause.raw = 0;
 		mbadaddr = 0;
 		mepc = 0;
-		misa = 0; //TODO
+		misa = 0x40041101; //TODO
 		status.raw = 0;
 		status.mpp = 3;
 		status.spp = 1;
@@ -401,6 +401,7 @@ public:
 		ipSoft = 0;
 		ipInput = 0;
 		stepCounter = 0;
+		sbadaddr = 42;
 		lrscReserved = false;
 	}
 
@@ -513,7 +514,7 @@ public:
 		pcWrite(xtvec.base << 2);
 		if(interrupt) livenessInterrupt = 0;
 
-		if(!interrupt) step(); //As VexRiscv instruction which trap do not reach writeback stage fire
+//		if(!interrupt) step(); //As VexRiscv instruction which trap do not reach writeback stage fire
 	}
 
     uint32_t currentInstruction;
@@ -540,6 +541,7 @@ public:
 		case MISA: *value = misa; break;
 		case MEDELEG: *value = medeleg; break;
 		case MIDELEG: *value = mideleg; break;
+		case MHARTID: *value = 0; break;
 
 		case SSTATUS: *value = status.raw & 0xC0133; break;
 		case SIP: *value = getIp().raw & 0x333; break;
@@ -578,7 +580,7 @@ public:
 		case MEPC: mepc = value; break;
 		case MSCRATCH: mscratch = value; break;
 		case MISA: misa = value; break;
-		case MEDELEG: medeleg = value; break;
+		case MEDELEG: medeleg = value & (~0x8); break;
 		case MIDELEG: mideleg = value; break;
 
 		case SSTATUS: maskedWrite(status.raw, value,0xC0133); break;
@@ -1259,7 +1261,7 @@ public:
 		top = new VVexRiscv;
 		#ifdef TRACE_ACCESS
 			regTraces.open (name + ".regTrace");
-			memTraces.open (name + ".memTrace");hh
+			memTraces.open (name + ".memTrace");
 		#endif
 		logTraces.open (name + ".logTrace");
 		debugLog.open (name + ".debugTrace");
@@ -1342,7 +1344,7 @@ public:
 				 #endif
 				 ) <<
 				 #endif
-				 " : WRITE mem" << (1 << size) << "[" << addr << "] = " << *data << endl;
+				 " : WRITE mem" << hex << (1 << size) << "[" << addr << "] = " << *data << dec << endl;
 				for(uint32_t b = 0;b < (1 << size);b++){
 					uint32_t offset = (addr+b)&0x3;
 					if((mask >> offset) & 1 == 1)
@@ -1356,6 +1358,7 @@ public:
 					*data &= ~(0xFF << (offset*8));
 					*data |= mem[addr + b] << (offset*8);
 				}
+				/*
 				memTraces <<
 				#ifdef TRACE_WITH_TIME
 				(currentTime
@@ -1364,7 +1367,7 @@ public:
 				 #endif
 				 ) <<
 				 #endif
-				  " : READ  mem" << (1 << size) << "[" << addr << "] = " << *data << endl;
+				  " : READ  mem" << (1 << size) << "[" << addr << "] = " << *data << endl;*/
 
 			}
 		}
@@ -1430,6 +1433,9 @@ public:
 		#ifdef TRACE
 		if(i == TRACE_START && i != 0) cout << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "START TRACE" << endl;
 		if(i >= TRACE_START) tfp->dump(i);
+		#ifdef TRACE_SPORADIC
+		else if(i % 1000000 < 100) tfp->dump(i);
+		#endif
 		#endif
 	}
 
@@ -1623,6 +1629,14 @@ public:
                     	fail();
                     }
                 }
+
+                #ifdef CSR
+                    if(top->VexRiscv->CsrPlugin_hadException){
+                        if(riscvRefEnable) {
+                            riscvRef.step();
+                        }
+                    }
+                #endif
 
 				for(SimElement* simElement : simElements) simElement->preCycle();
 
@@ -3451,7 +3465,6 @@ public:
     }
 };
 
-
 class LinuxRegression: public LinuxSoc{
 public:
     string pendingLine = "";
@@ -3479,6 +3492,82 @@ public:
         case PASS: if (pendingLineContain("# ")) { pass(); } break;
         }
         if(c == '\n' || pendingLine.length() > 200) pendingLine = "";
+    }
+};
+
+#endif
+
+#ifdef LINUX_SOC_SMP
+
+class LinuxSocSmp : public Workspace{
+public:
+    queue <char> customCin;
+    void pushCin(string m){
+        for(char& c : m) {
+            customCin.push(c);
+        }
+    }
+
+	LinuxSocSmp(string name) : Workspace(name) {
+	    #ifdef WITH_USER_IO
+		stdinNonBuffered();
+		captureCtrlC();
+	    #endif
+		stdoutNonBuffered();
+	}
+
+	virtual ~LinuxSocSmp(){
+	    #ifdef WITH_USER_IO
+	    stdinRestore();
+	    #endif
+	}
+	virtual bool isDBusCheckedRegion(uint32_t address){ return true;}
+	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xF0000000;}
+    virtual bool isMmuRegion(uint32_t addr) { return true; }
+
+
+
+    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+        if(isPerifRegion(addr)) switch(addr){
+    		//TODO Emulate peripherals here
+    		case 0xF0010000: if(wr && *data != 0) fail(); else *data = 0;  break;
+    		case 0xF001BFF8: if(wr) fail(); else *data = mTime; break;
+    		case 0xF001BFFC: if(wr) fail(); else *data = mTime >> 32; break;
+    		case 0xF0014000: if(wr) mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data; else fail(); break;
+    		case 0xF0014004: if(wr) mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); else fail(); break;
+    		case 0xF0000000:
+    		    if(wr){
+    		        char c = (char)*data;
+                    cout << c;
+                    logTraces << c;
+                    logTraces.flush();
+                    onStdout(c);
+				}
+            case 0xF0000004:
+    		    if(!wr){
+				    #ifdef WITH_USER_IO
+					if(stdinNonEmpty()){
+						char c;
+						read(0, &c, 1);
+						*data = c;
+					} else
+					#endif
+					if(!customCin.empty()){
+					    *data = customCin.front();
+                        customCin.pop();
+					} else {
+						*data = -1;
+					}
+				}
+				break;
+    		default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " mask=0x" << mask << " data=0x" << data << dec << endl; fail(); break;
+    	}
+
+    	Workspace::dBusAccess(addr,wr,size,mask,data,error);
+    }
+
+    virtual void onStdout(char c){
+
     }
 };
 
@@ -3839,6 +3928,27 @@ int main(int argc, char **argv, char **env) {
     }
 #endif
 
+
+#ifdef LINUX_SOC_SMP
+    {
+
+	    LinuxSocSmp soc("linuxSmp");
+	    #ifndef DEBUG_PLUGIN_EXTERNAL
+	    soc.withRiscvRef();
+		soc.loadBin(EMULATOR, 0x80000000);
+		soc.loadBin(VMLINUX,  0xC0000000);
+		soc.loadBin(DTB,      0xC4000000);
+		soc.loadBin(RAMDISK,  0xC2000000);
+		#endif
+		//soc.setIStall(true);
+		//soc.setDStall(true);
+		soc.bootAt(0x80000000);
+		soc.run(0);
+//		soc.run((496300000l + 2000000) / 2);
+//		soc.run(438700000l/2);
+        return -1;
+    }
+#endif
 
 
 
