@@ -533,6 +533,9 @@ object VexRiscvSmpClusterOpenSbi extends App{
     var iMemReadBytes, dMemReadBytes, dMemWriteBytes, iMemSequencial,iMemRequests = 0l
     var reportTimer = 0
     var reportCycle = 0
+    var dMemWrites, dMemWritesCached = 0l
+    var dMemWriteCacheAddress = 0l
+    val dMemWriteCacheMask = ~((1 << log2Up(128/8))-1)
 
     import java.io._
     val csv = new PrintWriter(new File("bench.csv" ))
@@ -540,7 +543,6 @@ object VexRiscvSmpClusterOpenSbi extends App{
       var sequencialPrediction = 0l
       val cache = dut.cpus(i).core.children.find(_.isInstanceOf[InstructionCache]).head.asInstanceOf[InstructionCache].io.cpu.decode
     })
-    csv.write(s"reportCycle,iMemReadBytes,dMemReadBytes,dMemWriteBytes,miaou,asd\n")
     dut.clockDomain.onSamplings{
       for(i <- 0 until cpuCount; iMem = dut.io.iMems(i); ctx = iMemCtx(i)){
 //        if(iMem.cmd.valid.toBoolean && iMem.cmd.ready.toBoolean){
@@ -568,6 +570,13 @@ object VexRiscvSmpClusterOpenSbi extends App{
       if(dut.io.dMem.cmd.valid.toBoolean && dut.io.dMem.cmd.ready.toBoolean){
         if(dut.io.dMem.cmd.opcode.toInt == Bmb.Cmd.Opcode.WRITE){
           dMemWriteBytes += dut.io.dMem.cmd.length.toInt+1
+          val address = dut.io.dMem.cmd.address.toLong
+          dMemWrites += 1
+          if((address & dMemWriteCacheMask) == (dMemWriteCacheAddress & dMemWriteCacheMask)){
+            dMemWritesCached += 1
+          } else {
+            dMemWriteCacheAddress = address
+          }
         }else {
           dMemReadBytes += dut.io.dMem.cmd.length.toInt+1
         }
@@ -578,7 +587,8 @@ object VexRiscvSmpClusterOpenSbi extends App{
         reportTimer = 0
 //        println(f"\n** c=${reportCycle} ir=${iMemReadBytes*1e-6}%5.2f dr=${dMemReadBytes*1e-6}%5.2f dw=${dMemWriteBytes*1e-6}%5.2f **\n")
 
-        csv.write(s"$reportCycle,$iMemReadBytes,$dMemReadBytes,$dMemWriteBytes,$iMemRequests,$iMemSequencial\n")
+
+        csv.write(s"$reportCycle,$iMemReadBytes,$dMemReadBytes,$dMemWriteBytes,$iMemRequests,$iMemSequencial,$dMemWrites,$dMemWritesCached\n")
         csv.flush()
         reportCycle = 0
         iMemReadBytes = 0
@@ -586,6 +596,8 @@ object VexRiscvSmpClusterOpenSbi extends App{
         dMemWriteBytes = 0
         iMemRequests = 0
         iMemSequencial = 0
+        dMemWrites = 0
+        dMemWritesCached = 0
       }
     }
 
