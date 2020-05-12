@@ -356,6 +356,7 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
       val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
       val compressed = r.nextDouble() < rvcRate
       val tighlyCoupled = r.nextBoolean() && !catchAll
+      val reducedBankWidth = r.nextBoolean()
 //      val tighlyCoupled = false
       val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
       val relaxedPcCalculation, twoCycleCache, injectorStage = r.nextBoolean()
@@ -392,7 +393,8 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
               asyncTagMemory = false,
               twoCycleRam = twoCycleRam,
               twoCycleCache = twoCycleCache,
-              twoCycleRamInnerMux = twoCycleRamInnerMux
+              twoCycleRamInnerMux = twoCycleRamInnerMux,
+              reducedBankWidth = reducedBankWidth
             )
           )
           if(tighlyCoupled) p.newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0))
