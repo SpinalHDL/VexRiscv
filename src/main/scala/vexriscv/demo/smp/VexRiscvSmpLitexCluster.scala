@@ -350,8 +350,8 @@ object VexRiscvLitexSmpClusterGen extends App {
     debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
   )
 
-//  SpinalVerilog(Bench.compressIo(dutGen))
-  SpinalVerilog(dutGen)
+  SpinalVerilog(Bench.compressIo(dutGen))
+//  SpinalVerilog(dutGen)
 
 }
 

@@ -120,22 +120,6 @@ object VexRiscvSmpClusterGen {
         new MmuPlugin(
           ioRange = ioRange
         ),
-        //Uncomment the whole IBusSimplePlugin and comment IBusCachedPlugin if you want uncached iBus config
-        //        new IBusSimplePlugin(
-        //          resetVector = 0x80000000l,
-        //          cmdForkOnSecondStage = false,
-        //          cmdForkPersistence = false,
-        //          prediction = DYNAMIC_TARGET,
-        //          historyRamSizeLog2 = 10,
-        //          catchAccessFault = true,
-        //          compressedGen = true,
-        //          busLatencyMin = 1,
-        //          injectorStage = true,
-        //          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
-        //            portTlbSize = 4
-        //          )
-        //        ),
-
         //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
         new IBusCachedPlugin(
           resetVector = resetVector,
@@ -146,9 +130,9 @@ object VexRiscvSmpClusterGen {
           injectorStage = false,
           relaxedPcCalculation = true,
           config = InstructionCacheConfig(
-            cacheSize = 4096*1,
+            cacheSize = 4096*2,
             bytePerLine = 64,
-            wayCount = 1,
+            wayCount = 2,
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 128,
@@ -156,8 +140,8 @@ object VexRiscvSmpClusterGen {
             catchAccessFault = true,
             asyncTagMemory = false,
             twoCycleRam = false,
-            twoCycleCache = true
-            //          )
+            twoCycleCache = true,
+            reducedBankWidth = true
           ),
           memoryTranslatorPortConfig = MmuPortConfig(
             portTlbSize = 4,
@@ -166,16 +150,6 @@ object VexRiscvSmpClusterGen {
             earlyCacheHits = true
           )
         ),
-        //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
-        //        new DBusSimplePlugin(
-        //          catchAddressMisaligned = true,
-        //          catchAccessFault = true,
-        //          earlyInjection = false,
-        //          withLrSc = true,
-        //          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
-        //            portTlbSize = 4
-        //          )
-        //        ),
         new DBusCachedPlugin(
           dBusCmdMasterPipe = true,
           dBusCmdSlavePipe = true,
@@ -204,13 +178,6 @@ object VexRiscvSmpClusterGen {
             earlyCacheHits = true
           )
         ),
-
-        //          new MemoryTranslatorPlugin(
-        //            tlbSize = 32,
-        //            virtualRange = _(31 downto 28) === 0xC,
-        //            ioRange      = _(31 downto 28) === 0xF
-        //          ),
-
         new DecoderSimplePlugin(
           catchIllegalInstruction = true
         ),
@@ -234,8 +201,6 @@ object VexRiscvSmpClusterGen {
           pessimisticWriteRegFile = false,
           pessimisticAddressMatch = false
         ),
-        //        new HazardSimplePlugin(false, true, false, true),
-        //        new HazardSimplePlugin(false, false, false, false),
         new MulPlugin,
         new MulDivIterativePlugin(
           genMul = false,
@@ -243,9 +208,7 @@ object VexRiscvSmpClusterGen {
           mulUnrollFactor = 32,
           divUnrollFactor = 1
         ),
-        //          new DivPlugin,
         new CsrPlugin(CsrPluginConfig.openSbi(hartId = hartId, misa = Riscv.misaToInt("imas"))),
-
         new BranchPlugin(
           earlyBranch = false,
           catchAddressMisaligned = true,

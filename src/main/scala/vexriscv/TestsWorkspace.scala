@@ -60,9 +60,9 @@ object TestsWorkspace {
             prediction = STATIC,
             injectorStage = false,
             config = InstructionCacheConfig(
-              cacheSize = 4096*1,
+              cacheSize = 4096*2,
               bytePerLine = 64,
-              wayCount = 1,
+              wayCount = 2,
               addressWidth = 32,
               cpuDataWidth = 32,
               memDataWidth = 128,
@@ -70,7 +70,8 @@ object TestsWorkspace {
               catchAccessFault = true,
               asyncTagMemory = false,
               twoCycleRam = true,
-              twoCycleCache = true
+              twoCycleCache = true,
+              reducedBankWidth = true
               //          )
             ),
             memoryTranslatorPortConfig = MmuPortConfig(
@@ -129,7 +130,7 @@ object TestsWorkspace {
             catchIllegalInstruction = true
           ),
           new RegFilePlugin(
-            regFileReadyKind = plugin.SYNC,
+            regFileReadyKind = plugin.ASYNC,
             zeroBoot = true
           ),
           new IntAluPlugin,
