@@ -534,8 +534,11 @@ object VexRiscvSmpClusterOpenSbi extends App{
     var reportTimer = 0
     var reportCycle = 0
     var dMemWrites, dMemWritesCached = 0l
-    var dMemWriteCacheAddress = 0l
-    val dMemWriteCacheMask = ~((1 << log2Up(128/8))-1)
+    val dMemWriteCacheCtx = List(4,8,16,32,64).map(bytes => new {
+      var counter = 0l
+      var address = 0l
+      val mask = ~((1 << log2Up(bytes))-1)
+    })
 
     import java.io._
     val csv = new PrintWriter(new File("bench.csv" ))
@@ -572,13 +575,16 @@ object VexRiscvSmpClusterOpenSbi extends App{
           dMemWriteBytes += dut.io.dMem.cmd.length.toInt+1
           val address = dut.io.dMem.cmd.address.toLong
           dMemWrites += 1
-          if((address & dMemWriteCacheMask) == (dMemWriteCacheAddress & dMemWriteCacheMask)){
-            dMemWritesCached += 1
-          } else {
-            dMemWriteCacheAddress = address
+          for(ctx <- dMemWriteCacheCtx){
+            if((address & ctx.mask) == (ctx.address & ctx.mask)){
+              ctx.counter += 1
+            } else {
+              ctx.address = address
+            }
           }
         }else {
           dMemReadBytes += dut.io.dMem.cmd.length.toInt+1
+          for(ctx <- dMemWriteCacheCtx) ctx.address = -1
         }
       }
       reportTimer = reportTimer + 1
@@ -588,7 +594,7 @@ object VexRiscvSmpClusterOpenSbi extends App{
 //        println(f"\n** c=${reportCycle} ir=${iMemReadBytes*1e-6}%5.2f dr=${dMemReadBytes*1e-6}%5.2f dw=${dMemWriteBytes*1e-6}%5.2f **\n")
 
 
-        csv.write(s"$reportCycle,$iMemReadBytes,$dMemReadBytes,$dMemWriteBytes,$iMemRequests,$iMemSequencial,$dMemWrites,$dMemWritesCached\n")
+        csv.write(s"$reportCycle,$iMemReadBytes,$dMemReadBytes,$dMemWriteBytes,$iMemRequests,$iMemSequencial,$dMemWrites,${dMemWriteCacheCtx.map(_.counter).mkString(",")}\n")
         csv.flush()
         reportCycle = 0
         iMemReadBytes = 0
@@ -597,7 +603,7 @@ object VexRiscvSmpClusterOpenSbi extends App{
         iMemRequests = 0
         iMemSequencial = 0
         dMemWrites = 0
-        dMemWritesCached = 0
+        for(ctx <- dMemWriteCacheCtx) ctx.counter = 0
       }
     }
 
