@@ -329,7 +329,6 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
 
 object VexRiscvLitexSmpClusterGen extends App {
   val cpuCount = 4
-  val withStall = false
 
   def parameter = VexRiscvLitexSmpClusterParameter(
     cluster = VexRiscvSmpClusterParameter(
@@ -350,8 +349,9 @@ object VexRiscvLitexSmpClusterGen extends App {
     debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
   )
 
-  SpinalVerilog(Bench.compressIo(dutGen))
-//  SpinalVerilog(dutGen)
+  val genConfig = SpinalConfig().addStandardMemBlackboxing(blackboxByteEnables)
+//  genConfig.generateVerilog(Bench.compressIo(dutGen))
+  genConfig.generateVerilog(dutGen)
 
 }
 
