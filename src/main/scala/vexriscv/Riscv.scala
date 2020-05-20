@@ -159,5 +159,7 @@ object Riscv{
 
     def UCYCLE    = 0xC00 // UR Machine ucycle counter.
     def UCYCLEH   = 0xC80
+    def UINSTRET  = 0xC02 // UR Machine instructions-retired counter.
+    def UINSTRETH = 0xC82 // UR Upper 32 bits of minstret, RV32I only.
   }
 }
