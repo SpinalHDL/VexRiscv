@@ -73,13 +73,13 @@ case class LiteDramNative(p : LiteDramNativeParameter) extends Bundle with IMast
     }
 
     var writeCmdCounter, writeDataCounter = 0
-    StreamReadyRandomizer(bus.cmd, cd)
+    StreamReadyRandomizer(bus.cmd, cd).factor = 0.5f
     StreamMonitor(bus.cmd, cd) { t =>
       cmdQueue.enqueue(Cmd(t.addr.toLong * (p.dataWidth/8) , t.we.toBoolean))
       if(t.we.toBoolean) writeCmdCounter += 1
     }
 
-    StreamReadyRandomizer(bus.wdata, cd)
+    StreamReadyRandomizer(bus.wdata, cd).factor = 0.5f
     StreamMonitor(bus.wdata, cd) { p =>
       writeDataCounter += 1
 //      if(p.data.toBigInt == BigInt("00000002000000020000000200000002",16)){
@@ -175,16 +175,19 @@ case class BmbToLiteDram(bmbParameter : BmbParameter,
 
   val halt = Bool()
   val (cmdFork, dataFork) = StreamFork2(unburstified.cmd.haltWhen(halt))
-  io.output.cmd.arbitrationFrom(cmdFork.haltWhen(pendingRead.msb))
-  io.output.cmd.addr := (cmdFork.address >> log2Up(liteDramParameter.dataWidth/8)).resized
-  io.output.cmd.we := cmdFork.isWrite
+  val outputCmd =  Stream(LiteDramNativeCmd(liteDramParameter))
+  outputCmd.arbitrationFrom(cmdFork.haltWhen(pendingRead.msb))
+  outputCmd.addr := (cmdFork.address >> log2Up(liteDramParameter.dataWidth/8)).resized
+  outputCmd.we := cmdFork.isWrite
+
+  io.output.cmd <-< outputCmd
 
   if(bmbParameter.canWrite) {
     val wData = Stream(LiteDramNativeWData(liteDramParameter))
     wData.arbitrationFrom(dataFork.throwWhen(dataFork.isRead))
     wData.data := dataFork.data
     wData.we := dataFork.mask
-    io.output.wdata << wData.queue(wdataFifoSize)
+    io.output.wdata << wData.queueLowLatency(wdataFifoSize, latency = 1) //TODO queue low latency
   } else {
     dataFork.ready := True
     io.output.wdata.valid := False
@@ -212,7 +215,7 @@ case class BmbToLiteDram(bmbParameter : BmbParameter,
   unburstified.rsp.data := rdataFifo.data
 
 
-  pendingRead := pendingRead + U(io.output.cmd.fire && !io.output.cmd.we) - U(rdataFifo.fire)
+  pendingRead := pendingRead + U(outputCmd.fire && !outputCmd.we) - U(rdataFifo.fire)
 }
 
 object BmbToLiteDramTester extends App{
@@ -241,6 +244,7 @@ case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParamet
                                              liteDram : LiteDramNativeParameter,
                                              liteDramMapping : AddressMapping)
 
+//addAttribute("""mark_debug = "true"""")
 case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
                                    debugClockDomain : ClockDomain) extends Component{
 
@@ -308,50 +312,59 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
   iBusDecoder.io.input << iBusArbiter.io.output.pipelined(cmdValid = true)
 
   val iMem = LiteDramNative(p.liteDram)
-  val iMemBridge = iMem.fromBmb(iBusDecoder.io.outputs(1), wdataFifoSize = 0, rdataFifoSize = 32)
-  iMem.cmd   >-> io.iMem.cmd
-  iMem.wdata >> io.iMem.wdata
-  iMem.rdata << io.iMem.rdata
+  io.iMem.fromBmb(iBusDecoder.io.outputs(1), wdataFifoSize = 0, rdataFifoSize = 32)
 
+
+  val iBusDecoderToPeripheral = iBusDecoder.io.outputs(0).resize(dataWidth = 32).pipelined(cmdHalfRate = true, rspValid = true)
+  val dBusDecoderToPeripheral = dBusDecoder.io.outputs(0).resize(dataWidth = 32).pipelined(cmdHalfRate = true, rspValid = true)
 
   val peripheralAccessLength = Math.max(iBusDecoder.io.outputs(0).p.lengthWidth, dBusDecoder.io.outputs(0).p.lengthWidth)
   val peripheralArbiter = BmbArbiter(
-    p = dBusDecoder.io.outputs(0).p.copy(sourceWidth = dBusDecoder.io.outputs(0).p.sourceWidth + 1, lengthWidth = peripheralAccessLength),
+    p = dBusDecoder.io.outputs(0).p.copy(
+      sourceWidth = List(iBusDecoderToPeripheral, dBusDecoderToPeripheral).map(_.p.sourceWidth).max + 1,
+      contextWidth = List(iBusDecoderToPeripheral, dBusDecoderToPeripheral).map(_.p.contextWidth).max,
+      lengthWidth = peripheralAccessLength,
+      dataWidth = 32
+    ),
     portCount = 2,
     lowerFirstPriority = true
   )
-  peripheralArbiter.io.inputs(0) << iBusDecoder.io.outputs(0).resize(dataWidth = 32).pipelined(cmdHalfRate = true, rspValid = true)
-  peripheralArbiter.io.inputs(1) << dBusDecoder.io.outputs(0).resize(dataWidth = 32).pipelined(cmdHalfRate = true, rspValid = true)
+  peripheralArbiter.io.inputs(0) << iBusDecoderToPeripheral
+  peripheralArbiter.io.inputs(1) << dBusDecoderToPeripheral
 
   val peripheralWishbone = peripheralArbiter.io.output.pipelined(cmdValid = true).toWishbone()
   io.peripheral << peripheralWishbone
 }
 
 object VexRiscvLitexSmpClusterGen extends App {
-  val cpuCount = 4
+  for(cpuCount <- List(1,2,4,8)) {
+    def parameter = VexRiscvLitexSmpClusterParameter(
+      cluster = VexRiscvSmpClusterParameter(
+        cpuConfigs = List.tabulate(cpuCount) { hartId =>
+          vexRiscvConfig(
+            hartIdWidth = log2Up(cpuCount),
+            hartId = hartId,
+            ioRange = address => address.msb,
+            resetVector = 0
+          )
+        }
+      ),
+      liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
+      liteDramMapping = SizeMapping(0x40000000l, 0x40000000l)
+    )
 
-  def parameter = VexRiscvLitexSmpClusterParameter(
-    cluster = VexRiscvSmpClusterParameter(
-      cpuConfigs = List.tabulate(cpuCount) { hartId =>
-        vexRiscvConfig(
-          hartId = hartId,
-          ioRange =  address => address.msb,
-          resetVector = 0
-        )
-      }
-    ),
-    liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
-    liteDramMapping = SizeMapping(0x40000000l, 0x40000000l)
-  )
+    def dutGen = {
+      val toplevel = VexRiscvLitexSmpCluster(
+        p = parameter,
+        debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
+      )
+      toplevel
+    }
 
-  def dutGen = VexRiscvLitexSmpCluster(
-    p = parameter,
-    debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
-  )
-
-  val genConfig = SpinalConfig().addStandardMemBlackboxing(blackboxByteEnables)
-//  genConfig.generateVerilog(Bench.compressIo(dutGen))
-  genConfig.generateVerilog(dutGen)
+    val genConfig = SpinalConfig().addStandardMemBlackboxing(blackboxByteEnables)
+    //  genConfig.generateVerilog(Bench.compressIo(dutGen))
+    genConfig.generateVerilog(dutGen.setDefinitionName(s"VexRiscvLitexSmpCluster_${cpuCount}c"))
+  }
 
 }
 
@@ -363,13 +376,13 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
     simConfig.withWave
     simConfig.allOptimisation
 
-    val cpuCount = 4
-    val withStall = false
+    val cpuCount = 8
 
     def parameter = VexRiscvLitexSmpClusterParameter(
       cluster = VexRiscvSmpClusterParameter(
         cpuConfigs = List.tabulate(cpuCount) { hartId =>
           vexRiscvConfig(
+            hartIdWidth = log2Up(cpuCount),
             hartId = hartId,
             ioRange =  address => address(31 downto 28) === 0xF,
             resetVector = 0x80000000l
@@ -440,12 +453,12 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
 
 //      fork{
 //        disableSimWave()
-//        val atMs = 8
-//        val durationMs = 3
-//        sleep(atMs*1000000)
+//        val atMs = 3790
+//        val durationMs = 5
+//        sleep(atMs*1000000l)
 //        enableSimWave()
 //        println("** enableSimWave **")
-//        sleep(durationMs*1000000)
+//        sleep(durationMs*1000000l)
 //        println("** disableSimWave **")
 //        while(true) {
 //          disableSimWave()
@@ -453,7 +466,7 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
 //          enableSimWave()
 //          sleep(  100 * 10)
 //        }
-//  //      simSuccess()
+//        //      simSuccess()
 //      }
 
       fork{

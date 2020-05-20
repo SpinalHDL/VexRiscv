@@ -54,8 +54,9 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
     val core = new VexRiscv(cpuConfig)
     core.plugins.foreach {
       case plugin: IBusCachedPlugin => iBus = plugin.iBus.toBmb()
-      case plugin: DBusCachedPlugin => dBus = plugin.dBus.toBmb()
+      case plugin: DBusCachedPlugin => dBus = plugin.dBus.toBmb().pipelined(cmdValid = true)
       case plugin: CsrPlugin => {
+        plugin.externalMhartId := cpuId
         plugin.softwareInterrupt := io.softwareInterrupts(cpuId)
         plugin.externalInterrupt := io.externalInterrupts(cpuId)
         plugin.timerInterrupt := io.timerInterrupts(cpuId)
@@ -112,9 +113,12 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
 
 
 object VexRiscvSmpClusterGen {
-  def vexRiscvConfig(hartId : Int,
+  def vexRiscvConfig(hartIdWidth : Int,
+                     hartId : Int,
                      ioRange : UInt => Bool = (x => x(31 downto 28) === 0xF),
                      resetVector : Long = 0x80000000l) = {
+    val iBusWidth = 128
+    val dBusWidth = 64
     val config = VexRiscvConfig(
       plugins = List(
         new MmuPlugin(
@@ -135,7 +139,7 @@ object VexRiscvSmpClusterGen {
             wayCount = 2,
             addressWidth = 32,
             cpuDataWidth = 32,
-            memDataWidth = 128,
+            memDataWidth = iBusWidth,
             catchIllegalAccess = true,
             catchAccessFault = true,
             asyncTagMemory = false,
@@ -151,7 +155,7 @@ object VexRiscvSmpClusterGen {
           )
         ),
         new DBusCachedPlugin(
-          dBusCmdMasterPipe = true,
+          dBusCmdMasterPipe = dBusWidth == 32,
           dBusCmdSlavePipe = true,
           dBusRspSlavePipe = true,
           relaxedMemoryTranslationRegister = true,
@@ -161,14 +165,15 @@ object VexRiscvSmpClusterGen {
             wayCount          = 1,
             addressWidth      = 32,
             cpuDataWidth      = 32,
-            memDataWidth      = 32,
+            memDataWidth      = dBusWidth,
             catchAccessError  = true,
             catchIllegal      = true,
             catchUnaligned    = true,
             withLrSc = true,
             withAmo = true,
             withExclusive = true,
-            withInvalidate = true
+            withInvalidate = true,
+            aggregationWidth = if(dBusWidth == 32) 0 else log2Up(dBusWidth/8)
             //          )
           ),
           memoryTranslatorPortConfig = MmuPortConfig(
@@ -208,7 +213,7 @@ object VexRiscvSmpClusterGen {
           mulUnrollFactor = 32,
           divUnrollFactor = 1
         ),
-        new CsrPlugin(CsrPluginConfig.openSbi(hartId = hartId, misa = Riscv.misaToInt("imas"))),
+        new CsrPlugin(CsrPluginConfig.openSbi(misa = Riscv.misaToInt("imas")).copy(withExternalMhartid = true, mhartidWidth = hartIdWidth)),
         new BranchPlugin(
           earlyBranch = false,
           catchAddressMisaligned = true,
@@ -224,7 +229,7 @@ object VexRiscvSmpClusterGen {
     debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn")),
     p = VexRiscvSmpClusterParameter(
       cpuConfigs = List.tabulate(cpuCount) {
-        vexRiscvConfig(_, resetVector = resetVector)
+        vexRiscvConfig(log2Up(cpuCount), _, resetVector = resetVector)
       }
     )
   )
@@ -462,7 +467,7 @@ object VexRiscvSmpClusterOpenSbi extends App{
   simConfig.allOptimisation
   simConfig.addSimulatorFlag("--threads 1")
 
-  val cpuCount = 1
+  val cpuCount = 4
   val withStall = false
 
   def gen = {
@@ -573,8 +578,8 @@ object VexRiscvSmpClusterOpenSbi extends App{
 
 //    fork{
 //      disableSimWave()
-//      val atMs = 130
-//      val durationMs = 15
+//      val atMs = 3790
+//      val durationMs = 5
 //      sleep(atMs*1000000)
 //      enableSimWave()
 //      println("** enableSimWave **")

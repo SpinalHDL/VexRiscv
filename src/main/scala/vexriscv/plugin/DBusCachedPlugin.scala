@@ -195,6 +195,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         rsp.exclusive := RegNext(dBus.rsp.exclusive)
         rsp.error := RegNext(dBus.rsp.error)
         rsp.last := RegNext(dBus.rsp.last)
+        rsp.aggregated := RegNext(dBus.rsp.aggregated)
         rsp.data := RegNextWhen(dBus.rsp.data, dBus.rsp.valid && !cache.io.cpu.writeBack.keepMemRspData)
         rsp
       }

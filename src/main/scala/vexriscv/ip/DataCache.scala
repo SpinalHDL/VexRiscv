@@ -5,7 +5,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4Shared}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
-import spinal.lib.bus.bmb.{Bmb, BmbParameter}
+import spinal.lib.bus.bmb.{Bmb, BmbCmd, BmbParameter}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 import vexriscv.plugin.DBusSimpleBus
@@ -29,7 +29,8 @@ case class DataCacheConfig(cacheSize : Int,
                            withInvalidate : Boolean = false,
                            pendingMax : Int = 32,
                            directTlbHit : Boolean = false,
-                           mergeExecuteMemory : Boolean = false){
+                           mergeExecuteMemory : Boolean = false,
+                           aggregationWidth : Int = 0){
   assert(!(mergeExecuteMemory && (earlyDataMux || earlyWaysHits)))
   assert(!(earlyDataMux && !earlyWaysHits))
   assert(isPow2(pendingMax))
@@ -41,6 +42,8 @@ case class DataCacheConfig(cacheSize : Int,
   def withInternalLrSc = withLrSc && !withExclusive
   def withExternalLrSc = withLrSc && withExclusive
   def withExternalAmo = withAmo && withExclusive
+  def cpuDataBytes = cpuDataWidth/8
+  def memDataBytes = memDataWidth/8
   def getAxi4SharedConfig() = Axi4Config(
     addressWidth = addressWidth,
     dataWidth = memDataWidth,
@@ -79,10 +82,10 @@ case class DataCacheConfig(cacheSize : Int,
 
   def getBmbParameter() = BmbParameter(
     addressWidth = 32,
-    dataWidth = 32,
+    dataWidth = memDataWidth,
     lengthWidth = log2Up(this.bytePerLine),
     sourceWidth = 0,
-    contextWidth = if(!withWriteResponse) 1 else 0,
+    contextWidth = (if(!withWriteResponse) 1 else 0) + (if(cpuDataWidth != memDataWidth) log2Up(memDataBytes) else 0),
     canRead = true,
     canWrite = true,
     alignment  = BmbParameter.BurstAlignement.LENGTH,
@@ -203,6 +206,7 @@ case class DataCacheMemCmd(p : DataCacheConfig) extends Bundle{
   val last = Bool
 }
 case class DataCacheMemRsp(p : DataCacheConfig) extends Bundle{
+  val aggregated = UInt(p.aggregationWidth bits)
   val last = Bool()
   val data = Bits(p.memDataWidth bit)
   val error = Bool
@@ -217,7 +221,7 @@ case class DataCacheAck(p : DataCacheConfig) extends Bundle{
 }
 
 case class DataCacheSync(p : DataCacheConfig) extends Bundle{
-
+  val aggregated = UInt(p.aggregationWidth bits)
 }
 
 case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave{
@@ -369,21 +373,133 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
   }
 
 
-  def toBmb() : Bmb = {
+  def toBmb(syncPendingMax : Int = 16,
+            timeoutCycles : Int = 16) : Bmb = new Area{
+    setCompositeName(DataCacheMemBus.this, "Bridge", true)
     val pipelinedMemoryBusConfig = p.getBmbParameter()
     val bus = Bmb(pipelinedMemoryBusConfig).setCompositeName(this,"toBmb", true)
+    val aggregationMax = p.memDataBytes
 
-    bus.cmd.valid := cmd.valid
-    bus.cmd.last := cmd.last
-    if(!p.withWriteResponse) bus.cmd.context(0) := cmd.wr
-    bus.cmd.opcode := (cmd.wr ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
-    bus.cmd.address := cmd.address.resized
-    bus.cmd.data := cmd.data
-    bus.cmd.length := (cmd.length << 2) | 3 //TODO better sub word access
-    bus.cmd.mask := cmd.mask
-    if(p.withExclusive) bus.cmd.exclusive := cmd.exclusive
+    case class Context() extends Bundle{
+      val isWrite = !p.withWriteResponse generate Bool()
+      val rspCount = (p.cpuDataWidth != p.memDataWidth) generate UInt(log2Up(aggregationMax) bits)
+    }
 
-    cmd.ready := bus.cmd.ready
+    val withoutWriteBuffer = if(p.cpuDataWidth == p.memDataWidth) new Area {
+      val busCmdContext = Context()
+
+      bus.cmd.valid := cmd.valid
+      bus.cmd.last := cmd.last
+      bus.cmd.opcode := (cmd.wr ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
+      bus.cmd.address := cmd.address.resized
+      bus.cmd.data := cmd.data
+      bus.cmd.length := (cmd.length << 2) | 3
+      bus.cmd.mask := cmd.mask
+      if (p.withExclusive) bus.cmd.exclusive := cmd.exclusive
+      if (!p.withWriteResponse) busCmdContext.isWrite := cmd.wr
+      bus.cmd.context := B(busCmdContext)
+
+      cmd.ready := bus.cmd.ready
+      if(p.withInvalidate) sync.arbitrationFrom(bus.sync)
+    }
+
+    val withWriteBuffer = if(p.cpuDataWidth != p.memDataWidth) new Area {
+      val buffer = new Area {
+        val stream = cmd.toEvent().m2sPipe()
+        val address = Reg(UInt(p.addressWidth bits))
+        val length = Reg(UInt(pipelinedMemoryBusConfig.lengthWidth bits))
+        val write  = Reg(Bool)
+        val exclusive = Reg(Bool)
+        val data = Reg(Bits(p.memDataWidth bits))
+        val mask = Reg(Bits(p.memDataWidth/8 bits)) init(0)
+      }
+
+      val aggregationRange = log2Up(p.memDataWidth/8)-1 downto log2Up(p.cpuDataWidth/8)
+      val tagRange = p.addressWidth-1 downto aggregationRange.high+1
+      val aggregationEnabled = Reg(Bool)
+      val aggregationCounter = Reg(UInt(log2Up(aggregationMax) bits)) init(0)
+      val aggregationCounterFull = aggregationCounter === aggregationCounter.maxValue
+      val timer = Reg(UInt(log2Up(timeoutCycles)+1 bits)) init(0)
+      val timerFull = timer.msb
+      val hit = cmd.address(tagRange) === buffer.address(tagRange)
+      val canAggregate = cmd.valid && cmd.wr && !cmd.uncached && !cmd.exclusive && !timerFull && !aggregationCounterFull && (!buffer.stream.valid || aggregationEnabled && hit)
+      val doFlush = cmd.valid && !canAggregate || timerFull || aggregationCounterFull || !aggregationEnabled
+//      val canAggregate = False
+//      val doFlush = True
+      val busCmdContext = Context()
+      val halt = False
+
+      when(cmd.fire){
+        aggregationCounter := aggregationCounter + 1
+      }
+      when(buffer.stream.valid && !timerFull){
+        timer := timer + 1
+      }
+      when(bus.cmd.fire || !buffer.stream.valid){
+        buffer.mask := 0
+        aggregationCounter := 0
+        timer := 0
+      }
+
+      buffer.stream.ready := (bus.cmd.ready && doFlush || canAggregate) && !halt
+      bus.cmd.valid := buffer.stream.valid && doFlush && !halt
+      bus.cmd.last := True
+      bus.cmd.opcode := (buffer.write ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
+      bus.cmd.address := buffer.address
+      bus.cmd.length := buffer.length
+      bus.cmd.data := buffer.data
+      bus.cmd.mask := buffer.mask
+
+      if (p.withExclusive) bus.cmd.exclusive := buffer.exclusive
+      bus.cmd.context.removeAssignments() := B(busCmdContext)
+      if (!p.withWriteResponse) busCmdContext.isWrite := bus.cmd.isWrite
+      busCmdContext.rspCount := aggregationCounter
+
+      val aggregationSel = cmd.address(aggregationRange)
+      when(cmd.fire){
+        val dIn = cmd.data.subdivideIn(8 bits)
+        val dReg = buffer.data.subdivideIn(8 bits)
+        for(byteId <- 0 until p.memDataBytes){
+          when(aggregationSel === byteId / p.cpuDataBytes && cmd.mask(byteId % p.cpuDataBytes)){
+            dReg.write(byteId, dIn(byteId % p.cpuDataBytes))
+            buffer.mask(byteId) := True
+          }
+        }
+      }
+
+      when(cmd.fire){
+        buffer.write := cmd.wr
+        buffer.address := cmd.address.resized
+        buffer.length := (cmd.length << 2) | 3
+        if (p.withExclusive) buffer.exclusive := cmd.exclusive
+
+        when(cmd.wr && !cmd.uncached && !cmd.exclusive){
+          aggregationEnabled := True
+          buffer.address(aggregationRange.high downto 0) := 0
+          buffer.length := p.memDataBytes-1
+        } otherwise {
+          aggregationEnabled := False
+        }
+      }
+
+
+      val rspCtx = bus.rsp.context.as(Context())
+      rsp.aggregated := rspCtx.rspCount
+
+      val syncLogic = p.withInvalidate generate new Area{
+        val cmdCtx = Stream(UInt(log2Up(aggregationMax) bits))
+        cmdCtx.valid := bus.cmd.fire && bus.cmd.isWrite
+        cmdCtx.payload := aggregationCounter
+        halt setWhen(!cmdCtx.ready)
+
+        val syncCtx = cmdCtx.queueLowLatency(syncPendingMax, latency = 1)
+        syncCtx.ready := bus.sync.fire
+
+        sync.arbitrationFrom(bus.sync)
+        sync.aggregated := syncCtx.payload
+      }
+    }
+
 
     rsp.valid := bus.rsp.valid
     if(!p.withWriteResponse) rsp.valid clearWhen(bus.rsp.context(0))
@@ -399,21 +515,9 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
       inv.enable  := bus.inv.all
 
       bus.ack.arbitrationFrom(ack)
-
-      sync.arbitrationFrom(bus.sync)
-
-//      bus.ack.arbitrationFrom(ack)
-//      //TODO manage lenght ?
-//      inv.address := bus.inv.address
-////      inv.opcode := bus.inv.opcode
-//      ???
-//
-//      bus.ack.arbitrationFrom(ack)
+      //      //TODO manage lenght ?
     }
-
-
-    bus
-  }
+  }.bus
 
 }
 
@@ -537,7 +641,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
   val memCmdSent = RegInit(False) setWhen (io.mem.cmd.ready) clearWhen (!io.cpu.writeBack.isStuck)
   val pending = withExclusive generate new Area{
     val counter = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
-    val counterNext = counter + U(io.mem.cmd.fire && io.mem.cmd.last) - U(io.mem.rsp.valid  && io.mem.rsp.last)
+    val counterNext = counter + U(io.mem.cmd.fire && io.mem.cmd.last) - ((io.mem.rsp.valid  && io.mem.rsp.last) ? (io.mem.rsp.aggregated +^ 1) | 0)
     counter := counterNext
 
     val done = RegNext(counterNext === 0)
@@ -554,7 +658,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
 
   val sync = withInvalidate generate new Area{
     io.mem.sync.ready := True
-
+    val syncCount = io.mem.sync.aggregated +^ 1
     val syncContext = new Area{
       val history = Mem(Bool, pendingMax)
       val wPtr, rPtr = Reg(UInt(log2Up(pendingMax)+1 bits)) init(0)
@@ -564,7 +668,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
       }
 
       when(io.mem.sync.fire){
-        rPtr := rPtr + 1
+        rPtr := rPtr + syncCount
       }
       val uncached = history.readAsync(rPtr.resized)
       val full = RegNext(wPtr - rPtr >= pendingMax-1)
@@ -573,7 +677,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
 
     def pending(inc : Bool, dec : Bool) = new Area {
       val pendingSync = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
-      val pendingSyncNext = pendingSync + U(io.mem.cmd.fire && io.mem.cmd.wr && inc) - U(io.mem.sync.fire && dec)
+      val pendingSyncNext = pendingSync + U(io.mem.cmd.fire && io.mem.cmd.wr && inc) - ((io.mem.sync.fire && dec) ? syncCount | 0)
       pendingSync := pendingSyncNext
     }
 
@@ -582,7 +686,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
 
     def track(load : Bool, uncached : Boolean) = new Area {
       val counter = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
-      counter := counter - U(io.mem.sync.fire && counter =/= 0 && (if(uncached) syncContext.uncached else !syncContext.uncached))
+      counter := counter - ((io.mem.sync.fire && counter =/= 0 && (if(uncached) syncContext.uncached else !syncContext.uncached)) ? syncCount | 0)
       when(load){ counter := (if(uncached) writeUncached.pendingSyncNext else writeCached.pendingSyncNext) }
 
       val busy = counter =/= 0

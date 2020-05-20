@@ -39,7 +39,7 @@ case class CsrPluginConfig(
                             marchid             : BigInt,
                             mimpid              : BigInt,
                             mhartid             : BigInt,
-                            misaExtensionsInit   : Int,
+                            misaExtensionsInit  : Int,
                             misaAccess          : CsrAccess,
                             mtvecAccess         : CsrAccess,
                             mtvecInit           : BigInt,
@@ -68,6 +68,8 @@ case class CsrPluginConfig(
                             satpAccess          : CsrAccess = CsrAccess.NONE,
                             medelegAccess       : CsrAccess = CsrAccess.NONE,
                             midelegAccess       : CsrAccess = CsrAccess.NONE,
+                            withExternalMhartid : Boolean = false,
+                            mhartidWidth        : Int = 0,
                             pipelineCsrRead     : Boolean = false,
                             pipelinedInterrupt  : Boolean = true,
                             csrOhDecoder        : Boolean = true,
@@ -85,12 +87,12 @@ object CsrPluginConfig{
   def small : CsrPluginConfig = small(0x00000020l)
   def smallest : CsrPluginConfig = smallest(0x00000020l)
 
-  def openSbi(hartId : Int, misa : Int) = CsrPluginConfig(
+  def openSbi(misa : Int) = CsrPluginConfig(
     catchIllegalAccess  = true,
     mvendorid           = 0,
     marchid             = 0,
     mimpid              = 0,
-    mhartid             = hartId,
+    mhartid             = 0,
     misaExtensionsInit  = misa,
     misaAccess          = CsrAccess.READ_ONLY,
     mtvecAccess         = CsrAccess.READ_WRITE,   //Could have been WRITE_ONLY :(
@@ -387,6 +389,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var contextSwitching : Bool = null
   var thirdPartyWake : Bool = null
   var inWfi : Bool = null
+  var externalMhartId : UInt = null
 
   override def askWake(): Unit = thirdPartyWake := True
 
@@ -515,6 +518,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
 
     pipeline.update(MPP, UInt(2 bits))
+
+    if(withExternalMhartid) externalMhartId = in UInt(mhartidWidth bits)
   }
 
   def inhibateInterrupts() : Unit = allowInterrupts := False
@@ -600,7 +605,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       if(mvendorid != null) READ_ONLY(CSR.MVENDORID, U(mvendorid))
       if(marchid   != null) READ_ONLY(CSR.MARCHID  , U(marchid  ))
       if(mimpid    != null) READ_ONLY(CSR.MIMPID   , U(mimpid   ))
-      if(mhartid   != null) READ_ONLY(CSR.MHARTID  , U(mhartid  ))
+      if(mhartid   != null && !withExternalMhartid) READ_ONLY(CSR.MHARTID  , U(mhartid  ))
+      if(withExternalMhartid) READ_ONLY(CSR.MHARTID  , externalMhartId)
       misaAccess(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
 
       //Machine CSR
