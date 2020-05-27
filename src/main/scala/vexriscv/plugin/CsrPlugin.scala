@@ -87,12 +87,12 @@ object CsrPluginConfig{
   def small : CsrPluginConfig = small(0x00000020l)
   def smallest : CsrPluginConfig = smallest(0x00000020l)
 
-  def openSbi(misa : Int) = CsrPluginConfig(
+  def openSbi(mhartid : Int, misa : Int) = CsrPluginConfig(
     catchIllegalAccess  = true,
     mvendorid           = 0,
     marchid             = 0,
     mimpid              = 0,
-    mhartid             = 0,
+    mhartid             = mhartid,
     misaExtensionsInit  = misa,
     misaAccess          = CsrAccess.READ_ONLY,
     mtvecAccess         = CsrAccess.READ_WRITE,   //Could have been WRITE_ONLY :(

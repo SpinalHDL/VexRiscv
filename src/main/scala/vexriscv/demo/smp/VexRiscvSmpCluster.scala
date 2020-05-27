@@ -51,12 +51,12 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
       }
       case _ =>
     }
+    if(cpuId == 0) cpuConfig.plugins += new DebugPlugin(debugClockDomain)
     val core = new VexRiscv(cpuConfig)
     core.plugins.foreach {
       case plugin: IBusCachedPlugin => iBus = plugin.iBus.toBmb()
       case plugin: DBusCachedPlugin => dBus = plugin.dBus.toBmb().pipelined(cmdValid = true)
       case plugin: CsrPlugin => {
-        plugin.externalMhartId := cpuId
         plugin.softwareInterrupt := io.softwareInterrupts(cpuId)
         plugin.externalInterrupt := io.externalInterrupts(cpuId)
         plugin.timerInterrupt := io.timerInterrupts(cpuId)
@@ -113,12 +113,12 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
 
 
 object VexRiscvSmpClusterGen {
-  def vexRiscvConfig(hartIdWidth : Int,
-                     hartId : Int,
+  def vexRiscvConfig(hartId : Int,
                      ioRange : UInt => Bool = (x => x(31 downto 28) === 0xF),
-                     resetVector : Long = 0x80000000l) = {
-    val iBusWidth = 128
-    val dBusWidth = 64
+                     resetVector : Long = 0x80000000l,
+                     iBusWidth : Int = 128,
+                     dBusWidth : Int = 64) = {
+
     val config = VexRiscvConfig(
       plugins = List(
         new MmuPlugin(
@@ -213,7 +213,7 @@ object VexRiscvSmpClusterGen {
           mulUnrollFactor = 32,
           divUnrollFactor = 1
         ),
-        new CsrPlugin(CsrPluginConfig.openSbi(misa = Riscv.misaToInt("imas")).copy(withExternalMhartid = true, mhartidWidth = hartIdWidth)),
+        new CsrPlugin(CsrPluginConfig.openSbi(mhartid = hartId, misa = Riscv.misaToInt("imas"))),
         new BranchPlugin(
           earlyBranch = false,
           catchAddressMisaligned = true,
@@ -222,14 +222,13 @@ object VexRiscvSmpClusterGen {
         new YamlPlugin(s"cpu$hartId.yaml")
       )
     )
-    if(hartId == 0) config.plugins += new DebugPlugin(null)
     config
   }
   def vexRiscvCluster(cpuCount : Int, resetVector : Long = 0x80000000l) = VexRiscvSmpCluster(
     debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn")),
     p = VexRiscvSmpClusterParameter(
       cpuConfigs = List.tabulate(cpuCount) {
-        vexRiscvConfig(log2Up(cpuCount), _, resetVector = resetVector)
+        vexRiscvConfig(_, resetVector = resetVector)
       }
     )
   )

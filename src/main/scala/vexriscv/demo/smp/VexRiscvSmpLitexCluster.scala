@@ -342,7 +342,6 @@ object VexRiscvLitexSmpClusterGen extends App {
       cluster = VexRiscvSmpClusterParameter(
         cpuConfigs = List.tabulate(cpuCount) { hartId =>
           vexRiscvConfig(
-            hartIdWidth = log2Up(cpuCount),
             hartId = hartId,
             ioRange = address => address.msb,
             resetVector = 0
@@ -382,7 +381,6 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
       cluster = VexRiscvSmpClusterParameter(
         cpuConfigs = List.tabulate(cpuCount) { hartId =>
           vexRiscvConfig(
-            hartIdWidth = log2Up(cpuCount),
             hartId = hartId,
             ioRange =  address => address(31 downto 28) === 0xF,
             resetVector = 0x80000000l
