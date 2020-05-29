@@ -10,7 +10,7 @@ import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
 import spinal.lib.eda.bench.Bench
 import spinal.lib.misc.Clint
 import spinal.lib.sim.{SimData, SparseMemory, StreamDriver, StreamMonitor, StreamReadyRandomizer}
-import vexriscv.demo.smp.VexRiscvLitexSmpClusterOpenSbi.{cpuCount, parameter}
+import vexriscv.demo.smp.VexRiscvLitexSmpDevClusterOpenSbi.{cpuCount, parameter}
 import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
 import vexriscv.{VexRiscv, VexRiscvConfig}
 import vexriscv.plugin.{CsrPlugin, DBusCachedPlugin, DebugPlugin, IBusCachedPlugin}
@@ -19,12 +19,12 @@ import scala.collection.mutable
 import scala.util.Random
 
 
-case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParameter,
+case class VexRiscvLitexSmpDevClusterParameter( cluster : VexRiscvSmpClusterParameter,
                                              liteDram : LiteDramNativeParameter,
                                              liteDramMapping : AddressMapping)
 
 //addAttribute("""mark_debug = "true"""")
-case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
+case class VexRiscvLitexSmpDevCluster(p : VexRiscvLitexSmpDevClusterParameter,
                                    debugClockDomain : ClockDomain) extends Component{
 
   val peripheralWishboneConfig = WishboneConfig(
@@ -36,9 +36,11 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
     useCTI = true
   )
 
+  val cpuCount = p.cluster.cpuConfigs.size
+
   val io = new Bundle {
-    val dMem = master(LiteDramNative(p.liteDram))
-    val iMem = master(LiteDramNative(p.liteDram))
+    val dMem = Vec(master(LiteDramNative(p.liteDram)), cpuCount)
+    val iMem =  Vec(master(LiteDramNative(p.liteDram)), cpuCount)
     val peripheral = master(Wishbone(peripheralWishboneConfig))
     val clint = slave(Wishbone(Clint.getWisboneConfig()))
     val externalInterrupts = in Bits(p.cluster.cpuConfigs.size bits)
@@ -46,7 +48,6 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
     val jtag = slave(Jtag())
     val debugReset = out Bool()
   }
-  val cpuCount = p.cluster.cpuConfigs.size
   val clint = Clint(cpuCount)
   clint.driveFrom(WishboneSlaveFactory(io.clint))
 
@@ -71,53 +72,55 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
 //    pendingMax = 31
 //  )
   dBusDecoder.io.input << cluster.io.dMem.pipelined(cmdValid = true, cmdReady = true, rspValid = true)
-  val dMemBridge = io.dMem.fromBmb(dBusDecoder.io.outputs(1), wdataFifoSize = 32, rdataFifoSize = 32)
-
-  val iBusArbiterParameter = cluster.iBusParameter.copy(sourceWidth = log2Up(cpuCount))
-  val iBusArbiter = BmbArbiter(
-    p = iBusArbiterParameter,
-    portCount = cpuCount,
-    lowerFirstPriority = false
-  )
-
-  (iBusArbiter.io.inputs, cluster.io.iMems).zipped.foreach(_ << _.pipelined(cmdHalfRate = true, rspValid = true))
-
-  val iBusDecoder = BmbDecoder(
-    p            = iBusArbiter.io.output.p,
-    mappings     = Seq(DefaultMapping, p.liteDramMapping),
-    capabilities = Seq(iBusArbiterParameter, iBusArbiterParameter),
-    pendingMax   = 15
-  )
-  iBusDecoder.io.input << iBusArbiter.io.output.pipelined(cmdValid = true)
-
-  val iMem = LiteDramNative(p.liteDram)
-  io.iMem.fromBmb(iBusDecoder.io.outputs(1), wdataFifoSize = 0, rdataFifoSize = 32)
 
 
-  val iBusDecoderToPeripheral = iBusDecoder.io.outputs(0).resize(dataWidth = 32).pipelined(cmdHalfRate = true, rspValid = true)
+  val perIBus = for(id <- 0 until cpuCount) yield new Area{
+    val decoder = BmbDecoder(
+      p            = cluster.io.iMems(id).p,
+      mappings     = Seq(DefaultMapping, p.liteDramMapping),
+      capabilities = Seq(cluster.io.iMems(id).p,cluster.io.iMems(id).p),
+      pendingMax   = 15
+    )
+
+    decoder.io.input << cluster.io.iMems(id)
+    io.iMem(id).fromBmb(decoder.io.outputs(1), wdataFifoSize = 0, rdataFifoSize = 32)
+    val toPeripheral = decoder.io.outputs(0).resize(dataWidth = 32)
+  }
+
   val dBusDecoderToPeripheral = dBusDecoder.io.outputs(0).resize(dataWidth = 32).pipelined(cmdHalfRate = true, rspValid = true)
 
-  val peripheralAccessLength = Math.max(iBusDecoder.io.outputs(0).p.lengthWidth, dBusDecoder.io.outputs(0).p.lengthWidth)
+  val peripheralAccessLength = Math.max(perIBus(0).toPeripheral.p.lengthWidth, dBusDecoder.io.outputs(0).p.lengthWidth)
   val peripheralArbiter = BmbArbiter(
     p = dBusDecoder.io.outputs(0).p.copy(
-      sourceWidth = List(iBusDecoderToPeripheral, dBusDecoderToPeripheral).map(_.p.sourceWidth).max + 1,
-      contextWidth = List(iBusDecoderToPeripheral, dBusDecoderToPeripheral).map(_.p.contextWidth).max,
+      sourceWidth = List(perIBus(0).toPeripheral, dBusDecoderToPeripheral).map(_.p.sourceWidth).max + log2Up(cpuCount + 1),
+      contextWidth = List(perIBus(0).toPeripheral, dBusDecoderToPeripheral).map(_.p.contextWidth).max,
       lengthWidth = peripheralAccessLength,
       dataWidth = 32
     ),
-    portCount = 2,
+    portCount = cpuCount+1,
     lowerFirstPriority = true
   )
-  peripheralArbiter.io.inputs(0) << iBusDecoderToPeripheral
-  peripheralArbiter.io.inputs(1) << dBusDecoderToPeripheral
+
+  for(id <- 0 until cpuCount){
+    peripheralArbiter.io.inputs(id) << perIBus(id).toPeripheral
+  }
+  peripheralArbiter.io.inputs(cpuCount) << dBusDecoderToPeripheral
 
   val peripheralWishbone = peripheralArbiter.io.output.pipelined(cmdValid = true).toWishbone()
   io.peripheral << peripheralWishbone
+
+
+  val dBusDemux = BmbSourceDecoder(dBusDecoder.io.outputs(1).p)
+  dBusDemux.io.input << dBusDecoder.io.outputs(1)
+  val dMemBridge = for(id <- 0 until cpuCount)  yield {
+    io.dMem(id).fromBmb(dBusDemux.io.outputs(id), wdataFifoSize = 32, rdataFifoSize = 32)
+  }
+
 }
 
-object VexRiscvLitexSmpClusterGen extends App {
+object VexRiscvLitexSmpDevClusterGen extends App {
   for(cpuCount <- List(1,2,4,8)) {
-    def parameter = VexRiscvLitexSmpClusterParameter(
+    def parameter = VexRiscvLitexSmpDevClusterParameter(
       cluster = VexRiscvSmpClusterParameter(
         cpuConfigs = List.tabulate(cpuCount) { hartId =>
           vexRiscvConfig(
@@ -132,7 +135,7 @@ object VexRiscvLitexSmpClusterGen extends App {
     )
 
     def dutGen = {
-      val toplevel = VexRiscvLitexSmpCluster(
+      val toplevel = VexRiscvLitexSmpDevCluster(
         p = parameter,
         debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
       )
@@ -141,22 +144,22 @@ object VexRiscvLitexSmpClusterGen extends App {
 
     val genConfig = SpinalConfig().addStandardMemBlackboxing(blackboxByteEnables)
     //  genConfig.generateVerilog(Bench.compressIo(dutGen))
-    genConfig.generateVerilog(dutGen.setDefinitionName(s"VexRiscvLitexSmpCluster_${cpuCount}c"))
+    genConfig.generateVerilog(dutGen.setDefinitionName(s"VexRiscvLitexSmpDevCluster_${cpuCount}c"))
   }
 
 }
 
 
-object VexRiscvLitexSmpClusterOpenSbi extends App{
+object VexRiscvLitexSmpDevClusterOpenSbi extends App{
     import spinal.core.sim._
 
     val simConfig = SimConfig
     simConfig.withWave
     simConfig.allOptimisation
 
-    val cpuCount = 8
+    val cpuCount = 4
 
-    def parameter = VexRiscvLitexSmpClusterParameter(
+    def parameter = VexRiscvLitexSmpDevClusterParameter(
       cluster = VexRiscvSmpClusterParameter(
         cpuConfigs = List.tabulate(cpuCount) { hartId =>
           vexRiscvConfig(
@@ -171,7 +174,7 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
     )
 
     def dutGen = {
-      val top = VexRiscvLitexSmpCluster(
+      val top = VexRiscvLitexSmpDevCluster(
         p = parameter,
         debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
       )
@@ -189,7 +192,7 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
         top.io.peripheral.ACK := top.io.peripheral.CYC  && (!hit || top.io.clint.ACK)
         top.io.peripheral.ERR := False
 
-        top.dMemBridge.unburstified.cmd.simPublic()
+//        top.dMemBridge.unburstified.cmd.simPublic()
       }
       top
     }
@@ -210,9 +213,10 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
       ram.loadBin(0xC1000000l, "../buildroot/output/images/dtb")
       ram.loadBin(0xC2000000l, "../buildroot/output/images/rootfs.cpio")
 
-
-      dut.io.iMem.simSlave(ram, dut.clockDomain)
-      dut.io.dMem.simSlave(ram, dut.clockDomain, dut.dMemBridge.unburstified)
+      for(id <- 0 until cpuCount) {
+        dut.io.iMem(id).simSlave(ram, dut.clockDomain)
+        dut.io.dMem(id).simSlave(ram, dut.clockDomain)
+      }
 
       dut.io.externalInterrupts #= 0
       dut.io.externalSupervisorInterrupts  #= 0
