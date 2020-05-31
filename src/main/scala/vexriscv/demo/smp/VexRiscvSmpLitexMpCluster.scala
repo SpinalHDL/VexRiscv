@@ -10,7 +10,7 @@ import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
 import spinal.lib.eda.bench.Bench
 import spinal.lib.misc.Clint
 import spinal.lib.sim.{SimData, SparseMemory, StreamDriver, StreamMonitor, StreamReadyRandomizer}
-import vexriscv.demo.smp.VexRiscvLitexSmpDevClusterOpenSbi.{cpuCount, parameter}
+import vexriscv.demo.smp.VexRiscvLitexSmpMpClusterOpenSbi.{cpuCount, parameter}
 import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
 import vexriscv.{VexRiscv, VexRiscvConfig}
 import vexriscv.plugin.{CsrPlugin, DBusCachedPlugin, DebugPlugin, IBusCachedPlugin}
@@ -19,12 +19,12 @@ import scala.collection.mutable
 import scala.util.Random
 
 
-case class VexRiscvLitexSmpDevClusterParameter( cluster : VexRiscvSmpClusterParameter,
+case class VexRiscvLitexSmpMpClusterParameter( cluster : VexRiscvSmpClusterParameter,
                                              liteDram : LiteDramNativeParameter,
                                              liteDramMapping : AddressMapping)
 
 //addAttribute("""mark_debug = "true"""")
-case class VexRiscvLitexSmpDevCluster(p : VexRiscvLitexSmpDevClusterParameter,
+case class VexRiscvLitexSmpMpCluster(p : VexRiscvLitexSmpMpClusterParameter,
                                    debugClockDomain : ClockDomain) extends Component{
 
   val peripheralWishboneConfig = WishboneConfig(
@@ -83,8 +83,8 @@ case class VexRiscvLitexSmpDevCluster(p : VexRiscvLitexSmpDevClusterParameter,
     )
 
     decoder.io.input << cluster.io.iMems(id)
-    io.iMem(id).fromBmb(decoder.io.outputs(1), wdataFifoSize = 0, rdataFifoSize = 32)
-    val toPeripheral = decoder.io.outputs(0).resize(dataWidth = 32)
+    io.iMem(id).fromBmb(decoder.io.outputs(1).pipelined(cmdHalfRate = true), wdataFifoSize = 0, rdataFifoSize = 32)
+    val toPeripheral = decoder.io.outputs(0).resize(dataWidth = 32).pipelined(cmdHalfRate = true, rspValid = true)
   }
 
   val dBusDecoderToPeripheral = dBusDecoder.io.outputs(0).resize(dataWidth = 32).pipelined(cmdHalfRate = true, rspValid = true)
@@ -111,16 +111,16 @@ case class VexRiscvLitexSmpDevCluster(p : VexRiscvLitexSmpDevClusterParameter,
 
 
   val dBusDemux = BmbSourceDecoder(dBusDecoder.io.outputs(1).p)
-  dBusDemux.io.input << dBusDecoder.io.outputs(1)
+  dBusDemux.io.input << dBusDecoder.io.outputs(1).pipelined(cmdValid = true, cmdReady = true,rspValid = true)
   val dMemBridge = for(id <- 0 until cpuCount)  yield {
     io.dMem(id).fromBmb(dBusDemux.io.outputs(id), wdataFifoSize = 32, rdataFifoSize = 32)
   }
 
 }
 
-object VexRiscvLitexSmpDevClusterGen extends App {
+object VexRiscvLitexSmpMpClusterGen extends App {
   for(cpuCount <- List(1,2,4,8)) {
-    def parameter = VexRiscvLitexSmpDevClusterParameter(
+    def parameter = VexRiscvLitexSmpMpClusterParameter(
       cluster = VexRiscvSmpClusterParameter(
         cpuConfigs = List.tabulate(cpuCount) { hartId =>
           vexRiscvConfig(
@@ -135,7 +135,7 @@ object VexRiscvLitexSmpDevClusterGen extends App {
     )
 
     def dutGen = {
-      val toplevel = VexRiscvLitexSmpDevCluster(
+      val toplevel = VexRiscvLitexSmpMpCluster(
         p = parameter,
         debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
       )
@@ -144,13 +144,13 @@ object VexRiscvLitexSmpDevClusterGen extends App {
 
     val genConfig = SpinalConfig().addStandardMemBlackboxing(blackboxByteEnables)
     //  genConfig.generateVerilog(Bench.compressIo(dutGen))
-    genConfig.generateVerilog(dutGen.setDefinitionName(s"VexRiscvLitexSmpDevCluster_${cpuCount}c"))
+    genConfig.generateVerilog(dutGen.setDefinitionName(s"VexRiscvLitexSmpMpCluster_${cpuCount}c"))
   }
 
 }
 
 
-object VexRiscvLitexSmpDevClusterOpenSbi extends App{
+object VexRiscvLitexSmpMpClusterOpenSbi extends App{
     import spinal.core.sim._
 
     val simConfig = SimConfig
@@ -159,7 +159,7 @@ object VexRiscvLitexSmpDevClusterOpenSbi extends App{
 
     val cpuCount = 4
 
-    def parameter = VexRiscvLitexSmpDevClusterParameter(
+    def parameter = VexRiscvLitexSmpMpClusterParameter(
       cluster = VexRiscvSmpClusterParameter(
         cpuConfigs = List.tabulate(cpuCount) { hartId =>
           vexRiscvConfig(
@@ -174,7 +174,7 @@ object VexRiscvLitexSmpDevClusterOpenSbi extends App{
     )
 
     def dutGen = {
-      val top = VexRiscvLitexSmpDevCluster(
+      val top = VexRiscvLitexSmpMpCluster(
         p = parameter,
         debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
       )

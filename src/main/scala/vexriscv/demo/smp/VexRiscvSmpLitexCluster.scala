@@ -115,6 +115,7 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
   io.peripheral << peripheralWishbone
 }
 
+//ifconfig eth0 192.168.0.50 netmask  255.255.255.0 up
 object VexRiscvLitexSmpClusterGen extends App {
   for(cpuCount <- List(1,2,4,8)) {
     def parameter = VexRiscvLitexSmpClusterParameter(
