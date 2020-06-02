@@ -9,6 +9,8 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba3.apb.{Apb3, Apb3Config}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
+import spinal.lib.bus.bmb.{Bmb, BmbAccessParameter, BmbParameter}
+import spinal.lib.bus.simple.PipelinedMemoryBus
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -20,6 +22,16 @@ case class DebugExtensionCmd() extends Bundle{
 }
 case class DebugExtensionRsp() extends Bundle{
   val data = Bits(32 bit)
+}
+
+object DebugExtensionBus{
+  def getBmbAccessParameter(source : BmbAccessParameter) = BmbAccessParameter(
+    addressWidth = 8,
+    dataWidth    = 32,
+    lengthWidth  = 2,
+    sourceWidth  = source.sourceWidth,
+    contextWidth = source.contextWidth
+  )
 }
 
 case class DebugExtensionBus() extends Bundle with IMasterSlave{
@@ -59,6 +71,41 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
 
     bus.waitRequestn := cmd.ready
     bus.readData := rsp.data
+
+    bus
+  }
+
+  def fromPipelinedMemoryBus(): PipelinedMemoryBus ={
+    val bus = PipelinedMemoryBus(32, 32)
+
+    cmd.arbitrationFrom(bus.cmd)
+    cmd.wr := bus.cmd.write
+    cmd.address := bus.cmd.address.resized
+    cmd.data := bus.cmd.data
+
+    bus.rsp.valid := RegNext(cmd.fire) init(False)
+    bus.rsp.data := rsp.data
+
+    bus
+  }
+
+  def fromBmb(): Bmb ={
+    val bus = Bmb(BmbParameter(
+      addressWidth  = 8,
+      dataWidth     = 32,
+      lengthWidth   = 2,
+      sourceWidth   = 0,
+      contextWidth  = 0
+    ))
+
+    cmd.arbitrationFrom(bus.cmd)
+    cmd.wr := bus.cmd.isWrite
+    cmd.address := bus.cmd.address
+    cmd.data := bus.cmd.data
+
+    bus.rsp.valid := RegNext(cmd.fire) init(False)
+    bus.rsp.data := rsp.data
+    bus.rsp.last := True
 
     bus
   }
