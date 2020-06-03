@@ -115,7 +115,16 @@ case class VexRiscvLitexSmpMpCluster(p : VexRiscvLitexSmpMpClusterParameter,
   val dMemBridge = for(id <- 0 until cpuCount)  yield {
     io.dMem(id).fromBmb(dBusDemux.io.outputs(id), wdataFifoSize = 32, rdataFifoSize = 32)
   }
-
+//
+//  io.dMem.foreach(_.cmd.valid.addAttribute("""mark_debug = "true""""))
+//  io.dMem.foreach(_.cmd.ready.addAttribute("""mark_debug = "true""""))
+//  io.iMem.foreach(_.cmd.valid.addAttribute("""mark_debug = "true""""))
+//  io.iMem.foreach(_.cmd.ready.addAttribute("""mark_debug = "true""""))
+//
+//  cluster.io.dMem.cmd.valid.addAttribute("""mark_debug = "true"""")
+//  cluster.io.dMem.cmd.ready.addAttribute("""mark_debug = "true"""")
+//  cluster.io.dMem.rsp.valid.addAttribute("""mark_debug = "true"""")
+//  cluster.io.dMem.rsp.ready.addAttribute("""mark_debug = "true"""")
 }
 
 object VexRiscvLitexSmpMpClusterGen extends App {
@@ -155,9 +164,10 @@ object VexRiscvLitexSmpMpClusterOpenSbi extends App{
 
     val simConfig = SimConfig
     simConfig.withWave
+    simConfig.withFstWave
     simConfig.allOptimisation
 
-    val cpuCount = 4
+    val cpuCount = 2
 
     def parameter = VexRiscvLitexSmpMpClusterParameter(
       cluster = VexRiscvSmpClusterParameter(
@@ -221,41 +231,59 @@ object VexRiscvLitexSmpMpClusterOpenSbi extends App{
       dut.io.externalInterrupts #= 0
       dut.io.externalSupervisorInterrupts  #= 0
 
-      dut.clockDomain.onSamplings{
+//      val stdin = mutable.Queue[Byte]()
+//      def stdInPush(str : String) = stdin ++= str.toCharArray.map(_.toByte)
+//      fork{
+//        sleep(4000*1000000l)
+//        stdInPush("root\n")
+//        sleep(1000*1000000l)
+//        stdInPush("ping localhost -i 0.01 > /dev/null &\n")
+//        stdInPush("ping localhost -i 0.01 > /dev/null &\n")
+//        stdInPush("ping localhost -i 0.01 > /dev/null &\n")
+//        stdInPush("ping localhost -i 0.01 > /dev/null &\n")
+//        sleep(500*1000000l)
+//        while(true){
+//          sleep(500*1000000l)
+//          stdInPush("uptime\n")
+//          printf("\n** uptime **")
+//        }
+//      }
+      dut.clockDomain.onFallingEdges{
         if(dut.io.peripheral.CYC.toBoolean){
           (dut.io.peripheral.ADR.toLong << 2) match {
             case 0xF0000000l => print(dut.io.peripheral.DAT_MOSI.toLong.toChar)
             case 0xF0000004l => dut.io.peripheral.DAT_MISO #= (if(System.in.available() != 0) System.in.read() else 0xFFFFFFFFl)
-            case _ =>
-          }
+//            case 0xF0000004l => {
+//              val c = if(stdin.nonEmpty) {
+//                stdin.dequeue().toInt & 0xFF
+//              } else {
+//                0xFFFFFFFFl
+//              }
+//              dut.io.peripheral.DAT_MISO #= c
+//            }
+//            case _ =>
+//          }
 //          println(f"${dut.io.peripheral.ADR.toLong}%x")
         }
       }
 
-//      fork{
-//        disableSimWave()
-//        val atMs = 3790
-//        val durationMs = 5
-//        sleep(atMs*1000000l)
-//        enableSimWave()
-//        println("** enableSimWave **")
-//        sleep(durationMs*1000000l)
-//        println("** disableSimWave **")
-//        while(true) {
-//          disableSimWave()
-//          sleep(100000 * 10)
-//          enableSimWave()
-//          sleep(  100 * 10)
-//        }
-//        //      simSuccess()
-//      }
-
       fork{
+        val at = 0
+        val duration = 0
+        while(simTime() < at*1000000l) {
+          disableSimWave()
+          sleep(100000 * 10)
+          enableSimWave()
+          sleep(  200 * 10)
+        }
+        println("\n\n********************")
+        sleep(duration*1000000l)
+        println("********************\n\n")
         while(true) {
           disableSimWave()
           sleep(100000 * 10)
           enableSimWave()
-          sleep(  100 * 10)
+          sleep(  400 * 10)
         }
       }
     }

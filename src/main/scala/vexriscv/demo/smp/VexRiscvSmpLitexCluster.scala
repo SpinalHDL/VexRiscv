@@ -155,7 +155,7 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
     simConfig.withWave
     simConfig.allOptimisation
 
-    val cpuCount = 8
+    val cpuCount = 2
 
     def parameter = VexRiscvLitexSmpClusterParameter(
       cluster = VexRiscvSmpClusterParameter(
@@ -218,7 +218,7 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
       dut.io.externalInterrupts #= 0
       dut.io.externalSupervisorInterrupts  #= 0
 
-      dut.clockDomain.onSamplings{
+      dut.clockDomain.onFallingEdges{
         if(dut.io.peripheral.CYC.toBoolean){
           (dut.io.peripheral.ADR.toLong << 2) match {
             case 0xF0000000l => print(dut.io.peripheral.DAT_MOSI.toLong.toChar)
