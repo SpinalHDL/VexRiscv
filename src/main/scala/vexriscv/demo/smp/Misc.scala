@@ -205,10 +205,17 @@ case class BmbToLiteDram(bmbParameter : BmbParameter,
 
   val rspContext = cmdContext.queue(rdataFifoSize)
   val rdataFifo = io.output.rdata.queueLowLatency(rdataFifoSize, latency = 1)
+  val writeTocken = CounterUpDown(
+    stateCount = rdataFifoSize*2,
+    incWhen = io.output.wdata.fire,
+    decWhen = rspContext.fire && rspContext.isWrite
+  )
+  val canRspWrite = writeTocken =/= 0
+  val canRspRead = CombInit(rdataFifo.valid)
 
   rdataFifo.ready := unburstified.rsp.fire && !rspContext.isWrite
   rspContext.ready := unburstified.rsp.fire
-  unburstified.rsp.valid := rspContext.valid && (rspContext.isWrite || rdataFifo.valid)
+  unburstified.rsp.valid := rspContext.valid && (rspContext.isWrite  ? canRspWrite | canRspRead)
   unburstified.rsp.setSuccess()
   unburstified.rsp.last := True
   unburstified.rsp.source := rspContext.source
