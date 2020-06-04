@@ -160,76 +160,76 @@ object VexRiscvLitexSmpMpClusterGen extends App {
 
 
 object VexRiscvLitexSmpMpClusterOpenSbi extends App{
-    import spinal.core.sim._
+  import spinal.core.sim._
 
-    val simConfig = SimConfig
-    simConfig.withWave
-    simConfig.withFstWave
-    simConfig.allOptimisation
+  val simConfig = SimConfig
+  simConfig.withWave
+  simConfig.withFstWave
+  simConfig.allOptimisation
 
-    val cpuCount = 2
+  val cpuCount = 2
 
-    def parameter = VexRiscvLitexSmpMpClusterParameter(
-      cluster = VexRiscvSmpClusterParameter(
-        cpuConfigs = List.tabulate(cpuCount) { hartId =>
-          vexRiscvConfig(
-            hartId = hartId,
-            ioRange =  address => address(31 downto 28) === 0xF,
-            resetVector = 0x80000000l
-          )
-        }
-      ),
-      liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
-      liteDramMapping = SizeMapping(0x80000000l, 0x70000000l)
+  def parameter = VexRiscvLitexSmpMpClusterParameter(
+    cluster = VexRiscvSmpClusterParameter(
+      cpuConfigs = List.tabulate(cpuCount) { hartId =>
+        vexRiscvConfig(
+          hartId = hartId,
+          ioRange =  address => address(31 downto 28) === 0xF,
+          resetVector = 0x80000000l
+        )
+      }
+    ),
+    liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
+    liteDramMapping = SizeMapping(0x80000000l, 0x70000000l)
+  )
+
+  def dutGen = {
+    val top = VexRiscvLitexSmpMpCluster(
+      p = parameter,
+      debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
     )
+    top.rework{
+      top.io.clint.setAsDirectionLess.allowDirectionLessIo
+      top.io.peripheral.setAsDirectionLess.allowDirectionLessIo.simPublic()
 
-    def dutGen = {
-      val top = VexRiscvLitexSmpMpCluster(
-        p = parameter,
-        debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
-      )
-      top.rework{
-        top.io.clint.setAsDirectionLess.allowDirectionLessIo
-        top.io.peripheral.setAsDirectionLess.allowDirectionLessIo.simPublic()
-
-        val hit = (top.io.peripheral.ADR <<2 >= 0xF0010000l && top.io.peripheral.ADR<<2 < 0xF0020000l)
-        top.io.clint.CYC := top.io.peripheral.CYC && hit
-        top.io.clint.STB := top.io.peripheral.STB
-        top.io.clint.WE := top.io.peripheral.WE
-        top.io.clint.ADR := top.io.peripheral.ADR.resized
-        top.io.clint.DAT_MOSI := top.io.peripheral.DAT_MOSI
-        top.io.peripheral.DAT_MISO := top.io.clint.DAT_MISO
-        top.io.peripheral.ACK := top.io.peripheral.CYC  && (!hit || top.io.clint.ACK)
-        top.io.peripheral.ERR := False
+      val hit = (top.io.peripheral.ADR <<2 >= 0xF0010000l && top.io.peripheral.ADR<<2 < 0xF0020000l)
+      top.io.clint.CYC := top.io.peripheral.CYC && hit
+      top.io.clint.STB := top.io.peripheral.STB
+      top.io.clint.WE := top.io.peripheral.WE
+      top.io.clint.ADR := top.io.peripheral.ADR.resized
+      top.io.clint.DAT_MOSI := top.io.peripheral.DAT_MOSI
+      top.io.peripheral.DAT_MISO := top.io.clint.DAT_MISO
+      top.io.peripheral.ACK := top.io.peripheral.CYC  && (!hit || top.io.clint.ACK)
+      top.io.peripheral.ERR := False
 
 //        top.dMemBridge.unburstified.cmd.simPublic()
-      }
-      top
     }
-    simConfig.compile(dutGen).doSimUntilVoid(seed = 42){dut =>
-      dut.clockDomain.forkStimulus(10)
-      fork {
-        dut.debugClockDomain.resetSim #= false
-        sleep (0)
-        dut.debugClockDomain.resetSim #= true
-        sleep (10)
-        dut.debugClockDomain.resetSim #= false
-      }
+    top
+  }
+  simConfig.compile(dutGen).doSimUntilVoid(seed = 42){dut =>
+    dut.clockDomain.forkStimulus(10)
+    fork {
+      dut.debugClockDomain.resetSim #= false
+      sleep (0)
+      dut.debugClockDomain.resetSim #= true
+      sleep (10)
+      dut.debugClockDomain.resetSim #= false
+    }
 
 
-      val ram = SparseMemory()
-      ram.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin")
-      ram.loadBin(0xC0000000l, "../buildroot/output/images/Image")
-      ram.loadBin(0xC1000000l, "../buildroot/output/images/dtb")
-      ram.loadBin(0xC2000000l, "../buildroot/output/images/rootfs.cpio")
+    val ram = SparseMemory()
+    ram.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin")
+    ram.loadBin(0xC0000000l, "../buildroot/output/images/Image")
+    ram.loadBin(0xC1000000l, "../buildroot/output/images/dtb")
+    ram.loadBin(0xC2000000l, "../buildroot/output/images/rootfs.cpio")
 
-      for(id <- 0 until cpuCount) {
-        dut.io.iMem(id).simSlave(ram, dut.clockDomain)
-        dut.io.dMem(id).simSlave(ram, dut.clockDomain)
-      }
+    for(id <- 0 until cpuCount) {
+      dut.io.iMem(id).simSlave(ram, dut.clockDomain)
+      dut.io.dMem(id).simSlave(ram, dut.clockDomain)
+    }
 
-      dut.io.externalInterrupts #= 0
-      dut.io.externalSupervisorInterrupts  #= 0
+    dut.io.externalInterrupts #= 0
+    dut.io.externalSupervisorInterrupts  #= 0
 
 //      val stdin = mutable.Queue[Byte]()
 //      def stdInPush(str : String) = stdin ++= str.toCharArray.map(_.toByte)
@@ -248,43 +248,44 @@ object VexRiscvLitexSmpMpClusterOpenSbi extends App{
 //          printf("\n** uptime **")
 //        }
 //      }
-      dut.clockDomain.onFallingEdges{
-        if(dut.io.peripheral.CYC.toBoolean){
-          (dut.io.peripheral.ADR.toLong << 2) match {
-            case 0xF0000000l => print(dut.io.peripheral.DAT_MOSI.toLong.toChar)
-            case 0xF0000004l => dut.io.peripheral.DAT_MISO #= (if(System.in.available() != 0) System.in.read() else 0xFFFFFFFFl)
-//            case 0xF0000004l => {
-//              val c = if(stdin.nonEmpty) {
-//                stdin.dequeue().toInt & 0xFF
-//              } else {
-//                0xFFFFFFFFl
-//              }
-//              dut.io.peripheral.DAT_MISO #= c
-//            }
-//            case _ =>
-//          }
-//          println(f"${dut.io.peripheral.ADR.toLong}%x")
-        }
-      }
-
-      fork{
-        val at = 0
-        val duration = 0
-        while(simTime() < at*1000000l) {
-          disableSimWave()
-          sleep(100000 * 10)
-          enableSimWave()
-          sleep(  200 * 10)
-        }
-        println("\n\n********************")
-        sleep(duration*1000000l)
-        println("********************\n\n")
-        while(true) {
-          disableSimWave()
-          sleep(100000 * 10)
-          enableSimWave()
-          sleep(  400 * 10)
+    dut.clockDomain.onFallingEdges {
+      if (dut.io.peripheral.CYC.toBoolean) {
+        (dut.io.peripheral.ADR.toLong << 2) match {
+          case 0xF0000000l => print(dut.io.peripheral.DAT_MOSI.toLong.toChar)
+          case 0xF0000004l => dut.io.peripheral.DAT_MISO #= (if (System.in.available() != 0) System.in.read() else 0xFFFFFFFFl)
+          //            case 0xF0000004l => {
+          //              val c = if(stdin.nonEmpty) {
+          //                stdin.dequeue().toInt & 0xFF
+          //              } else {
+          //                0xFFFFFFFFl
+          //              }
+          //              dut.io.peripheral.DAT_MISO #= c
+          //            }
+          //            case _ =>
+          //          }
+          //          println(f"${dut.io.peripheral.ADR.toLong}%x")
         }
       }
     }
+
+    fork{
+      val at = 0
+      val duration = 0
+      while(simTime() < at*1000000l) {
+        disableSimWave()
+        sleep(100000 * 10)
+        enableSimWave()
+        sleep(  200 * 10)
+      }
+      println("\n\n********************")
+      sleep(duration*1000000l)
+      println("********************\n\n")
+      while(true) {
+        disableSimWave()
+        sleep(100000 * 10)
+        enableSimWave()
+        sleep(  400 * 10)
+      }
+    }
   }
+}
