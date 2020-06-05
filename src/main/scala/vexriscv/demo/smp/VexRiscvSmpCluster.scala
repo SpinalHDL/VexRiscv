@@ -9,7 +9,7 @@ import spinal.lib.bus.bmb.{Bmb, BmbArbiter, BmbDecoder, BmbExclusiveMonitor, Bmb
 import spinal.lib.com.jtag.Jtag
 import spinal.lib.com.jtag.sim.JtagTcp
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
-import vexriscv.plugin.{BranchPlugin, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
+import vexriscv.plugin.{BranchPlugin, CsrAccess, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
 import vexriscv.{Riscv, VexRiscv, VexRiscvConfig, plugin}
 
 import scala.collection.mutable
@@ -160,9 +160,9 @@ object VexRiscvSmpClusterGen {
           dBusRspSlavePipe = true,
           relaxedMemoryTranslationRegister = true,
           config = new DataCacheConfig(
-            cacheSize         = 4096*1,
+            cacheSize         = 4096*2,
             bytePerLine       = 64,
-            wayCount          = 1,
+            wayCount          = 2,
             addressWidth      = 32,
             cpuDataWidth      = 32,
             memDataWidth      = dBusWidth,
@@ -213,7 +213,7 @@ object VexRiscvSmpClusterGen {
           mulUnrollFactor = 32,
           divUnrollFactor = 1
         ),
-        new CsrPlugin(CsrPluginConfig.openSbi(mhartid = hartId, misa = Riscv.misaToInt("imas"))),
+        new CsrPlugin(CsrPluginConfig.openSbi(mhartid = hartId, misa = Riscv.misaToInt("imas")).copy(utimeAccess = CsrAccess.READ_ONLY)),
         new BranchPlugin(
           earlyBranch = false,
           catchAddressMisaligned = true,
