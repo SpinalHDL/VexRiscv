@@ -40,6 +40,7 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
     val externalSupervisorInterrupts = in Bits(p.cpuConfigs.size bits)
     val jtag = slave(Jtag())
     val debugReset = out Bool()
+    val time = in UInt(64 bits)
   }
 
   val cpus = for((cpuConfig, cpuId) <- p.cpuConfigs.zipWithIndex) yield new Area{
@@ -61,6 +62,7 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
         plugin.externalInterrupt := io.externalInterrupts(cpuId)
         plugin.timerInterrupt := io.timerInterrupts(cpuId)
         if (plugin.config.supervisorGen) plugin.externalInterruptS := io.externalSupervisorInterrupts(cpuId)
+        if (plugin.utime != null) plugin.utime := io.time
       }
       case plugin: DebugPlugin => debugClockDomain{
         io.debugReset := RegNext(plugin.io.resetOut)
@@ -517,6 +519,9 @@ object VexRiscvSmpClusterOpenSbi extends App{
       var lastAddress = 0l
     })
     dut.clockDomain.onSamplings{
+      dut.io.time #= simTime()/10
+
+
       for(i <- 0 until cpuCount; iMem = dut.io.iMems(i); ctx = iMemCtx(i)){
 //        if(iMem.cmd.valid.toBoolean && iMem.cmd.ready.toBoolean){
 //          val length = iMem.cmd.length.toInt + 1

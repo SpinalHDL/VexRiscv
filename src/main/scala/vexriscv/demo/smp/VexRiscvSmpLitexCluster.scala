@@ -57,6 +57,7 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
   cluster.io.debugReset <> io.debugReset
   cluster.io.timerInterrupts <> B(clint.harts.map(_.timerInterrupt))
   cluster.io.softwareInterrupts <> B(clint.harts.map(_.softwareInterrupt))
+  cluster.io.time := clint.time
 
   val dBusDecoder = BmbDecoderOutOfOrder(
     p            = cluster.io.dMem.p,

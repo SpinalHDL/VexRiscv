@@ -58,6 +58,7 @@ case class VexRiscvLitexSmpMpCluster(p : VexRiscvLitexSmpMpClusterParameter,
   cluster.io.debugReset <> io.debugReset
   cluster.io.timerInterrupts <> B(clint.harts.map(_.timerInterrupt))
   cluster.io.softwareInterrupts <> B(clint.harts.map(_.softwareInterrupt))
+  cluster.io.time := clint.time
 
   val dBusDecoder = BmbDecoderOutOfOrder(
     p            = cluster.io.dMem.p,
@@ -253,6 +254,7 @@ object VexRiscvLitexSmpMpClusterOpenSbi extends App{
         (dut.io.peripheral.ADR.toLong << 2) match {
           case 0xF0000000l => print(dut.io.peripheral.DAT_MOSI.toLong.toChar)
           case 0xF0000004l => dut.io.peripheral.DAT_MISO #= (if (System.in.available() != 0) System.in.read() else 0xFFFFFFFFl)
+          case _ =>
           //            case 0xF0000004l => {
           //              val c = if(stdin.nonEmpty) {
           //                stdin.dequeue().toInt & 0xFF
