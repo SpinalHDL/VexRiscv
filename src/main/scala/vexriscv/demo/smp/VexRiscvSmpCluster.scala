@@ -497,9 +497,11 @@ object VexRiscvSmpClusterOpenSbi extends App{
     ram.memory.loadBin(0xC2000000l, "../buildroot/output/images/rootfs.cpio")
 
     import spinal.core.sim._
-    var iMemReadBytes, dMemReadBytes, dMemWriteBytes, iMemSequencial,iMemRequests = 0l
+    var iMemReadBytes, dMemReadBytes, dMemWriteBytes, iMemSequencial,iMemRequests, iMemPrefetchHit = 0l
     var reportTimer = 0
     var reportCycle = 0
+    val iMemFetchDelta = mutable.HashMap[Long, Long]()
+    var iMemFetchDeltaSorted : Seq[(Long, Long)] = null
     var dMemWrites, dMemWritesCached = 0l
     val dMemWriteCacheCtx = List(4,8,16,32,64).map(bytes => new {
       var counter = 0l
@@ -512,6 +514,7 @@ object VexRiscvSmpClusterOpenSbi extends App{
     val iMemCtx = Array.tabulate(cpuCount)(i => new {
       var sequencialPrediction = 0l
       val cache = dut.cpus(i).core.children.find(_.isInstanceOf[InstructionCache]).head.asInstanceOf[InstructionCache].io.cpu.decode
+      var lastAddress = 0l
     })
     dut.clockDomain.onSamplings{
       for(i <- 0 until cpuCount; iMem = dut.io.iMems(i); ctx = iMemCtx(i)){
@@ -527,7 +530,6 @@ object VexRiscvSmpClusterOpenSbi extends App{
           val mask = ~(length-1)
           if(ctx.cache.cacheMiss.toBoolean) {
             iMemReadBytes += length
-            iMemRequests += 1
             if ((address & mask) == (ctx.sequencialPrediction & mask)) {
               iMemSequencial += 1
             }
@@ -535,6 +537,18 @@ object VexRiscvSmpClusterOpenSbi extends App{
           if(!ctx.cache.isStuck.toBoolean) {
             ctx.sequencialPrediction = address + length
           }
+        }
+
+        if(iMem.cmd.valid.toBoolean && iMem.cmd.ready.toBoolean){
+          val address = iMem.cmd.address.toLong
+          iMemRequests += 1
+          if(iMemCtx(i).lastAddress + ctx.cache.p.bytePerLine == address){
+            iMemPrefetchHit += 1
+          }
+          val delta = address-iMemCtx(i).lastAddress
+          iMemFetchDelta(delta) = iMemFetchDelta.getOrElse(delta, 0l) + 1l
+          if(iMemRequests % 1000 == 999) iMemFetchDeltaSorted = iMemFetchDelta.toSeq.sortBy(_._1)
+          iMemCtx(i).lastAddress = address
         }
       }
       if(dut.io.dMem.cmd.valid.toBoolean && dut.io.dMem.cmd.ready.toBoolean){
@@ -561,7 +575,7 @@ object VexRiscvSmpClusterOpenSbi extends App{
 //        println(f"\n** c=${reportCycle} ir=${iMemReadBytes*1e-6}%5.2f dr=${dMemReadBytes*1e-6}%5.2f dw=${dMemWriteBytes*1e-6}%5.2f **\n")
 
 
-        csv.write(s"$reportCycle,$iMemReadBytes,$dMemReadBytes,$dMemWriteBytes,$iMemRequests,$iMemSequencial,$dMemWrites,${dMemWriteCacheCtx.map(_.counter).mkString(",")}\n")
+        csv.write(s"$reportCycle,$iMemReadBytes,$dMemReadBytes,$dMemWriteBytes,$iMemRequests,$iMemSequencial,$dMemWrites,${dMemWriteCacheCtx.map(_.counter).mkString(",")},$iMemPrefetchHit\n")
         csv.flush()
         reportCycle = 0
         iMemReadBytes = 0
@@ -570,6 +584,7 @@ object VexRiscvSmpClusterOpenSbi extends App{
         iMemRequests = 0
         iMemSequencial = 0
         dMemWrites = 0
+        iMemPrefetchHit = 0
         for(ctx <- dMemWriteCacheCtx) ctx.counter = 0
       }
     }
