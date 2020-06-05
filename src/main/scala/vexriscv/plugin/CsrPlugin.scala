@@ -66,6 +66,7 @@ case class CsrPluginConfig(
                             scycleAccess        : CsrAccess = CsrAccess.NONE,
                             sinstretAccess      : CsrAccess = CsrAccess.NONE,
                             satpAccess          : CsrAccess = CsrAccess.NONE,
+                            utimeAccess         :CsrAccess = CsrAccess.NONE,
                             medelegAccess       : CsrAccess = CsrAccess.NONE,
                             midelegAccess       : CsrAccess = CsrAccess.NONE,
                             withExternalMhartid : Boolean = false,
@@ -390,6 +391,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var thirdPartyWake : Bool = null
   var inWfi : Bool = null
   var externalMhartId : UInt = null
+  var utime : UInt = null
 
   override def askWake(): Unit = thirdPartyWake := True
 
@@ -520,6 +522,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     pipeline.update(MPP, UInt(2 bits))
 
     if(withExternalMhartid) externalMhartId = in UInt(mhartidWidth bits)
+    if(utimeAccess != CsrAccess.NONE) utime = in UInt(64 bits) setName("utime")
   }
 
   def inhibateInterrupts() : Unit = allowInterrupts := False
@@ -633,6 +636,11 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       //User CSR
       ucycleAccess(CSR.UCYCLE, mcycle(31 downto 0))
       ucycleAccess(CSR.UCYCLEH, mcycle(63 downto 32))
+
+      if(utimeAccess != CsrAccess.NONE) {
+        utimeAccess(CSR.UTIME,  utime(31 downto 0))
+        utimeAccess(CSR.UTIMEH, utime(63 downto 32))
+      }
 
       pipeline(MPP) := mstatus.MPP
     }

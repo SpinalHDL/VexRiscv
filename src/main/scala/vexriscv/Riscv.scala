@@ -159,7 +159,10 @@ object Riscv{
 
 
 
-    def UCYCLE    = 0xC00 // UR Machine ucycle counter.
-    def UCYCLEH   = 0xC80
+    def UCYCLE   = 0xC00 // UR Machine ucycle counter.
+    def UCYCLEH  = 0xC80
+    def UTIME    = 0xC01 // rdtime
+    def UTIMEH   = 0xC81
+
   }
 }
