@@ -983,7 +983,8 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
 
     when(bypassCache){
       io.cpu.writeBack.data := ioMemRspMuxed
-      if(catchAccessError) io.cpu.writeBack.accessError := !request.wr && pending.last && io.mem.rsp.valid && io.mem.rsp.error
+      def isLast = if(pending != null) pending.last else True
+      if(catchAccessError) io.cpu.writeBack.accessError := !request.wr && isLast && io.mem.rsp.valid && io.mem.rsp.error
     } otherwise {
       io.cpu.writeBack.data := dataMux
       if(catchAccessError) io.cpu.writeBack.accessError := (waysHits & B(tagsReadRsp.map(_.error))) =/= 0
