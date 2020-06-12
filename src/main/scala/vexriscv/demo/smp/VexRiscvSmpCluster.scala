@@ -6,8 +6,10 @@ import spinal.core.sim.{onSimEnd, simSuccess}
 import spinal.lib._
 import spinal.lib.bus.bmb.sim.BmbMemoryAgent
 import spinal.lib.bus.bmb.{Bmb, BmbArbiter, BmbDecoder, BmbExclusiveMonitor, BmbInvalidateMonitor, BmbParameter}
-import spinal.lib.com.jtag.Jtag
+import spinal.lib.bus.misc.SizeMapping
+import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
 import spinal.lib.com.jtag.sim.JtagTcp
+import spinal.lib.system.debugger.SystemDebuggerConfig
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
 import vexriscv.plugin.{BranchPlugin, CsrAccess, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
 import vexriscv.{Riscv, VexRiscv, VexRiscvConfig, plugin}
@@ -38,21 +40,23 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
     val externalInterrupts = in Bits(p.cpuConfigs.size bits)
     val softwareInterrupts = in Bits(p.cpuConfigs.size bits)
     val externalSupervisorInterrupts = in Bits(p.cpuConfigs.size bits)
-    val jtag = slave(Jtag())
+    val debugBus = slave(Bmb(SystemDebuggerConfig().getBmbParameter.copy(addressWidth = 20)))
     val debugReset = out Bool()
     val time = in UInt(64 bits)
   }
 
+  io.debugReset := False
   val cpus = for((cpuConfig, cpuId) <- p.cpuConfigs.zipWithIndex) yield new Area{
     var iBus : Bmb = null
     var dBus : Bmb = null
+    var debug : Bmb = null
     cpuConfig.plugins.foreach {
       case plugin: DebugPlugin => debugClockDomain{
         plugin.debugClockDomain = debugClockDomain
       }
       case _ =>
     }
-    if(cpuId == 0) cpuConfig.plugins += new DebugPlugin(debugClockDomain)
+    cpuConfig.plugins += new DebugPlugin(debugClockDomain)
     val core = new VexRiscv(cpuConfig)
     core.plugins.foreach {
       case plugin: IBusCachedPlugin => iBus = plugin.iBus.toBmb()
@@ -65,8 +69,8 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
         if (plugin.utime != null) plugin.utime := io.time
       }
       case plugin: DebugPlugin => debugClockDomain{
-        io.debugReset := RegNext(plugin.io.resetOut)
-        io.jtag <> plugin.io.bus.fromJtag()
+        io.debugReset setWhen(RegNext(plugin.io.resetOut))
+        debug = plugin.io.bus.fromBmb()
       }
       case _ =>
     }
@@ -97,19 +101,18 @@ case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
 
   io.dMem << invalidateMonitor.io.output
 
-//  val iBusArbiter = BmbArbiter(
-//    p = iBusArbiterParameter,
-//    portCount = cpus.size,
-//    pendingRspMax = 64,
-//    lowerFirstPriority = false,
-//    inputsWithInv = cpus.map(_ => true),
-//    inputsWithSync = cpus.map(_ => true),
-//    pendingInvMax = 16
-//  )
-//
-//  (iBusArbiter.io.inputs, cpus).zipped.foreach(_ << _.iBus)
-//  io.iMem << iBusArbiter.io.output
   (io.iMems, cpus).zipped.foreach(_ << _.iBus)
+
+  val debug = debugClockDomain on new Area{
+    val arbiter = BmbDecoder(
+      p            = io.debugBus.p,
+      mappings     = List.tabulate(p.cpuConfigs.size)(i => SizeMapping(0x00000 + i*0x1000, 0x1000)),
+      capabilities = List.fill(p.cpuConfigs.size)(io.debugBus.p),
+      pendingMax   = 2
+    )
+    arbiter.io.input << io.debugBus
+    (arbiter.io.outputs, cpus.map(_.debug)).zipped.foreach(_ >> _)
+  }
 }
 
 
@@ -417,10 +420,7 @@ object VexRiscvSmpClusterTestInfrastructure{
     import spinal.core.sim._
     dut.clockDomain.forkStimulus(10)
     dut.debugClockDomain.forkStimulus(10)
-//    JtagTcp(dut.io.jtag, 100)
-    dut.io.jtag.tck #= false
-    dut.io.jtag.tdi #= false
-    dut.io.jtag.tms #= false
+    dut.io.debugBus.cmd.valid #= false
   }
 }
 

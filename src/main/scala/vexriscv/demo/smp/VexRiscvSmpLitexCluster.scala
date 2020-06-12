@@ -3,13 +3,15 @@ package vexriscv.demo.smp
 import spinal.core._
 import spinal.lib.bus.bmb._
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig, WishboneSlaveFactory}
-import spinal.lib.com.jtag.Jtag
+import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
 import spinal.lib._
 import spinal.lib.bus.bmb.sim.{BmbMemoryMultiPort, BmbMemoryTester}
 import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
 import spinal.lib.eda.bench.Bench
 import spinal.lib.misc.Clint
+import spinal.lib.misc.plic.{PlicGatewayActiveHigh, PlicMapper, PlicMapping, PlicTarget}
 import spinal.lib.sim.{SimData, SparseMemory, StreamDriver, StreamMonitor, StreamReadyRandomizer}
+import spinal.lib.system.debugger.{JtagBridgeNoTap, SystemDebugger, SystemDebuggerConfig}
 import vexriscv.demo.smp.VexRiscvLitexSmpClusterOpenSbi.{cpuCount, parameter}
 import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
 import vexriscv.{VexRiscv, VexRiscvConfig}
@@ -25,7 +27,8 @@ case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParamet
 
 //addAttribute("""mark_debug = "true"""")
 case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
-                                   debugClockDomain : ClockDomain) extends Component{
+                                   debugClockDomain : ClockDomain,
+                                   jtagClockDomain : ClockDomain) extends Component{
 
   val peripheralWishboneConfig = WishboneConfig(
     addressWidth = 30,
@@ -41,9 +44,9 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
     val iMem = master(LiteDramNative(p.liteDram))
     val peripheral = master(Wishbone(peripheralWishboneConfig))
     val clint = slave(Wishbone(Clint.getWisboneConfig()))
-    val externalInterrupts = in Bits(p.cluster.cpuConfigs.size bits)
-    val externalSupervisorInterrupts  = in Bits(p.cluster.cpuConfigs.size bits)
-    val jtag = slave(Jtag())
+    val plic  = slave(Wishbone(WishboneConfig(addressWidth = 20, dataWidth = 32)))
+    val interrupts  = in Bits(32 bits)
+    val jtagInstruction = slave(JtagTapInstructionCtrl())
     val debugReset = out Bool()
   }
   val cpuCount = p.cluster.cpuConfigs.size
@@ -51,13 +54,24 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
   clint.driveFrom(WishboneSlaveFactory(io.clint))
 
   val cluster = VexRiscvSmpCluster(p.cluster, debugClockDomain)
-  cluster.io.externalInterrupts <> io.externalInterrupts
-  cluster.io.externalSupervisorInterrupts <> io.externalSupervisorInterrupts
-  cluster.io.jtag <> io.jtag
   cluster.io.debugReset <> io.debugReset
   cluster.io.timerInterrupts <> B(clint.harts.map(_.timerInterrupt))
   cluster.io.softwareInterrupts <> B(clint.harts.map(_.softwareInterrupt))
   cluster.io.time := clint.time
+
+  val debug = debugClockDomain on new Area{
+    val jtagConfig = SystemDebuggerConfig()
+    val jtagBridge = new JtagBridgeNoTap(
+      c = jtagConfig,
+      jtagClockDomain = jtagClockDomain
+    )
+    jtagBridge.io.ctrl << io.jtagInstruction
+
+    val debugger = new SystemDebugger(jtagConfig)
+    debugger.io.remote <> jtagBridge.io.remote
+
+    cluster.io.debugBus << debugger.io.mem.toBmb()
+  }
 
   val dBusDecoder = BmbDecoderOutOfOrder(
     p            = cluster.io.dMem.p,
@@ -114,9 +128,39 @@ case class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter,
 
   val peripheralWishbone = peripheralArbiter.io.output.pipelined(cmdValid = true).toWishbone()
   io.peripheral << peripheralWishbone
+
+  val plic = new Area{
+    val priorityWidth = 2
+
+    val gateways = for(i <- 1 until 32) yield PlicGatewayActiveHigh(
+      source = io.interrupts(i),
+      id = i,
+      priorityWidth = priorityWidth
+    )
+
+    val bus = WishboneSlaveFactory(io.plic)
+
+    val targets = for(i <- 0 until cpuCount) yield new Area{
+      val machine = PlicTarget(
+        gateways = gateways,
+        priorityWidth = priorityWidth
+      )
+      val supervisor = PlicTarget(
+        gateways = gateways,
+        priorityWidth = priorityWidth
+      )
+
+      cluster.io.externalInterrupts(i) := machine.iep
+      cluster.io.externalSupervisorInterrupts(i) := supervisor.iep
+    }
+
+    val bridge = PlicMapper(bus, PlicMapping.sifive)(
+      gateways = gateways,
+      targets = targets.flatMap(t => List(t.machine, t.supervisor))
+    )
+  }
 }
 
-//ifconfig eth0 192.168.0.50 netmask  255.255.255.0 up
 object VexRiscvLitexSmpClusterGen extends App {
   for(cpuCount <- List(1,2,4,8)) {
     def parameter = VexRiscvLitexSmpClusterParameter(
@@ -136,7 +180,8 @@ object VexRiscvLitexSmpClusterGen extends App {
     def dutGen = {
       val toplevel = VexRiscvLitexSmpCluster(
         p = parameter,
-        debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
+        debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn")),
+        jtagClockDomain = ClockDomain.external("jtag", withReset = false)
       )
       toplevel
     }
@@ -175,7 +220,8 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
     def dutGen = {
       val top = VexRiscvLitexSmpCluster(
         p = parameter,
-        debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn"))
+        debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn")),
+        jtagClockDomain = ClockDomain.external("jtag", withReset = false)
       )
       top.rework{
         top.io.clint.setAsDirectionLess.allowDirectionLessIo
@@ -216,8 +262,7 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
       dut.io.iMem.simSlave(ram, dut.clockDomain)
       dut.io.dMem.simSlave(ram, dut.clockDomain, dut.dMemBridge.unburstified)
 
-      dut.io.externalInterrupts #= 0
-      dut.io.externalSupervisorInterrupts  #= 0
+      dut.io.interrupts #= 0
 
       dut.clockDomain.onFallingEdges{
         if(dut.io.peripheral.CYC.toBoolean){
