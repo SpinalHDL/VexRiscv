@@ -274,10 +274,3 @@ object TestsWorkspace {
     }
   }
 }
-
-//TODO DivPlugin should not used MixedDivider (double twoComplement)
-//TODO DivPlugin should register the twoComplement output before pipeline insertion
-//TODO MulPlugin doesn't fit well on Artix (FMAX)
-//TODO PcReg design is unoptimized by Artix synthesis
-//TODO FMAX SRC mux + bipass mux prioriti
-//TODO FMAX, isFiring is to pesimisstinc in some cases(include removeIt flushed ..)

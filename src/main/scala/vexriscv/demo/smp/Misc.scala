@@ -188,7 +188,7 @@ case class BmbToLiteDram(bmbParameter : BmbParameter,
     wData.arbitrationFrom(dataFork.throwWhen(dataFork.isRead))
     wData.data := dataFork.data
     wData.we := dataFork.mask
-    io.output.wdata << wData.queueLowLatency(wdataFifoSize, latency = 1) //TODO queue low latency
+    io.output.wdata << wData.queueLowLatency(wdataFifoSize, latency = 1)
   } else {
     dataFork.ready := True
     io.output.wdata.valid := False
