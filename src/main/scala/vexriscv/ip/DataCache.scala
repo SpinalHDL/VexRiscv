@@ -228,8 +228,8 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
   val cmd = Stream (DataCacheMemCmd(p))
   val rsp = Flow (DataCacheMemRsp(p))
 
-  val inv = p.withInvalidate generate Stream(DataCacheInv(p))
-  val ack = p.withInvalidate generate Stream(DataCacheAck(p))
+  val inv = p.withInvalidate generate Stream(Fragment(DataCacheInv(p)))
+  val ack = p.withInvalidate generate Stream(Fragment(DataCacheAck(p)))
   val sync = p.withInvalidate generate Stream(DataCacheSync(p))
 
   override def asMaster(): Unit = {
@@ -279,15 +279,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     axi.r.ready := True
     axi.b.ready := True
 
-
-    //TODO remove
-    val axi2 = cloneOf(axi)
-    //    axi.arw >/-> axi2.arw
-    //    axi.w >/-> axi2.w
-    //    axi.r <-/< axi2.r
-    //    axi.b <-/< axi2.b
-    axi2 << axi
-    axi2
+    axi
   }
 
 
@@ -509,13 +501,24 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     if(p.withExclusive) rsp.exclusive := bus.rsp.exclusive
     bus.rsp.ready := True
 
-    if(p.withInvalidate){
-      inv.arbitrationFrom(bus.inv)
-      inv.address := bus.inv.address
-      inv.enable  := bus.inv.all
+    val invalidateLogic = p.withInvalidate generate new Area{
+      val beatCountMinusOne = bus.inv.transferBeatCountMinusOne(p.bytePerLine)
+      val counter = Reg(UInt(widthOf(beatCountMinusOne) bits)) init(0)
 
-      bus.ack.arbitrationFrom(ack)
-      //      //TODO manage lenght ?
+      inv.valid := bus.inv.valid
+      inv.address := bus.inv.address + (counter << log2Up(p.bytePerLine))
+      inv.enable  := bus.inv.all
+      inv.last := counter === beatCountMinusOne
+      bus.inv.ready := inv.last && inv.ready
+
+      if(widthOf(counter) != 0) when(inv.fire){
+        counter := counter + 1
+        when(inv.last){
+          counter := 0
+        }
+      }
+
+      bus.ack.arbitrationFrom(ack.throwWhen(!ack.last))
     }
   }.bus
 
@@ -1112,6 +1115,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
       }
       io.mem.ack.arbitrationFrom(input)
       io.mem.ack.hit := wayHit
+      io.mem.ack.last := input.last
 
       //Manage invalidation read during write hazard
       s1.invalidations := RegNextWhen((input.valid && input.enable && input.address(lineRange) === s0.input.address(lineRange)) ? wayHits | 0, s0.input.ready)
