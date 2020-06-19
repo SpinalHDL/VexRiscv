@@ -106,6 +106,7 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
     bus.rsp.valid := RegNext(cmd.fire) init(False)
     bus.rsp.data := rsp.data
     bus.rsp.last := True
+    bus.rsp.setSuccess()
 
     bus
   }
