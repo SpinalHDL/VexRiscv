@@ -5,7 +5,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4Shared}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
-import spinal.lib.bus.bmb.{Bmb, BmbCmd, BmbParameter}
+import spinal.lib.bus.bmb.{Bmb, BmbAccessParameter, BmbCmd, BmbInvalidationParameter, BmbParameter, BmbSourceParameter}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 import vexriscv.plugin.DBusSimpleBus
@@ -81,20 +81,21 @@ case class DataCacheConfig(cacheSize : Int,
   )
 
   def getBmbParameter() = BmbParameter(
-    addressWidth = 32,
-    dataWidth = memDataWidth,
-    lengthWidth = log2Up(this.bytePerLine),
-    sourceWidth = 0,
-    contextWidth = (if(!withWriteResponse) 1 else 0) + (if(cpuDataWidth != memDataWidth) log2Up(memDataBytes) else 0),
-    canRead = true,
-    canWrite = true,
-    alignment  = BmbParameter.BurstAlignement.LENGTH,
-    maximumPendingTransactionPerId = Int.MaxValue,
-    canInvalidate = withInvalidate,
-    canSync = withInvalidate,
-    canExclusive = withExclusive,
-    invalidateLength = log2Up(this.bytePerLine),
-    invalidateAlignment = BmbParameter.BurstAlignement.LENGTH
+    BmbAccessParameter(
+      addressWidth = 32,
+      dataWidth = memDataWidth
+    ).addSources(1, BmbSourceParameter(
+      lengthWidth = log2Up(this.bytePerLine),
+      contextWidth = (if(!withWriteResponse) 1 else 0) + (if(cpuDataWidth != memDataWidth) log2Up(memDataBytes) else 0),
+      alignment  = BmbParameter.BurstAlignement.LENGTH,
+      canExclusive = withExclusive
+    )),
+    BmbInvalidationParameter(
+      canInvalidate = withInvalidate,
+      canSync = withInvalidate,
+      invalidateLength = log2Up(this.bytePerLine),
+      invalidateAlignment = BmbParameter.BurstAlignement.LENGTH
+    )
   )
 }
 
@@ -399,7 +400,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
       val buffer = new Area {
         val stream = cmd.toEvent().m2sPipe()
         val address = Reg(UInt(p.addressWidth bits))
-        val length = Reg(UInt(pipelinedMemoryBusConfig.lengthWidth bits))
+        val length = Reg(UInt(pipelinedMemoryBusConfig.access.lengthWidth bits))
         val write  = Reg(Bool)
         val exclusive = Reg(Bool)
         val data = Reg(Bits(p.memDataWidth bits))

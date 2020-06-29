@@ -83,7 +83,7 @@ object IBusSimpleBus{
     canRead = true,
     canWrite = false,
     alignment     = BmbParameter.BurstAlignement.LENGTH,
-    maximumPendingTransactionPerId = if(plugin != null) plugin.pendingMax else Int.MaxValue
+    maximumPendingTransaction = if(plugin != null) plugin.pendingMax else Int.MaxValue
   )
 }
 

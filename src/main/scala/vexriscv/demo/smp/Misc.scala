@@ -11,8 +11,6 @@ import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
 import spinal.lib.eda.bench.Bench
 import spinal.lib.misc.Clint
 import spinal.lib.sim.{SimData, SparseMemory, StreamDriver, StreamMonitor, StreamReadyRandomizer}
-import vexriscv.demo.smp.VexRiscvLitexSmpClusterOpenSbi.{cpuCount, parameter}
-import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
 import vexriscv.{VexRiscv, VexRiscvConfig}
 import vexriscv.plugin.{CsrPlugin, DBusCachedPlugin, DebugPlugin, IBusCachedPlugin}
 
@@ -166,8 +164,8 @@ case class BmbToLiteDram(bmbParameter : BmbParameter,
   val resized = io.input.resize(liteDramParameter.dataWidth)
   val unburstified = resized.unburstify()
   case class Context() extends Bundle {
-    val context = Bits(unburstified.p.contextWidth bits)
-    val source  = UInt(unburstified.p.sourceWidth bits)
+    val context = Bits(unburstified.p.access.contextWidth bits)
+    val source  = UInt(unburstified.p.access.sourceWidth bits)
     val isWrite = Bool()
   }
 
@@ -183,7 +181,7 @@ case class BmbToLiteDram(bmbParameter : BmbParameter,
 
   io.output.cmd <-< outputCmd
 
-  if(bmbParameter.canWrite) {
+  if(bmbParameter.access.canWrite) {
     val wData = Stream(LiteDramNativeWData(liteDramParameter))
     wData.arbitrationFrom(dataFork.throwWhen(dataFork.isRead))
     wData.data := dataFork.data

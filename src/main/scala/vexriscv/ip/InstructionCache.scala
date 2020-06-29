@@ -5,7 +5,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4ReadOnly}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
-import spinal.lib.bus.bmb.{Bmb, BmbParameter}
+import spinal.lib.bus.bmb.{Bmb, BmbAccessParameter, BmbParameter, BmbSourceParameter}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 import vexriscv.plugin.{IBusSimpleBus, IBusSimplePlugin}
@@ -71,15 +71,16 @@ case class InstructionCacheConfig( cacheSize : Int,
   )
 
   def getBmbParameter() = BmbParameter(
-    addressWidth = 32,
-    dataWidth = memDataWidth,
-    lengthWidth = log2Up(this.bytePerLine),
-    sourceWidth = 0,
-    contextWidth = 0,
-    canRead = true,
-    canWrite = false,
-    alignment = BmbParameter.BurstAlignement.LENGTH,
-    maximumPendingTransactionPerId = 1
+    BmbAccessParameter(
+      addressWidth = 32,
+      dataWidth = memDataWidth
+    ).addSources(1, BmbSourceParameter(
+      lengthWidth = log2Up(this.bytePerLine),
+      contextWidth = 0,
+      canWrite = false,
+      alignment = BmbParameter.BurstAlignement.LENGTH,
+      maximumPendingTransaction = 1
+    ))
   )
 }
 
