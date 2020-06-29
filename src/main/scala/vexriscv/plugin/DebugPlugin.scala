@@ -25,12 +25,11 @@ case class DebugExtensionRsp() extends Bundle{
 }
 
 object DebugExtensionBus{
-  def getBmbAccessParameter(source : BmbAccessParameter) = BmbAccessCapabilities(
+  def getBmbAccessParameter(source : BmbAccessCapabilities) = source.copy(
     addressWidth = 8,
     dataWidth    = 32,
     lengthWidthMax  = 2,
-    sourceWidthMax  = source.sourceWidth,
-    contextWidthMax = source.contextWidth
+    alignment = BmbParameter.BurstAlignement.LENGTH
   )
 }
 

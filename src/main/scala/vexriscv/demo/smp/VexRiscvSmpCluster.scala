@@ -1,22 +1,22 @@
-//package vexriscv.demo.smp
-//
-//import spinal.core
-//import spinal.core._
-//import spinal.core.sim.{onSimEnd, simSuccess}
-//import spinal.lib._
-//import spinal.lib.bus.bmb.sim.BmbMemoryAgent
-//import spinal.lib.bus.bmb.{Bmb, BmbArbiter, BmbDecoder, BmbExclusiveMonitor, BmbInvalidateMonitor, BmbParameter}
-//import spinal.lib.bus.misc.SizeMapping
-//import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
-//import spinal.lib.com.jtag.sim.JtagTcp
-//import spinal.lib.system.debugger.SystemDebuggerConfig
-//import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
-//import vexriscv.plugin.{BranchPlugin, CsrAccess, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
-//import vexriscv.{Riscv, VexRiscv, VexRiscvConfig, plugin}
-//
-//import scala.collection.mutable
-//import scala.collection.mutable.ArrayBuffer
-//
+package vexriscv.demo.smp
+
+import spinal.core
+import spinal.core._
+import spinal.core.sim.{onSimEnd, simSuccess}
+import spinal.lib._
+import spinal.lib.bus.bmb.sim.BmbMemoryAgent
+import spinal.lib.bus.bmb.{Bmb, BmbArbiter, BmbDecoder, BmbExclusiveMonitor, BmbInvalidateMonitor, BmbParameter}
+import spinal.lib.bus.misc.SizeMapping
+import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
+import spinal.lib.com.jtag.sim.JtagTcp
+import spinal.lib.system.debugger.SystemDebuggerConfig
+import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
+import vexriscv.plugin.{BranchPlugin, CsrAccess, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
+import vexriscv.{Riscv, VexRiscv, VexRiscvConfig, plugin}
+
+import scala.collection.mutable
+import scala.collection.mutable.ArrayBuffer
+
 //
 //case class VexRiscvSmpClusterParameter( cpuConfigs : Seq[VexRiscvConfig])
 //
@@ -117,118 +117,118 @@
 //
 //
 //
-//object VexRiscvSmpClusterGen {
-//  def vexRiscvConfig(hartId : Int,
-//                     ioRange : UInt => Bool = (x => x(31 downto 28) === 0xF),
-//                     resetVector : Long = 0x80000000l,
-//                     iBusWidth : Int = 128,
-//                     dBusWidth : Int = 64) = {
-//
-//    val config = VexRiscvConfig(
-//      plugins = List(
-//        new MmuPlugin(
-//          ioRange = ioRange
-//        ),
-//        //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
-//        new IBusCachedPlugin(
-//          resetVector = resetVector,
-//          compressedGen = false,
-//          prediction = STATIC,
-//          historyRamSizeLog2 = 9,
-//          relaxPredictorAddress = true,
-//          injectorStage = false,
-//          relaxedPcCalculation = true,
-//          config = InstructionCacheConfig(
-//            cacheSize = 4096*2,
-//            bytePerLine = 64,
-//            wayCount = 2,
-//            addressWidth = 32,
-//            cpuDataWidth = 32,
-//            memDataWidth = iBusWidth,
-//            catchIllegalAccess = true,
-//            catchAccessFault = true,
-//            asyncTagMemory = false,
-//            twoCycleRam = false,
-//            twoCycleCache = true,
-//            reducedBankWidth = true
-//          ),
-//          memoryTranslatorPortConfig = MmuPortConfig(
-//            portTlbSize = 4,
-//            latency = 1,
-//            earlyRequireMmuLockup = true,
-//            earlyCacheHits = true
-//          )
-//        ),
-//        new DBusCachedPlugin(
-//          dBusCmdMasterPipe = dBusWidth == 32,
-//          dBusCmdSlavePipe = true,
-//          dBusRspSlavePipe = true,
-//          relaxedMemoryTranslationRegister = true,
-//          config = new DataCacheConfig(
-//            cacheSize         = 4096*2,
-//            bytePerLine       = 64,
-//            wayCount          = 2,
-//            addressWidth      = 32,
-//            cpuDataWidth      = 32,
-//            memDataWidth      = dBusWidth,
-//            catchAccessError  = true,
-//            catchIllegal      = true,
-//            catchUnaligned    = true,
-//            withLrSc = true,
-//            withAmo = true,
-//            withExclusive = true,
-//            withInvalidate = true,
-//            aggregationWidth = if(dBusWidth == 32) 0 else log2Up(dBusWidth/8)
-//            //          )
-//          ),
-//          memoryTranslatorPortConfig = MmuPortConfig(
-//            portTlbSize = 4,
-//            latency = 1,
-//            earlyRequireMmuLockup = true,
-//            earlyCacheHits = true
-//          )
-//        ),
-//        new DecoderSimplePlugin(
-//          catchIllegalInstruction = true
-//        ),
-//        new RegFilePlugin(
-//          regFileReadyKind = plugin.ASYNC,
-//          zeroBoot = true,
-//          x0Init = false
-//        ),
-//        new IntAluPlugin,
-//        new SrcPlugin(
-//          separatedAddSub = false
-//        ),
-//        new FullBarrelShifterPlugin(earlyInjection = false),
-//        //        new LightShifterPlugin,
-//        new HazardSimplePlugin(
-//          bypassExecute           = true,
-//          bypassMemory            = true,
-//          bypassWriteBack         = true,
-//          bypassWriteBackBuffer   = true,
-//          pessimisticUseSrc       = false,
-//          pessimisticWriteRegFile = false,
-//          pessimisticAddressMatch = false
-//        ),
-//        new MulPlugin,
-//        new MulDivIterativePlugin(
-//          genMul = false,
-//          genDiv = true,
-//          mulUnrollFactor = 32,
-//          divUnrollFactor = 1
-//        ),
-//        new CsrPlugin(CsrPluginConfig.openSbi(mhartid = hartId, misa = Riscv.misaToInt("imas")).copy(utimeAccess = CsrAccess.READ_ONLY)),
-//        new BranchPlugin(
-//          earlyBranch = false,
-//          catchAddressMisaligned = true,
-//          fenceiGenAsAJump = false
-//        ),
-//        new YamlPlugin(s"cpu$hartId.yaml")
-//      )
-//    )
-//    config
-//  }
+object VexRiscvSmpClusterGen {
+  def vexRiscvConfig(hartId : Int,
+                     ioRange : UInt => Bool = (x => x(31 downto 28) === 0xF),
+                     resetVector : Long = 0x80000000l,
+                     iBusWidth : Int = 128,
+                     dBusWidth : Int = 64) = {
+
+    val config = VexRiscvConfig(
+      plugins = List(
+        new MmuPlugin(
+          ioRange = ioRange
+        ),
+        //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
+        new IBusCachedPlugin(
+          resetVector = resetVector,
+          compressedGen = false,
+          prediction = STATIC,
+          historyRamSizeLog2 = 9,
+          relaxPredictorAddress = true,
+          injectorStage = false,
+          relaxedPcCalculation = true,
+          config = InstructionCacheConfig(
+            cacheSize = 4096*2,
+            bytePerLine = 64,
+            wayCount = 2,
+            addressWidth = 32,
+            cpuDataWidth = 32,
+            memDataWidth = iBusWidth,
+            catchIllegalAccess = true,
+            catchAccessFault = true,
+            asyncTagMemory = false,
+            twoCycleRam = false,
+            twoCycleCache = true,
+            reducedBankWidth = true
+          ),
+          memoryTranslatorPortConfig = MmuPortConfig(
+            portTlbSize = 4,
+            latency = 1,
+            earlyRequireMmuLockup = true,
+            earlyCacheHits = true
+          )
+        ),
+        new DBusCachedPlugin(
+          dBusCmdMasterPipe = dBusWidth == 32,
+          dBusCmdSlavePipe = true,
+          dBusRspSlavePipe = true,
+          relaxedMemoryTranslationRegister = true,
+          config = new DataCacheConfig(
+            cacheSize         = 4096*2,
+            bytePerLine       = 64,
+            wayCount          = 2,
+            addressWidth      = 32,
+            cpuDataWidth      = 32,
+            memDataWidth      = dBusWidth,
+            catchAccessError  = true,
+            catchIllegal      = true,
+            catchUnaligned    = true,
+            withLrSc = true,
+            withAmo = true,
+            withExclusive = true,
+            withInvalidate = true,
+            aggregationWidth = if(dBusWidth == 32) 0 else log2Up(dBusWidth/8)
+            //          )
+          ),
+          memoryTranslatorPortConfig = MmuPortConfig(
+            portTlbSize = 4,
+            latency = 1,
+            earlyRequireMmuLockup = true,
+            earlyCacheHits = true
+          )
+        ),
+        new DecoderSimplePlugin(
+          catchIllegalInstruction = true
+        ),
+        new RegFilePlugin(
+          regFileReadyKind = plugin.ASYNC,
+          zeroBoot = true,
+          x0Init = false
+        ),
+        new IntAluPlugin,
+        new SrcPlugin(
+          separatedAddSub = false
+        ),
+        new FullBarrelShifterPlugin(earlyInjection = false),
+        //        new LightShifterPlugin,
+        new HazardSimplePlugin(
+          bypassExecute           = true,
+          bypassMemory            = true,
+          bypassWriteBack         = true,
+          bypassWriteBackBuffer   = true,
+          pessimisticUseSrc       = false,
+          pessimisticWriteRegFile = false,
+          pessimisticAddressMatch = false
+        ),
+        new MulPlugin,
+        new MulDivIterativePlugin(
+          genMul = false,
+          genDiv = true,
+          mulUnrollFactor = 32,
+          divUnrollFactor = 1
+        ),
+        new CsrPlugin(CsrPluginConfig.openSbi(mhartid = hartId, misa = Riscv.misaToInt("imas")).copy(utimeAccess = CsrAccess.READ_ONLY)),
+        new BranchPlugin(
+          earlyBranch = false,
+          catchAddressMisaligned = true,
+          fenceiGenAsAJump = false
+        ),
+        new YamlPlugin(s"cpu$hartId.yaml")
+      )
+    )
+    config
+  }
 //  def vexRiscvCluster(cpuCount : Int, resetVector : Long = 0x80000000l) = VexRiscvSmpCluster(
 //    debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn")),
 //    p = VexRiscvSmpClusterParameter(
@@ -242,7 +242,7 @@
 //      vexRiscvCluster(4)
 //    }
 //  }
-//}
+}
 //
 //
 //
