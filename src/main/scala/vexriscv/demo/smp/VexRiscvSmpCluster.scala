@@ -5,21 +5,110 @@ import spinal.core._
 import spinal.core.sim.{onSimEnd, simSuccess}
 import spinal.lib._
 import spinal.lib.bus.bmb.sim.BmbMemoryAgent
-import spinal.lib.bus.bmb.{Bmb, BmbArbiter, BmbDecoder, BmbExclusiveMonitor, BmbInvalidateMonitor, BmbParameter}
-import spinal.lib.bus.misc.SizeMapping
-import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
+import spinal.lib.bus.bmb._
+import spinal.lib.bus.misc.{DefaultMapping, SizeMapping}
+import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig, WishboneToBmb, WishboneToBmbGenerator}
+import spinal.lib.com.jtag.{Jtag, JtagInstructionDebuggerGenerator, JtagTapInstructionCtrl}
 import spinal.lib.com.jtag.sim.JtagTcp
+import spinal.lib.com.jtag.xilinx.Bscane2BmbMasterGenerator
+import spinal.lib.generator.Handle
+import spinal.lib.misc.plic.PlicMapping
 import spinal.lib.system.debugger.SystemDebuggerConfig
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
 import vexriscv.plugin.{BranchPlugin, CsrAccess, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
-import vexriscv.{Riscv, VexRiscv, VexRiscvConfig, plugin}
+import vexriscv.{Riscv, VexRiscv, VexRiscvBmbGenerator, VexRiscvConfig, plugin}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import spinal.lib.generator._
 
-//
-//case class VexRiscvSmpClusterParameter( cpuConfigs : Seq[VexRiscvConfig])
-//
+case class VexRiscvSmpClusterParameter( cpuConfigs : Seq[VexRiscvConfig])
+
+class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator{
+  val cpuCount = p.cpuConfigs.size
+
+  val debugCd = ClockDomainResetGenerator()
+  debugCd.holdDuration.load(4095)
+  debugCd.makeExternal()
+
+  val systemCd = ClockDomainResetGenerator()
+  systemCd.holdDuration.load(63)
+  systemCd.setInput(debugCd)
+
+  this.onClockDomain(systemCd.outputClockDomain)
+
+  implicit val interconnect = BmbSmpInterconnectGenerator()
+
+  val debugBridge = JtagInstructionDebuggerGenerator() onClockDomain(debugCd.outputClockDomain)
+  debugBridge.jtagClockDomain.load(ClockDomain.external("jtag", withReset = false))
+
+  val debugPort = debugBridge.produceIo(debugBridge.logic.jtagBridge.io.ctrl)
+
+  val exclusiveMonitor = BmbExclusiveMonitorGenerator()
+  val invalidationMonitor = BmbInvalidateMonitorGenerator()
+  interconnect.addConnection(exclusiveMonitor.output, invalidationMonitor.input)
+  interconnect.masters(invalidationMonitor.output).withOutOfOrderDecoder()
+
+  val cores = for(cpuId <- 0 until cpuCount) yield new Area{
+    val cpu = VexRiscvBmbGenerator()
+    cpu.config.load(p.cpuConfigs(cpuId))
+    interconnect.addConnection(
+      cpu.dBus -> List(exclusiveMonitor.input)
+    )
+    cpu.enableDebugBmb(
+      debugCd = debugCd,
+      resetCd = systemCd,
+      mapping = SizeMapping(cpuId*0x1000, 0x1000)
+    )
+    interconnect.addConnection(debugBridge.bmb, cpu.debugBmb)
+  }
+}
+
+
+class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends VexRiscvSmpClusterBase(p) {
+  val peripheralBridge = BmbToWishboneGenerator(DefaultMapping)
+  val peripheral = peripheralBridge.produceIo(peripheralBridge.logic.io.output)
+  interconnect.slaves(peripheralBridge.bmb).forceAccessSourceDataWidth(32)
+
+  val plic = BmbPlicGenerator(0)
+  plic.priorityWidth.load(2)
+  plic.mapping.load(PlicMapping.sifive)
+
+  val plicWishboneBridge = WishboneToBmbGenerator()
+  val plicWishbone = plicWishboneBridge.produceIo(plicWishboneBridge.logic.io.input)
+  plicWishboneBridge.config.load(WishboneConfig(20, 32))
+  interconnect.addConnection(plicWishboneBridge.bmb, plic.bus)
+
+  val clint = BmbClintGenerator(0)
+
+  val clintWishboneBridge = WishboneToBmbGenerator()
+  val clintWishbone = clintWishboneBridge.produceIo(clintWishboneBridge.logic.io.input)
+  clintWishboneBridge.config.load(WishboneConfig(14, 32))
+  interconnect.addConnection(clintWishboneBridge.bmb, clint.bus)
+
+  val interrupts = add task (in Bits(32 bits))
+  for(i <- 1 to 31) yield plic.addInterrupt(interrupts.derivate(_.apply(i)), i)
+
+  for ((core, cpuId) <- cores.zipWithIndex) {
+    core.cpu.setTimerInterrupt(clint.timerInterrupt(cpuId))
+    core.cpu.setSoftwareInterrupt(clint.softwareInterrupt(cpuId))
+    plic.priorityWidth.load(2)
+    plic.mapping.load(PlicMapping.sifive)
+    plic.addTarget(core.cpu.externalInterrupt)
+    plic.addTarget(core.cpu.externalSupervisorInterrupt)
+    List(clint.logic, core.cpu.logic).produce {
+      for (plugin <- core.cpu.config.plugins) plugin match {
+        case plugin: CsrPlugin if plugin.utime != null => plugin.utime := clint.logic.io.time
+        case _ =>
+      }
+    }
+  }
+
+  clint.cpuCount.load(cpuCount)
+}
+
+
+
 //case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
 //                              debugClockDomain : ClockDomain) extends Component{
 //  val dBusParameter = p.cpuConfigs.head.plugins.find(_.isInstanceOf[DBusCachedPlugin]).get.asInstanceOf[DBusCachedPlugin].config.getBmbParameter()
