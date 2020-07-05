@@ -88,7 +88,8 @@ case class DataCacheConfig(cacheSize : Int,
       lengthWidth = log2Up(this.bytePerLine),
       contextWidth = (if(!withWriteResponse) 1 else 0) + (if(cpuDataWidth != memDataWidth) log2Up(memDataBytes) else 0),
       alignment  = BmbParameter.BurstAlignement.LENGTH,
-      canExclusive = withExclusive
+      canExclusive = withExclusive,
+      withCachedRead = true
     )),
     BmbInvalidationParameter(
       canInvalidate = withInvalidate,

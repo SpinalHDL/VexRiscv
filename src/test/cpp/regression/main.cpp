@@ -1248,8 +1248,13 @@ public:
     };
 
 	CpuRef riscvRef = CpuRef(this);
-
+    string vcdName;
+    Workspace* setVcdName(string name){
+        vcdName = name;
+        return this;
+    }
 	Workspace(string name){
+	    vcdName = name;
 	    //seed = VL_RANDOM_I(32)^VL_RANDOM_I(32)^0x1093472;
 	    //srand48(seed);
     //    setIStall(false);
@@ -1450,7 +1455,7 @@ public:
 		Verilated::traceEverOn(true);
 		tfp = new VerilatedVcdC;
 		top->trace(tfp, 99);
-		tfp->open((string(name)+ ".vcd").c_str());
+		tfp->open((vcdName + ".vcd").c_str());
 		#endif
 
 		// Reset
@@ -1679,7 +1684,7 @@ public:
 
 
 
-		dump(i);
+		dump(i+2);
 		dump(i+10);
 		#ifdef TRACE
 		tfp->close();
@@ -1750,6 +1755,7 @@ public:
 			#endif
 			case 0xF00FFF48u: mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data;break;
 			case 0xF00FFF4Cu: mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); break;
+			case 0xF00FFF50u: cout << "mTime " << *data << " : " << mTime << endl;
 			}
 			if((addr & 0xFFFFF000) == 0xF5670000){
 			    uint32_t t = 0x900FF000 | (addr & 0xFFF);
@@ -3970,14 +3976,15 @@ int main(int argc, char **argv, char **env) {
 			w.loadHex(RUN_HEX);
 			w.withRiscvRef();
 			#endif
-			//w.setIStall(false);
-			//w.setDStall(false);
+			w.setIStall(false);
+			w.setDStall(false);
 
 			#if defined(TRACE) || defined(TRACE_ACCESS)
 				//w.setCyclesPerSecond(5e3);
 				//printf("Speed reduced 5Khz\n");
 			#endif
 			w.run(0xFFFFFFFFFFFF);
+			exit(0);
 		}
 		#endif
 
@@ -4047,11 +4054,11 @@ int main(int argc, char **argv, char **env) {
 			    #ifndef COMPRESSED
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
-				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->run(10e4);)
+				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->setVcdName("machineCsr")->run(10e4);)
                 #else
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,   14,2,     15,5,16,17,1 };
-				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->run(10e4);)
+				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->setVcdName("machineCsrCompressed")->run(10e4);)
                 #endif
 			#endif
 //			#ifdef MMU

@@ -1,7 +1,7 @@
 package vexriscv
 
 import spinal.core._
-import spinal.lib.bus.bmb.{Bmb, BmbAccessCapabilities, BmbAccessParameter, BmbImplicitDebugDecoder, BmbParameter, BmbSmpInterconnectGenerator}
+import spinal.lib.bus.bmb.{Bmb, BmbAccessCapabilities, BmbAccessParameter, BmbImplicitDebugDecoder, BmbInvalidationParameter, BmbParameter, BmbSmpInterconnectGenerator}
 import spinal.lib.bus.misc.AddressMapping
 import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
 import spinal.lib.generator._
@@ -148,9 +148,17 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbSmpInterconnectGe
     }
   }
 
+  val invalidationSource = Handle[BmbInvalidationParameter]
+  val invalidationRequirements = Handle[BmbInvalidationParameter]
   if(interconnectSmp != null){
     interconnectSmp.addMaster(accessRequirements = parameterGenerator.iBusParameter.derivate(_.access), bus = iBus)
-    interconnectSmp.addMaster(accessRequirements = parameterGenerator.dBusParameter.derivate(_.access), bus = dBus)
+    interconnectSmp.addMaster(
+      accessRequirements = parameterGenerator.dBusParameter.derivate(_.access),
+      invalidationSource = invalidationSource,
+      invalidationCapabilities = invalidationSource,
+      invalidationRequirements = invalidationRequirements,
+      bus = dBus
+    )
   }
 
 }

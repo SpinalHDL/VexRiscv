@@ -23,6 +23,12 @@ case class VexRiscvConfig(){
   val plugins = ArrayBuffer[Plugin[VexRiscv]]()
 
   def add(that : Plugin[VexRiscv]) : this.type = {plugins += that;this}
+  def find[T](clazz: Class[T]): Option[T] = {
+    plugins.find(_.getClass == clazz) match {
+      case Some(x) => Some(x.asInstanceOf[T])
+      case None => None
+    }
+  }
 
   //Default Stageables
   object IS_RVC extends Stageable(Bool)
