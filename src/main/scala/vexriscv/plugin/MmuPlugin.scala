@@ -105,6 +105,10 @@ class MmuPlugin(ioRange : UInt => Bool,
         val id = port.id
         val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
         val cache = Vec(Reg(CacheLine()) init, port.args.portTlbSize)
+        val dirty = RegInit(False).allowUnsetRegToAvoidLatch
+        if(port.args.earlyRequireMmuLockup){
+          dirty clearWhen(!port.bus.cmd.last.isStuck)
+        }
 
         def toRsp[T <: Data](data : T, from : MemoryTranslatorCmd) : T = from match {
           case _ if from == port.bus.cmd.last => data
@@ -144,8 +148,8 @@ class MmuPlugin(ioRange : UInt => Bool,
           port.bus.rsp.allowRead := cacheLine.allowRead  || csr.status.mxr && cacheLine.allowExecute
           port.bus.rsp.allowWrite := cacheLine.allowWrite
           port.bus.rsp.allowExecute := cacheLine.allowExecute
-          port.bus.rsp.exception := cacheHit && (cacheLine.exception || cacheLine.allowUser && privilegeService.isSupervisor() && !csr.status.sum || !cacheLine.allowUser && privilegeService.isUser())
-          port.bus.rsp.refilling := !cacheHit
+          port.bus.rsp.exception := !dirty &&  cacheHit && (cacheLine.exception || cacheLine.allowUser && privilegeService.isSupervisor() && !csr.status.sum || !cacheLine.allowUser && privilegeService.isUser())
+          port.bus.rsp.refilling :=  dirty || !cacheHit
         } otherwise {
           port.bus.rsp.physicalAddress := port.bus.cmd.last.virtualAddress
           port.bus.rsp.allowRead := True
@@ -204,7 +208,7 @@ class MmuPlugin(ioRange : UInt => Bool,
         dBusAccess.cmd.data.assignDontCare()
         dBusAccess.cmd.writeMask.assignDontCare()
 
-        val refills = OHMasking.last(B(sortedPortsInfo.map(port => port.bus.cmd.last.isValid && port.bus.rsp.refilling)))
+        val refills = OHMasking.last(B(ports.map(port => port.handle.bus.cmd.last.isValid && port.requireMmuLockup && !port.dirty && !port.cacheHit)))
         switch(state){
           is(State.IDLE){
             when(refills.orR){
@@ -266,6 +270,9 @@ class MmuPlugin(ioRange : UInt => Bool,
           for((port, id) <- ports.zipWithIndex) {
             when(portSortedOh(id)) {
               port.entryToReplace.increment()
+              if(port.handle.args.earlyRequireMmuLockup) {
+                port.dirty := True
+              } //Avoid having non coherent TLB lookup
               for ((line, lineId) <- port.cache.zipWithIndex) {
                 when(port.entryToReplace === lineId){
                   val superPage = state === State.L1_RSP
@@ -289,8 +296,15 @@ class MmuPlugin(ioRange : UInt => Bool,
     val fenceStage = stages.last
     fenceStage plug new Area{
       import fenceStage._
-      when(arbitration.isValid && input(IS_SFENCE_VMA)){ // || csrService.isWriting(CSR.SATP)
+      when(arbitration.isValid && input(IS_SFENCE_VMA)){
         for(port <- core.ports; line <- port.cache) line.valid := False //Assume that the instruction already fetched into the pipeline are ok
+      }
+
+      csrService.duringWrite(CSR.SATP){
+        for(port <- core.ports; line <- port.cache) line.valid := False
+        core.ports.filter(_.handle.args.earlyRequireMmuLockup).foreach{p =>
+          p.dirty := True
+        }
       }
     }
   }
