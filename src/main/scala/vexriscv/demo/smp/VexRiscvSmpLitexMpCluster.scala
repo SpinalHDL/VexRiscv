@@ -1,33 +1,73 @@
-//package vexriscv.demo.smp
-//
-//import spinal.core._
-//import spinal.lib.bus.bmb._
-//import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig, WishboneSlaveFactory}
-//import spinal.lib.com.jtag.{Jtag, JtagTap, JtagTapInstructionCtrl}
-//import spinal.lib._
-//import spinal.lib.blackbox.xilinx.s7.BSCANE2
-//import spinal.lib.bus.bmb.sim.{BmbMemoryMultiPort, BmbMemoryTester}
-//import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
-//import spinal.lib.com.jtag.sim.JtagTcp
-//import spinal.lib.com.jtag.xilinx.Bscane2BmbMaster
-//import spinal.lib.eda.bench.Bench
-//import spinal.lib.misc.Clint
-//import spinal.lib.misc.plic.{PlicGatewayActiveHigh, PlicMapper, PlicMapping, PlicTarget}
-//import spinal.lib.sim.{SimData, SparseMemory, StreamDriver, StreamMonitor, StreamReadyRandomizer}
-//import spinal.lib.system.debugger.{JtagBridgeNoTap, SystemDebugger, SystemDebuggerConfig}
-//import sun.jvm.hotspot.oops.DataLayout
-//import vexriscv.demo.smp.VexRiscvLitexSmpMpClusterOpenSbi.{cpuCount, parameter}
-//import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
-//import vexriscv.{VexRiscv, VexRiscvConfig}
-//import vexriscv.plugin.{CsrPlugin, DBusCachedPlugin, DebugPlugin, IBusCachedPlugin}
-//
-//import scala.collection.mutable
-//import scala.util.Random
-//
-//
-//case class VexRiscvLitexSmpMpClusterParameter( cluster : VexRiscvSmpClusterParameter,
-//                                             liteDram : LiteDramNativeParameter,
-//                                             liteDramMapping : AddressMapping)
+package vexriscv.demo.smp
+
+import spinal.core._
+import spinal.lib.bus.bmb._
+import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
+import spinal.lib.bus.wishbone.{WishboneConfig, WishboneToBmbGenerator}
+import spinal.lib.sim.SparseMemory
+import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
+
+case class VexRiscvLitexSmpMpClusterParameter( cluster : VexRiscvSmpClusterParameter,
+                                             liteDram : LiteDramNativeParameter,
+                                             liteDramMapping : AddressMapping)
+
+class VexRiscvLitexSmpMpCluster(p : VexRiscvLitexSmpMpClusterParameter) extends VexRiscvSmpClusterWithPeripherals(p.cluster) {
+  val iArbiter = BmbSmpBridgeGenerator()
+  val iBridge = BmbToLiteDramGenerator(p.liteDramMapping)
+  val dBridge = BmbToLiteDramGenerator(p.liteDramMapping)
+
+  for(core <- cores) interconnect.addConnection(core.cpu.iBus -> List(iArbiter.bmb))
+  interconnect.addConnection(
+    iArbiter.bmb               -> List(iBridge.bmb, peripheralBridge.bmb),
+    invalidationMonitor.output -> List(dBridge.bmb, peripheralBridge.bmb)
+  )
+  interconnect.masters(invalidationMonitor.output).withOutOfOrderDecoder()
+
+  dBridge.liteDramParameter.load(p.liteDram)
+  iBridge.liteDramParameter.load(p.liteDram)
+
+  // Interconnect pipelining (FMax)
+  for(core <- cores) {
+    interconnect.setPipelining(core.cpu.dBus)(cmdValid = true, cmdReady = true, rspValid = true)
+    interconnect.setPipelining(core.cpu.iBus)(cmdHalfRate = true, rspValid = true)
+    interconnect.setPipelining(iArbiter.bmb)(cmdHalfRate = true, rspValid = true)
+  }
+  interconnect.setPipelining(invalidationMonitor.output)(cmdValid = true, cmdReady = true, rspValid = true)
+  interconnect.setPipelining(peripheralBridge.bmb)(cmdHalfRate = true, rspValid = true)
+}
+
+
+object VexRiscvLitexSmpMpClusterGen extends App {
+  for(cpuCount <- List(1,2,4,8)) {
+    def parameter = VexRiscvLitexSmpMpClusterParameter(
+      cluster = VexRiscvSmpClusterParameter(
+        cpuConfigs = List.tabulate(cpuCount) { hartId =>
+          vexRiscvConfig(
+            hartId = hartId,
+            ioRange = address => address.msb,
+            resetVector = 0
+          )
+        }
+      ),
+      liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
+      liteDramMapping = SizeMapping(0x40000000l, 0x40000000l)
+    )
+
+    def dutGen = {
+      val toplevel = new VexRiscvLitexSmpMpCluster(
+        p = parameter
+      ).toComponent()
+      toplevel
+    }
+
+    val genConfig = SpinalConfig().addStandardMemBlackboxing(blackboxByteEnables)
+    //  genConfig.generateVerilog(Bench.compressIo(dutGen))
+    genConfig.generateVerilog(dutGen.setDefinitionName(s"VexRiscvLitexSmpMpCluster_${cpuCount}c"))
+  }
+}
+
+
+
 //
 ////addAttribute("""mark_debug = "true"""")
 //class VexRiscvLitexSmpMpCluster(val p : VexRiscvLitexSmpMpClusterParameter,

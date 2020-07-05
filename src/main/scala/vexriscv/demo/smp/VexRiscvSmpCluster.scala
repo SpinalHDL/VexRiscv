@@ -108,104 +108,6 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
 }
 
 
-
-//case class VexRiscvSmpCluster(p : VexRiscvSmpClusterParameter,
-//                              debugClockDomain : ClockDomain) extends Component{
-//  val dBusParameter = p.cpuConfigs.head.plugins.find(_.isInstanceOf[DBusCachedPlugin]).get.asInstanceOf[DBusCachedPlugin].config.getBmbParameter()
-//  val dBusArbiterParameter = dBusParameter.copy(sourceWidth = log2Up(p.cpuConfigs.size))
-//  val exclusiveMonitorParameter = dBusArbiterParameter
-//  val invalidateMonitorParameter = BmbExclusiveMonitor.outputParameter(exclusiveMonitorParameter)
-//  val dMemParameter = BmbInvalidateMonitor.outputParameter(invalidateMonitorParameter)
-//
-//  val iBusParameter = p.cpuConfigs.head.plugins.find(_.isInstanceOf[IBusCachedPlugin]).get.asInstanceOf[IBusCachedPlugin].config.getBmbParameter()
-//  val iBusArbiterParameter = iBusParameter//.copy(sourceWidth = log2Up(p.cpuConfigs.size))
-//  val iMemParameter = iBusArbiterParameter
-//
-//  val io = new Bundle {
-//    val dMem = master(Bmb(dMemParameter))
-////    val iMem = master(Bmb(iMemParameter))
-//    val iMems = Vec(master(Bmb(iMemParameter)), p.cpuConfigs.size)
-//    val timerInterrupts = in Bits(p.cpuConfigs.size bits)
-//    val externalInterrupts = in Bits(p.cpuConfigs.size bits)
-//    val softwareInterrupts = in Bits(p.cpuConfigs.size bits)
-//    val externalSupervisorInterrupts = in Bits(p.cpuConfigs.size bits)
-//    val debugBus = slave(Bmb(SystemDebuggerConfig().getBmbParameter.copy(addressWidth = 20)))
-//    val debugReset = out Bool()
-//    val time = in UInt(64 bits)
-//  }
-//
-//  io.debugReset := False
-//  val cpus = for((cpuConfig, cpuId) <- p.cpuConfigs.zipWithIndex) yield new Area{
-//    var iBus : Bmb = null
-//    var dBus : Bmb = null
-//    var debug : Bmb = null
-//    cpuConfig.plugins.foreach {
-//      case plugin: DebugPlugin => debugClockDomain{
-//        plugin.debugClockDomain = debugClockDomain
-//      }
-//      case _ =>
-//    }
-//    cpuConfig.plugins += new DebugPlugin(debugClockDomain)
-//    val core = new VexRiscv(cpuConfig)
-//    core.plugins.foreach {
-//      case plugin: IBusCachedPlugin => iBus = plugin.iBus.toBmb()
-//      case plugin: DBusCachedPlugin => dBus = plugin.dBus.toBmb().pipelined(cmdValid = true)
-//      case plugin: CsrPlugin => {
-//        plugin.softwareInterrupt := io.softwareInterrupts(cpuId)
-//        plugin.externalInterrupt := io.externalInterrupts(cpuId)
-//        plugin.timerInterrupt := io.timerInterrupts(cpuId)
-//        if (plugin.config.supervisorGen) plugin.externalInterruptS := io.externalSupervisorInterrupts(cpuId)
-//        if (plugin.utime != null) plugin.utime := io.time
-//      }
-//      case plugin: DebugPlugin => debugClockDomain{
-//        io.debugReset setWhen(RegNext(plugin.io.resetOut))
-//        debug = plugin.io.bus.fromBmb()
-//      }
-//      case _ =>
-//    }
-//  }
-//
-//  val dBusArbiter = BmbArbiter(
-//    p = dBusArbiterParameter,
-//    portCount = cpus.size,
-//    lowerFirstPriority = false,
-//    inputsWithInv = cpus.map(_ => true),
-//    inputsWithSync = cpus.map(_ => true),
-//    pendingInvMax = 16
-//  )
-//
-//  (dBusArbiter.io.inputs, cpus).zipped.foreach(_ << _.dBus.pipelined(invValid = true, ackValid = true, syncValid = true))
-//
-//  val exclusiveMonitor = BmbExclusiveMonitor(
-//    inputParameter = exclusiveMonitorParameter,
-//    pendingWriteMax = 64
-//  )
-//  exclusiveMonitor.io.input << dBusArbiter.io.output.pipelined(cmdValid = true, cmdReady = true, rspValid = true)
-//
-//  val invalidateMonitor = BmbInvalidateMonitor(
-//    inputParameter = invalidateMonitorParameter,
-//    pendingInvMax = 16
-//  )
-//  invalidateMonitor.io.input << exclusiveMonitor.io.output
-//
-//  io.dMem << invalidateMonitor.io.output
-//
-//  (io.iMems, cpus).zipped.foreach(_ << _.iBus)
-//
-//  val debug = debugClockDomain on new Area{
-//    val arbiter = BmbDecoder(
-//      p            = io.debugBus.p,
-//      mappings     = List.tabulate(p.cpuConfigs.size)(i => SizeMapping(0x00000 + i*0x1000, 0x1000)),
-//      capabilities = List.fill(p.cpuConfigs.size)(io.debugBus.p),
-//      pendingMax   = 2
-//    )
-//    arbiter.io.input << io.debugBus
-//    (arbiter.io.outputs, cpus.map(_.debug)).zipped.foreach(_ >> _)
-//  }
-//}
-//
-//
-//
 object VexRiscvSmpClusterGen {
   def vexRiscvConfig(hartId : Int,
                      ioRange : UInt => Bool = (x => x(31 downto 28) === 0xF),
@@ -222,7 +124,7 @@ object VexRiscvSmpClusterGen {
         new IBusCachedPlugin(
           resetVector = resetVector,
           compressedGen = false,
-          prediction = STATIC,
+          prediction = vexriscv.plugin.NONE,
           historyRamSizeLog2 = 9,
           relaxPredictorAddress = true,
           injectorStage = false,
@@ -309,7 +211,7 @@ object VexRiscvSmpClusterGen {
         ),
         new CsrPlugin(CsrPluginConfig.openSbi(mhartid = hartId, misa = Riscv.misaToInt("imas")).copy(utimeAccess = CsrAccess.READ_ONLY)),
         new BranchPlugin(
-          earlyBranch = false,
+          earlyBranch = true,
           catchAddressMisaligned = true,
           fenceiGenAsAJump = false
         ),
@@ -318,6 +220,8 @@ object VexRiscvSmpClusterGen {
     )
     config
   }
+
+
 //  def vexRiscvCluster(cpuCount : Int, resetVector : Long = 0x80000000l) = VexRiscvSmpCluster(
 //    debugClockDomain = ClockDomain.current.copy(reset = Bool().setName("debugResetIn")),
 //    p = VexRiscvSmpClusterParameter(

@@ -3,8 +3,10 @@ package vexriscv.demo.smp
 import spinal.core._
 import spinal.lib.bus.bmb._
 import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
+import spinal.lib.bus.wishbone.{WishboneConfig, WishboneToBmbGenerator}
 import spinal.lib.sim.SparseMemory
 import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
+import vexriscv.plugin.DBusCachedPlugin
 
 
 case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParameter,
@@ -26,6 +28,17 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
 
   dBridge.liteDramParameter.load(p.liteDram)
   iBridge.liteDramParameter.load(p.liteDram)
+
+  // Coherent DMA interface
+  val dmaBridge = WishboneToBmbGenerator()
+  val dmaWishbone = dmaBridge.produceIo(dmaBridge.logic.io.input)
+  val dmaDataWidth = p.cluster.cpuConfigs.head.find(classOf[DBusCachedPlugin]).get.config.memDataWidth
+  dmaBridge.config.load(WishboneConfig(
+    addressWidth = 32-log2Up(dmaDataWidth/8),
+    dataWidth = p.cluster.cpuConfigs.head.find(classOf[DBusCachedPlugin]).get.config.memDataWidth,
+    useSTALL = true
+  ))
+  interconnect.addConnection(dmaBridge.bmb, exclusiveMonitor.input)
 
   // Interconnect pipelining (FMax)
   for(core <- cores) {

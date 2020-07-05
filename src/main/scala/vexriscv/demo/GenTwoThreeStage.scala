@@ -4,12 +4,13 @@ import spinal.core.SpinalVerilog
 import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
 import vexriscv.plugin.{BranchPlugin, CsrPlugin, CsrPluginConfig, DBusSimplePlugin, DecoderSimplePlugin, DivPlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusSimplePlugin, IntAluPlugin, LightShifterPlugin, MulPlugin, MulSimplePlugin, NONE, RegFilePlugin, SrcPlugin, YamlPlugin}
 
-object GenTwoStage extends App{
+object GenTwoThreeStage extends App{
   def cpu(withMulDiv : Boolean,
           bypass : Boolean,
-          barrielShifter : Boolean) = new VexRiscv(
+          barrielShifter : Boolean,
+          withMemoryStage : Boolean) = new VexRiscv(
     config = VexRiscvConfig(
-      withMemoryStage = false,
+      withMemoryStage = withMemoryStage,
       withWriteBackStage = false,
       plugins = List(
         new IBusSimplePlugin(
@@ -42,8 +43,8 @@ object GenTwoStage extends App{
         ),
         new HazardSimplePlugin(
           bypassExecute           = bypass,
-          bypassMemory            = false,
-          bypassWriteBack         = false,
+          bypassMemory            = bypass,
+          bypassWriteBack         = bypass,
           bypassWriteBackBuffer   = bypass,
           pessimisticUseSrc       = false,
           pessimisticWriteRegFile = false,
@@ -67,5 +68,5 @@ object GenTwoStage extends App{
     )
   )
 
-  SpinalVerilog(cpu(false,false,false))
+  SpinalVerilog(cpu(true,true,true,true))
 }
