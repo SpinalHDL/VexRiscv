@@ -306,6 +306,7 @@ case class CsrWrite(that : Data, bitOffset : Int)
 case class CsrRead(that : Data , bitOffset : Int)
 case class CsrReadToWriteOverride(that : Data, bitOffset : Int) //Used for special cases, as MIP where there shadow stuff
 case class CsrOnWrite(doThat :() => Unit)
+case class CsrDuringWrite(doThat :() => Unit)
 case class CsrOnRead(doThat : () => Unit)
 case class CsrMapping() extends CsrInterface{
   val mapping = mutable.LinkedHashMap[Int,ArrayBuffer[Any]]()
@@ -314,6 +315,7 @@ case class CsrMapping() extends CsrInterface{
   override def w(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrWrite(that,bitOffset))
   override def r2w(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrReadToWriteOverride(that,bitOffset))
   override def onWrite(csrAddress: Int)(body: => Unit): Unit = addMappingAt(csrAddress, CsrOnWrite(() => body))
+  override def duringWrite(csrAddress: Int)(body: => Unit): Unit = addMappingAt(csrAddress, CsrDuringWrite(() => body))
   override def onRead(csrAddress: Int)(body: => Unit): Unit =  addMappingAt(csrAddress, CsrOnRead(() => {body}))
 }
 
@@ -321,6 +323,7 @@ case class CsrMapping() extends CsrInterface{
 trait CsrInterface{
   def onWrite(csrAddress : Int)(doThat : => Unit) : Unit
   def onRead(csrAddress : Int)(doThat : => Unit) : Unit
+  def duringWrite(csrAddress: Int)(body: => Unit): Unit
   def r(csrAddress : Int, bitOffset : Int, that : Data): Unit
   def w(csrAddress : Int, bitOffset : Int, that : Data): Unit
   def rw(csrAddress : Int, bitOffset : Int,that : Data): Unit ={
@@ -425,6 +428,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     }
   }
 
+
   //Interruption and exception data model
   case class Delegator(var enable : Bool, privilege : Int)
   case class InterruptSpec(var cond : Bool, id : Int, privilege : Int, delegators : List[Delegator])
@@ -440,6 +444,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def w(csrAddress: Int, bitOffset: Int, that: Data): Unit = csrMapping.w(csrAddress, bitOffset, that)
   override def r2w(csrAddress: Int, bitOffset: Int, that: Data): Unit = csrMapping.r2w(csrAddress, bitOffset, that)
   override def onWrite(csrAddress: Int)(body: => Unit): Unit = csrMapping.onWrite(csrAddress)(body)
+  override def duringWrite(csrAddress: Int)(body: => Unit): Unit = csrMapping.duringWrite(csrAddress)(body)
   override def onRead(csrAddress: Int)(body: => Unit): Unit = csrMapping.onRead(csrAddress)(body)
 
   override def setup(pipeline: VexRiscv): Unit = {
@@ -700,7 +705,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         if(supervisorGen) {
           redoInterface.valid := False
           redoInterface.payload := decode.input(PC)
-          onWrite(CSR.SATP){
+          duringWrite(CSR.SATP){
             execute.arbitration.flushNext := True
             redoInterface.valid := True
           }
@@ -1011,7 +1016,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       execute plug new Area {
         import execute._
         def previousStage = decode
-        val blockedBySideEffects =  stagesFromExecute.tail.map(s => s.arbitration.isValid).asBits().orR // && s.input(HAS_SIDE_EFFECT)  to improve be less pessimistic
+        val blockedBySideEffects =  stagesFromExecute.tail.map(s => s.arbitration.isValid).asBits().orR || pipeline.service(classOf[HazardService]).hazardOnExecuteRS// && s.input(HAS_SIDE_EFFECT)  to improve be less pessimistic
 
         val illegalAccess = True
         val illegalInstruction = False
@@ -1052,33 +1057,17 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
         val imm = IMM(input(INSTRUCTION))
         def writeSrc = input(SRC1)
-      //  val readDataValid = True
         val readData = Bits(32 bits)
         val writeInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE)
         val readInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE)
-        val writeEnable = writeInstruction && ! blockedBySideEffects && !arbitration.isStuckByOthers// &&  readDataRegValid
-        val readEnable  = readInstruction  && ! blockedBySideEffects && !arbitration.isStuckByOthers// && !readDataRegValid
-        //arbitration.isStuckByOthers, in case of the hazardPlugin is in the executeStage
-
-
-//        def readDataReg = memory.input(REGFILE_WRITE_DATA)  //PIPE OPT
-//        val readDataRegValid = Reg(Bool) setWhen(arbitration.isValid) clearWhen(!arbitration.isStuck)
-//        val writeDataEnable = input(INSTRUCTION)(13) ? writeSrc | B"xFFFFFFFF"
-//        val writeData = if(noCsrAlu) writeSrc else input(INSTRUCTION)(13).mux(
-//          False -> writeSrc,
-//          True -> Mux(input(INSTRUCTION)(12), ~writeSrc,  writeSrc)
-//        )
+        val writeEnable = writeInstruction && ! blockedBySideEffects && !arbitration.isStuckByOthers
+        val readEnable  = readInstruction  && ! blockedBySideEffects && !arbitration.isStuckByOthers
 
         val readToWriteData = CombInit(readData)
         val writeData = if(noCsrAlu) writeSrc else input(INSTRUCTION)(13).mux(
           False -> writeSrc,
           True -> Mux(input(INSTRUCTION)(12), readToWriteData & ~writeSrc, readToWriteData | writeSrc)
         )
-
-
-
-//        arbitration.haltItself setWhen(writeInstruction && !readDataRegValid)
-
 
         when(arbitration.isValid && input(IS_CSR)) {
           if(!pipelineCsrRead) output(REGFILE_WRITE_DATA) := readData
@@ -1101,7 +1090,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val csrAddress = input(INSTRUCTION)(csrRange)
         Component.current.afterElaboration{
           def doJobs(jobs : ArrayBuffer[Any]): Unit ={
-            val withWrite = jobs.exists(j => j.isInstanceOf[CsrWrite] || j.isInstanceOf[CsrOnWrite])
+            val withWrite = jobs.exists(j => j.isInstanceOf[CsrWrite] || j.isInstanceOf[CsrOnWrite] || j.isInstanceOf[CsrDuringWrite])
             val withRead = jobs.exists(j => j.isInstanceOf[CsrRead] || j.isInstanceOf[CsrOnRead])
             if(withRead && withWrite) {
               illegalAccess := False
@@ -1110,11 +1099,15 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
               if (withRead) illegalAccess.clearWhen(input(CSR_READ_OPCODE))
             }
 
+
+            for (element <- jobs) element match {
+              case element : CsrDuringWrite => when(writeInstruction){element.doThat()}
+              case _ =>
+            }
             when(writeEnable) {
               for (element <- jobs) element match {
                 case element: CsrWrite => element.that.assignFromBits(writeData(element.bitOffset, element.that.getBitsWidth bits))
-                case element: CsrOnWrite =>
-                  element.doThat()
+                case element: CsrOnWrite => element.doThat()
                 case _ =>
               }
             }
