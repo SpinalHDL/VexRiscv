@@ -128,7 +128,7 @@ object VexRiscvSmpClusterGen {
           historyRamSizeLog2 = 9,
           relaxPredictorAddress = true,
           injectorStage = false,
-          relaxedPcCalculation = true,
+          relaxedPcCalculation = false,
           config = InstructionCacheConfig(
             cacheSize = 4096*2,
             bytePerLine = 64,
@@ -191,7 +191,7 @@ object VexRiscvSmpClusterGen {
         new SrcPlugin(
           separatedAddSub = false
         ),
-        new FullBarrelShifterPlugin(earlyInjection = false),
+        new FullBarrelShifterPlugin(earlyInjection = true),
         //        new LightShifterPlugin,
         new HazardSimplePlugin(
           bypassExecute           = true,
