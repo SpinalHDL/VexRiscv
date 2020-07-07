@@ -30,6 +30,7 @@ case class DataCacheConfig(cacheSize : Int,
                            pendingMax : Int = 32,
                            directTlbHit : Boolean = false,
                            mergeExecuteMemory : Boolean = false,
+                           asyncTagMemory : Boolean = false,
                            aggregationWidth : Int = 0){
   assert(!(mergeExecuteMemory && (earlyDataMux || earlyWaysHits)))
   assert(!(earlyDataMux && !earlyWaysHits))
@@ -591,12 +592,18 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
     val data = Mem(Bits(memDataWidth bit), wayMemWordCount)
 
     //Reads
-    val tagsReadRsp = tags.readSync(tagsReadCmd.payload, tagsReadCmd.valid && !io.cpu.memory.isStuck)
+    val tagsReadRsp = asyncTagMemory match {
+      case false => tags.readSync(tagsReadCmd.payload, tagsReadCmd.valid && !io.cpu.memory.isStuck)
+      case true => tags.readAsync(RegNextWhen(tagsReadCmd.payload, io.cpu.execute.isValid && !io.cpu.memory.isStuck))
+    }
     val dataReadRspMem = data.readSync(dataReadCmd.payload, dataReadCmd.valid && !io.cpu.memory.isStuck)
     val dataReadRspSel = if(mergeExecuteMemory) io.cpu.writeBack.address else io.cpu.memory.address
     val dataReadRsp = dataReadRspMem.subdivideIn(cpuDataWidth bits).read(dataReadRspSel(memWordToCpuWordRange))
 
-    val tagsInvReadRsp = withInvalidate generate tags.readSync(tagsInvReadCmd.payload, tagsInvReadCmd.valid)
+    val tagsInvReadRsp = withInvalidate generate(asyncTagMemory match {
+      case false => tags.readSync(tagsInvReadCmd.payload, tagsInvReadCmd.valid)
+      case true => tags.readAsync(RegNextWhen(tagsInvReadCmd.payload, tagsInvReadCmd.valid))
+    })
 
     //Writes
     when(tagsWriteCmd.valid && tagsWriteCmd.way(i)){
