@@ -134,7 +134,7 @@ make clean run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yes SUPERVISO
 
 
 object LinuxGen {
-  def configFull(litex : Boolean, withMmu : Boolean) = {
+  def configFull(litex : Boolean, withMmu : Boolean, withSmp : Boolean = false) = {
     val config = VexRiscvConfig(
       plugins = List(
         //Uncomment the whole IBusSimplePlugin and comment IBusCachedPlugin if you want uncached iBus config
@@ -201,6 +201,8 @@ object LinuxGen {
             catchAccessError  = true,
             catchIllegal      = true,
             catchUnaligned    = true,
+            withExclusive = withSmp,
+            withInvalidate = withSmp,
             withLrSc = true,
             withAmo = true
 //          )

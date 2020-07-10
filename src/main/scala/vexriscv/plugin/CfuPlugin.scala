@@ -5,6 +5,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.bmb.WeakConnector
 import spinal.lib.bus.misc.{AddressMapping, DefaultMapping}
+import vexriscv.Riscv.IMM
 
 case class CfuPluginParameter(
                         CFU_VERSION : Int,
@@ -78,12 +79,20 @@ case class CfuBus(p : CfuBusParameter) extends Bundle with IMasterSlave{
   }
 }
 
+object CfuPlugin{
+  object Input2Kind extends SpinalEnum{
+    val RS, IMM_I = newElement()
+  }
+}
 
+case class CfuPluginEncoding(instruction : MaskedLiteral,
+                             functionId : List[Range],
+                             input2Kind : CfuPlugin.Input2Kind.E)
 
 class CfuPlugin( val stageCount : Int,
                  val allowZeroLatency : Boolean,
-                 val encoding : MaskedLiteral,
-                 val busParameter : CfuBusParameter) extends Plugin[VexRiscv]{
+                 val busParameter : CfuBusParameter,
+                 val encodings : List[CfuPluginEncoding] = null) extends Plugin[VexRiscv]{
   def p = busParameter
 
   assert(p.CFU_INPUTS <= 2)
@@ -99,7 +108,8 @@ class CfuPlugin( val stageCount : Int,
 
   val CFU_ENABLE = new Stageable(Bool()).setCompositeName(this, "CFU_ENABLE")
   val CFU_IN_FLIGHT = new Stageable(Bool()).setCompositeName(this, "CFU_IN_FLIGHT")
-
+  val CFU_ENCODING = new Stageable(UInt(log2Up(encodings.size) bits)).setCompositeName(this, "CFU_ENCODING")
+  val CFU_INPUT_2_KIND = new Stageable(CfuPlugin.Input2Kind()).setCompositeName(this, "CFU_ENCODING")
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline._
@@ -111,17 +121,53 @@ class CfuPlugin( val stageCount : Int,
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(CFU_ENABLE, False)
 
-    //custom-0
-    decoderService.add(List(
-      encoding  -> List(
+    for((encoding, id) <- encodings.zipWithIndex){
+      var actions = List(
         CFU_ENABLE -> True,
         REGFILE_WRITE_VALID      -> True,
         BYPASSABLE_EXECUTE_STAGE -> Bool(stageCount == 0),
         BYPASSABLE_MEMORY_STAGE  -> Bool(stageCount <= 1),
         RS1_USE -> True,
-        RS2_USE -> True
+        CFU_ENCODING -> id,
+        CFU_INPUT_2_KIND -> encoding.input2Kind()
       )
-    ))
+
+      encoding.input2Kind match {
+        case CfuPlugin.Input2Kind.RS =>
+          actions :+= RS2_USE -> True
+        case CfuPlugin.Input2Kind.IMM_I =>
+      }
+
+      decoderService.add(
+        key = encoding.instruction,
+        values = actions
+      )
+    }
+
+//    decoderService.add(List(
+//      //custom-0
+//      M"-------------------------0001011"  -> List(
+//        CFU_ENABLE -> True,
+//        REGFILE_WRITE_VALID      -> True,
+//        BYPASSABLE_EXECUTE_STAGE -> Bool(stageCount == 0),
+//        BYPASSABLE_MEMORY_STAGE  -> Bool(stageCount <= 1),
+//        RS1_USE -> True,
+//        RS2_USE -> True,
+//        CFU_IMM -> False
+//      ),
+//
+//      //custom-1
+//      M"-------------------------0101011"  -> List(
+//        CFU_ENABLE -> True,
+//        REGFILE_WRITE_VALID      -> True,
+//        BYPASSABLE_EXECUTE_STAGE -> Bool(stageCount == 0),
+//        BYPASSABLE_MEMORY_STAGE  -> Bool(stageCount <= 1),
+//        RS1_USE -> True,
+//        CFU_IMM -> True
+//      )
+//    ))
+
+
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -139,11 +185,16 @@ class CfuPlugin( val stageCount : Int,
       bus.cmd.valid := (schedule || hold) && !fired
       arbitration.haltItself setWhen(bus.cmd.valid && !bus.cmd.ready)
 
-      bus.cmd.function_id := U(input(INSTRUCTION)(14 downto 12)).resized
+//      bus.cmd.function_id := U(input(INSTRUCTION)(14 downto 12)).resized
+      val functionsIds = encodings.map(e => U(Cat(e.functionId.map(r => input(INSTRUCTION)(r))), busParameter.CFU_FUNCTION_ID_W bits))
+      bus.cmd.function_id := functionsIds.read(input(CFU_ENCODING))
       bus.cmd.reorder_id := 0
       bus.cmd.request_id := 0
       if(p.CFU_INPUTS >= 1) bus.cmd.inputs(0) := input(RS1)
-      if(p.CFU_INPUTS >= 2) bus.cmd.inputs(1) := input(RS2)
+      if(p.CFU_INPUTS >= 2)  bus.cmd.inputs(1) := input(CFU_INPUT_2_KIND).mux(
+        CfuPlugin.Input2Kind.RS -> input(RS2),
+        CfuPlugin.Input2Kind.IMM_I -> IMM(input(INSTRUCTION)).i_sext
+      )
     }
 
     joinStage plug new Area{

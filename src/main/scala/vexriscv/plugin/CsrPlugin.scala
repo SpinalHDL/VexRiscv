@@ -8,6 +8,7 @@ import vexriscv.plugin.IntAluPlugin.{ALU_BITWISE_CTRL, ALU_CTRL, AluBitwiseCtrlE
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable
+import spinal.core.sim._
 
 /**
   * Created by spinalvm on 21.03.17.
@@ -38,7 +39,7 @@ case class CsrPluginConfig(
                             marchid             : BigInt,
                             mimpid              : BigInt,
                             mhartid             : BigInt,
-                            misaExtensionsInit   : Int,
+                            misaExtensionsInit  : Int,
                             misaAccess          : CsrAccess,
                             mtvecAccess         : CsrAccess,
                             mtvecInit           : BigInt,
@@ -65,8 +66,11 @@ case class CsrPluginConfig(
                             scycleAccess        : CsrAccess = CsrAccess.NONE,
                             sinstretAccess      : CsrAccess = CsrAccess.NONE,
                             satpAccess          : CsrAccess = CsrAccess.NONE,
+                            utimeAccess         :CsrAccess = CsrAccess.NONE,
                             medelegAccess       : CsrAccess = CsrAccess.NONE,
                             midelegAccess       : CsrAccess = CsrAccess.NONE,
+                            withExternalMhartid : Boolean = false,
+                            mhartidWidth        : Int = 0,
                             pipelineCsrRead     : Boolean = false,
                             pipelinedInterrupt  : Boolean = true,
                             csrOhDecoder        : Boolean = true,
@@ -83,6 +87,46 @@ object CsrPluginConfig{
   def all : CsrPluginConfig = all(0x00000020l)
   def small : CsrPluginConfig = small(0x00000020l)
   def smallest : CsrPluginConfig = smallest(0x00000020l)
+
+  def openSbi(mhartid : Int, misa : Int) = CsrPluginConfig(
+    catchIllegalAccess  = true,
+    mvendorid           = 0,
+    marchid             = 0,
+    mimpid              = 0,
+    mhartid             = mhartid,
+    misaExtensionsInit  = misa,
+    misaAccess          = CsrAccess.READ_ONLY,
+    mtvecAccess         = CsrAccess.READ_WRITE,   //Could have been WRITE_ONLY :(
+    mtvecInit           = null,
+    mepcAccess          = CsrAccess.READ_WRITE,
+    mscratchGen         = true,
+    mcauseAccess        = CsrAccess.READ_ONLY,
+    mbadaddrAccess      = CsrAccess.READ_ONLY,
+    mcycleAccess        = CsrAccess.NONE,
+    minstretAccess      = CsrAccess.NONE,
+    ucycleAccess        = CsrAccess.NONE,
+    wfiGenAsWait        = true,
+    ecallGen            = true,
+    xtvecModeGen        = false,
+    noCsrAlu            = false,
+    wfiGenAsNop         = false,
+    ebreakGen           = false, //TODO
+    userGen             = true,
+    supervisorGen       = true,
+    sscratchGen         = true,
+    stvecAccess         = CsrAccess.READ_WRITE,
+    sepcAccess          = CsrAccess.READ_WRITE,
+    scauseAccess        = CsrAccess.READ_WRITE,
+    sbadaddrAccess      = CsrAccess.READ_WRITE,
+    scycleAccess        = CsrAccess.NONE,
+    sinstretAccess      = CsrAccess.NONE,
+    satpAccess          = CsrAccess.NONE,
+    medelegAccess       = CsrAccess.READ_WRITE,  //Could have been WRITE_ONLY :(
+    midelegAccess       = CsrAccess.READ_WRITE,  //Could have been WRITE_ONLY :(
+    pipelineCsrRead     = false,
+    deterministicInteruptionEntry  = false
+  )
+
   def linuxMinimal(mtVecInit : BigInt) = CsrPluginConfig(
     catchIllegalAccess  = true,
     mvendorid           = 1,
@@ -346,6 +390,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var contextSwitching : Bool = null
   var thirdPartyWake : Bool = null
   var inWfi : Bool = null
+  var externalMhartId : UInt = null
+  var utime : UInt = null
 
   override def askWake(): Unit = thirdPartyWake := True
 
@@ -474,6 +520,9 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
 
     pipeline.update(MPP, UInt(2 bits))
+
+    if(withExternalMhartid) externalMhartId = in UInt(mhartidWidth bits)
+    if(utimeAccess != CsrAccess.NONE) utime = in UInt(64 bits) setName("utime")
   }
 
   def inhibateInterrupts() : Unit = allowInterrupts := False
@@ -559,7 +608,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       if(mvendorid != null) READ_ONLY(CSR.MVENDORID, U(mvendorid))
       if(marchid   != null) READ_ONLY(CSR.MARCHID  , U(marchid  ))
       if(mimpid    != null) READ_ONLY(CSR.MIMPID   , U(mimpid   ))
-      if(mhartid   != null) READ_ONLY(CSR.MHARTID  , U(mhartid  ))
+      if(mhartid   != null && !withExternalMhartid) READ_ONLY(CSR.MHARTID  , U(mhartid  ))
+      if(withExternalMhartid) READ_ONLY(CSR.MHARTID  , externalMhartId)
       misaAccess(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
 
       //Machine CSR
@@ -586,6 +636,11 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       //User CSR
       ucycleAccess(CSR.UCYCLE, mcycle(31 downto 0))
       ucycleAccess(CSR.UCYCLEH, mcycle(63 downto 32))
+
+      if(utimeAccess != CsrAccess.NONE) {
+        utimeAccess(CSR.UTIME,  utime(31 downto 0))
+        utimeAccess(CSR.UTIMEH, utime(63 downto 32))
+      }
 
       pipeline(MPP) := mstatus.MPP
     }
@@ -834,7 +889,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       interruptJump := interrupt.valid && pipelineLiberator.done && allowInterrupts
       if(pipelinedInterrupt) interrupt.valid clearWhen(interruptJump) //avoid double fireing
 
-      val hadException = RegNext(exception) init(False)
+      val hadException = RegNext(exception) init(False) addTag(Verilator.public)
       pipelineLiberator.done.clearWhen(hadException)
 
 

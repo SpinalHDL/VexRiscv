@@ -1,7 +1,7 @@
 package vexriscv
 
 import java.io.{File, OutputStream}
-import java.util.concurrent.TimeUnit
+import java.util.concurrent.{ForkJoinPool, TimeUnit}
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfterAll, FunSuite, ParallelTestExecution, Tag, Transformer}
@@ -321,9 +321,12 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-    val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
+    val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
+    val noWriteBack = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
+
 
     if(r.nextDouble() < 0.5){
+      val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
       val latency = r.nextInt(5) + 1
       val compressed = r.nextDouble() < rvcRate
       val injectorStage = r.nextBoolean() || latency == 1
@@ -347,14 +350,20 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
         override def instructionAnticipatedOk() = injectorStage
       }
     } else {
+      val twoStageMmu = r.nextBoolean()
+      val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig(portTlbSize = 4, latency = if(twoStageMmu) 1 else 0, earlyRequireMmuLockup = Random.nextBoolean() && twoStageMmu, earlyCacheHits = Random.nextBoolean() && twoStageMmu) else null
+
       val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
       val compressed = r.nextDouble() < rvcRate
       val tighlyCoupled = r.nextBoolean() && !catchAll
+      val reducedBankWidth = r.nextBoolean()
 //      val tighlyCoupled = false
       val prediction = random(r, List(NONE, STATIC, DYNAMIC, DYNAMIC_TARGET))
       val relaxedPcCalculation, twoCycleCache, injectorStage = r.nextBoolean()
       val twoCycleRam = r.nextBoolean() && twoCycleCache
-      val bytePerLine = List(8,16,32,64)(r.nextInt(4))
+      val twoCycleRamInnerMux = r.nextBoolean() && twoCycleRam
+      val memDataWidth = List(32,64,128)(r.nextInt(3))
+      val bytePerLine = Math.max(memDataWidth/8, List(8,16,32,64)(r.nextInt(4)))
       var cacheSize = 0
       var wayCount = 0
       do{
@@ -362,8 +371,8 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
 
-      new VexRiscvPosition("Cached" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")+ (if(tighlyCoupled)"Tc" else "")) with InstructionAnticipatedPosition{
-        override def testParam = "IBUS=CACHED" + (if(compressed) " COMPRESSED=yes" else "") + (if(tighlyCoupled)" IBUS_TC=yes" else "")
+      new VexRiscvPosition(s"Cached${memDataWidth}d" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")+ (if(tighlyCoupled)"Tc" else "")) with InstructionAnticipatedPosition{
+        override def testParam = s"IBUS=CACHED IBUS_DATA_WIDTH=$memDataWidth" + (if(compressed) " COMPRESSED=yes" else "") + (if(tighlyCoupled)" IBUS_TC=yes" else "")
         override def applyOn(config: VexRiscvConfig): Unit = {
           val p = new IBusCachedPlugin(
             resetVector = 0x80000000l,
@@ -378,12 +387,14 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
               wayCount = wayCount,
               addressWidth = 32,
               cpuDataWidth = 32,
-              memDataWidth = 32,
+              memDataWidth = memDataWidth,
               catchIllegalAccess = catchAll,
               catchAccessFault = catchAll,
               asyncTagMemory = false,
               twoCycleRam = twoCycleRam,
-              twoCycleCache = twoCycleCache
+              twoCycleCache = twoCycleCache,
+              twoCycleRamInnerMux = twoCycleRamInnerMux,
+              reducedBankWidth = reducedBankWidth
             )
           )
           if(tighlyCoupled) p.newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0))
@@ -402,13 +413,12 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-    val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
     val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
     val noWriteBack = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
 
 
-
     if(r.nextDouble() < 0.4 || noMemory){
+      val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4, latency = 0) else null
       val withLrSc = catchAll
       val earlyInjection = r.nextBoolean() && !universes.contains(VexRiscvUniverse.NO_WRITEBACK)
       new VexRiscvPosition("Simple" + (if(earlyInjection) "Early" else "Late")) {
@@ -423,21 +433,27 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 //        override def isCompatibleWith(positions: Seq[ConfigPosition[VexRiscvConfig]]) = catchAll == positions.exists(_.isInstanceOf[CatchAllPosition])
       }
     } else {
-      val bytePerLine = List(8,16,32,64)(r.nextInt(4))
+      val twoStageMmu = r.nextBoolean() && !noMemory && !noWriteBack
+      val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig(portTlbSize = 4, latency = if(twoStageMmu) 1 else 0, earlyRequireMmuLockup = Random.nextBoolean() && twoStageMmu, earlyCacheHits = Random.nextBoolean() && twoStageMmu) else null
+      val memDataWidth = List(32,64,128)(r.nextInt(3))
+      val bytePerLine = Math.max(memDataWidth/8, List(8,16,32,64)(r.nextInt(4)))
       var cacheSize = 0
       var wayCount = 0
       val withLrSc = catchAll
-      val withAmo = catchAll && r.nextBoolean()
-      val dBusRspSlavePipe, relaxedMemoryTranslationRegister = r.nextBoolean()
+      val withSmp = withLrSc && r.nextBoolean()
+      val withAmo = catchAll && r.nextBoolean() || withSmp
+      val dBusRspSlavePipe = r.nextBoolean() || withSmp
+      val relaxedMemoryTranslationRegister = r.nextBoolean()
       val earlyWaysHits = r.nextBoolean() && !noWriteBack
+      val directTlbHit = r.nextBoolean() && mmuConfig.isInstanceOf[MmuPortConfig]
       val dBusCmdMasterPipe, dBusCmdSlavePipe = false //As it create test bench issues
 
       do{
         cacheSize = 512 << r.nextInt(5)
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
-      new VexRiscvPosition("Cached" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "")) {
-        override def testParam = "DBUS=CACHED " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")
+      new VexRiscvPosition(s"Cached${memDataWidth}d" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "") + (if(withSmp) "Smp " else "") + (if(directTlbHit) "Dtlb " else "") + (if(twoStageMmu) "Tsmmu " else "")) {
+        override def testParam = s"DBUS=CACHED DBUS_DATA_WIDTH=$memDataWidth " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")  + (if(withSmp) "DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes " else "")
 
         override def applyOn(config: VexRiscvConfig): Unit = {
           config.plugins += new DBusCachedPlugin(
@@ -447,13 +463,16 @@ class DBusDimension extends VexRiscvDimension("DBus") {
               wayCount = wayCount,
               addressWidth = 32,
               cpuDataWidth = 32,
-              memDataWidth = 32,
+              memDataWidth = memDataWidth,
               catchAccessError = catchAll,
               catchIllegal = catchAll,
               catchUnaligned = catchAll,
               withLrSc = withLrSc,
               withAmo = withAmo,
-              earlyWaysHits = earlyWaysHits
+              earlyWaysHits = earlyWaysHits,
+              withExclusive = withSmp,
+              withInvalidate = withSmp,
+              directTlbHit = directTlbHit
             ),
             dBusCmdMasterPipe = dBusCmdMasterPipe,
             dBusCmdSlavePipe = dBusCmdSlavePipe,
@@ -567,8 +586,13 @@ object PlayFuture extends App{
   Thread.sleep(8000)
 }
 
-class MultithreadedFunSuite extends FunSuite {
-  implicit val ec = ExecutionContext.global
+class MultithreadedFunSuite(threadCount : Int) extends FunSuite {
+  val finalThreadCount = if(threadCount > 0) threadCount else {
+    new oshi.SystemInfo().getHardware.getProcessor.getLogicalProcessorCount
+  }
+  implicit val ec = ExecutionContext.fromExecutorService(
+    new ForkJoinPool(finalThreadCount, ForkJoinPool.defaultForkJoinWorkerThreadFactory, null, true)
+  )
   class Job(body : => Unit){
     val originalOutput = Console.out
     val buffer = mutable.Queue[Char]()
@@ -605,7 +629,7 @@ class MultithreadedFunSuite extends FunSuite {
 }
 
 
-class FunTestPara extends MultithreadedFunSuite{
+class FunTestPara extends MultithreadedFunSuite(3){
   def createTest(name : String): Unit ={
     test(name){
       for(i <- 0 to 4) {
@@ -617,20 +641,20 @@ class FunTestPara extends MultithreadedFunSuite{
   (0 to 80).map(_.toString).foreach(createTest)
 }
 
-class FunTestPlay extends FunSuite {
-  def createTest(name : String): Unit ={
-    test(name){
-      Thread.sleep(500)
-      for(i <- 0 to 4) {
-        println(s"$name    $i")
-        Thread.sleep(500)
-      }
-    }
-  }
-  (0 to 80).map(_.toString).foreach(createTest)
-}
+//class FunTestPlay extends FunSuite {
+//  def createTest(name : String): Unit ={
+//    test(name){
+//      Thread.sleep(500)
+//      for(i <- 0 to 4) {
+//        println(s"$name    $i")
+//        Thread.sleep(500)
+//      }
+//    }
+//  }
+//  (0 to 80).map(_.toString).foreach(createTest)
+//}
 
-class TestIndividualFeatures extends MultithreadedFunSuite {
+class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VEXRISCV_REGRESSION_THREAD_COUNT", "0").toInt) {
   val testCount = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_COUNT", "100").toInt
   val seed = sys.env.getOrElse("VEXRISCV_REGRESSION_SEED", Random.nextLong().toString).toLong
   val testId : Set[Int] =  sys.env.get("VEXRISCV_REGRESSION_TEST_ID") match {
@@ -716,7 +740,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite {
 
       //Test RTL
       val debug = true
-      val stdCmd = (s"make run REGRESSION_PATH=../../src/test/cpp/regression VEXRISCV_FILE=VexRiscv.v WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=1000000000000l FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${coremarkRegression} THREAD_COUNT=1 ") + s" SEED=${testSeed} "
+      val stdCmd = (s"make run REGRESSION_PATH=../../src/test/cpp/regression VEXRISCV_FILE=VexRiscv.v WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=100000000000ll FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${coremarkRegression} THREAD_COUNT=1 ") + s" SEED=${testSeed} "
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
       println(testCmd)
       val str = doCmd(testCmd)

@@ -3,9 +3,9 @@
 
 verilator/configure:
 	rm -rf verilator*
-	wget https://www.veripool.org/ftp/verilator-4.012.tgz
+	wget https://www.veripool.org/ftp/verilator-4.034.tgz
 	tar xvzf verilator*.t*gz
-	mv verilator-4.012 verilator
+	mv verilator-4.034 verilator
 
 verilator/Makefile: verilator/configure
 	cd verilator
