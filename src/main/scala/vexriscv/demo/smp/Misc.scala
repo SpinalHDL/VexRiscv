@@ -9,10 +9,9 @@ import spinal.lib._
 import spinal.lib.bus.bmb.sim.{BmbMemoryMultiPort, BmbMemoryTester}
 import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
 import spinal.lib.eda.bench.Bench
+import spinal.lib.generator.{Generator, Handle}
 import spinal.lib.misc.Clint
 import spinal.lib.sim.{SimData, SparseMemory, StreamDriver, StreamMonitor, StreamReadyRandomizer}
-import vexriscv.demo.smp.VexRiscvLitexSmpClusterOpenSbi.{cpuCount, parameter}
-import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
 import vexriscv.{VexRiscv, VexRiscvConfig}
 import vexriscv.plugin.{CsrPlugin, DBusCachedPlugin, DebugPlugin, IBusCachedPlugin}
 
@@ -166,8 +165,8 @@ case class BmbToLiteDram(bmbParameter : BmbParameter,
   val resized = io.input.resize(liteDramParameter.dataWidth)
   val unburstified = resized.unburstify()
   case class Context() extends Bundle {
-    val context = Bits(unburstified.p.contextWidth bits)
-    val source  = UInt(unburstified.p.sourceWidth bits)
+    val context = Bits(unburstified.p.access.contextWidth bits)
+    val source  = UInt(unburstified.p.access.sourceWidth bits)
     val isWrite = Bool()
   }
 
@@ -183,7 +182,7 @@ case class BmbToLiteDram(bmbParameter : BmbParameter,
 
   io.output.cmd <-< outputCmd
 
-  if(bmbParameter.canWrite) {
+  if(bmbParameter.access.canWrite) {
     val wData = Stream(LiteDramNativeWData(liteDramParameter))
     wData.arbitrationFrom(dataFork.throwWhen(dataFork.isRead))
     wData.data := dataFork.data
@@ -246,4 +245,44 @@ object BmbToLiteDramTester extends App{
     val tester = new BmbMemoryTester(dut.io.input, dut.clockDomain, rspCounterTarget = 3000)
     dut.io.output.simSlave(tester.memory.memory, dut.clockDomain)
   }
+}
+
+case class BmbToLiteDramGenerator(mapping : AddressMapping)(implicit interconnect : BmbSmpInterconnectGenerator) extends Generator{
+  val liteDramParameter = createDependency[LiteDramNativeParameter]
+  val bmb = produce(logic.io.input)
+  val dram = produceIo(logic.io.output)
+
+  val accessSource = Handle[BmbAccessCapabilities]
+  val accessRequirements = createDependency[BmbAccessParameter]
+  interconnect.addSlave(
+    accessSource             = accessSource,
+    accessCapabilities       = accessSource,
+    accessRequirements       = accessRequirements,
+    bus                      = bmb,
+    mapping                  = mapping
+  )
+  val logic = add task BmbToLiteDram(
+    bmbParameter = accessRequirements.toBmbParameter(),
+    liteDramParameter = liteDramParameter,
+    wdataFifoSize = 32,
+    rdataFifoSize = 32
+  )
+}
+
+case class BmbToWishboneGenerator(mapping : AddressMapping)(implicit interconnect : BmbSmpInterconnectGenerator) extends Generator{
+  val bmb = produce(logic.io.input)
+  val wishbone = produce(logic.io.output)
+
+  val accessSource = Handle[BmbAccessCapabilities]
+  val accessRequirements = createDependency[BmbAccessParameter]
+  interconnect.addSlave(
+    accessSource             = accessSource,
+    accessCapabilities       = accessSource,
+    accessRequirements       = accessRequirements,
+    bus                      = bmb,
+    mapping                  = mapping
+  )
+  val logic = add task BmbToWishbone(
+    p = accessRequirements.toBmbParameter()
+  )
 }

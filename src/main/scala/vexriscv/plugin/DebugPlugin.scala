@@ -9,7 +9,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba3.apb.{Apb3, Apb3Config}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
-import spinal.lib.bus.bmb.{Bmb, BmbAccessParameter, BmbParameter}
+import spinal.lib.bus.bmb.{Bmb, BmbAccessCapabilities, BmbAccessParameter, BmbParameter}
 import spinal.lib.bus.simple.PipelinedMemoryBus
 
 import scala.collection.mutable.ArrayBuffer
@@ -25,12 +25,11 @@ case class DebugExtensionRsp() extends Bundle{
 }
 
 object DebugExtensionBus{
-  def getBmbAccessParameter(source : BmbAccessParameter) = BmbAccessParameter(
+  def getBmbAccessParameter(source : BmbAccessCapabilities) = source.copy(
     addressWidth = 8,
     dataWidth    = 32,
-    lengthWidth  = 2,
-    sourceWidth  = source.sourceWidth,
-    contextWidth = source.contextWidth
+    lengthWidthMax  = 2,
+    alignment = BmbParameter.BurstAlignement.LENGTH
   )
 }
 

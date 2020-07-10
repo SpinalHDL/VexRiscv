@@ -5,7 +5,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4Shared}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
-import spinal.lib.bus.bmb.{Bmb, BmbCmd, BmbParameter}
+import spinal.lib.bus.bmb.{Bmb, BmbAccessParameter, BmbCmd, BmbInvalidationParameter, BmbParameter, BmbSourceParameter}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 import vexriscv.plugin.DBusSimpleBus
@@ -30,6 +30,7 @@ case class DataCacheConfig(cacheSize : Int,
                            pendingMax : Int = 32,
                            directTlbHit : Boolean = false,
                            mergeExecuteMemory : Boolean = false,
+                           asyncTagMemory : Boolean = false,
                            aggregationWidth : Int = 0){
   assert(!(mergeExecuteMemory && (earlyDataMux || earlyWaysHits)))
   assert(!(earlyDataMux && !earlyWaysHits))
@@ -81,20 +82,22 @@ case class DataCacheConfig(cacheSize : Int,
   )
 
   def getBmbParameter() = BmbParameter(
-    addressWidth = 32,
-    dataWidth = memDataWidth,
-    lengthWidth = log2Up(this.bytePerLine),
-    sourceWidth = 0,
-    contextWidth = (if(!withWriteResponse) 1 else 0) + (if(cpuDataWidth != memDataWidth) log2Up(memDataBytes) else 0),
-    canRead = true,
-    canWrite = true,
-    alignment  = BmbParameter.BurstAlignement.LENGTH,
-    maximumPendingTransactionPerId = Int.MaxValue,
-    canInvalidate = withInvalidate,
-    canSync = withInvalidate,
-    canExclusive = withExclusive,
-    invalidateLength = log2Up(this.bytePerLine),
-    invalidateAlignment = BmbParameter.BurstAlignement.LENGTH
+    BmbAccessParameter(
+      addressWidth = 32,
+      dataWidth = memDataWidth
+    ).addSources(1, BmbSourceParameter(
+      lengthWidth = log2Up(this.bytePerLine),
+      contextWidth = (if(!withWriteResponse) 1 else 0) + (if(cpuDataWidth != memDataWidth) log2Up(memDataBytes) else 0),
+      alignment  = BmbParameter.BurstAlignement.LENGTH,
+      canExclusive = withExclusive,
+      withCachedRead = true
+    )),
+    BmbInvalidationParameter(
+      canInvalidate = withInvalidate,
+      canSync = withInvalidate,
+      invalidateLength = log2Up(this.bytePerLine),
+      invalidateAlignment = BmbParameter.BurstAlignement.LENGTH
+    )
   )
 }
 
@@ -399,7 +402,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
       val buffer = new Area {
         val stream = cmd.toEvent().m2sPipe()
         val address = Reg(UInt(p.addressWidth bits))
-        val length = Reg(UInt(pipelinedMemoryBusConfig.lengthWidth bits))
+        val length = Reg(UInt(pipelinedMemoryBusConfig.access.lengthWidth bits))
         val write  = Reg(Bool)
         val exclusive = Reg(Bool)
         val data = Reg(Bits(p.memDataWidth bits))
@@ -589,12 +592,18 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
     val data = Mem(Bits(memDataWidth bit), wayMemWordCount)
 
     //Reads
-    val tagsReadRsp = tags.readSync(tagsReadCmd.payload, tagsReadCmd.valid && !io.cpu.memory.isStuck)
+    val tagsReadRsp = asyncTagMemory match {
+      case false => tags.readSync(tagsReadCmd.payload, tagsReadCmd.valid && !io.cpu.memory.isStuck)
+      case true => tags.readAsync(RegNextWhen(tagsReadCmd.payload, io.cpu.execute.isValid && !io.cpu.memory.isStuck))
+    }
     val dataReadRspMem = data.readSync(dataReadCmd.payload, dataReadCmd.valid && !io.cpu.memory.isStuck)
     val dataReadRspSel = if(mergeExecuteMemory) io.cpu.writeBack.address else io.cpu.memory.address
     val dataReadRsp = dataReadRspMem.subdivideIn(cpuDataWidth bits).read(dataReadRspSel(memWordToCpuWordRange))
 
-    val tagsInvReadRsp = withInvalidate generate tags.readSync(tagsInvReadCmd.payload, tagsInvReadCmd.valid)
+    val tagsInvReadRsp = withInvalidate generate(asyncTagMemory match {
+      case false => tags.readSync(tagsInvReadCmd.payload, tagsInvReadCmd.valid)
+      case true => tags.readAsync(RegNextWhen(tagsInvReadCmd.payload, tagsInvReadCmd.valid))
+    })
 
     //Writes
     when(tagsWriteCmd.valid && tagsWriteCmd.way(i)){

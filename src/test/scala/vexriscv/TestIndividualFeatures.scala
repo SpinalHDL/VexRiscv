@@ -351,6 +351,7 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
       }
     } else {
       val twoStageMmu = r.nextBoolean()
+      val asyncTagMemory = r.nextBoolean()
       val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig(portTlbSize = 4, latency = if(twoStageMmu) 1 else 0, earlyRequireMmuLockup = Random.nextBoolean() && twoStageMmu, earlyCacheHits = Random.nextBoolean() && twoStageMmu) else null
 
       val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
@@ -371,7 +372,7 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
 
-      new VexRiscvPosition(s"Cached${memDataWidth}d" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")+ (if(tighlyCoupled)"Tc" else "")) with InstructionAnticipatedPosition{
+      new VexRiscvPosition(s"Cached${memDataWidth}d" + (if(twoCycleCache) "2cc" else "") + (if(injectorStage) "Injstage" else "") + (if(twoCycleRam) "2cr" else "")  + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(relaxedPcCalculation) "Relax" else "") + (if(compressed) "Rvc" else "") + prediction.getClass.getTypeName().replace("$","")+ (if(tighlyCoupled)"Tc" else "") + (if(asyncTagMemory) "Atm" else "")) with InstructionAnticipatedPosition{
         override def testParam = s"IBUS=CACHED IBUS_DATA_WIDTH=$memDataWidth" + (if(compressed) " COMPRESSED=yes" else "") + (if(tighlyCoupled)" IBUS_TC=yes" else "")
         override def applyOn(config: VexRiscvConfig): Unit = {
           val p = new IBusCachedPlugin(
@@ -390,7 +391,7 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
               memDataWidth = memDataWidth,
               catchIllegalAccess = catchAll,
               catchAccessFault = catchAll,
-              asyncTagMemory = false,
+              asyncTagMemory = asyncTagMemory,
               twoCycleRam = twoCycleRam,
               twoCycleCache = twoCycleCache,
               twoCycleRamInnerMux = twoCycleRamInnerMux,
@@ -447,12 +448,13 @@ class DBusDimension extends VexRiscvDimension("DBus") {
       val earlyWaysHits = r.nextBoolean() && !noWriteBack
       val directTlbHit = r.nextBoolean() && mmuConfig.isInstanceOf[MmuPortConfig]
       val dBusCmdMasterPipe, dBusCmdSlavePipe = false //As it create test bench issues
+      val asyncTagMemory = r.nextBoolean()
 
       do{
         cacheSize = 512 << r.nextInt(5)
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
-      new VexRiscvPosition(s"Cached${memDataWidth}d" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "") + (if(withSmp) "Smp " else "") + (if(directTlbHit) "Dtlb " else "") + (if(twoStageMmu) "Tsmmu " else "")) {
+      new VexRiscvPosition(s"Cached${memDataWidth}d" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "") + (if(withSmp) "Smp " else "") + (if(directTlbHit) "Dtlb " else "") + (if(twoStageMmu) "Tsmmu " else "") + (if(asyncTagMemory) "Atm" else "")) {
         override def testParam = s"DBUS=CACHED DBUS_DATA_WIDTH=$memDataWidth " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")  + (if(withSmp) "DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes " else "")
 
         override def applyOn(config: VexRiscvConfig): Unit = {
@@ -472,7 +474,8 @@ class DBusDimension extends VexRiscvDimension("DBus") {
               earlyWaysHits = earlyWaysHits,
               withExclusive = withSmp,
               withInvalidate = withSmp,
-              directTlbHit = directTlbHit
+              directTlbHit = directTlbHit,
+              asyncTagMemory = asyncTagMemory
             ),
             dBusCmdMasterPipe = dBusCmdMasterPipe,
             dBusCmdSlavePipe = dBusCmdSlavePipe,
@@ -669,6 +672,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VE
   val zephyrCount = sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")
   val demwRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEMW_RATE", "0.6").toDouble
   val demRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEM_RATE", "0.5").toDouble
+  val stopOnError = sys.env.getOrElse("VEXRISCV_REGRESSION_STOP_ON_ERROR", "no")
   val lock = new{}
 
 
@@ -740,7 +744,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VE
 
       //Test RTL
       val debug = true
-      val stdCmd = (s"make run REGRESSION_PATH=../../src/test/cpp/regression VEXRISCV_FILE=VexRiscv.v WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=100000000000ll FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=${coremarkRegression} THREAD_COUNT=1 ") + s" SEED=${testSeed} "
+      val stdCmd = (s"make run REGRESSION_PATH=../../src/test/cpp/regression VEXRISCV_FILE=VexRiscv.v WITH_USER_IO=no REDO=10 TRACE=${if(debug) "yes" else "no"} TRACE_START=100000000000ll FLOW_INFO=no STOP_ON_ERROR=$stopOnError DHRYSTONE=yes COREMARK=${coremarkRegression} THREAD_COUNT=1 ") + s" SEED=${testSeed} "
       val testCmd = stdCmd + (positionsToApply).map(_.testParam).mkString(" ")
       println(testCmd)
       val str = doCmd(testCmd)

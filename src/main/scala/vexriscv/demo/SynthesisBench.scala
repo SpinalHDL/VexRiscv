@@ -54,39 +54,86 @@ object VexRiscvSynthesisBench {
     val twoStage = new Rtl {
       override def getName(): String = "VexRiscv two stages"
       override def getRtlPath(): String = "VexRiscvTwoStages.v"
-      SpinalVerilog(wrap(GenTwoStage.cpu(
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
         withMulDiv = false,
         bypass = false,
-        barrielShifter = false
+        barrielShifter = false,
+        withMemoryStage = false
       )).setDefinitionName(getRtlPath().split("\\.").head))
     }
     val twoStageBarell = new Rtl {
       override def getName(): String = "VexRiscv two stages with barriel"
       override def getRtlPath(): String = "VexRiscvTwoStagesBar.v"
-      SpinalVerilog(wrap(GenTwoStage.cpu(
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
         withMulDiv = false,
         bypass = true,
-        barrielShifter = true
+        barrielShifter = true,
+        withMemoryStage = false
       )).setDefinitionName(getRtlPath().split("\\.").head))
     }
     val twoStageMulDiv = new Rtl {
       override def getName(): String = "VexRiscv two stages with Mul Div"
       override def getRtlPath(): String = "VexRiscvTwoStagesMD.v"
-      SpinalVerilog(wrap(GenTwoStage.cpu(
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
         withMulDiv = true,
         bypass = false,
-        barrielShifter = false
+        barrielShifter = false,
+        withMemoryStage = false
       )).setDefinitionName(getRtlPath().split("\\.").head))
     }
     val twoStageAll = new Rtl {
       override def getName(): String = "VexRiscv two stages with Mul Div fast"
       override def getRtlPath(): String = "VexRiscvTwoStagesMDfast.v"
-      SpinalVerilog(wrap(GenTwoStage.cpu(
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
         withMulDiv = true,
         bypass = true,
-        barrielShifter = true
+        barrielShifter = true,
+        withMemoryStage = false
       )).setDefinitionName(getRtlPath().split("\\.").head))
     }
+
+
+    val threeStage = new Rtl {
+      override def getName(): String = "VexRiscv three stages"
+      override def getRtlPath(): String = "VexRiscvThreeStages.v"
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
+        withMulDiv = false,
+        bypass = false,
+        barrielShifter = false,
+        withMemoryStage = true
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+    val threeStageBarell = new Rtl {
+      override def getName(): String = "VexRiscv three stages with barriel"
+      override def getRtlPath(): String = "VexRiscvThreeStagesBar.v"
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
+        withMulDiv = false,
+        bypass = true,
+        barrielShifter = true,
+        withMemoryStage = true
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+    val threeStageMulDiv = new Rtl {
+      override def getName(): String = "VexRiscv three stages with Mul Div"
+      override def getRtlPath(): String = "VexRiscvThreeStagesMD.v"
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
+        withMulDiv = true,
+        bypass = false,
+        barrielShifter = false,
+        withMemoryStage = true
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+    val threeStageAll = new Rtl {
+      override def getName(): String = "VexRiscv three stages with Mul Div fast"
+      override def getRtlPath(): String = "VexRiscvThreeStagesMDfast.v"
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
+        withMulDiv = true,
+        bypass = true,
+        barrielShifter = true,
+        withMemoryStage = true
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
     val smallestNoCsr = new Rtl {
       override def getName(): String = "VexRiscv smallest no CSR"
       override def getRtlPath(): String = "VexRiscvSmallestNoCsr.v"
@@ -155,8 +202,12 @@ object VexRiscvSynthesisBench {
 
 
 
-//    val rtls = List(twoStage, twoStageBarell, twoStageMulDiv, twoStageAll, smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced, linuxBalancedSmp)
-    val rtls = List(linuxBalanced, linuxBalancedSmp)
+    val rtls = List(
+      twoStage, twoStageBarell, twoStageMulDiv, twoStageAll,
+      threeStage, threeStageBarell, threeStageMulDiv, threeStageAll,
+      smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced, linuxBalancedSmp
+    )
+//    val rtls = List(linuxBalanced, linuxBalancedSmp)
 //    val rtls = List(smallest)
     val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)  ++ List(
       new Target {
