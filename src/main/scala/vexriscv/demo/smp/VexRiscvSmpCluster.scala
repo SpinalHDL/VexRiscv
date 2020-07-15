@@ -37,7 +37,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator{
 
   this.onClockDomain(systemCd.outputClockDomain)
 
-  implicit val interconnect = BmbSmpInterconnectGenerator()
+  implicit val interconnect = BmbInterconnectGenerator()
 
   val debugBridge = JtagInstructionDebuggerGenerator() onClockDomain(debugCd.outputClockDomain)
   debugBridge.jtagClockDomain.load(ClockDomain.external("jtag", withReset = false))

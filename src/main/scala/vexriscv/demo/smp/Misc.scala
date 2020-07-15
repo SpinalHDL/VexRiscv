@@ -247,7 +247,7 @@ object BmbToLiteDramTester extends App{
   }
 }
 
-case class BmbToLiteDramGenerator(mapping : AddressMapping)(implicit interconnect : BmbSmpInterconnectGenerator) extends Generator{
+case class BmbToLiteDramGenerator(mapping : AddressMapping)(implicit interconnect : BmbInterconnectGenerator) extends Generator{
   val liteDramParameter = createDependency[LiteDramNativeParameter]
   val bmb = produce(logic.io.input)
   val dram = produceIo(logic.io.output)
@@ -269,7 +269,7 @@ case class BmbToLiteDramGenerator(mapping : AddressMapping)(implicit interconnec
   )
 }
 
-case class BmbToWishboneGenerator(mapping : AddressMapping)(implicit interconnect : BmbSmpInterconnectGenerator) extends Generator{
+case class BmbToWishboneGenerator(mapping : AddressMapping)(implicit interconnect : BmbInterconnectGenerator) extends Generator{
   val bmb = produce(logic.io.input)
   val wishbone = produce(logic.io.output)
 

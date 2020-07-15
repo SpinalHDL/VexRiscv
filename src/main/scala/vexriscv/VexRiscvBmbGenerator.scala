@@ -1,7 +1,7 @@
 package vexriscv
 
 import spinal.core._
-import spinal.lib.bus.bmb.{Bmb, BmbAccessCapabilities, BmbAccessParameter, BmbImplicitDebugDecoder, BmbInvalidationParameter, BmbParameter, BmbSmpInterconnectGenerator}
+import spinal.lib.bus.bmb.{Bmb, BmbAccessCapabilities, BmbAccessParameter, BmbImplicitDebugDecoder, BmbInvalidationParameter, BmbParameter, BmbInterconnectGenerator}
 import spinal.lib.bus.misc.AddressMapping
 import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
 import spinal.lib.generator._
@@ -17,7 +17,7 @@ object VexRiscvBmbGenerator{
   val DEBUG_BMB = 4
 }
 
-case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbSmpInterconnectGenerator = null) extends Generator {
+case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGenerator = null) extends Generator {
   import VexRiscvBmbGenerator._
 
   val config = Handle[VexRiscvConfig]
