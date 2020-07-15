@@ -12,7 +12,7 @@ case class VexRiscvLitexSmpMpClusterParameter( cluster : VexRiscvSmpClusterParam
                                              liteDramMapping : AddressMapping)
 
 class VexRiscvLitexSmpMpCluster(p : VexRiscvLitexSmpMpClusterParameter) extends VexRiscvSmpClusterWithPeripherals(p.cluster) {
-  val iArbiter = BmbSmpBridgeGenerator()
+  val iArbiter = BmbBridgeGenerator()
   val iBridge = BmbToLiteDramGenerator(p.liteDramMapping)
   val dBridge = BmbToLiteDramGenerator(p.liteDramMapping)
 
