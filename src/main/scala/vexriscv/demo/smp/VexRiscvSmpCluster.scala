@@ -77,14 +77,14 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
   val plicWishboneBridge = WishboneToBmbGenerator()
   val plicWishbone = plicWishboneBridge.produceIo(plicWishboneBridge.logic.io.input)
   plicWishboneBridge.config.load(WishboneConfig(20, 32))
-  interconnect.addConnection(plicWishboneBridge.bmb, plic.bus)
+  interconnect.addConnection(plicWishboneBridge.bmb, plic.ctrl)
 
   val clint = BmbClintGenerator(0)
 
   val clintWishboneBridge = WishboneToBmbGenerator()
   val clintWishbone = clintWishboneBridge.produceIo(clintWishboneBridge.logic.io.input)
   clintWishboneBridge.config.load(WishboneConfig(14, 32))
-  interconnect.addConnection(clintWishboneBridge.bmb, clint.bus)
+  interconnect.addConnection(clintWishboneBridge.bmb, clint.ctrl)
 
   val interrupts = add task (in Bits(32 bits))
   for(i <- 1 to 31) yield plic.addInterrupt(interrupts.derivate(_.apply(i)), i)
