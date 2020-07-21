@@ -22,7 +22,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import spinal.lib.generator._
 
-case class VexRiscvSmpClusterParameter( cpuConfigs : Seq[VexRiscvConfig])
+case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig], withExclusiveAndInvalidation : Boolean)
 
 class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator{
   val cpuCount = p.cpuConfigs.size
@@ -44,16 +44,28 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator{
 
   val debugPort = debugBridge.produceIo(debugBridge.logic.jtagBridge.io.ctrl)
 
-  val exclusiveMonitor = BmbExclusiveMonitorGenerator()
-  val invalidationMonitor = BmbInvalidateMonitorGenerator()
-  interconnect.addConnection(exclusiveMonitor.output, invalidationMonitor.input)
-  interconnect.masters(invalidationMonitor.output).withOutOfOrderDecoder()
+  val dBusCoherent = BmbBridgeGenerator()
+  val dBusNonCoherent = BmbBridgeGenerator()
+
+  val smp = p.withExclusiveAndInvalidation generate new Area{
+    val exclusiveMonitor = BmbExclusiveMonitorGenerator()
+    interconnect.addConnection(dBusCoherent.bmb, exclusiveMonitor.input)
+
+    val invalidationMonitor = BmbInvalidateMonitorGenerator()
+    interconnect.addConnection(exclusiveMonitor.output, invalidationMonitor.input)
+    interconnect.addConnection(invalidationMonitor.output, dBusNonCoherent.bmb)
+    interconnect.masters(invalidationMonitor.output).withOutOfOrderDecoder()
+  }
+
+  val noSmp = !p.withExclusiveAndInvalidation generate new Area{
+    interconnect.addConnection(dBusCoherent.bmb, dBusNonCoherent.bmb)
+  }
 
   val cores = for(cpuId <- 0 until cpuCount) yield new Area{
     val cpu = VexRiscvBmbGenerator()
     cpu.config.load(p.cpuConfigs(cpuId))
     interconnect.addConnection(
-      cpu.dBus -> List(exclusiveMonitor.input)
+      cpu.dBus -> List(dBusCoherent.bmb)
     )
     cpu.enableDebugBmb(
       debugCd = debugCd,
@@ -113,7 +125,8 @@ object VexRiscvSmpClusterGen {
                      ioRange : UInt => Bool = (x => x(31 downto 28) === 0xF),
                      resetVector : Long = 0x80000000l,
                      iBusWidth : Int = 128,
-                     dBusWidth : Int = 64) = {
+                     dBusWidth : Int = 64,
+                     coherency : Boolean = true) = {
 
     val config = VexRiscvConfig(
       plugins = List(
@@ -167,8 +180,8 @@ object VexRiscvSmpClusterGen {
             catchUnaligned    = true,
             withLrSc = true,
             withAmo = true,
-            withExclusive = true,
-            withInvalidate = true,
+            withExclusive = coherency,
+            withInvalidate = coherency,
             aggregationWidth = if(dBusWidth == 32) 0 else log2Up(dBusWidth/8)
             //          )
           ),

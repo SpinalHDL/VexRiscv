@@ -417,7 +417,8 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
       val timer = Reg(UInt(log2Up(timeoutCycles)+1 bits)) init(0)
       val timerFull = timer.msb
       val hit = cmd.address(tagRange) === buffer.address(tagRange)
-      val canAggregate = cmd.valid && cmd.wr && !cmd.uncached && !cmd.exclusive && !timerFull && !aggregationCounterFull && (!buffer.stream.valid || aggregationEnabled && hit)
+      val cmdExclusive = if(p.withExclusive) cmd.exclusive else False
+      val canAggregate = cmd.valid && cmd.wr && !cmd.uncached && !cmdExclusive && !timerFull && !aggregationCounterFull && (!buffer.stream.valid || aggregationEnabled && hit)
       val doFlush = cmd.valid && !canAggregate || timerFull || aggregationCounterFull || !aggregationEnabled
 //      val canAggregate = False
 //      val doFlush = True
@@ -468,7 +469,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
         buffer.length := (cmd.length << 2) | 3
         if (p.withExclusive) buffer.exclusive := cmd.exclusive
 
-        when(cmd.wr && !cmd.uncached && !cmd.exclusive){
+        when(cmd.wr && !cmd.uncached && !cmdExclusive){
           aggregationEnabled := True
           buffer.address(aggregationRange.high downto 0) := 0
           buffer.length := p.memDataBytes-1

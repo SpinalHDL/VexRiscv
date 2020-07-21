@@ -22,11 +22,11 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
 
   for(core <- cores) interconnect.addConnection(core.cpu.iBus -> List(iArbiter.bmb))
   interconnect.addConnection(
-    iArbiter.bmb               -> List(iBridge.bmb, peripheralBridge.bmb),
-    invalidationMonitor.output -> List(dBridge.bmb, peripheralBridge.bmb)
+    iArbiter.bmb        -> List(iBridge.bmb, peripheralBridge.bmb),
+    dBusNonCoherent.bmb -> List(dBridge.bmb, peripheralBridge.bmb)
   )
 
-  if(p.coherentDma || p.cluster.cpuConfigs.size > 1) interconnect.masters(invalidationMonitor.output).withOutOfOrderDecoder()
+  if(p.cluster.withExclusiveAndInvalidation) interconnect.masters(dBusNonCoherent.bmb).withOutOfOrderDecoder()
 
   dBridge.liteDramParameter.load(p.liteDram)
   iBridge.liteDramParameter.load(p.liteDram)
@@ -41,7 +41,7 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
       dataWidth = p.cluster.cpuConfigs.head.find(classOf[DBusCachedPlugin]).get.config.memDataWidth,
       useSTALL = true
     ))
-    interconnect.addConnection(bridge.bmb, exclusiveMonitor.input)
+    interconnect.addConnection(bridge.bmb, dBusCoherent.bmb)
   }
 
   // Interconnect pipelining (FMax)
@@ -50,7 +50,7 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
     interconnect.setPipelining(core.cpu.iBus)(cmdHalfRate = true, rspValid = true)
     interconnect.setPipelining(iArbiter.bmb)(cmdHalfRate = true, rspValid = true)
   }
-  interconnect.setPipelining(invalidationMonitor.output)(cmdValid = true, cmdReady = true, rspValid = true)
+  interconnect.setPipelining(dBusNonCoherent.bmb)(cmdValid = true, cmdReady = true, rspValid = true)
   interconnect.setPipelining(peripheralBridge.bmb)(cmdHalfRate = true, rspValid = true)
 }
 
@@ -74,6 +74,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("netlist-name") action { (v, c) => netlistName = v }
   }.parse(args))
 
+  val coherency = coherentDma || cpuCount > 1
   def parameter = VexRiscvLitexSmpClusterParameter(
     cluster = VexRiscvSmpClusterParameter(
       cpuConfigs = List.tabulate(cpuCount) { hartId =>
@@ -82,9 +83,11 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
           ioRange = address => address.msb,
           resetVector = 0,
           iBusWidth = iBusWidth,
-          dBusWidth = dBusWidth
+          dBusWidth = dBusWidth,
+          coherency = coherency
         )
-      }
+      },
+      withExclusiveAndInvalidation = coherency
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = liteDramWidth),
     liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
@@ -114,7 +117,8 @@ object VexRiscvLitexSmpClusterGen extends App {
             ioRange = address => address.msb,
             resetVector = 0
           )
-        }
+        },
+        withExclusiveAndInvalidation = true
       ),
       liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
       liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
@@ -152,7 +156,8 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
           ioRange =  address => address(31 downto 28) === 0xF,
           resetVector = 0x80000000l
         )
-      }
+      },
+      withExclusiveAndInvalidation = true
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
     liteDramMapping = SizeMapping(0x80000000l, 0x70000000l),
