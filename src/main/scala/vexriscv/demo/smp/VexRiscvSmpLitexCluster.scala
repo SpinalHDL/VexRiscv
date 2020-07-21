@@ -59,6 +59,10 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var cpuCount = 1
   var iBusWidth = 64
   var dBusWidth = 64
+  var iCacheSize = 8192
+  var dCacheSize = 8192
+  var iCacheWays = 2
+  var dCacheWays = 2
   var liteDramWidth = 128
   var coherentDma = false
   var netlistDirectory = "."
@@ -69,6 +73,10 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("cpu-count") action { (v, c) => cpuCount = v.toInt }
     opt[String]("ibus-width") action { (v, c) => iBusWidth = v.toInt }
     opt[String]("dbus-width") action { (v, c) => dBusWidth = v.toInt }
+    opt[String]("icache-size") action { (v, c) => iCacheSize = v.toInt }
+    opt[String]("dcache-size") action { (v, c) => dCacheSize = v.toInt }
+    opt[String]("icache-ways") action { (v, c) => iCacheWays = v.toInt }
+    opt[String]("dcache-ways") action { (v, c) => dCacheWays = v.toInt }
     opt[String]("litedram-width") action { (v, c) => liteDramWidth = v.toInt }
     opt[String]("netlist-directory") action { (v, c) => netlistDirectory = v }
     opt[String]("netlist-name") action { (v, c) => netlistName = v }
@@ -84,6 +92,10 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
           resetVector = 0,
           iBusWidth = iBusWidth,
           dBusWidth = dBusWidth,
+          iCacheSize = iCacheSize,
+          dCacheSize = dCacheSize,
+          iCacheWays = iCacheWays,
+          dCacheWays = dCacheWays,
           coherency = coherency
         )
       },

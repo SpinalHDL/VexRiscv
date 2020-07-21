@@ -126,8 +126,13 @@ object VexRiscvSmpClusterGen {
                      resetVector : Long = 0x80000000l,
                      iBusWidth : Int = 128,
                      dBusWidth : Int = 64,
-                     coherency : Boolean = true) = {
-
+                     coherency : Boolean = true,
+                     iCacheSize : Int = 8192,
+                     dCacheSize : Int = 8192,
+                     iCacheWays : Int = 2,
+                     dCacheWays : Int = 2) = {
+    assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
+    assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
     val config = VexRiscvConfig(
       plugins = List(
         new MmuPlugin(
@@ -143,9 +148,9 @@ object VexRiscvSmpClusterGen {
           injectorStage = false,
           relaxedPcCalculation = false,
           config = InstructionCacheConfig(
-            cacheSize = 4096*2,
+            cacheSize = iCacheSize,
             bytePerLine = 64,
-            wayCount = 2,
+            wayCount = iCacheWays,
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = iBusWidth,
@@ -169,9 +174,9 @@ object VexRiscvSmpClusterGen {
           dBusRspSlavePipe = true,
           relaxedMemoryTranslationRegister = true,
           config = new DataCacheConfig(
-            cacheSize         = 4096*2,
+            cacheSize         = dCacheSize,
             bytePerLine       = 64,
-            wayCount          = 2,
+            wayCount          = dCacheWays,
             addressWidth      = 32,
             cpuDataWidth      = 32,
             memDataWidth      = dBusWidth,
