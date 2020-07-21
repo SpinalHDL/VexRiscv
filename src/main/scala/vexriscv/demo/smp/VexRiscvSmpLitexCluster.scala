@@ -38,8 +38,9 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
     val dataWidth = p.cluster.cpuConfigs.head.find(classOf[DBusCachedPlugin]).get.config.memDataWidth
     bridge.config.load(WishboneConfig(
       addressWidth = 32 - log2Up(dataWidth / 8),
-      dataWidth = p.cluster.cpuConfigs.head.find(classOf[DBusCachedPlugin]).get.config.memDataWidth,
-      useSTALL = true
+      dataWidth = dataWidth,
+      useSTALL = true,
+      selWidth = dataWidth/8
     ))
     interconnect.addConnection(bridge.bmb, dBusCoherent.bmb)
   }
