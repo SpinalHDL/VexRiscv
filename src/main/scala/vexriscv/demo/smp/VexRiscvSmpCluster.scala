@@ -202,8 +202,8 @@ object VexRiscvSmpClusterGen {
         ),
         new RegFilePlugin(
           regFileReadyKind = plugin.ASYNC,
-          zeroBoot = true,
-          x0Init = false
+          zeroBoot = false,
+          x0Init = true
         ),
         new IntAluPlugin,
         new SrcPlugin(
