@@ -82,21 +82,48 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
   val peripheral = peripheralBridge.produceIo(peripheralBridge.logic.io.output)
   interconnect.slaves(peripheralBridge.bmb).forceAccessSourceDataWidth(32)
 
-  val plic = BmbPlicGenerator(0)
+  val plic = BmbPlicGenerator()(interconnect = null)
   plic.priorityWidth.load(2)
   plic.mapping.load(PlicMapping.sifive)
 
-  val plicWishboneBridge = WishboneToBmbGenerator()
-  val plicWishbone = plicWishboneBridge.produceIo(plicWishboneBridge.logic.io.input)
-  plicWishboneBridge.config.load(WishboneConfig(20, 32))
-  interconnect.addConnection(plicWishboneBridge.bmb, plic.ctrl)
+  val plicWishboneBridge = new Generator{
+    dependencies += plic.ctrl
 
-  val clint = BmbClintGenerator(0)
+    plic.accessRequirements.load(BmbAccessParameter(
+      addressWidth = 22,
+      dataWidth = 32
+    ).addSources(1, BmbSourceParameter(
+      contextWidth = 0,
+      lengthWidth = 2,
+      alignment =  BmbParameter.BurstAlignement.LENGTH
+    )))
 
-  val clintWishboneBridge = WishboneToBmbGenerator()
-  val clintWishbone = clintWishboneBridge.produceIo(clintWishboneBridge.logic.io.input)
-  clintWishboneBridge.config.load(WishboneConfig(14, 32))
-  interconnect.addConnection(clintWishboneBridge.bmb, clint.ctrl)
+    val logic = add task new Area{
+      val bridge = WishboneToBmb(WishboneConfig(20, 32))
+      bridge.io.output >> plic.ctrl
+    }
+  }
+  val plicWishbone = plicWishboneBridge.produceIo(plicWishboneBridge.logic.bridge.io.input)
+
+  val clint = BmbClintGenerator(0)(interconnect = null)
+  val clintWishboneBridge = new Generator{
+    dependencies += clint.ctrl
+
+    clint.accessRequirements.load(BmbAccessParameter(
+      addressWidth = 16,
+      dataWidth = 32
+    ).addSources(1, BmbSourceParameter(
+      contextWidth = 0,
+      lengthWidth = 2,
+      alignment =  BmbParameter.BurstAlignement.LENGTH
+    )))
+
+    val logic = add task new Area{
+      val bridge = WishboneToBmb(WishboneConfig(14, 32))
+      bridge.io.output >> clint.ctrl
+    }
+  }
+  val clintWishbone = clintWishboneBridge.produceIo(clintWishboneBridge.logic.bridge.io.input)
 
   val interrupts = add task (in Bits(32 bits))
   for(i <- 1 to 31) yield plic.addInterrupt(interrupts.derivate(_.apply(i)), i)
