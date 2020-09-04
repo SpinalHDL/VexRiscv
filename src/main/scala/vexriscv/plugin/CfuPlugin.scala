@@ -97,7 +97,7 @@ class CfuPlugin( val stageCount : Int,
 
   assert(p.CFU_INPUTS <= 2)
   assert(p.CFU_OUTPUTS == 1)
-  assert(p.CFU_FUNCTION_ID_W == 3)
+//  assert(p.CFU_FUNCTION_ID_W == 3)
 
   var bus : CfuBus = null
   var joinException : Flow[ExceptionCause] = null
@@ -128,7 +128,7 @@ class CfuPlugin( val stageCount : Int,
         BYPASSABLE_EXECUTE_STAGE -> Bool(stageCount == 0),
         BYPASSABLE_MEMORY_STAGE  -> Bool(stageCount <= 1),
         RS1_USE -> True,
-        CFU_ENCODING -> id,
+        CFU_ENCODING -> U(id),
         CFU_INPUT_2_KIND -> encoding.input2Kind()
       )
 
