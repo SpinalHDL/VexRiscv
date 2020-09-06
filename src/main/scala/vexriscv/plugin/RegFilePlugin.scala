@@ -18,6 +18,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
                     writeRfInMemoryStage : Boolean = false,
                     readInExecute : Boolean = false,
                     syncUpdateOnStall : Boolean = true,
+                    rv32e : Boolean = false,
                     withShadow : Boolean = false //shadow registers aren't transition hazard free
                    ) extends Plugin[VexRiscv] with RegFileService{
   import Riscv._
@@ -39,8 +40,11 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
     val readStage = if(readInExecute) execute else decode
     val writeStage = if(writeRfInMemoryStage) memory else stages.last
 
+    val numRegisters = if(rv32e) 16 else 32
+    def clipRange(that : Range) = if(rv32e) that.tail else that
+
     val global = pipeline plug new Area{
-      val regFileSize = if(withShadow) 64 else 32
+      val regFileSize = if(withShadow) numRegisters * 2 else numRegisters
       val regFile = Mem(Bits(32 bits),regFileSize) addAttribute(Verilator.public)
       if(zeroBoot) regFile.init(List.fill(regFileSize)(B(0, 32 bits)))
 
@@ -59,6 +63,9 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
     when(decode.input(INSTRUCTION)(rdRange) === 0) {
       decode.input(REGFILE_WRITE_VALID) := False
     }
+    if(rv32e) when(decode.input(INSTRUCTION)(rdRange.head)) {
+      decode.input(REGFILE_WRITE_VALID) := False
+    }
 
     //Read register file
     readStage plug new Area{
@@ -72,8 +79,8 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
       }
 
       def shadowPrefix(that : Bits) = if(withShadow) global.shadow.read ## that else that
-      val regFileReadAddress1 = U(shadowPrefix(srcInstruction(Riscv.rs1Range)))
-      val regFileReadAddress2 = U(shadowPrefix(srcInstruction(Riscv.rs2Range)))
+      val regFileReadAddress1 = U(shadowPrefix(srcInstruction(clipRange(Riscv.rs1Range))))
+      val regFileReadAddress2 = U(shadowPrefix(srcInstruction(clipRange(Riscv.rs2Range))))
 
       val (rs1Data,rs2Data) = regFileReadyKind match{
         case `ASYNC` => (global.regFile.readAsync(regFileReadAddress1),global.regFile.readAsync(regFileReadAddress2))
@@ -93,7 +100,7 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
       def shadowPrefix(that : Bits) = if(withShadow) global.shadow.write ## that else that
       val regFileWrite = global.regFile.writePort.addAttribute(Verilator.public).setName("lastStageRegFileWrite")
       regFileWrite.valid := output(REGFILE_WRITE_VALID) && arbitration.isFiring
-      regFileWrite.address := U(shadowPrefix(output(INSTRUCTION)(rdRange)))
+      regFileWrite.address := U(shadowPrefix(output(INSTRUCTION)(clipRange(rdRange))))
       regFileWrite.data := output(REGFILE_WRITE_DATA)
 
       //Ensure no boot glitches modify X0
