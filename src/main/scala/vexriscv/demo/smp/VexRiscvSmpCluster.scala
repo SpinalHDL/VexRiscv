@@ -157,7 +157,8 @@ object VexRiscvSmpClusterGen {
                      iCacheSize : Int = 8192,
                      dCacheSize : Int = 8192,
                      iCacheWays : Int = 2,
-                     dCacheWays : Int = 2) = {
+                     dCacheWays : Int = 2,
+                     iBusRelax : Boolean = false) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
     val config = VexRiscvConfig(
@@ -173,7 +174,7 @@ object VexRiscvSmpClusterGen {
           historyRamSizeLog2 = 9,
           relaxPredictorAddress = true,
           injectorStage = false,
-          relaxedPcCalculation = false,
+          relaxedPcCalculation = iBusRelax,
           config = InstructionCacheConfig(
             cacheSize = iCacheSize,
             bytePerLine = 64,

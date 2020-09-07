@@ -791,6 +791,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
     val wayInvalidate = stagePipe(stageA. wayInvalidate)
     val consistancyHazard = if(stageA.consistancyCheck != null) stagePipe(stageA.consistancyCheck.hazard) else False
     val dataColisions = stagePipe(stageA.dataColisions)
+    val unaligned = if(!catchUnaligned) False else stagePipe((stageA.request.size === 2 && io.cpu.memory.address(1 downto 0) =/= 0) || (stageA.request.size === 1 && io.cpu.memory.address(0 downto 0) =/= 0))
     val waysHitsBeforeInvalidate = if(earlyWaysHits) stagePipe(B(stageA.wayHits)) else B(tagsReadRsp.map(tag => mmuRsp.physicalAddress(tagRange) === tag.address && tag.valid).asBits())
     val waysHits = waysHitsBeforeInvalidate & ~wayInvalidate
     val waysHit = waysHits.orR
@@ -891,7 +892,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
     io.cpu.redo := False
     io.cpu.writeBack.accessError := False
     io.cpu.writeBack.mmuException := io.cpu.writeBack.isValid && (if(catchIllegal) mmuRsp.exception || (!mmuRsp.allowWrite && request.wr) || (!mmuRsp.allowRead && (!request.wr || isAmo)) else False)
-    io.cpu.writeBack.unalignedAccess := io.cpu.writeBack.isValid && (if(catchUnaligned) ((request.size === 2 && mmuRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && mmuRsp.physicalAddress(0 downto 0) =/= 0)) else False)
+    io.cpu.writeBack.unalignedAccess := io.cpu.writeBack.isValid && unaligned
     io.cpu.writeBack.isWrite := request.wr
 
     io.mem.cmd.valid := False
