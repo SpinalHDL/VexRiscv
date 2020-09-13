@@ -158,7 +158,8 @@ object VexRiscvSmpClusterGen {
                      dCacheSize : Int = 8192,
                      iCacheWays : Int = 2,
                      dCacheWays : Int = 2,
-                     iBusRelax : Boolean = false) = {
+                     iBusRelax : Boolean = false,
+                     earlyBranch : Boolean = true) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
     val config = VexRiscvConfig(
@@ -257,7 +258,7 @@ object VexRiscvSmpClusterGen {
         ),
         new CsrPlugin(CsrPluginConfig.openSbi(mhartid = hartId, misa = Riscv.misaToInt("imas")).copy(utimeAccess = CsrAccess.READ_ONLY)),
         new BranchPlugin(
-          earlyBranch = true,
+          earlyBranch = earlyBranch,
           catchAddressMisaligned = true,
           fenceiGenAsAJump = false
         ),
