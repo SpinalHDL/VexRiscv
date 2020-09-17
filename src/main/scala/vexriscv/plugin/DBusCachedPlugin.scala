@@ -250,8 +250,10 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       if(twoStageMmu) {
         mmuBus.cmd(0).isValid := cache.io.cpu.execute.isValid
         mmuBus.cmd(0).isStuck := arbitration.isStuck
-        mmuBus.cmd(0).virtualAddress := cache.io.cpu.execute.address
+        mmuBus.cmd(0).virtualAddress := input(SRC_ADD).asUInt
         mmuBus.cmd(0).bypassTranslation := False
+//        KeepAttribute(mmuBus.cmd(0))
+//        KeepAttribute(mmuBus.cmd(1))
       }
 
       cache.io.cpu.flush.valid := arbitration.isValid && input(MEMORY_MANAGMENT)
