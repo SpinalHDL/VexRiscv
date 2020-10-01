@@ -283,7 +283,7 @@ Note that sometimes Eclipse needs to be restarted in order to be able to place n
 
 ## Briey SoC
 As a demonstration, a SoC named Briey is implemented in `src/main/scala/vexriscv/demo/Briey.scala`. This SoC is very similar to
-the [Pinsec SoC](https://spinalhdl.github.io/SpinalDoc/spinal/lib/pinsec/hardware/):
+the [Pinsec SoC](https://spinalhdl.github.io/SpinalDoc-RTD/SpinalHDL/Legacy/pinsec/hardware_toplevel.html#):
 
 ![Briey SoC](assets/brieySoc.png?raw=true "")
 
