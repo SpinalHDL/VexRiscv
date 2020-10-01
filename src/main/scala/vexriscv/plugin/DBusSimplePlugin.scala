@@ -90,7 +90,7 @@ object DBusSimpleBus{
   )
 }
 
-case class DBusSimpleBus() extends Bundle with IMasterSlave{
+case class DBusSimpleBus(bigEndian : Boolean = false) extends Bundle with IMasterSlave{
   val cmd = Stream(DBusSimpleCmd())
   val rsp = DBusSimpleRsp()
 
@@ -100,10 +100,25 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
   }
 
   def cmdS2mPipe() : DBusSimpleBus = {
-    val s = DBusSimpleBus()
+    val s = DBusSimpleBus(bigEndian)
     s.cmd    << this.cmd.s2mPipe()
     this.rsp := s.rsp
     s
+  }
+
+  def genMask(cmd : DBusSimpleCmd) = {
+    if(bigEndian)
+      cmd.size.mux(
+        U(0) -> B"1000",
+        U(1) -> B"1100",
+        default -> B"1111"
+      ) |>> cmd.address(1 downto 0)
+    else
+      cmd.size.mux(
+        U(0) -> B"0001",
+        U(1) -> B"0011",
+        default -> B"1111"
+      ) |<< cmd.address(1 downto 0)
   }
 
   def toAxi4Shared(stageCmd : Boolean = false, pendingWritesMax : Int = 7): Axi4Shared = {
@@ -130,11 +145,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     axi.writeData.arbitrationFrom(dataStage)
     axi.writeData.last := True
     axi.writeData.data := dataStage.data
-    axi.writeData.strb := (dataStage.size.mux(
-      U(0) -> B"0001",
-      U(1) -> B"0011",
-      default -> B"1111"
-    ) << dataStage.address(1 downto 0)).resized
+    axi.writeData.strb := genMask(dataStage).resized
 
 
     rsp.ready := axi.r.valid
@@ -158,11 +169,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     mm.write := cmdStage.valid && cmdStage.wr
     mm.address := (cmdStage.address >> 2) @@ U"00"
     mm.writeData := cmdStage.data(31 downto 0)
-    mm.byteEnable := (cmdStage.size.mux (
-      U(0) -> B"0001",
-      U(1) -> B"0011",
-      default -> B"1111"
-    ) << cmdStage.address(1 downto 0)).resized
+    mm.byteEnable := genMask(cmdStage).resized
 
 
     cmdStage.ready := mm.waitRequestn
@@ -181,11 +188,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     bus.ADR := cmdStage.address >> 2
     bus.CTI :=B"000"
     bus.BTE := "00"
-    bus.SEL := (cmdStage.size.mux (
-      U(0) -> B"0001",
-      U(1) -> B"0011",
-      default -> B"1111"
-    ) << cmdStage.address(1 downto 0)).resized
+    bus.SEL := genMask(cmdStage).resized
     when(!cmdStage.wr) {
       bus.SEL := "1111"
     }
@@ -209,11 +212,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
     bus.cmd.write := cmd.wr
     bus.cmd.address := cmd.address.resized
     bus.cmd.data := cmd.data
-    bus.cmd.mask := cmd.size.mux(
-      0 -> B"0001",
-      1 -> B"0011",
-      default -> B"1111"
-    ) |<< cmd.address(1 downto 0)
+    bus.cmd.mask := genMask(cmd)
     cmd.ready := bus.cmd.ready
 
     rsp.ready := bus.rsp.valid
@@ -265,11 +264,7 @@ case class DBusSimpleBus() extends Bundle with IMasterSlave{
       1       -> U"01",
       default -> U"11"
     )
-    bus.cmd.mask := cmd.size.mux(
-      0       -> B"0001",
-      1       -> B"0011",
-      default -> B"1111"
-    ) |<< cmd.address(1 downto 0)
+    bus.cmd.mask := genMask(cmd)
 
     cmd.ready := bus.cmd.ready
 
@@ -289,6 +284,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
                        emitCmdInMemoryStage : Boolean = false,
                        onlyLoadWords : Boolean = false,
                        withLrSc : Boolean = false,
+                       val bigEndian : Boolean = false,
                        memoryTranslatorPortConfig : Any = null) extends Plugin[VexRiscv] with DBusAccessService {
 
   var dBus  : DBusSimpleBus = null
@@ -393,7 +389,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     import pipeline._
     import pipeline.config._
 
-    dBus = master(DBusSimpleBus()).setName("dBus")
+    dBus = master(DBusSimpleBus(bigEndian)).setName("dBus")
 
 
     decode plug new Area {
@@ -436,11 +432,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       insert(MEMORY_ADDRESS_LOW) := dBus.cmd.address(1 downto 0)
 
       //formal
-      val formalMask = dBus.cmd.size.mux(
-        U(0) -> B"0001",
-        U(1) -> B"0011",
-        default -> B"1111"
-      ) |<< dBus.cmd.address(1 downto 0)
+      val formalMask = dBus.genMask(dBus.cmd)
 
       insert(FORMAL_MEM_ADDR) := dBus.cmd.address & U"xFFFFFFFC"
       insert(FORMAL_MEM_WMASK) := (dBus.cmd.valid &&  dBus.cmd.wr) ? formalMask | B"0000"
@@ -541,17 +533,32 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
       val rspShifted = MEMORY_READ_DATA()
       rspShifted := input(MEMORY_READ_DATA)
-      switch(input(MEMORY_ADDRESS_LOW)){
-        is(1){rspShifted(7 downto 0) := input(MEMORY_READ_DATA)(15 downto 8)}
-        is(2){rspShifted(15 downto 0) := input(MEMORY_READ_DATA)(31 downto 16)}
-        is(3){rspShifted(7 downto 0) := input(MEMORY_READ_DATA)(31 downto 24)}
-      }
+      if(bigEndian)
+        switch(input(MEMORY_ADDRESS_LOW)){
+          is(1){rspShifted(31 downto 24) := input(MEMORY_READ_DATA)(23 downto 16)}
+          is(2){rspShifted(31 downto 16) := input(MEMORY_READ_DATA)(15 downto 0)}
+          is(3){rspShifted(31 downto 24) := input(MEMORY_READ_DATA)(7 downto 0)}
+        }
+      else
+        switch(input(MEMORY_ADDRESS_LOW)){
+          is(1){rspShifted(7 downto 0) := input(MEMORY_READ_DATA)(15 downto 8)}
+          is(2){rspShifted(15 downto 0) := input(MEMORY_READ_DATA)(31 downto 16)}
+          is(3){rspShifted(7 downto 0) := input(MEMORY_READ_DATA)(31 downto 24)}
+        }
 
-      val rspFormated = input(INSTRUCTION)(13 downto 12).mux(
-        0 -> B((31 downto 8) -> (rspShifted(7) && !input(INSTRUCTION)(14)),(7 downto 0) -> rspShifted(7 downto 0)),
-        1 -> B((31 downto 16) -> (rspShifted(15) && ! input(INSTRUCTION)(14)),(15 downto 0) -> rspShifted(15 downto 0)),
-        default -> rspShifted //W
-      )
+      val rspFormated =
+        if(bigEndian)
+          input(INSTRUCTION)(13 downto 12).mux(
+                0 -> B((31 downto 8) -> (rspShifted(31) && !input(INSTRUCTION)(14)),(7 downto 0) -> rspShifted(31 downto 24)),
+                1 -> B((31 downto 16) -> (rspShifted(31) && ! input(INSTRUCTION)(14)),(15 downto 0) -> rspShifted(31 downto 16)),
+                default -> rspShifted //W
+          )
+        else
+          input(INSTRUCTION)(13 downto 12).mux(
+                0 -> B((31 downto 8) -> (rspShifted(7) && !input(INSTRUCTION)(14)),(7 downto 0) -> rspShifted(7 downto 0)),
+                1 -> B((31 downto 16) -> (rspShifted(15) && ! input(INSTRUCTION)(14)),(15 downto 0) -> rspShifted(15 downto 0)),
+                default -> rspShifted //W
+          )
 
       when(arbitration.isValid && input(MEMORY_ENABLE)) {
         output(REGFILE_WRITE_DATA) := (if(!onlyLoadWords) rspFormated else input(MEMORY_READ_DATA))
