@@ -179,7 +179,7 @@ sbt "runMain vexriscv.demo.GenSmallest"
 NOTES:
 - It could take time the first time you run it.
 - The VexRiscv project may need an unreleased master-head of the SpinalHDL repo. If it fails to compile, just get the SpinalHDL repository and
-   do a "sbt clean compile publish-local" in it as described in the dependencies chapter.
+   do a "sbt clean compile publishLocal" in it as described in the dependencies chapter.
 
 ## Regression tests
 
