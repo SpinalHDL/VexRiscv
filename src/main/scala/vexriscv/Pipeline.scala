@@ -14,7 +14,7 @@ trait Pipeline {
   val plugins = ArrayBuffer[Plugin[T]]()
   var stages = ArrayBuffer[Stage]()
   var unremovableStages = mutable.Set[Stage]()
-  val things = mutable.HashMap[PipelineThing[_], Any]()
+  val things = mutable.LinkedHashMap[PipelineThing[_], Any]()
 //  val services = ArrayBuffer[Any]()
 
   def stageBefore(stage : Stage) = stages(indexOf(stage)-1)
@@ -78,7 +78,7 @@ trait Pipeline {
       def setInsertStageId(stageId : Int) = insertStageId = stageId
     }
 
-    val inputOutputKeys = mutable.HashMap[Stageable[Data],KeyInfo]()
+    val inputOutputKeys = mutable.LinkedHashMap[Stageable[Data],KeyInfo]()
     val insertedStageable = mutable.Set[Stageable[Data]]()
     for(stageIndex <- 0 until stages.length; stage = stages(stageIndex)){
       stage.inserts.keysIterator.foreach(signal => inputOutputKeys.getOrElseUpdate(signal,new KeyInfo).setInsertStageId(stageIndex))

@@ -102,6 +102,20 @@ _start:
   addi x4, x4, 1023
   sw x4, 8(x3)
   sw x5, 12(x3)
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
+  nop
   li x28, 6
   li x4, 0x080
   csrw mie,x4

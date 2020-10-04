@@ -56,7 +56,7 @@ object GenNoCacheNoMmuMaxPerf extends App{
         new CsrPlugin(CsrPluginConfig.small),
         new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
-          earlyBranch = true,
+          earlyBranch = false,
           catchAddressMisaligned = true
         ),
         new YamlPlugin("cpu0.yaml")

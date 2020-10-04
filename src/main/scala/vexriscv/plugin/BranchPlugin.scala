@@ -53,7 +53,8 @@ trait PredictionInterface{
 class BranchPlugin(earlyBranch : Boolean,
                    catchAddressMisaligned : Boolean = false,
                    fenceiGenAsAJump : Boolean = false,
-                   fenceiGenAsANop : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
+                   fenceiGenAsANop : Boolean = false,
+                   decodeBranchSrc2 : Boolean = false) extends Plugin[VexRiscv] with PredictionInterface{
 
 
   def catchAddressMisalignedForReal = catchAddressMisaligned && !pipeline(RVC_GEN)
@@ -138,7 +139,10 @@ class BranchPlugin(earlyBranch : Boolean,
     }
 
     val pcManagerService = pipeline.service(classOf[JumpService])
-    jumpInterface = pcManagerService.createJumpInterface(branchStage)
+
+    //Priority -1, as DYNAMIC_TARGET misspredicted on non branch instruction should lose against other instructions
+    //legitim branches, as MRET for instance
+    jumpInterface = pcManagerService.createJumpInterface(branchStage, priority = -10)
 
 
     if (catchAddressMisalignedForReal) {
@@ -196,7 +200,7 @@ class BranchPlugin(earlyBranch : Boolean,
       ).asUInt
 
       val branchAdder = branch_src1 + branch_src2
-      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ "0"
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ U"0"
     }
 
     //Apply branchs (JAL,JALR, Bxx)
@@ -273,7 +277,7 @@ class BranchPlugin(earlyBranch : Boolean,
         }
       }
       val branchAdder = branch_src1 + branch_src2
-      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ "0"
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ U"0"
     }
 
 
@@ -310,6 +314,8 @@ class BranchPlugin(earlyBranch : Boolean,
     //Do branch calculations (conditions + target PC)
     object NEXT_PC extends Stageable(UInt(32 bits))
     object TARGET_MISSMATCH extends Stageable(Bool)
+    object BRANCH_SRC2 extends Stageable(UInt(32 bits))
+    val branchSrc2Stage = if(decodeBranchSrc2) decode else execute
     execute plug new Area {
       import execute._
 
@@ -328,16 +334,17 @@ class BranchPlugin(earlyBranch : Boolean,
         )
       )
 
-      val imm = IMM(input(INSTRUCTION))
       val branch_src1 = (input(BRANCH_CTRL) === BranchCtrlEnum.JALR) ? input(RS1).asUInt | input(PC)
-      val branch_src2 = input(BRANCH_CTRL).mux(
+
+      val imm = IMM(branchSrc2Stage.input(INSTRUCTION))
+      branchSrc2Stage.insert(BRANCH_SRC2) := branchSrc2Stage.input(BRANCH_CTRL).mux(
         BranchCtrlEnum.JAL  -> imm.j_sext,
         BranchCtrlEnum.JALR -> imm.i_sext,
         default             -> imm.b_sext
       ).asUInt
 
-      val branchAdder = branch_src1 + branch_src2
-      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ "0"
+      val branchAdder = branch_src1 + input(BRANCH_SRC2)
+      insert(BRANCH_CALC) := branchAdder(31 downto 1) @@ U"0"
       insert(NEXT_PC) := input(PC) + (if(pipeline(RVC_GEN)) ((input(IS_RVC)) ? U(2) | U(4)) else 4)
       insert(TARGET_MISSMATCH) := decode.input(PC) =/= input(BRANCH_CALC)
     }

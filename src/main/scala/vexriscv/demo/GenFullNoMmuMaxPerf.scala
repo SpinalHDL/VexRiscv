@@ -20,7 +20,7 @@ object GenFullNoMmuMaxPerf extends App{
           prediction = DYNAMIC_TARGET,
           historyRamSizeLog2 = 8,
           config = InstructionCacheConfig(
-            cacheSize = 4096*4,
+            cacheSize = 4096*2,
             bytePerLine =32,
             wayCount = 1,
             addressWidth = 32,
@@ -29,13 +29,13 @@ object GenFullNoMmuMaxPerf extends App{
             catchIllegalAccess = true,
             catchAccessFault = true,
             asyncTagMemory = false,
-            twoCycleRam = true,
+            twoCycleRam = false,
             twoCycleCache = true
           )
         ),
         new DBusCachedPlugin(
           config = new DataCacheConfig(
-            cacheSize         = 4096*4,
+            cacheSize         = 4096*2,
             bytePerLine       = 32,
             wayCount          = 1,
             addressWidth      = 32,
@@ -76,7 +76,7 @@ object GenFullNoMmuMaxPerf extends App{
         new CsrPlugin(CsrPluginConfig.small),
         new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
-          earlyBranch = true,
+          earlyBranch = false,
           catchAddressMisaligned = true
         ),
         new YamlPlugin("cpu0.yaml")

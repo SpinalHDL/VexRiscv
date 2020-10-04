@@ -2,8 +2,10 @@ package vexriscv.plugin
 import vexriscv._
 import vexriscv.VexRiscv
 import spinal.core._
+import spinal.lib.KeepAttribute
 
-class MulPlugin extends Plugin[VexRiscv]{
+//Input buffer generaly avoid the FPGA synthesis to duplicate reg inside the DSP cell, which could stress timings quite much.
+class MulPlugin(inputBuffer : Boolean = false) extends Plugin[VexRiscv]{
   object MUL_LL extends Stageable(UInt(32 bits))
   object MUL_LH extends Stageable(SInt(34 bits))
   object MUL_HL extends Stageable(SInt(34 bits))
@@ -19,8 +21,8 @@ class MulPlugin extends Plugin[VexRiscv]{
 
 
     val actions = List[(Stageable[_ <: BaseType],Any)](
-      SRC1_CTRL                -> Src1CtrlEnum.RS,
-      SRC2_CTRL                -> Src2CtrlEnum.RS,
+//      SRC1_CTRL                -> Src1CtrlEnum.RS,
+//      SRC2_CTRL                -> Src2CtrlEnum.RS,
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
       BYPASSABLE_MEMORY_STAGE  -> False,
@@ -48,8 +50,26 @@ class MulPlugin extends Plugin[VexRiscv]{
       val aSigned,bSigned = Bool
       val a,b = Bits(32 bit)
 
-      a := input(SRC1)
-      b := input(SRC2)
+//      a := input(SRC1)
+//      b := input(SRC2)
+
+      val withInputBuffer = inputBuffer generate new Area{
+        val rs1 = RegNext(input(RS1))
+        val rs2 = RegNext(input(RS2))
+        a := rs1
+        b := rs2
+
+        val delay = RegNext(arbitration.isStuck)
+        when(arbitration.isValid && input(IS_MUL) && !delay){
+          arbitration.haltItself := True
+        }
+      }
+
+      val noInputBuffer = (!inputBuffer) generate new Area{
+        a := input(RS1)
+        b := input(RS2)
+      }
+
       switch(input(INSTRUCTION)(13 downto 12)) {
         is(B"01") {
           aSigned := True
@@ -75,6 +95,12 @@ class MulPlugin extends Plugin[VexRiscv]{
       insert(MUL_LH) := aSLow * bHigh
       insert(MUL_HL) := aHigh * bSLow
       insert(MUL_HH) := aHigh * bHigh
+
+      Component.current.afterElaboration{
+        //Avoid synthesis tools to retime RS1 RS2 from execute stage to decode stage leading to bad timings (ex : Vivado, even if retiming is disabled)
+        KeepAttribute(input(RS1))
+        KeepAttribute(input(RS2))
+      }
     }
 
     //First aggregation of partial multiplication

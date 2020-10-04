@@ -1,0 +1,9 @@
+#!/bin/sh
+
+#cannot rm build because it erase software images that the make file copy there
+#rm -rf ./build
+
+mkdir -p ./build
+
+cd ./build
+vivado -mode batch -source ../make_vivado_project.tcl -notrace

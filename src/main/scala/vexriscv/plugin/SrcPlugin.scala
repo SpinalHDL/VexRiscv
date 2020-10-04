@@ -2,6 +2,7 @@ package vexriscv.plugin
 
 import vexriscv._
 import spinal.core._
+import spinal.lib.KeepAttribute
 
 
 class SrcPlugin(separatedAddSub : Boolean = false, executeInsertion : Boolean = false, decodeAddSub : Boolean = false) extends Plugin[VexRiscv]{

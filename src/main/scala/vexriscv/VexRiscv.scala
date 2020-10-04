@@ -23,6 +23,12 @@ case class VexRiscvConfig(){
   val plugins = ArrayBuffer[Plugin[VexRiscv]]()
 
   def add(that : Plugin[VexRiscv]) : this.type = {plugins += that;this}
+  def find[T](clazz: Class[T]): Option[T] = {
+    plugins.find(_.getClass == clazz) match {
+      case Some(x) => Some(x.asInstanceOf[T])
+      case None => None
+    }
+  }
 
   //Default Stageables
   object IS_RVC extends Stageable(Bool)
@@ -36,7 +42,6 @@ case class VexRiscvConfig(){
   object PC extends Stageable(UInt(32 bits))
   object PC_CALC_WITHOUT_JUMP extends Stageable(UInt(32 bits))
   object INSTRUCTION extends Stageable(Bits(32 bits))
-  object INSTRUCTION_READY extends Stageable(Bool)
   object INSTRUCTION_ANTICIPATED extends Stageable(Bits(32 bits))
   object LEGAL_INSTRUCTION extends Stageable(Bool)
   object REGFILE_WRITE_VALID extends Stageable(Bool)

@@ -50,7 +50,7 @@ object RvcDecompressor{
         ret := (i(11 downto 7) === 2) ? addi16sp | lui
       }
       is(12){
-        val isImmediate = i(11 downto 10) =/= "11"
+        val isImmediate = i(11 downto 10) =/= B"11"
         val isShift = !i(11)
         val func3 = i(11 downto 10).mux(
           0 -> B"101",
@@ -64,7 +64,7 @@ object RvcDecompressor{
           )
         )
         val msbs = Mux(
-          sel = i(11 downto 10) === "10",
+          sel = i(11 downto 10) === B"10",
           whenTrue = B((6 downto 0) -> i(12)), //andi
           whenFalse = B"0" ## (i(11 downto 10) === B"01" || (i(11 downto 10) === B"11" && i(6 downto 5) === B"00")) ## B"00000"
         )
@@ -122,7 +122,7 @@ object StreamForkVex{
 
 object StreamVexPimper{
   implicit class StreamFlushPimper[T <: Data](pimped : Stream[T]){
-    def m2sPipeWithFlush(flush : Bool, discardInput : Boolean = true, collapsBubble : Boolean = true): Stream[T] = {
+    def m2sPipeWithFlush(flush : Bool, discardInput : Boolean = true, collapsBubble : Boolean = true, flushInput : Bool = null): Stream[T] = {
       val ret = cloneOf(pimped)
 
       val rValid = RegInit(False)
@@ -132,7 +132,10 @@ object StreamVexPimper{
       pimped.ready := (Bool(collapsBubble) && !ret.valid) || ret.ready
 
       when(pimped.ready) {
-        rValid := pimped.valid
+        if(flushInput == null)
+          rValid := pimped.valid
+        else
+          rValid := pimped.valid && !flushInput
         rData := pimped.payload
       }
 
