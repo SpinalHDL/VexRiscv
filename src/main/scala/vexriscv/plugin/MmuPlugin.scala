@@ -92,11 +92,12 @@ class MmuPlugin(ioRange : UInt => Bool,
       }
       val satp = new Area {
         val mode = RegInit(False)
+        val asid = Reg(Bits(9 bits))
         val ppn = Reg(UInt(20 bits))
       }
 
       for(offset <- List(CSR.MSTATUS, CSR.SSTATUS)) csrService.rw(offset, 19 -> status.mxr, 18 -> status.sum, 17 -> status.mprv)
-      csrService.rw(CSR.SATP, 31 -> satp.mode, 0 -> satp.ppn)
+      csrService.rw(CSR.SATP, 31 -> satp.mode, 22 -> satp.asid, 0 -> satp.ppn)
     }
 
     val core = pipeline plug new Area {
