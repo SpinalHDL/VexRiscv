@@ -1191,7 +1191,7 @@ class UserInterruptPlugin(interruptName : String, code : Int, privilege : Int = 
     interrupt = in.Bool().setName(interruptName)
     val interruptPending =  RegNext(interrupt) init(False)
     val interruptEnable = RegInit(False).setName(interruptName + "_enable")
-    csr.addInterrupt(interruptPending , code, privilege, Nil)
+    csr.addInterrupt(interruptPending && interruptEnable, code, privilege, Nil)
     csr.r(csrAddress = CSR.MIP, bitOffset = code,interruptPending)
     csr.rw(csrAddress = CSR.MIE, bitOffset = code, interruptEnable)
   }
