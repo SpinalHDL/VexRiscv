@@ -275,8 +275,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
       insert(MEMORY_ADDRESS_LOW) := cache.io.cpu.execute.address(1 downto 0)
 
-      when(cache.io.cpu.redo && arbitration.isValid && input(MEMORY_ENABLE)){
-        arbitration.haltItself := True
+      when(cache.io.cpu.execute.refilling && arbitration.isValid){
+        arbitration.haltByOther := True
       }
 
       if(relaxedMemoryTranslationRegister) {
@@ -400,7 +400,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         decode.arbitration.haltByOther := True
         val exceptionService = pipeline.service(classOf[ExceptionService])
         when(!stagesFromExecute.map(s => s.arbitration.isValid || exceptionService.isExceptionPending(s)).orR){
-          when(!cache.io.cpu.redo) {
+          when(!cache.io.cpu.execute.refilling) {
             cache.io.cpu.execute.isValid := True
             dBusAccess.cmd.ready := !execute.arbitration.isStuck
           }

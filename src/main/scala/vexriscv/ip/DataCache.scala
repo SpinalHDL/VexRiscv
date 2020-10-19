@@ -110,10 +110,11 @@ case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterS
   val address = UInt(p.addressWidth bit)
   val haltIt = Bool
   val args = DataCacheCpuExecuteArgs(p)
+  val refilling = Bool
 
   override def asMaster(): Unit = {
     out(isValid, args, address)
-    in(haltIt)
+    in(haltIt, refilling)
   }
 }
 
@@ -1072,7 +1073,9 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
       waysAllocator := (waysAllocator ## waysAllocator.msb).resized
     }
 
-    io.cpu.redo setWhen(valid)
+    io.cpu.redo setWhen(valid.rise())
+    io.cpu.execute.refilling := valid
+
     stageB.mmuRspFreeze setWhen(stageB.loaderValid || valid)
   }
 
