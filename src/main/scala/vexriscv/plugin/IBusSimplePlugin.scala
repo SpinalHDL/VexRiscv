@@ -373,10 +373,9 @@ class IBusSimplePlugin(    resetVector : BigInt,
         fetchRsp.rsp := rspBuffer.output.payload
         fetchRsp.rsp.error.clearWhen(!rspBuffer.output.valid) //Avoid interference with instruction injection from the debug plugin
         if(bigEndian){
-          // inst(15 downto 0) should contain lower addressed parcel,
-          // and inst(31 downto 16) the higher addressed parcel
+          // instructions are stored in little endian byteorder
           fetchRsp.rsp.inst.allowOverride
-          fetchRsp.rsp.inst := rspBuffer.output.payload.inst.rotateLeft(16)
+          fetchRsp.rsp.inst := EndiannessSwap(rspBuffer.output.payload.inst)
         }
 
         val join = Stream(FetchRsp())
