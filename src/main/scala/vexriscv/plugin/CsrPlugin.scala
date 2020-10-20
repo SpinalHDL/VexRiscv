@@ -264,6 +264,31 @@ object CsrPluginConfig{
     uinstretAccess = CsrAccess.NONE
   )
 
+  def zephyr(mtvecInit : BigInt) = CsrPluginConfig(
+    catchIllegalAccess = true,
+    mvendorid           = 1,
+    marchid             = 2,
+    mimpid              = 3,
+    mhartid             = 0,
+    misaExtensionsInit  = 0,
+    misaAccess          = CsrAccess.NONE,
+    mtvecAccess         = CsrAccess.READ_WRITE,
+    mtvecInit           = mtvecInit,
+    mepcAccess          = CsrAccess.READ_WRITE,
+    mscratchGen         = true,
+    mcauseAccess        = CsrAccess.READ_ONLY,
+    mbadaddrAccess      = CsrAccess.READ_ONLY,
+    mcycleAccess        = CsrAccess.NONE,
+    minstretAccess      = CsrAccess.NONE,
+    ucycleAccess        = CsrAccess.NONE,
+    uinstretAccess      = CsrAccess.NONE,
+    wfiGenAsWait        = true,
+    ecallGen            = true,
+    userGen             = true,
+    medelegAccess       = CsrAccess.READ_WRITE,
+    midelegAccess       = CsrAccess.READ_WRITE
+  )
+
 }
 case class CsrWrite(that : Data, bitOffset : Int)
 case class CsrRead(that : Data , bitOffset : Int)
