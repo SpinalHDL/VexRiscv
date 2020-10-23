@@ -20,11 +20,11 @@ case class CfuPluginParameter(
                         CFU_FLOW_REQ_READY_ALWAYS : Boolean,
                         CFU_FLOW_RESP_READY_ALWAYS : Boolean)
 
-case class CfuBusParameter(CFU_VERSION : Int,
-                           CFU_INTERFACE_ID_W : Int,
+case class CfuBusParameter(CFU_VERSION : Int = 0,
+                           CFU_INTERFACE_ID_W : Int = 0,
                            CFU_FUNCTION_ID_W : Int,
-                           CFU_REORDER_ID_W : Int,
-                           CFU_REQ_RESP_ID_W : Int,
+                           CFU_REORDER_ID_W : Int = 0,
+                           CFU_REQ_RESP_ID_W : Int = 0,
                            CFU_INPUTS : Int,
                            CFU_INPUT_DATA_W : Int,
                            CFU_OUTPUTS : Int,
