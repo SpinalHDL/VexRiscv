@@ -1175,7 +1175,11 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             }
           }
 
-          illegalAccess setWhen(privilege < csrAddress(9 downto 8).asUInt)
+          when(privilege < csrAddress(9 downto 8).asUInt){
+            illegalAccess := True
+            readInstruction := False
+            writeInstruction := False
+          }
           illegalAccess clearWhen(!arbitration.isValid || !input(IS_CSR))
         }
       }
