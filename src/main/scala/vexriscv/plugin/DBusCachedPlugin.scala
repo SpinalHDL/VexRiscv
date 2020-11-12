@@ -313,10 +313,10 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
       cache.io.cpu.writeBack.address := U(input(REGFILE_WRITE_DATA))
 
-      val fence = if(withInvalidate) {
+      val fence = if(withInvalidate) new Area {
         cache.io.cpu.writeBack.fence := input(INSTRUCTION)(31 downto 20).as(FenceFlags())
         val aquire = False
-        if(withWriteResponse) when(input(INSTRUCTION)(26)) { //AQ
+        if(withWriteResponse) when(input(MEMORY_ENABLE) && input(INSTRUCTION)(26)) { //AQ
           if(withLrSc) when(input(MEMORY_LRSC)){
             aquire := True
           }
