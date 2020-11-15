@@ -412,7 +412,7 @@ Note that VexRiscv can run Linux on both cache full and cache less design.
 
 A prebuild GCC toolsuite can be found here:
 
-- https://www.sifive.com/products/tools/  => SiFive GNU Embedded Toolchain
+- https://www.sifive.com/software/  => Prebuilt RISC‑V GCC Toolchain and Emulator
 
 The VexRiscvSocSoftware makefiles are expecting to find this prebuild version in /opt/riscv/__contentOfThisPreBuild__
 
