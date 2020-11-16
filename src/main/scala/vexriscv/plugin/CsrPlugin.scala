@@ -1060,8 +1060,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val readData = Bits(32 bits)
         val writeInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE)
         val readInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE)
-        val writeEnable = writeInstruction && ! blockedBySideEffects && !arbitration.isStuckByOthers
-        val readEnable  = readInstruction  && ! blockedBySideEffects && !arbitration.isStuckByOthers
+        val writeEnable = writeInstruction && !arbitration.isStuck
+        val readEnable  = readInstruction  && !arbitration.isStuck
 
         val readToWriteData = CombInit(readData)
         val writeData = if(noCsrAlu) writeSrc else input(INSTRUCTION)(13).mux(
