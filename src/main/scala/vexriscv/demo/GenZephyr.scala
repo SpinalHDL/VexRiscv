@@ -40,7 +40,7 @@ object GenZephyr extends App{
         ),
         new PmpPlugin(
           regions = 16,
-          ioRange = _(31 downto 28) === 0xF
+          ioRange = _(31 downto 28) === 0xf
         ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = true

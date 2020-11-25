@@ -65,30 +65,32 @@ import scala.collection.mutable.ArrayBuffer
 
 case class PmpRegister() extends Area {
 
-  // Addressing options
+  // Addressing options (TOR not supported)
+  def TOR = 1
   def NA4 = 2
   def NAPOT = 3
 
+  // Software-accessible CSR interface
   val csr = new Area {
-    val r, w, x, l = RegInit(False)
+    val r, w, x = Reg(Bool)
+    val l = RegInit(False)
     val a = Reg(UInt(2 bits)) init(0)
     val addr = Reg(UInt(32 bits))
   }
 
+  // Active region bounds and permissions (internal)
   val region = new Area {
     val r, w, x = Reg(Bool)
-    val l = RegInit(False)
-    val start = Reg(UInt(32 bits))
-    val end = Reg(UInt(32 bits))
-    val valid = RegInit(False)
+    val lock, valid = RegInit(False)
+    val start, end = Reg(UInt(32 bits))
   }
-
-  // Internal CSR state is locked until reset if L-bit set
-  when(~region.l) {
-    region.r := csr.r
-    region.w := csr.w
-    region.x := csr.x
-    region.l := csr.l
+  
+  // Internal PMP state is locked until reset once the L-bit is set.
+  when(~region.lock) {
+    region.r    := csr.r
+    region.w    := csr.w
+    region.x    := csr.x
+    region.lock := csr.l
 
     switch(csr.a) {
       is(NA4) {
@@ -123,6 +125,7 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
    
   val pmps = ArrayBuffer[PmpRegister]()
   val portsInfo = ArrayBuffer[ProtectedMemoryTranslatorPort]()
+  var redoInterface : Flow[UInt] = null
 
   override def newTranslationPort(priority : Int, args : Any): MemoryTranslatorBus = {
     val port = ProtectedMemoryTranslatorPort(MemoryTranslatorBus())
@@ -131,35 +134,51 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
   }
 
   override def build(pipeline: VexRiscv): Unit = {
-    import pipeline._
     import pipeline.config._
+    import pipeline._
     import Riscv._
 
     val csrService = pipeline.service(classOf[CsrInterface])
     val privilegeService = pipeline.service(classOf[PrivilegeService])
+    var pcManagerService = pipeline.service(classOf[JumpService])
+
+    // Flush proceeding instructions and replay them after any CSR write.
+    redoInterface = pcManagerService.createJumpInterface(pipeline.execute, -1)
+    redoInterface.valid := False
+    redoInterface.payload := decode.input(PC)
 
     val core = pipeline plug new Area {
 
+      redoInterface.valid := False
+
       // Instantiate pmpaddr0 ... pmpaddr# CSRs.
-      for (n <- 0 until regions) {
+      for (i <- 0 until regions) {
         pmps += PmpRegister() 
-        csrService.rw(0x3B0 + n, pmps(n).csr.addr)
+        csrService.rw(0x3b0 + i, pmps(i).csr.addr)
+        csrService.onWrite(0x3b0 + i) {
+          execute.arbitration.flushNext := True
+          redoInterface.valid := True
+        }
       }
 
       // Instantiate pmpcfg0 ... pmpcfg# CSRs.
-      for (n <- 0 until (regions / 4)) {
-        csrService.rw(0x3A0 + n, 
-          31 -> pmps((n * 4) + 3).csr.l, 23 -> pmps((n * 4) + 2).csr.l,
-          15 -> pmps((n * 4) + 1).csr.l,  7 -> pmps((n * 4)    ).csr.l,
-          27 -> pmps((n * 4) + 3).csr.a, 26 -> pmps((n * 4) + 3).csr.x,
-          25 -> pmps((n * 4) + 3).csr.w, 24 -> pmps((n * 4) + 3).csr.r,
-          19 -> pmps((n * 4) + 2).csr.a, 18 -> pmps((n * 4) + 2).csr.x,
-          17 -> pmps((n * 4) + 2).csr.w, 16 -> pmps((n * 4) + 2).csr.r,
-          11 -> pmps((n * 4) + 1).csr.a, 10 -> pmps((n * 4) + 1).csr.x,
-           9 -> pmps((n * 4) + 1).csr.w,  8 -> pmps((n * 4) + 1).csr.r,
-           3 -> pmps((n * 4)    ).csr.a,  2 -> pmps((n * 4)    ).csr.x,
-           1 -> pmps((n * 4)    ).csr.w,  0 -> pmps((n * 4)    ).csr.r
+      for (i <- 0 until (regions / 4)) {
+        csrService.rw(0x3a0 + i,
+          31 -> pmps((i * 4) + 3).csr.l, 23 -> pmps((i * 4) + 2).csr.l,
+          15 -> pmps((i * 4) + 1).csr.l,  7 -> pmps((i * 4)    ).csr.l,
+          27 -> pmps((i * 4) + 3).csr.a, 26 -> pmps((i * 4) + 3).csr.x,
+          25 -> pmps((i * 4) + 3).csr.w, 24 -> pmps((i * 4) + 3).csr.r,
+          19 -> pmps((i * 4) + 2).csr.a, 18 -> pmps((i * 4) + 2).csr.x,
+          17 -> pmps((i * 4) + 2).csr.w, 16 -> pmps((i * 4) + 2).csr.r,
+          11 -> pmps((i * 4) + 1).csr.a, 10 -> pmps((i * 4) + 1).csr.x,
+           9 -> pmps((i * 4) + 1).csr.w,  8 -> pmps((i * 4) + 1).csr.r,
+           3 -> pmps((i * 4)    ).csr.a,  2 -> pmps((i * 4)    ).csr.x,
+           1 -> pmps((i * 4)    ).csr.w,  0 -> pmps((i * 4)    ).csr.r
         )
+        csrService.onWrite(0x3a0 + i) {
+          execute.arbitration.flushNext := True
+          redoInterface.valid := True
+        }
       }
 
       // Connect memory ports to PMP logic.
@@ -168,13 +187,13 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
         val address = port.bus.cmd.virtualAddress
         port.bus.rsp.physicalAddress := address
 
-        // Only the first matching PMP region is applied.
+        // Only the first matching PMP region applies.
         val hits = pmps.map(pmp => pmp.region.valid && 
                                    pmp.region.start <= address && 
                                    pmp.region.end > address &&
-                                   (pmp.region.l || ~privilegeService.isMachine()))
+                                  (pmp.region.lock || ~privilegeService.isMachine()))
 
-        // M-mode has full access by default. All others have none by default.
+        // M-mode has full access by default, others have none.
         when(CountOne(hits) === 0) {
           port.bus.rsp.allowRead := privilegeService.isMachine()
           port.bus.rsp.allowWrite := privilegeService.isMachine()
