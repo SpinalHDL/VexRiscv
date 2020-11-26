@@ -107,8 +107,6 @@ case class PmpRegister() extends Area {
         region.valid := True
       }
       default {
-        region.start := 0
-        region.end := 0
         region.valid := False
       }
     }
