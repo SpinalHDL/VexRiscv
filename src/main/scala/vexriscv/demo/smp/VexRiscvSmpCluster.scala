@@ -159,7 +159,8 @@ object VexRiscvSmpClusterGen {
                      iCacheWays : Int = 2,
                      dCacheWays : Int = 2,
                      iBusRelax : Boolean = false,
-                     earlyBranch : Boolean = false) = {
+                     earlyBranch : Boolean = false,
+                     dBusCmdMasterPipe : Boolean = false) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
     val config = VexRiscvConfig(
@@ -198,7 +199,7 @@ object VexRiscvSmpClusterGen {
           )
         ),
         new DBusCachedPlugin(
-          dBusCmdMasterPipe = dBusWidth == 32,
+          dBusCmdMasterPipe = dBusCmdMasterPipe || dBusWidth == 32,
           dBusCmdSlavePipe = true,
           dBusRspSlavePipe = true,
           relaxedMemoryTranslationRegister = true,
