@@ -48,6 +48,7 @@ class VexRiscvUniverse extends ConfigUniverse
 object VexRiscvUniverse{
   val CATCH_ALL = new VexRiscvUniverse
   val MMU = new VexRiscvUniverse
+  val PMP = new VexRiscvUniverse
   val FORCE_MULDIV = new VexRiscvUniverse
   val SUPERVISOR = new VexRiscvUniverse
   val NO_WRITEBACK = new VexRiscvUniverse
@@ -468,12 +469,12 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 }
 
 
-class MmuDimension extends VexRiscvDimension("DBus") {
+class MmuPmpDimension extends VexRiscvDimension("DBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     if(universes.contains(VexRiscvUniverse.MMU)) {
       new VexRiscvPosition("WithMmu") {
-        override def testParam = "MMU=yes"
+        override def testParam = "MMU=yes PMP=no"
 
         override def applyOn(config: VexRiscvConfig): Unit = {
           config.plugins += new MmuPlugin(
@@ -481,9 +482,20 @@ class MmuDimension extends VexRiscvDimension("DBus") {
           )
         }
       }
+    } else if (universes.contains(VexRiscvUniverse.PMP)) {
+      new VexRiscvPosition("WithPmp") {
+        override def testParam = "MMU=no PMP=yes"
+
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new PmpPlugin(
+            regions = 16,
+            ioRange = _ (31 downto 28) === 0xF
+          )
+        }
+      }
     } else {
-      new VexRiscvPosition("NoMmu") {
-        override def testParam = "MMU=no"
+      new VexRiscvPosition("NoMemProtect") {
+        override def testParam = "MMU=no PMP=no"
 
         override def applyOn(config: VexRiscvConfig): Unit = {
           config.plugins += new StaticMemoryTranslatorPlugin(
@@ -661,7 +673,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite {
     new CsrDimension(/*sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "1")*/ "0", zephyrCount, linuxRegression), //Freertos old port software is broken
     new DecoderDimension,
     new DebugDimension,
-    new MmuDimension
+    new MmuPmpDimension
   )
 
   var clockCounter = 0l
@@ -749,6 +761,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite {
     } else {
       if(machineOsRate > rand.nextDouble()) {
         universe += VexRiscvUniverse.CATCH_ALL
+        universe += VexRiscvUniverse.PMP
         if(demwRate < rand.nextDouble()){
           universe += VexRiscvUniverse.NO_WRITEBACK
         }

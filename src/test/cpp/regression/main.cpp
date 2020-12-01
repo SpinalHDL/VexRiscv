@@ -3871,7 +3871,7 @@ int main(int argc, char **argv, char **env) {
 		#endif
 
 		#ifdef PMP
-			redo(REDO,WorkspaceRegression("pmp").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../raw/lrsc/build/pmp.hex")->bootAt(0x00000000u)->run(10e3););
+			redo(REDO,WorkspaceRegression("pmp").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../raw/pmp/build/pmp.hex")->bootAt(0x00000000u)->run(10e3););
 		#endif
 
 		#ifdef AMO

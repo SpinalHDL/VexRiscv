@@ -1,4 +1,10 @@
-#define TEST_ID    x29
+/*
+ * Copyright (c) 2020 Samuel Lindemer <samuel.lindemer@ri.se>
+ *
+ * SPDX-License-Identifier: MIT
+ */
+
+#define TEST_ID    x28
 #define TRAP_RA    x30
 
 #define PMPCFG0    0x071a0808
@@ -24,15 +30,18 @@
 #define PMPADDR14  0x00000000 // NAPOT  WX
 #define PMPADDR15  0x00000000 // TOR   RWX
 
-.global trap
 .global _start
+_start:
+    la x1, trap
+    csrw mtvec, x1
+    j test0
 
-    j _start
-
+.global trap
 trap:
     csrw mepc, TRAP_RA
     mret
 
+.global to_user
 to_user:
     li t1, 0x14000
     csrc mstatus, t1
@@ -40,10 +49,6 @@ to_user:
     csrs mstatus, t1
     csrw mepc, ra
     mret
-
-_start:
-    la x1, trap
-    csrw mtvec, x1
 
 // configure PMP, attempt read/write from machine mode
 test0:

@@ -140,13 +140,12 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
     val privilegeService = pipeline.service(classOf[PrivilegeService])
     var pcManagerService = pipeline.service(classOf[JumpService])
 
-    // Flush proceeding instructions and replay them after any CSR write.
     redoInterface = pcManagerService.createJumpInterface(pipeline.execute, -1)
-    redoInterface.valid := False
-    redoInterface.payload := decode.input(PC)
 
     val core = pipeline plug new Area {
 
+      // Flush proceeding instructions and replay them after any CSR write.
+      redoInterface.payload := decode.input(PC)
       redoInterface.valid := False
 
       // Instantiate pmpaddr0 ... pmpaddr# CSRs.
