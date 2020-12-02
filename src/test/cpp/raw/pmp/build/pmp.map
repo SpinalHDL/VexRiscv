@@ -15,20 +15,20 @@ LOAD /opt/riscv/lib/gcc/riscv64-unknown-elf/10.2.0/../../../../riscv64-unknown-e
 END GROUP
 LOAD /opt/riscv/lib/gcc/riscv64-unknown-elf/10.2.0/libgcc.a
 
-.crt_section    0x0000000080000000      0x240
+.crt_section    0x0000000080000000      0x23c
                 0x0000000080000000                . = ALIGN (0x4)
  *crt.o(.text)
- .text          0x0000000080000000      0x240 build/src/crt.o
+ .text          0x0000000080000000      0x23c build/src/crt.o
                 0x0000000080000000                _start
                 0x0000000080000010                trap
                 0x0000000080000018                to_user
 OUTPUT(build/pmp.elf elf32-littleriscv)
 
-.data           0x0000000080000240        0x0
- .data          0x0000000080000240        0x0 build/src/crt.o
+.data           0x000000008000023c        0x0
+ .data          0x000000008000023c        0x0 build/src/crt.o
 
-.bss            0x0000000080000240        0x0
- .bss           0x0000000080000240        0x0 build/src/crt.o
+.bss            0x000000008000023c        0x0
+ .bss           0x000000008000023c        0x0 build/src/crt.o
 
 .riscv.attributes
                 0x0000000000000000       0x1e

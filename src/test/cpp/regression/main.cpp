@@ -725,23 +725,54 @@ public:
 			if (!pmpcfg[3].reg[1].l) maskedWrite(pmpcfg[3].raw, value, 0xff0000);
 			if (!pmpcfg[3].reg[0].l) maskedWrite(pmpcfg[3].raw, value, 0xff000000);
 			break;
-
-		case PMPADDR0: pmpaddr[0] = value; break;
-		case PMPADDR1: pmpaddr[1] = value; break;
-		case PMPADDR2: pmpaddr[2] = value; break;
-		case PMPADDR3: pmpaddr[3] = value; break;
-		case PMPADDR4: pmpaddr[4] = value; break;
-		case PMPADDR5: pmpaddr[5] = value; break;
-		case PMPADDR6: pmpaddr[6] = value; break;
-		case PMPADDR7: pmpaddr[7] = value; break;
-		case PMPADDR8: pmpaddr[8] = value; break;
-		case PMPADDR9: pmpaddr[9] = value; break;
-		case PMPADDR10: pmpaddr[10] = value; break;
-		case PMPADDR11: pmpaddr[11] = value; break;
-		case PMPADDR12: pmpaddr[12] = value; break;
-		case PMPADDR13: pmpaddr[13] = value; break;
-		case PMPADDR14: pmpaddr[14] = value; break;
-		case PMPADDR15: pmpaddr[15] = value; break;
+		case PMPADDR0:
+			if (!pmpcfg[0].reg[3].l) pmpaddr[0] = value;
+			break;
+		case PMPADDR1:
+			if (!pmpcfg[0].reg[2].l) pmpaddr[1] = value;
+			break;
+		case PMPADDR2:
+			if (!pmpcfg[0].reg[1].l) pmpaddr[2] = value;
+			break;
+		case PMPADDR3:
+			if (!pmpcfg[0].reg[0].l) pmpaddr[3] = value;
+			break;
+		case PMPADDR4:
+			if (!pmpcfg[1].reg[3].l) pmpaddr[4] = value;
+			break;
+		case PMPADDR5:
+			if (!pmpcfg[1].reg[2].l) pmpaddr[5] = value;
+			break;
+		case PMPADDR6:
+			if (!pmpcfg[1].reg[1].l) pmpaddr[6] = value;
+			break;
+		case PMPADDR7:
+			if (!pmpcfg[1].reg[0].l) pmpaddr[7] = value;
+			break;
+		case PMPADDR8:
+			if (!pmpcfg[2].reg[3].l) pmpaddr[8] = value;
+			break;
+		case PMPADDR9:
+			if (!pmpcfg[2].reg[2].l) pmpaddr[9] = value;
+			break;
+		case PMPADDR10:
+			if (!pmpcfg[2].reg[1].l) pmpaddr[10] = value;
+			break;
+		case PMPADDR11:
+			if (!pmpcfg[2].reg[0].l) pmpaddr[11] = value;
+			break;
+		case PMPADDR12:
+			if (!pmpcfg[3].reg[3].l) pmpaddr[12] = value;
+			break;
+		case PMPADDR13:
+			if (!pmpcfg[3].reg[2].l) pmpaddr[13] = value;
+			break;
+		case PMPADDR14:
+			if (!pmpcfg[3].reg[1].l) pmpaddr[14] = value;
+			break;
+		case PMPADDR15:
+			if (!pmpcfg[3].reg[0].l) pmpaddr[15] = value;
+			break;
 
 		default: ilegalInstruction(); return true; break;
 		}

@@ -25,17 +25,17 @@ Disassembly of section .crt_section:
 80000030 <test0>:
 80000030:	00000e13          	li	t3,0
 80000034:	00000f17          	auipc	t5,0x0
-80000038:	1f4f0f13          	addi	t5,t5,500 # 80000228 <fail>
+80000038:	1f0f0f13          	addi	t5,t5,496 # 80000224 <fail>
 8000003c:	800000b7          	lui	ra,0x80000
 80000040:	80008237          	lui	tp,0x80008
 80000044:	deadc137          	lui	sp,0xdeadc
-80000048:	eef10113          	addi	sp,sp,-273 # deadbeef <pass+0x5eadbcbb>
-8000004c:	0020a023          	sw	sp,0(ra) # 80000000 <pass+0xfffffdcc>
-80000050:	00222023          	sw	sp,0(tp) # 80008000 <pass+0x7dcc>
+80000048:	eef10113          	addi	sp,sp,-273 # deadbeef <pass+0x5eadbcbf>
+8000004c:	0020a023          	sw	sp,0(ra) # 80000000 <pass+0xfffffdd0>
+80000050:	00222023          	sw	sp,0(tp) # 80008000 <pass+0x7dd0>
 80000054:	0000a183          	lw	gp,0(ra)
-80000058:	1c311863          	bne	sp,gp,80000228 <fail>
+80000058:	1c311663          	bne	sp,gp,80000224 <fail>
 8000005c:	00022183          	lw	gp,0(tp) # 0 <_start-0x80000000>
-80000060:	1c311463          	bne	sp,gp,80000228 <fail>
+80000060:	1c311263          	bne	sp,gp,80000224 <fail>
 80000064:	071a12b7          	lui	t0,0x71a1
 80000068:	80828293          	addi	t0,t0,-2040 # 71a0808 <_start-0x78e5f7f8>
 8000006c:	3a029073          	csrw	pmpcfg0,t0
@@ -90,82 +90,81 @@ Disassembly of section .crt_section:
 80000130:	0020a023          	sw	sp,0(ra)
 80000134:	00222023          	sw	sp,0(tp) # 0 <_start-0x80000000>
 80000138:	0000a183          	lw	gp,0(ra)
-8000013c:	0e311663          	bne	sp,gp,80000228 <fail>
+8000013c:	0e311463          	bne	sp,gp,80000224 <fail>
 80000140:	00022183          	lw	gp,0(tp) # 0 <_start-0x80000000>
-80000144:	0e311263          	bne	sp,gp,80000228 <fail>
-80000148:	06c0006f          	j	800001b4 <test3>
+80000144:	0e311063          	bne	sp,gp,80000224 <fail>
 
-8000014c <test1>:
-8000014c:	00100e13          	li	t3,1
-80000150:	00000f17          	auipc	t5,0x0
-80000154:	0d8f0f13          	addi	t5,t5,216 # 80000228 <fail>
-80000158:	079a12b7          	lui	t0,0x79a1
-8000015c:	80828293          	addi	t0,t0,-2040 # 79a0808 <_start-0x7865f7f8>
-80000160:	3a029073          	csrw	pmpcfg0,t0
-80000164:	deadc137          	lui	sp,0xdeadc
-80000168:	eef10113          	addi	sp,sp,-273 # deadbeef <pass+0x5eadbcbb>
-8000016c:	00222023          	sw	sp,0(tp) # 0 <_start-0x80000000>
-80000170:	00000f17          	auipc	t5,0x0
-80000174:	010f0f13          	addi	t5,t5,16 # 80000180 <test2>
-80000178:	00022183          	lw	gp,0(tp) # 0 <_start-0x80000000>
-8000017c:	0ac0006f          	j	80000228 <fail>
+80000148 <test1>:
+80000148:	00100e13          	li	t3,1
+8000014c:	00000f17          	auipc	t5,0x0
+80000150:	0d8f0f13          	addi	t5,t5,216 # 80000224 <fail>
+80000154:	079a12b7          	lui	t0,0x79a1
+80000158:	80828293          	addi	t0,t0,-2040 # 79a0808 <_start-0x7865f7f8>
+8000015c:	3a029073          	csrw	pmpcfg0,t0
+80000160:	deadc137          	lui	sp,0xdeadc
+80000164:	eef10113          	addi	sp,sp,-273 # deadbeef <pass+0x5eadbcbf>
+80000168:	00222023          	sw	sp,0(tp) # 0 <_start-0x80000000>
+8000016c:	00000f17          	auipc	t5,0x0
+80000170:	010f0f13          	addi	t5,t5,16 # 8000017c <test2>
+80000174:	00022183          	lw	gp,0(tp) # 0 <_start-0x80000000>
+80000178:	0ac0006f          	j	80000224 <fail>
 
-80000180 <test2>:
-80000180:	00200e13          	li	t3,2
-80000184:	00000f17          	auipc	t5,0x0
-80000188:	0a4f0f13          	addi	t5,t5,164 # 80000228 <fail>
-8000018c:	071a12b7          	lui	t0,0x71a1
-80000190:	80828293          	addi	t0,t0,-2040 # 71a0808 <_start-0x78e5f7f8>
-80000194:	3a029073          	csrw	pmpcfg0,t0
-80000198:	deadc137          	lui	sp,0xdeadc
-8000019c:	eef10113          	addi	sp,sp,-273 # deadbeef <pass+0x5eadbcbb>
-800001a0:	00222023          	sw	sp,0(tp) # 0 <_start-0x80000000>
-800001a4:	00000f17          	auipc	t5,0x0
-800001a8:	010f0f13          	addi	t5,t5,16 # 800001b4 <test3>
-800001ac:	00022183          	lw	gp,0(tp) # 0 <_start-0x80000000>
-800001b0:	0780006f          	j	80000228 <fail>
+8000017c <test2>:
+8000017c:	00200e13          	li	t3,2
+80000180:	00000f17          	auipc	t5,0x0
+80000184:	0a4f0f13          	addi	t5,t5,164 # 80000224 <fail>
+80000188:	071a12b7          	lui	t0,0x71a1
+8000018c:	80828293          	addi	t0,t0,-2040 # 71a0808 <_start-0x78e5f7f8>
+80000190:	3a029073          	csrw	pmpcfg0,t0
+80000194:	deadc137          	lui	sp,0xdeadc
+80000198:	eef10113          	addi	sp,sp,-273 # deadbeef <pass+0x5eadbcbf>
+8000019c:	00222023          	sw	sp,0(tp) # 0 <_start-0x80000000>
+800001a0:	00000f17          	auipc	t5,0x0
+800001a4:	010f0f13          	addi	t5,t5,16 # 800001b0 <test3>
+800001a8:	00022183          	lw	gp,0(tp) # 0 <_start-0x80000000>
+800001ac:	0780006f          	j	80000224 <fail>
 
-800001b4 <test3>:
-800001b4:	00300e13          	li	t3,3
-800001b8:	00000f17          	auipc	t5,0x0
-800001bc:	070f0f13          	addi	t5,t5,112 # 80000228 <fail>
-800001c0:	00000e97          	auipc	t4,0x0
-800001c4:	00ce8e93          	addi	t4,t4,12 # 800001cc <test4>
-800001c8:	e51ff06f          	j	80000018 <to_user>
+800001b0 <test3>:
+800001b0:	00300e13          	li	t3,3
+800001b4:	00000f17          	auipc	t5,0x0
+800001b8:	070f0f13          	addi	t5,t5,112 # 80000224 <fail>
+800001bc:	00000e97          	auipc	t4,0x0
+800001c0:	00ce8e93          	addi	t4,t4,12 # 800001c8 <test4>
+800001c4:	e55ff06f          	j	80000018 <to_user>
 
-800001cc <test4>:
-800001cc:	00400e13          	li	t3,4
-800001d0:	00000f17          	auipc	t5,0x0
-800001d4:	058f0f13          	addi	t5,t5,88 # 80000228 <fail>
-800001d8:	deadc137          	lui	sp,0xdeadc
-800001dc:	eef10113          	addi	sp,sp,-273 # deadbeef <pass+0x5eadbcbb>
-800001e0:	00222023          	sw	sp,0(tp) # 0 <_start-0x80000000>
-800001e4:	00000f17          	auipc	t5,0x0
-800001e8:	010f0f13          	addi	t5,t5,16 # 800001f4 <test5>
-800001ec:	00022183          	lw	gp,0(tp) # 0 <_start-0x80000000>
-800001f0:	0380006f          	j	80000228 <fail>
+800001c8 <test4>:
+800001c8:	00400e13          	li	t3,4
+800001cc:	00000f17          	auipc	t5,0x0
+800001d0:	058f0f13          	addi	t5,t5,88 # 80000224 <fail>
+800001d4:	deadc137          	lui	sp,0xdeadc
+800001d8:	eef10113          	addi	sp,sp,-273 # deadbeef <pass+0x5eadbcbf>
+800001dc:	00222023          	sw	sp,0(tp) # 0 <_start-0x80000000>
+800001e0:	00000f17          	auipc	t5,0x0
+800001e4:	010f0f13          	addi	t5,t5,16 # 800001f0 <test5>
+800001e8:	00022183          	lw	gp,0(tp) # 0 <_start-0x80000000>
+800001ec:	0380006f          	j	80000224 <fail>
 
-800001f4 <test5>:
-800001f4:	00500e13          	li	t3,5
-800001f8:	00000f17          	auipc	t5,0x0
-800001fc:	03cf0f13          	addi	t5,t5,60 # 80000234 <pass>
-80000200:	80010237          	lui	tp,0x80010
-80000204:	deadc137          	lui	sp,0xdeadc
-80000208:	eef10113          	addi	sp,sp,-273 # deadbeef <pass+0x5eadbcbb>
-8000020c:	0020a023          	sw	sp,0(ra)
-80000210:	0000a183          	lw	gp,0(ra)
-80000214:	00311a63          	bne	sp,gp,80000228 <fail>
-80000218:	00022183          	lw	gp,0(tp) # 80010000 <pass+0xfdcc>
-8000021c:	00000f17          	auipc	t5,0x0
-80000220:	018f0f13          	addi	t5,t5,24 # 80000234 <pass>
-80000224:	00322023          	sw	gp,0(tp) # 0 <_start-0x80000000>
+800001f0 <test5>:
+800001f0:	00500e13          	li	t3,5
+800001f4:	00000f17          	auipc	t5,0x0
+800001f8:	03cf0f13          	addi	t5,t5,60 # 80000230 <pass>
+800001fc:	80010237          	lui	tp,0x80010
+80000200:	deadc137          	lui	sp,0xdeadc
+80000204:	eef10113          	addi	sp,sp,-273 # deadbeef <pass+0x5eadbcbf>
+80000208:	0020a023          	sw	sp,0(ra)
+8000020c:	0000a183          	lw	gp,0(ra)
+80000210:	00311a63          	bne	sp,gp,80000224 <fail>
+80000214:	00022183          	lw	gp,0(tp) # 80010000 <pass+0xfdd0>
+80000218:	00000f17          	auipc	t5,0x0
+8000021c:	018f0f13          	addi	t5,t5,24 # 80000230 <pass>
+80000220:	00322023          	sw	gp,0(tp) # 0 <_start-0x80000000>
 
-80000228 <fail>:
-80000228:	f0100137          	lui	sp,0xf0100
-8000022c:	f2410113          	addi	sp,sp,-220 # f00fff24 <pass+0x700ffcf0>
-80000230:	01c12023          	sw	t3,0(sp)
+80000224 <fail>:
+80000224:	f0100137          	lui	sp,0xf0100
+80000228:	f2410113          	addi	sp,sp,-220 # f00fff24 <pass+0x700ffcf4>
+8000022c:	01c12023          	sw	t3,0(sp)
 
-80000234 <pass>:
-80000234:	f0100137          	lui	sp,0xf0100
-80000238:	f2010113          	addi	sp,sp,-224 # f00fff20 <pass+0x700ffcec>
-8000023c:	00012023          	sw	zero,0(sp)
+80000230 <pass>:
+80000230:	f0100137          	lui	sp,0xf0100
+80000234:	f2010113          	addi	sp,sp,-224 # f00fff20 <pass+0x700ffcf0>
+80000238:	00012023          	sw	zero,0(sp)
