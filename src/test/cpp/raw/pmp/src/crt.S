@@ -5,6 +5,7 @@
  */
 
 #define TEST_ID    x28
+#define USER_RA    x29
 #define TRAP_RA    x30
 
 #define PMPCFG0    0x071a0808
@@ -43,11 +44,11 @@ trap:
 
 .global to_user
 to_user:
-    li t1, 0x14000
-    csrc mstatus, t1
-    li t1, 0x200
-    csrs mstatus, t1
-    csrw mepc, ra
+    li x2, 0x14000
+    csrc mstatus, x2
+    li x2, 0x200
+    csrs mstatus, x2
+    csrw mepc, USER_RA
     mret
 
 // configure PMP, attempt read/write from machine mode
@@ -55,118 +56,118 @@ test0:
     li TEST_ID, 0
     la TRAP_RA, fail
 
-    li t0, 0x80000000
-    li t3, 0x80008000
-    li t1, 0xdeadbeef
-    sw t1, 0x0(t0)
-    sw t1, 0x0(t3)
-    lw t2, 0x0(t0)
-    bne t1, t2, fail
-    lw t2, 0x0(t3)
-    bne t1, t2, fail
+    li x1, 0x80000000
+    li x4, 0x80008000
+    li x2, 0xdeadbeef
+    sw x2, 0x0(x1)
+    sw x2, 0x0(x4)
+    lw x3, 0x0(x1)
+    bne x2, x3, fail
+    lw x3, 0x0(x4)
+    bne x2, x3, fail
 
-    li t5, PMPCFG0
-    csrw pmpcfg0, t5
-    li t5, PMPCFG1
-    csrw pmpcfg1, t5
-    li t5, PMPCFG2
-    csrw pmpcfg2, t5
-    li t5, PMPCFG3
-    csrw pmpcfg3, t5
-    li t5, PMPADDR0
-    csrw pmpaddr0, t5
-    li t5, PMPADDR1
-    csrw pmpaddr1, t5
-    li t5, PMPADDR2
-    csrw pmpaddr2, t5
-    li t5, PMPADDR3
-    csrw pmpaddr3, t5
-    li t5, PMPADDR4
-    csrw pmpaddr4, t5
-    li t5, PMPADDR5
-    csrw pmpaddr5, t5
-    li t5, PMPADDR6
-    csrw pmpaddr6, t5
-    li t5, PMPADDR7
-    csrw pmpaddr7, t5
-    li t5, PMPADDR8
-    csrw pmpaddr8, t5
-    li t5, PMPADDR9
-    csrw pmpaddr9, t5
-    li t5, PMPADDR10
-    csrw pmpaddr10, t5
-    li t5, PMPADDR11
-    csrw pmpaddr11, t5
-    li t5, PMPADDR12
-    csrw pmpaddr12, t5
-    li t5, PMPADDR13
-    csrw pmpaddr13, t5
-    li t5, PMPADDR14
-    csrw pmpaddr14, t5
-    li t5, PMPADDR15
-    csrw pmpaddr15, t5
+    li x5, PMPCFG0
+    csrw pmpcfg0, x5
+    li x5, PMPCFG1
+    csrw pmpcfg1, x5
+    li x5, PMPCFG2
+    csrw pmpcfg2, x5
+    li x5, PMPCFG3
+    csrw pmpcfg3, x5
+    li x5, PMPADDR0
+    csrw pmpaddr0, x5
+    li x5, PMPADDR1
+    csrw pmpaddr1, x5
+    li x5, PMPADDR2
+    csrw pmpaddr2, x5
+    li x5, PMPADDR3
+    csrw pmpaddr3, x5
+    li x5, PMPADDR4
+    csrw pmpaddr4, x5
+    li x5, PMPADDR5
+    csrw pmpaddr5, x5
+    li x5, PMPADDR6
+    csrw pmpaddr6, x5
+    li x5, PMPADDR7
+    csrw pmpaddr7, x5
+    li x5, PMPADDR8
+    csrw pmpaddr8, x5
+    li x5, PMPADDR9
+    csrw pmpaddr9, x5
+    li x5, PMPADDR10
+    csrw pmpaddr10, x5
+    li x5, PMPADDR11
+    csrw pmpaddr11, x5
+    li x5, PMPADDR12
+    csrw pmpaddr12, x5
+    li x5, PMPADDR13
+    csrw pmpaddr13, x5
+    li x5, PMPADDR14
+    csrw pmpaddr14, x5
+    li x5, PMPADDR15
+    csrw pmpaddr15, x5
 
-    li t1, 0x00c0ffee
-    sw t1, 0x0(t0)
-    sw t1, 0x0(t3)
-    lw t2, 0x0(t0)
-    bne t1, t2, fail
-    lw t2, 0x0(t3)
-    bne t1, t2, fail
+    li x2, 0x00c0ffee
+    sw x2, 0x0(x1)
+    sw x2, 0x0(x4)
+    lw x3, 0x0(x1)
+    bne x2, x3, fail
+    lw x3, 0x0(x4)
+    bne x2, x3, fail
 
 // lock region 2, attempt read/write from machine mode
 test1:
     li TEST_ID, 1
     la TRAP_RA, fail 
-    li t5, PMPCFG0_
-    csrw pmpcfg0, t5            // lock region 2
-    li t1, 0xdeadbeef
-    sw t1, 0x0(t3)              // should be OK (write 0x80008000)
+    li x5, PMPCFG0_
+    csrw pmpcfg0, x5            // lock region 2
+    li x2, 0xdeadbeef
+    sw x2, 0x0(x4)              // should be OK (write 0x80008000)
     la TRAP_RA, test2
-    lw t2, 0x0(t3)              // should fault (read 0x80008000)
+    lw x3, 0x0(x4)              // should fault (read 0x80008000)
     j fail
 
 // "unlock" region 2, attempt read/write from machine mode
 test2:
     li TEST_ID, 2
     la TRAP_RA, fail 
-    li t5, PMPCFG0
-    csrw pmpcfg0, t5            // "unlock" region 2
-    li t1, 0xdeadbeef
-    sw t1, 0x0(t3)              // should still be OK (write 0x80008000)
+    li x5, PMPCFG0
+    csrw pmpcfg0, x5            // "unlock" region 2
+    li x2, 0xdeadbeef
+    sw x2, 0x0(x4)              // should still be OK (write 0x80008000)
     la TRAP_RA, test3
-    lw t2, 0x0(t3)              // should still fault (read 0x80008000)
+    lw x3, 0x0(x4)              // should still fault (read 0x80008000)
     j fail
 
 // jump into user mode
 test3:
     li TEST_ID, 3
     la TRAP_RA, fail
-    la ra, test4
+    la USER_RA, test4
     j to_user
 
 // attempt to read/write region 2 from user mode
 test4:
     li TEST_ID, 4
     la TRAP_RA, fail 
-    li t1, 0xdeadbeef
-    sw t1, 0x0(t3)              // should be OK (write 0x80008000)
+    li x2, 0xdeadbeef
+    sw x2, 0x0(x4)              // should be OK (write 0x80008000)
     la TRAP_RA, test5
-    lw t2, 0x0(t3)              // should fault (read 0x80008000)
+    lw x3, 0x0(x4)              // should fault (read 0x80008000)
     j fail
 
 // attempt to read/write other regions from user mode
 test5:
     li TEST_ID, 5
     la TRAP_RA, pass
-    li t3, 0x80010000
-    li t1, 0xdeadbeef
-    sw t1, 0x0(t0)
-    lw t2, 0x0(t0)
-    bne t1, t2, fail            // should be OK
-    lw t2, 0x0(t3)              // should be OK (read 0x80010000)
+    li x4, 0x80010000
+    li x2, 0xdeadbeef
+    sw x2, 0x0(x1)
+    lw x3, 0x0(x1)
+    bne x2, x3, fail            // should be OK
+    lw x3, 0x0(x4)              // should be OK (read 0x80010000)
     la TRAP_RA, pass
-    sw t2, 0x0(t3)              // should fault (write 0x80010000)
+    sw x3, 0x0(x4)              // should fault (write 0x80010000)
     
 fail:
     li x2, 0xf00fff24
