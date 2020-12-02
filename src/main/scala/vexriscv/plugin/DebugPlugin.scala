@@ -195,8 +195,9 @@ class DebugPlugin(val debugClockDomain : ClockDomain, hardwareBreakpointCount : 
         }
       }
 
+      val allowEBreak = if(!pipeline.serviceExist(classOf[PrivilegeService])) True else pipeline.service(classOf[PrivilegeService]).isMachine()
 
-      decode.insert(DO_EBREAK) := !haltIt && (decode.input(IS_EBREAK) || hardwareBreakpoints.map(hb => hb.valid && hb.pc === (decode.input(PC) >> 1)).foldLeft(False)(_ || _))
+      decode.insert(DO_EBREAK) := !haltIt && (decode.input(IS_EBREAK) || hardwareBreakpoints.map(hb => hb.valid && hb.pc === (decode.input(PC) >> 1)).foldLeft(False)(_ || _)) && allowEBreak
       when(execute.arbitration.isValid && execute.input(DO_EBREAK)){
         execute.arbitration.haltByOther := True
         busReadDataReg := execute.input(PC).asBits
