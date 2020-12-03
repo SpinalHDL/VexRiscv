@@ -5,12 +5,11 @@
  */
 
 #define TEST_ID    x28
-#define USER_RA    x29
 #define TRAP_RA    x30
 
-#define PMPCFG0    0x071a0808
-#define PMPCFG0_   0x079a0808 // lock region 2
-#define PMPCFG1    0x191c0504
+#define PMPCFG0    0x07120808
+#define PMPCFG0_   0x07920808 // lock region 2
+#define PMPCFG1    0x191f0304
 #define PMPCFG2    0x00000018
 #define PMPCFG3    0x0f1e1900
 
@@ -40,15 +39,6 @@ _start:
 .global trap
 trap:
     csrw mepc, TRAP_RA
-    mret
-
-.global to_user
-to_user:
-    li x2, 0x14000
-    csrc mstatus, x2
-    li x2, 0x200
-    csrs mstatus, x2
-    csrw mepc, USER_RA
     mret
 
 // configure PMP, attempt read/write from machine mode
@@ -112,6 +102,7 @@ test0:
     sw x2, 0x0(x4)
     lw x3, 0x0(x1)
     bne x2, x3, fail
+    li x3, 0x0
     lw x3, 0x0(x4)
     bne x2, x3, fail
 
@@ -143,8 +134,9 @@ test2:
 test3:
     li TEST_ID, 3
     la TRAP_RA, fail
-    la USER_RA, test4
-    j to_user
+    la x2, test4
+    csrw mepc, x2
+    mret
 
 // attempt to read/write region 2 from user mode
 test4:
@@ -159,12 +151,14 @@ test4:
 // attempt to read/write other regions from user mode
 test5:
     li TEST_ID, 5
-    la TRAP_RA, pass
-    li x4, 0x80010000
     li x2, 0xdeadbeef
     sw x2, 0x0(x1)
     lw x3, 0x0(x1)
-    bne x2, x3, fail            // should be OK
+    bne x2, x3, fail            // should be OK (read/write 0x80000000)
+
+test6:
+    li TEST_ID, 6
+    li x4, 0x80010000
     lw x3, 0x0(x4)              // should be OK (read 0x80010000)
     la TRAP_RA, pass
     sw x3, 0x0(x4)              // should fault (write 0x80010000)
@@ -174,5 +168,6 @@ fail:
     sw TEST_ID, 0(x2)
 
 pass:
+    li TEST_ID, 666
     li x2, 0xf00fff20
     sw x0, 0(x2)

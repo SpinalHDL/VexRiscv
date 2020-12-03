@@ -5,11 +5,12 @@ import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import vexriscv.{plugin, VexRiscv, VexRiscvConfig}
 import spinal.core._
 
-object GenZephyr extends App{
+object GenZephyr extends App {
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       plugins = List(
         new IBusCachedPlugin(
+          resetVector = 0x80000000l,
           prediction = STATIC,
           config = InstructionCacheConfig(
             cacheSize = 4096,

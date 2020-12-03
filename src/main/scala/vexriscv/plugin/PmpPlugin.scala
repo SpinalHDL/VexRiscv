@@ -153,8 +153,8 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
         pmps += PmpRegister() 
         csrService.rw(0x3b0 + i, pmps(i).csr.addr)
         csrService.onWrite(0x3b0 + i) {
-          execute.arbitration.flushNext := True
-          redoInterface.valid := True
+          //execute.arbitration.flushNext := True
+          //redoInterface.valid := True
         }
       }
 
@@ -173,8 +173,8 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
            1 -> pmps((i * 4)    ).csr.w,  0 -> pmps((i * 4)    ).csr.r
         )
         csrService.onWrite(0x3a0 + i) {
-          execute.arbitration.flushNext := True
-          redoInterface.valid := True
+          //execute.arbitration.flushNext := True
+          //redoInterface.valid := True
         }
       }
 
