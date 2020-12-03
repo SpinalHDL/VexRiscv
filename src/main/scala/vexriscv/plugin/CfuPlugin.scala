@@ -208,7 +208,7 @@ class CfuPlugin( val stageCount : Int,
           latency = 0
         )
       } else if(forkStage != joinStage && allowZeroLatency) {
-        bus.rsp.m2sPipe()
+        bus.rsp.s2mPipe()
       } else {
         bus.rsp.combStage()
       }
