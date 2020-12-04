@@ -63,9 +63,9 @@ import scala.collection.mutable.ArrayBuffer
  * register defines a 4-byte wide region.
  */
 
-case class PmpRegister() extends Area {
+case class PmpRegister(previous : PmpRegister) extends Area {
 
-  // Addressing options (TOR not supported)
+  def OFF = 0
   def TOR = 1
   def NA4 = 2
   def NAPOT = 3
@@ -81,37 +81,52 @@ case class PmpRegister() extends Area {
   // Active region bounds and permissions (internal)
   val region = new Area {
     val r, w, x = Reg(Bool)
-    val lock, valid = RegInit(False)
+    val l, valid = RegInit(False)
     val start, end = Reg(UInt(32 bits))
   }
   
-  // Internal PMP state is locked until reset once the L-bit is set.
-  when(~region.lock) {
-    region.r    := csr.r
-    region.w    := csr.w
-    region.x    := csr.x
-    region.lock := csr.l
+  when(~region.l) {
+    region.r := csr.r
+    region.w := csr.w
+    region.x := csr.x
+    region.l := csr.l
+
+    val shifted = csr.addr |<< 2
+    region.valid := True
 
     switch(csr.a) {
+
+      is(TOR) {
+        if (previous == null) {
+          region.start := 0
+        } else {
+          region.start := previous.region.end
+        }
+        if (csr.l == True) {
+          previous.region.l := True
+        }
+        region.end := shifted
+      }
+
       is(NA4) {
-        val shifted = csr.addr |<< 2
         region.start := shifted
         region.end := shifted + 4
-        region.valid := True
       }
+
       is(NAPOT) {
         val mask = csr.addr & ~(csr.addr + 1)
-        val shifted = (csr.addr & ~mask) |<< 2
-        region.start := shifted
-        region.end := shifted + ((mask + 1) |<< 3)
-        region.valid := True
+        val masked = (csr.addr & ~mask) |<< 2
+        region.start := masked
+        region.end := masked + ((mask + 1) |<< 3)
       }
+
       default {
+        region.end := shifted
         region.valid := False
       }
+
     }
   }
-
 }
 
 case class ProtectedMemoryTranslatorPort(bus : MemoryTranslatorBus)
@@ -123,7 +138,6 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
    
   val pmps = ArrayBuffer[PmpRegister]()
   val portsInfo = ArrayBuffer[ProtectedMemoryTranslatorPort]()
-  var redoInterface : Flow[UInt] = null
 
   override def newTranslationPort(priority : Int, args : Any): MemoryTranslatorBus = {
     val port = ProtectedMemoryTranslatorPort(MemoryTranslatorBus())
@@ -138,24 +152,17 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
 
     val csrService = pipeline.service(classOf[CsrInterface])
     val privilegeService = pipeline.service(classOf[PrivilegeService])
-    var pcManagerService = pipeline.service(classOf[JumpService])
-
-    redoInterface = pcManagerService.createJumpInterface(pipeline.execute, -1)
 
     val core = pipeline plug new Area {
 
-      // Flush proceeding instructions and replay them after any CSR write.
-      redoInterface.payload := decode.input(PC)
-      redoInterface.valid := False
-
       // Instantiate pmpaddr0 ... pmpaddr# CSRs.
       for (i <- 0 until regions) {
-        pmps += PmpRegister() 
-        csrService.rw(0x3b0 + i, pmps(i).csr.addr)
-        csrService.onWrite(0x3b0 + i) {
-          //execute.arbitration.flushNext := True
-          //redoInterface.valid := True
+        if (i == 0) {
+          pmps += PmpRegister(null)
+        } else {
+          pmps += PmpRegister(pmps.last)
         }
+        csrService.rw(0x3b0 + i, pmps(i).csr.addr)
       }
 
       // Instantiate pmpcfg0 ... pmpcfg# CSRs.
@@ -172,10 +179,6 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
            3 -> pmps((i * 4)    ).csr.a,  2 -> pmps((i * 4)    ).csr.x,
            1 -> pmps((i * 4)    ).csr.w,  0 -> pmps((i * 4)    ).csr.r
         )
-        csrService.onWrite(0x3a0 + i) {
-          //execute.arbitration.flushNext := True
-          //redoInterface.valid := True
-        }
       }
 
       // Connect memory ports to PMP logic.
@@ -188,7 +191,7 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
         val hits = pmps.map(pmp => pmp.region.valid && 
                                    pmp.region.start <= address && 
                                    pmp.region.end > address &&
-                                  (pmp.region.lock || ~privilegeService.isMachine()))
+                                  (pmp.region.l || ~privilegeService.isMachine()))
 
         // M-mode has full access by default, others have none.
         when(CountOne(hits) === 0) {

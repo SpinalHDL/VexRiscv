@@ -523,8 +523,8 @@ class CsrDimension(freertos : String, zephyr : String, linux : String) extends V
       }
     } else if(catchAll){
       new VexRiscvPosition("MachineOs") with CatchAllPosition{
-        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l))
-        override def testParam = s"CSR=yes FREERTOS=$freertos ZEPHYR=$zephyr"
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.zephyr(0x80000020l))
+        override def testParam = s"CSR=yes CSR_SKIP_TEST=yes FREERTOS=$freertos ZEPHYR=$zephyr"
       }
     } else if(r.nextDouble() < 0.3){
       new VexRiscvPosition("AllNoException") with CatchAllPosition{

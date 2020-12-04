@@ -211,27 +211,6 @@ class success : public std::exception { };
 #define MCYCLEH    0xB80 // MRW Upper 32 bits of mcycle, RV32I only.
 #define MINSTRETH  0xB82 // MRW Upper 32 bits of minstret, RV32I only.
 
-#define PMPCFG0    0x3a0
-#define PMPCFG1    0x3a1
-#define PMPCFG2    0x3a2
-#define PMPCFG3    0x3a3
-#define PMPADDR0   0x3b0
-#define PMPADDR1   0x3b1
-#define PMPADDR2   0x3b2
-#define PMPADDR3   0x3b3
-#define PMPADDR4   0x3b4
-#define PMPADDR5   0x3b5
-#define PMPADDR6   0x3b6
-#define PMPADDR7   0x3b7
-#define PMPADDR8   0x3b8
-#define PMPADDR9   0x3b9
-#define PMPADDR10  0x3ba
-#define PMPADDR11  0x3bb
-#define PMPADDR12  0x3bc
-#define PMPADDR13  0x3bd
-#define PMPADDR14  0x3be
-#define PMPADDR15  0x3bf
-
 #define SSTATUS 0x100
 #define SIE 0x104
 #define STVEC 0x105
@@ -466,53 +445,8 @@ public:
 	enum AccessKind {READ,WRITE,EXECUTE,READ_WRITE};
 	virtual bool isMmuRegion(uint32_t v) = 0;
 
-	bool pmpCheck(uint32_t p, AccessKind kind) {
-		for (int i = 0; i < 4; i++) {
-			for (int j = 0; j < 4; j++) {
-				if (privilege != 3 || pmpcfg[i].reg[3-j].l) {
-					uint32_t start, end;
-					bool valid = false;
-
-					switch (pmpcfg[i].reg[3-j].a) {
-						case 0: // OFF
-							valid = false;
-							break;
-
-						case 1: // TOR
-							valid = false;
-							break;
-
-						case 2: // NA4
-							valid = true;
-							start = pmpaddr[i*4+j] << 2;
-							end = start + 4;	
-							break;
-
-						case 3: // NAPOT
-							valid = true;
-							uint32_t mask = pmpaddr[i*4+j] & ~(pmpaddr[i*4+j] + 1);
-							start = (pmpaddr[i*4+j] & ~mask) << 2;
-							end = start + ((mask + 1) << 3);
-							break;
-					}
-					
-					if (valid && start <= p && end > p) {
-						if (kind == READ) return (bool)(!pmpcfg[i].reg[3-j].r);
-						if (kind == WRITE) return (bool)(!pmpcfg[i].reg[3-j].w);
-						if (kind == EXECUTE) return (bool)(!pmpcfg[i].reg[3-j].x);
-						return false;
-					}
-				}
-			}
-		}
-		return false;
-	}
 
 	bool v2p(uint32_t v, uint32_t *p, AccessKind kind) {
-#ifdef PMP
-		*p = v;
-		return pmpCheck(v, kind);
-#else
 		uint32_t effectivePrivilege = status.mprv && kind != EXECUTE ? status.mpp : privilege;
 		if(effectivePrivilege == 3 || satp.mode == 0 || !isMmuRegion(v)){
 			*p = v;
@@ -536,7 +470,6 @@ public:
 			*p = (tlb.ppn1 << 22) | (superPage ? v & 0x3FF000 : tlb.ppn0 << 12) | (v & 0xFFF);
 		}
 		return false;
-#endif
 	}
 
     void trap(bool interrupt,int32_t cause) {
@@ -639,27 +572,6 @@ public:
 		case SSCRATCH: *value = sscratch; break;
 		case SATP: *value = satp.raw; break;
 
-		case PMPCFG0: *value = pmpcfg[0].raw; break;
-		case PMPCFG1: *value = pmpcfg[1].raw; break;
-		case PMPCFG2: *value = pmpcfg[2].raw; break;
-		case PMPCFG3: *value = pmpcfg[3].raw; break;
-		case PMPADDR0: *value = pmpaddr[0]; break;
-		case PMPADDR1: *value = pmpaddr[1]; break;
-		case PMPADDR2: *value = pmpaddr[2]; break;
-		case PMPADDR3: *value = pmpaddr[3]; break;
-		case PMPADDR4: *value = pmpaddr[4]; break;
-		case PMPADDR5: *value = pmpaddr[5]; break;
-		case PMPADDR6: *value = pmpaddr[6]; break;
-		case PMPADDR7: *value = pmpaddr[7]; break;
-		case PMPADDR8: *value = pmpaddr[8]; break;
-		case PMPADDR9: *value = pmpaddr[9]; break;
-		case PMPADDR10: *value = pmpaddr[10]; break;
-		case PMPADDR11: *value = pmpaddr[11]; break;
-		case PMPADDR12: *value = pmpaddr[12]; break;
-		case PMPADDR13: *value = pmpaddr[13]; break;
-		case PMPADDR14: *value = pmpaddr[14]; break;
-		case PMPADDR15: *value = pmpaddr[15]; break;
-
 		default: return true; break;
 		}
 		return false;
@@ -698,81 +610,6 @@ public:
 		case SCAUSE: scause.raw = value; break;
 		case STVAL: sbadaddr = value; break;
 		case SEPC: sepc = value; break;
-		case SSCRATCH: sscratch = value; break;
-		case SATP: satp.raw = value; break;
-
-		case PMPCFG0:
-			if (!pmpcfg[0].reg[3].l) maskedWrite(pmpcfg[0].raw, value, 0xff);
-			if (!pmpcfg[0].reg[2].l) maskedWrite(pmpcfg[0].raw, value, 0xff00);
-			if (!pmpcfg[0].reg[1].l) maskedWrite(pmpcfg[0].raw, value, 0xff0000);
-			if (!pmpcfg[0].reg[0].l) maskedWrite(pmpcfg[0].raw, value, 0xff000000);
-			break;
-		case PMPCFG1:
-			if (!pmpcfg[1].reg[3].l) maskedWrite(pmpcfg[1].raw, value, 0xff);
-			if (!pmpcfg[1].reg[2].l) maskedWrite(pmpcfg[1].raw, value, 0xff00);
-			if (!pmpcfg[1].reg[1].l) maskedWrite(pmpcfg[1].raw, value, 0xff0000);
-			if (!pmpcfg[1].reg[0].l) maskedWrite(pmpcfg[1].raw, value, 0xff000000);
-			break;
-		case PMPCFG2:
-			if (!pmpcfg[2].reg[3].l) maskedWrite(pmpcfg[2].raw, value, 0xff);
-			if (!pmpcfg[2].reg[2].l) maskedWrite(pmpcfg[2].raw, value, 0xff00);
-			if (!pmpcfg[2].reg[1].l) maskedWrite(pmpcfg[2].raw, value, 0xff0000);
-			if (!pmpcfg[2].reg[0].l) maskedWrite(pmpcfg[2].raw, value, 0xff000000);
-			break;
-		case PMPCFG3:
-			if (!pmpcfg[3].reg[3].l) maskedWrite(pmpcfg[3].raw, value, 0xff);
-			if (!pmpcfg[3].reg[2].l) maskedWrite(pmpcfg[3].raw, value, 0xff00);
-			if (!pmpcfg[3].reg[1].l) maskedWrite(pmpcfg[3].raw, value, 0xff0000);
-			if (!pmpcfg[3].reg[0].l) maskedWrite(pmpcfg[3].raw, value, 0xff000000);
-			break;
-		case PMPADDR0:
-			if (!pmpcfg[0].reg[3].l) pmpaddr[0] = value;
-			break;
-		case PMPADDR1:
-			if (!pmpcfg[0].reg[2].l) pmpaddr[1] = value;
-			break;
-		case PMPADDR2:
-			if (!pmpcfg[0].reg[1].l) pmpaddr[2] = value;
-			break;
-		case PMPADDR3:
-			if (!pmpcfg[0].reg[0].l) pmpaddr[3] = value;
-			break;
-		case PMPADDR4:
-			if (!pmpcfg[1].reg[3].l) pmpaddr[4] = value;
-			break;
-		case PMPADDR5:
-			if (!pmpcfg[1].reg[2].l) pmpaddr[5] = value;
-			break;
-		case PMPADDR6:
-			if (!pmpcfg[1].reg[1].l) pmpaddr[6] = value;
-			break;
-		case PMPADDR7:
-			if (!pmpcfg[1].reg[0].l) pmpaddr[7] = value;
-			break;
-		case PMPADDR8:
-			if (!pmpcfg[2].reg[3].l) pmpaddr[8] = value;
-			break;
-		case PMPADDR9:
-			if (!pmpcfg[2].reg[2].l) pmpaddr[9] = value;
-			break;
-		case PMPADDR10:
-			if (!pmpcfg[2].reg[1].l) pmpaddr[10] = value;
-			break;
-		case PMPADDR11:
-			if (!pmpcfg[2].reg[0].l) pmpaddr[11] = value;
-			break;
-		case PMPADDR12:
-			if (!pmpcfg[3].reg[3].l) pmpaddr[12] = value;
-			break;
-		case PMPADDR13:
-			if (!pmpcfg[3].reg[2].l) pmpaddr[13] = value;
-			break;
-		case PMPADDR14:
-			if (!pmpcfg[3].reg[1].l) pmpaddr[14] = value;
-			break;
-		case PMPADDR15:
-			if (!pmpcfg[3].reg[0].l) pmpaddr[15] = value;
-			break;
 
 		default: ilegalInstruction(); return true; break;
 		}
@@ -4054,7 +3891,7 @@ int main(int argc, char **argv, char **env) {
 		#endif
 
 		#ifdef PMP
-			redo(REDO,WorkspaceRegression("pmp").loadHex(string(REGRESSION_PATH) + "../raw/pmp/build/pmp.hex")->bootAt(0x00000000u)->run(10e3););
+			redo(REDO,WorkspaceRegression("pmp").loadHex(string(REGRESSION_PATH) + "../raw/pmp/build/pmp.hex")->bootAt(0x80000000u)->run(10e3););
 		#endif
 
 		#ifdef AMO
