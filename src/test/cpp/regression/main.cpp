@@ -211,6 +211,7 @@ class success : public std::exception { };
 #define MCYCLEH    0xB80 // MRW Upper 32 bits of mcycle, RV32I only.
 #define MINSTRETH  0xB82 // MRW Upper 32 bits of minstret, RV32I only.
 
+
 #define SSTATUS 0x100
 #define SIE 0x104
 #define STVEC 0x105
@@ -373,24 +374,8 @@ public:
 		};
 	};
 	
+
 	bool lrscReserved;
-
-	struct pmpcfg_s {
-		uint32_t r : 1;
-		uint32_t w : 1;	
-		uint32_t x : 1;	
-		uint32_t a : 2;	
-		uint32_t _dummy : 2;	
-		uint32_t l : 1;	
-	} __attribute__((packed)); 
-
-	union pmpcfg_u {
-		uint32_t raw;
-		pmpcfg_s reg[4];
-	};
-
-	pmpcfg_u pmpcfg[4];
-	uint32_t pmpaddr[16];
 
 	RiscvGolden() {
 		pc = 0x80000000;
@@ -416,10 +401,6 @@ public:
 		ipInput = 0;
 		stepCounter = 0;
 		lrscReserved = false;
-		for (int i = 0; i < 4; i++)
-			pmpcfg[i].raw = 0;
-		for (int i = 0; i < 16; i++)
-			pmpaddr[i] = 0;
 	}
 
 	virtual void rfWrite(int32_t address, int32_t data) {
@@ -444,10 +425,8 @@ public:
 
 	enum AccessKind {READ,WRITE,EXECUTE,READ_WRITE};
 	virtual bool isMmuRegion(uint32_t v) = 0;
-
-
-	bool v2p(uint32_t v, uint32_t *p, AccessKind kind) {
-		uint32_t effectivePrivilege = status.mprv && kind != EXECUTE ? status.mpp : privilege;
+	bool v2p(uint32_t v, uint32_t *p, AccessKind kind){
+	    uint32_t effectivePrivilege = status.mprv && kind != EXECUTE ? status.mpp : privilege;
 		if(effectivePrivilege == 3 || satp.mode == 0 || !isMmuRegion(v)){
 			*p = v;
 		} else {
@@ -549,7 +528,7 @@ public:
 
 	virtual bool csrRead(int32_t csr, uint32_t *value){
 		if(((csr >> 8) & 0x3) > privilege) return true;
-		switch(csr) {
+		switch(csr){
 		case MSTATUS: *value = status.raw & MSTATUS_READ_MASK; break;
 		case MIP: *value = getIp().raw; break;
 		case MIE: *value = ie.raw; break;
@@ -571,7 +550,6 @@ public:
 		case SEPC: *value = sepc; break;
 		case SSCRATCH: *value = sscratch; break;
 		case SATP: *value = satp.raw; break;
-
 		default: return true; break;
 		}
 		return false;
@@ -610,6 +588,8 @@ public:
 		case SCAUSE: scause.raw = value; break;
 		case STVAL: sbadaddr = value; break;
 		case SEPC: sepc = value; break;
+		case SSCRATCH: sscratch = value; break;
+		case SATP: satp.raw = value; break;
 
 		default: ilegalInstruction(); return true; break;
 		}

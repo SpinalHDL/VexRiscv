@@ -46,6 +46,7 @@ abstract class  VexRiscvPosition(name: String) extends ConfigPosition[VexRiscvCo
 class VexRiscvUniverse extends ConfigUniverse
 
 object VexRiscvUniverse{
+  val CACHE_ALL = new VexRiscvUniverse
   val CATCH_ALL = new VexRiscvUniverse
   val MMU = new VexRiscvUniverse
   val PMP = new VexRiscvUniverse
@@ -322,9 +323,10 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
+    val cacheAll = universes.contains(VexRiscvUniverse.CACHE_ALL)
     val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
 
-    if(r.nextDouble() < 0.5){
+    if(r.nextDouble() < 0.5 && !cacheAll){
       val latency = r.nextInt(5) + 1
       val compressed = r.nextDouble() < rvcRate
       val injectorStage = r.nextBoolean() || latency == 1
@@ -403,13 +405,14 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
+    val cacheAll = universes.contains(VexRiscvUniverse.CACHE_ALL)
     val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
     val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
     val noWriteBack = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
 
 
 
-    if(r.nextDouble() < 0.4 || noMemory){
+    if((r.nextDouble() < 0.4 || noMemory) && !cacheAll){
       val withLrSc = catchAll
       val earlyInjection = r.nextBoolean() && !universes.contains(VexRiscvUniverse.NO_WRITEBACK)
       new VexRiscvPosition("Simple" + (if(earlyInjection) "Early" else "Late")) {
@@ -760,18 +763,15 @@ class TestIndividualFeatures extends MultithreadedFunSuite {
       }
     } else {
       if(machineOsRate > rand.nextDouble()) {
+        universe += VexRiscvUniverse.CACHE_ALL
         universe += VexRiscvUniverse.CATCH_ALL
         universe += VexRiscvUniverse.PMP
         if(demwRate < rand.nextDouble()){
           universe += VexRiscvUniverse.NO_WRITEBACK
         }
       }
-      if(demwRate > rand.nextDouble()){
-      }else if(demRate > rand.nextDouble()){
+      if(demRate > rand.nextDouble()){
         universe += VexRiscvUniverse.NO_WRITEBACK
-      } else {
-        universe += VexRiscvUniverse.NO_WRITEBACK
-        universe += VexRiscvUniverse.NO_MEMORY
       }
     }
 
