@@ -264,13 +264,13 @@ object CsrPluginConfig{
     uinstretAccess = CsrAccess.NONE
   )
 
-  def zephyr(mtvecInit : BigInt) = CsrPluginConfig(
+  def secure(mtvecInit : BigInt) = CsrPluginConfig(
     catchIllegalAccess = true,
     mvendorid           = 1,
     marchid             = 2,
     mimpid              = 3,
     mhartid             = 0,
-    misaExtensionsInit  = 0x103124, // RV32CFIMNU
+    misaExtensionsInit  = 0x101064, // RV32GCFMU
     misaAccess          = CsrAccess.READ_WRITE,
     mtvecAccess         = CsrAccess.READ_WRITE,
     mtvecInit           = mtvecInit,

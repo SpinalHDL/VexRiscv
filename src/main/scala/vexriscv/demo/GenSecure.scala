@@ -5,7 +5,7 @@ import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import vexriscv.{plugin, VexRiscv, VexRiscvConfig}
 import spinal.core._
 
-object GenZephyr extends App {
+object GenSecure extends App {
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       plugins = List(
@@ -71,7 +71,7 @@ object GenZephyr extends App {
           mulUnrollFactor = 1,
           divUnrollFactor = 1
         ),
-        new CsrPlugin(CsrPluginConfig.zephyr(0x00000020l)),
+        new CsrPlugin(CsrPluginConfig.secure(0x00000020l)),
         new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
         new BranchPlugin(
           earlyBranch = false,

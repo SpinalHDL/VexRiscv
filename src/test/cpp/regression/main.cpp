@@ -373,7 +373,7 @@ public:
 			uint32_t ppn1 : 12;
 		};
 	};
-	
+
 
 	bool lrscReserved;
 

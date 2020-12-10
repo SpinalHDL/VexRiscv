@@ -517,6 +517,7 @@ trait CatchAllPosition
 
 class CsrDimension(freertos : String, zephyr : String, linux : String) extends VexRiscvDimension("Csr") {
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    val pmp = universes.contains(VexRiscvUniverse.PMP)
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
     val supervisor = universes.contains(VexRiscvUniverse.SUPERVISOR)
     if(supervisor){
@@ -524,9 +525,14 @@ class CsrDimension(freertos : String, zephyr : String, linux : String) extends V
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.linuxFull(0x80000020l))
         override def testParam = s"FREERTOS=$freertos ZEPHYR=$zephyr LINUX_REGRESSION=$linux SUPERVISOR=yes"
       }
+    } else if(pmp){
+      new VexRiscvPosition("Secure") with CatchAllPosition{
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.secure(0x80000020l))
+        override def testParam = s"CSR=yes CSR_SKIP_TEST=yes FREERTOS=$freertos ZEPHYR=$zephyr"
+      }
     } else if(catchAll){
       new VexRiscvPosition("MachineOs") with CatchAllPosition{
-        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.zephyr(0x80000020l))
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l))
         override def testParam = s"CSR=yes CSR_SKIP_TEST=yes FREERTOS=$freertos ZEPHYR=$zephyr"
       }
     } else if(r.nextDouble() < 0.3){
@@ -655,6 +661,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite {
   val rvcRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_RVC_RATE", "0.5").toDouble
   val linuxRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_LINUX_RATE", "0.3").toDouble
   val machineOsRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_MACHINE_OS_RATE", "0.5").toDouble
+  val secureRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_SECURE_RATE", "0.5").toDouble
   val linuxRegression = sys.env.getOrElse("VEXRISCV_REGRESSION_LINUX_REGRESSION", "yes")
   val coremarkRegression = sys.env.getOrElse("VEXRISCV_REGRESSION_COREMARK", "yes")
   val zephyrCount = sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")
@@ -761,17 +768,26 @@ class TestIndividualFeatures extends MultithreadedFunSuite {
       if(demwRate < rand.nextDouble()){
         universe += VexRiscvUniverse.NO_WRITEBACK
       }
-    } else {
-      if(machineOsRate > rand.nextDouble()) {
+    } else if (secureRate > rand.nextDouble()) {
         universe += VexRiscvUniverse.CACHE_ALL
         universe += VexRiscvUniverse.CATCH_ALL
         universe += VexRiscvUniverse.PMP
         if(demwRate < rand.nextDouble()){
           universe += VexRiscvUniverse.NO_WRITEBACK
         }
+    } else {
+      if(machineOsRate > rand.nextDouble()) {
+        universe += VexRiscvUniverse.CATCH_ALL
+        if(demwRate < rand.nextDouble()){
+          universe += VexRiscvUniverse.NO_WRITEBACK
+        }
       }
-      if(demRate > rand.nextDouble()){
+      if(demwRate > rand.nextDouble()){
+      }else if(demRate > rand.nextDouble()){
         universe += VexRiscvUniverse.NO_WRITEBACK
+      } else {
+        universe += VexRiscvUniverse.NO_WRITEBACK
+        universe += VexRiscvUniverse.NO_MEMORY
       }
     }
 
