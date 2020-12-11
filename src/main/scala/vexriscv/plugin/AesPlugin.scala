@@ -6,9 +6,9 @@ import vexriscv.{DecoderService, Stageable, VexRiscv}
 
 /**
   * The AesPlugin allow to reduce the instruction count of each AES round by providing the following instruction :
-  * 1) aes_enc_round(rs1, rs2, sel). rd      = rs1 ^ quad_mul(sel, sbox(byte_sel(rs2, sel)))
+  * 1) aes_enc_round(rs1, rs2, sel).      rd = rs1 ^ quad_mul(sel, sbox(byte_sel(rs2, sel)))
   * 2) aes_enc_round_last(rs1, rs2, sel). rd = rs1 ^ quad_sbox(byte_sel(rs2, sel))
-  * 3) aes_dec_round(rs1, rs2, sel). rd      = rs1 ^ quad_inv_sbox(quad_mul(sel,byte_sel(rs2, sel)))
+  * 3) aes_dec_round(rs1, rs2, sel).      rd = rs1 ^ quad_inv_sbox(quad_mul(sel,byte_sel(rs2, sel)))
   * 4) aes_dec_round_last(rs1, rs2, sel). rd = rs1 ^ quad_inv_sbox(byte_sel(rs2, sel))
   *
   * Here is what those inner functions mean:
