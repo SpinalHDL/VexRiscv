@@ -1,0 +1,35 @@
+
+Memory Configuration
+
+Name             Origin             Length             Attributes
+onChipRam        0x0000000080000000 0x0000000000020000 w !xr
+*default*        0x0000000000000000 0xffffffffffffffff
+
+Linker script and memory map
+
+LOAD build/src/crt.o
+LOAD /opt/riscv/lib/gcc/riscv64-unknown-elf/10.2.0/libgcc.a
+START GROUP
+LOAD /opt/riscv/lib/gcc/riscv64-unknown-elf/10.2.0/../../../../riscv64-unknown-elf/lib/libc.a
+LOAD /opt/riscv/lib/gcc/riscv64-unknown-elf/10.2.0/../../../../riscv64-unknown-elf/lib/libgloss.a
+END GROUP
+LOAD /opt/riscv/lib/gcc/riscv64-unknown-elf/10.2.0/libgcc.a
+
+.crt_section    0x0000000080000000      0x284
+                0x0000000080000000                . = ALIGN (0x4)
+ *crt.o(.text)
+ .text          0x0000000080000000      0x284 build/src/crt.o
+                0x0000000080000000                _start
+                0x0000000080000010                trap
+OUTPUT(build/pmp.elf elf32-littleriscv)
+
+.data           0x0000000080000284        0x0
+ .data          0x0000000080000284        0x0 build/src/crt.o
+
+.bss            0x0000000080000284        0x0
+ .bss           0x0000000080000284        0x0 build/src/crt.o
+
+.riscv.attributes
+                0x0000000000000000       0x1e
+ .riscv.attributes
+                0x0000000000000000       0x1e build/src/crt.o
