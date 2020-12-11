@@ -4,6 +4,60 @@ import spinal.core._
 import spinal.lib._
 import vexriscv.{DecoderService, Stageable, VexRiscv}
 
+/**
+  * The AesPlugin allow to reduce the instruction count of each AES round by providing the following instruction :
+  * 1) aes_enc_round(rs1, rs2, sel). rd      = rs1 ^ quad_mul(sel, sbox(byte_sel(rs2, sel)))
+  * 2) aes_enc_round_last(rs1, rs2, sel). rd = rs1 ^ quad_sbox(byte_sel(rs2, sel))
+  * 3) aes_dec_round(rs1, rs2, sel). rd      = rs1 ^ quad_inv_sbox(quad_mul(sel,byte_sel(rs2, sel)))
+  * 4) aes_dec_round_last(rs1, rs2, sel). rd = rs1 ^ quad_inv_sbox(byte_sel(rs2, sel))
+  *
+  * Here is what those inner functions mean:
+  * - sbox apply the sbox transformation on the 'sel' byte of the 32 bits word
+  * - quad_mul multiply (Galois field) each byte of 32 bits word by a constant (which depend of sel)
+  * - quad_inv_sbox apply the inverse sbox transformation on each byte of 32 bits word
+  *
+  * You can find a complet example of those instruction usage in aes_cusom.h in vexriscv_aes_encrypt and
+  * vexriscv_aes_decrypt. Those function are made to work on little endian as in the linux kernel default AES
+  * implementation, but unlike libressl, libopenssl and dropbear ones (swapping the byte of the expended key can fix that).
+  *
+  * This plugin implement the processing using a single 32_bits * 512_words rom to fetch the sbox/inv_sbox/multiplication
+  * results already combined. This rom is formated as following :
+  *
+  * From word 0x000 to 0x0FF, it is formatted as follow :  (note multiplication are in Galois field)
+  * [ 7 :  0] : SBox[word_address & 0xFF] * 1
+  * [15 :  8] : SBox[word_address & 0xFF] * 2
+  * [23 : 16] : SBox[word_address & 0xFF] * 3
+  * [31 : 24] : inverse SBox[word_address & 0xFF] * 1 (Used for the last round of the decryption)
+  *
+  * From word 0x100 to 0x1FF, it is formatted as follow :
+  * [ 7 :  0] : inverse SBox[word_address & 0xFF * 14]
+  * [15 :  8] : inverse SBox[word_address & 0xFF *  9]
+  * [23 : 16] : inverse SBox[word_address & 0xFF * 13]
+  * [31 : 24] : inverse SBox[word_address & 0xFF * 11]
+  *
+  * So, on each instruction, the following is done (in order)
+  * 1) Select the 'sel' byte of RS2
+  * 2) Read the rom at a address which depend of the RS2 selected byte and the instruction
+  * 3) Permute the rom read data depending the instruction and the 'sel' argument
+  * 4) Xor the result with RS1 and return that as instruction result
+  *
+  * The instructions are encoded by default as following :
+  * --SS-LDXXXXXYYYYY000ZZZZZ0001011
+  *
+  * Where :
+  * - XXXXX is the register file source 2 (RS2)
+  * - YYYYY is the register file source 1 (RS1)
+  * - ZZZZZ is the register file destination
+  * - D=1 mean decrypt, D=0 mean encrypt
+  * - L=1 mean last round, L=0 mean full round
+  * - SS specify which byte should be used from RS2 for the processing
+  *
+  * In practice the aes-256-cbc performances should improve by a factor 4. See the following results from libopenssl
+  * from a SoC running linux at 100 Mhz
+  *   type                 16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
+  *   aes-256-cbc SW         492.58k      700.22k      796.41k      831.49k      830.09k      832.81k
+  *   aes-256-cbc HW        1099.77k     2320.65k     3164.16k     3484.67k     3528.02k     3511.64k
+  */
 
 case class AesPlugin(encoding : MaskedLiteral = M"-----------------000-----0001011") extends Plugin[VexRiscv]{
 
@@ -13,7 +67,6 @@ case class AesPlugin(encoding : MaskedLiteral = M"-----------------000-----00010
   val mapping = new {
     def DECRYPT = 25     // 0/1 =>  encrypt/decrypt
     def LAST_ROUND = 26
-    def ENDIAN = 27      //Not implemented yet
     def BYTE_SEL = 28    //Which byte should be used in RS2
   }
 
@@ -58,6 +111,7 @@ case class AesPlugin(encoding : MaskedLiteral = M"-----------------000-----00010
     memory plug new Area{
       import memory._
 
+      //Decode the rom data
       val rom = new Area {
         val storage = Mem(Bits(32 bits), 512) initBigInt((BANK0 ++ BANK1).map(BigInt(_)))
 
@@ -76,7 +130,7 @@ case class AesPlugin(encoding : MaskedLiteral = M"-----------------000-----00010
         val address = U(input(INSTRUCTION)(mapping.DECRYPT) ## input(INSTRUCTION)(mapping.LAST_ROUND))
         val output = remap(address)
       }
-
+      
       val wordDesuffle = new Area{
         val zero = B"0000"
         val byteSel = input(INSTRUCTION)(mapping.BYTE_SEL, 2 bits).asUInt
