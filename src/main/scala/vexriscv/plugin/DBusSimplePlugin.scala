@@ -488,9 +488,9 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         memoryExceptionPort.code.assignDontCare()
         memoryExceptionPort.badAddr := input(REGFILE_WRITE_DATA).asUInt
 
-        if(catchAccessFault) when(dBus.rsp.ready && dBus.rsp.error && !input(MEMORY_STORE)) {
+        if(catchAccessFault) when(dBus.rsp.ready && dBus.rsp.error) {
+          memoryExceptionPort.code := (input(MEMORY_STORE) ? U(7) | U(5)).resized
           memoryExceptionPort.valid := True
-          memoryExceptionPort.code := 5
         }
 
         if(catchAddressMisaligned) when(input(ALIGNEMENT_FAULT)){
