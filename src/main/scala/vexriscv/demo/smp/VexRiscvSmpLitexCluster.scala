@@ -6,7 +6,7 @@ import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
 import spinal.lib.bus.wishbone.{WishboneConfig, WishboneToBmbGenerator}
 import spinal.lib.sim.SparseMemory
 import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
-import vexriscv.plugin.DBusCachedPlugin
+import vexriscv.plugin.{AesPlugin, DBusCachedPlugin}
 
 
 case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParameter,
@@ -66,6 +66,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var dCacheWays = 2
   var liteDramWidth = 128
   var coherentDma = false
+  var aesInstruction = false
   var netlistDirectory = "."
   var netlistName = "VexRiscvLitexSmpCluster"
   assert(new scopt.OptionParser[Unit]("VexRiscvLitexSmpClusterCmdGen") {
@@ -81,13 +82,14 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("litedram-width") action { (v, c) => liteDramWidth = v.toInt }
     opt[String]("netlist-directory") action { (v, c) => netlistDirectory = v }
     opt[String]("netlist-name") action { (v, c) => netlistName = v }
+    opt[String]("aes-instruction") action { (v, c) => aesInstruction = v.toBoolean }
   }.parse(args))
 
   val coherency = coherentDma || cpuCount > 1
   def parameter = VexRiscvLitexSmpClusterParameter(
     cluster = VexRiscvSmpClusterParameter(
-      cpuConfigs = List.tabulate(cpuCount) { hartId =>
-        vexRiscvConfig(
+      cpuConfigs = List.tabulate(cpuCount) { hartId => {
+        val c = vexRiscvConfig(
           hartId = hartId,
           ioRange = address => address.msb,
           resetVector = 0,
@@ -99,7 +101,9 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
           dCacheWays = dCacheWays,
           coherency = coherency
         )
-      },
+        if(aesInstruction) c.add(new AesPlugin)
+        c
+      }},
       withExclusiveAndInvalidation = coherency
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = liteDramWidth),
@@ -114,7 +118,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     toplevel
   }
 
-  val genConfig = SpinalConfig(targetDirectory = netlistDirectory).addStandardMemBlackboxing(blackboxByteEnables)
+  val genConfig = SpinalConfig(targetDirectory = netlistDirectory, inlineRom = true).addStandardMemBlackboxing(blackboxByteEnables)
   genConfig.generateVerilog(dutGen.setDefinitionName(netlistName))
 
 }
