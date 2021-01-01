@@ -369,7 +369,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
   }
 
 
-  def toBmb(syncPendingMax : Int = 16,
+  def toBmb(syncPendingMax : Int = 32,
             timeoutCycles : Int = 16) : Bmb = new Area{
     setCompositeName(DataCacheMemBus.this, "Bridge", true)
     val pipelinedMemoryBusConfig = p.getBmbParameter()
@@ -489,7 +489,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
         cmdCtx.payload := aggregationCounter
         halt setWhen(!cmdCtx.ready)
 
-        val syncCtx = cmdCtx.queueLowLatency(syncPendingMax, latency = 1)
+        val syncCtx = cmdCtx.queue(syncPendingMax)
         syncCtx.ready := bus.sync.fire
 
         sync.arbitrationFrom(bus.sync)
