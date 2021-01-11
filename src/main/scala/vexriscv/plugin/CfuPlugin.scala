@@ -25,6 +25,7 @@ case class CfuBusParameter(CFU_VERSION : Int = 0,
                            CFU_FUNCTION_ID_W : Int,
                            CFU_REORDER_ID_W : Int = 0,
                            CFU_REQ_RESP_ID_W : Int = 0,
+                           CFU_STATE_INDEX_NUM : Int = 0,
                            CFU_INPUTS : Int,
                            CFU_INPUT_DATA_W : Int,
                            CFU_OUTPUTS : Int,
@@ -37,7 +38,7 @@ case class CfuCmd( p : CfuBusParameter ) extends Bundle{
   val reorder_id = UInt(p.CFU_REORDER_ID_W bits)
   val request_id = UInt(p.CFU_REQ_RESP_ID_W bits)
   val inputs = Vec(Bits(p.CFU_INPUT_DATA_W bits), p.CFU_INPUTS)
-
+  val state_index = UInt(log2Up(p.CFU_STATE_INDEX_NUM) bits)
   def weakAssignFrom(m : CfuCmd): Unit ={
     def s = this
     WeakConnector(m, s, m.function_id, s.function_id, defaultValue = null, allowUpSize = false, allowDownSize = true , allowDrop = true)
@@ -87,12 +88,16 @@ object CfuPlugin{
 
 case class CfuPluginEncoding(instruction : MaskedLiteral,
                              functionId : List[Range],
-                             input2Kind : CfuPlugin.Input2Kind.E)
+                             input2Kind : CfuPlugin.Input2Kind.E){
+  val functionIdWidth = functionId.map(_.size).sum
+}
 
-class CfuPlugin( val stageCount : Int,
-                 val allowZeroLatency : Boolean,
-                 val busParameter : CfuBusParameter,
-                 val encodings : List[CfuPluginEncoding] = null) extends Plugin[VexRiscv]{
+class CfuPlugin(val stageCount : Int,
+                val allowZeroLatency : Boolean,
+                val busParameter : CfuBusParameter,
+                val encodings : List[CfuPluginEncoding] = null,
+                val stateAndIndexCsrOffset : Int = 0xBC0,
+                val cfuIndexWidth : Int = 0) extends Plugin[VexRiscv]{
   def p = busParameter
 
   assert(p.CFU_INPUTS <= 2)
@@ -143,36 +148,24 @@ class CfuPlugin( val stageCount : Int,
         values = actions
       )
     }
-
-//    decoderService.add(List(
-//      //custom-0
-//      M"-------------------------0001011"  -> List(
-//        CFU_ENABLE -> True,
-//        REGFILE_WRITE_VALID      -> True,
-//        BYPASSABLE_EXECUTE_STAGE -> Bool(stageCount == 0),
-//        BYPASSABLE_MEMORY_STAGE  -> Bool(stageCount <= 1),
-//        RS1_USE -> True,
-//        RS2_USE -> True,
-//        CFU_IMM -> False
-//      ),
-//
-//      //custom-1
-//      M"-------------------------0101011"  -> List(
-//        CFU_ENABLE -> True,
-//        REGFILE_WRITE_VALID      -> True,
-//        BYPASSABLE_EXECUTE_STAGE -> Bool(stageCount == 0),
-//        BYPASSABLE_MEMORY_STAGE  -> Bool(stageCount <= 1),
-//        RS1_USE -> True,
-//        CFU_IMM -> True
-//      )
-//    ))
-
-
   }
 
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
+
+    val csr = pipeline plug new Area{
+      val stateId = Reg(UInt(log2Up(p.CFU_STATE_INDEX_NUM) bits)) init(0)
+      if(p.CFU_STATE_INDEX_NUM > 1) {
+        assert(stateAndIndexCsrOffset != -1, "CfuPlugin stateCsrIndex need to be set in the parameters")
+        pipeline.service(classOf[CsrInterface]).rw(stateAndIndexCsrOffset, 16, stateId)
+      }
+      bus.cmd.state_index := stateId
+      val cfuIndex = Reg(UInt(cfuIndexWidth bits)) init(0)
+      if(cfuIndexWidth != 0){
+        pipeline.service(classOf[CsrInterface]).rw(stateAndIndexCsrOffset, 0, cfuIndex)
+      }
+    }
 
 
     forkStage plug new Area{
@@ -186,8 +179,9 @@ class CfuPlugin( val stageCount : Int,
       arbitration.haltItself setWhen(bus.cmd.valid && !bus.cmd.ready)
 
 //      bus.cmd.function_id := U(input(INSTRUCTION)(14 downto 12)).resized
-      val functionsIds = encodings.map(e => U(Cat(e.functionId.map(r => input(INSTRUCTION)(r))), busParameter.CFU_FUNCTION_ID_W bits))
-      bus.cmd.function_id := functionsIds.read(input(CFU_ENCODING))
+      val functionIdFromInstructinoWidth = encodings.map(_.functionIdWidth).max
+      val functionsIds = encodings.map(e => U(Cat(e.functionId.map(r => input(INSTRUCTION)(r))), functionIdFromInstructinoWidth bits))
+      bus.cmd.function_id := csr.cfuIndex @@ functionsIds.read(input(CFU_ENCODING))
       bus.cmd.reorder_id := 0
       bus.cmd.request_id := 0
       if(p.CFU_INPUTS >= 1) bus.cmd.inputs(0) := input(RS1)
