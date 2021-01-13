@@ -59,7 +59,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
   assert(!(withoutInjectorStage && injectorStage))
 
   var iBus  : InstructionCacheMemBus = null
-  var mmuBus : MemoryTranslatorBus = null
+  var translatorBus : MemoryTranslatorBus = null
   var privilegeService : PrivilegeService = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
   val tightlyCoupledPorts = ArrayBuffer[TightlyCoupledPort]()
@@ -94,7 +94,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
     }
 
     if(pipeline.serviceExist(classOf[MemoryTranslator]))
-      mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_INSTRUCTION, memoryTranslatorPortConfig)
+      translatorBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_INSTRUCTION, memoryTranslatorPortConfig)
 
     privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
 
@@ -218,7 +218,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
           redoFetch := True
         }
 
-        if(catchInstructionPage) when(cacheRsp.isValid && cacheRsp.mmuException && !issueDetected) {
+        if(catchInstructionPage) when(cacheRsp.isValid && cacheRsp.pageFault && !issueDetected) {
           issueDetected \= True
           decodeExceptionPort.valid := iBusRsp.readyForError
           decodeExceptionPort.code := 12
@@ -230,7 +230,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
           redoFetch := True
         }
 
-        if(catchInstructionAccess) when(cacheRsp.isValid && cacheRsp.error && !issueDetected) {
+        if(catchInstructionAccess) when(cacheRsp.isValid && cacheRsp.accessFault && !issueDetected) {
           issueDetected \= True
           decodeExceptionPort.valid := iBusRsp.readyForError
           decodeExceptionPort.code := 1
@@ -248,17 +248,17 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         iBusRsp.output.pc := cacheRspArbitration.output.payload
       }
 
-      if (mmuBus != null) {
-        cache.io.cpu.fetch.mmuBus <> mmuBus
+      if (translatorBus != null) {
+        cache.io.cpu.fetch.translatorBus <> translatorBus
       } else {
-        cache.io.cpu.fetch.mmuBus.rsp.physicalAddress := cache.io.cpu.fetch.mmuBus.cmd.virtualAddress
-        cache.io.cpu.fetch.mmuBus.rsp.allowExecute := True
-        cache.io.cpu.fetch.mmuBus.rsp.allowRead := True
-        cache.io.cpu.fetch.mmuBus.rsp.allowWrite := True
-        cache.io.cpu.fetch.mmuBus.rsp.isIoAccess := False
-        cache.io.cpu.fetch.mmuBus.rsp.exception := False
-        cache.io.cpu.fetch.mmuBus.rsp.refilling := False
-        cache.io.cpu.fetch.mmuBus.busy := False
+        cache.io.cpu.fetch.translatorBus.rsp.physicalAddress := cache.io.cpu.fetch.translatorBus.cmd.virtualAddress
+        cache.io.cpu.fetch.translatorBus.rsp.allowExecute := True
+        cache.io.cpu.fetch.translatorBus.rsp.allowRead := True
+        cache.io.cpu.fetch.translatorBus.rsp.allowWrite := True
+        cache.io.cpu.fetch.translatorBus.rsp.isIoAccess := False
+        cache.io.cpu.fetch.translatorBus.rsp.exception := False
+        cache.io.cpu.fetch.translatorBus.rsp.refilling := False
+        cache.io.cpu.fetch.translatorBus.busy := False
       }
 
       val flushStage = decode

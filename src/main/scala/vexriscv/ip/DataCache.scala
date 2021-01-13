@@ -115,12 +115,12 @@ case class DataCacheCpuMemory(p : DataCacheConfig) extends Bundle with IMasterSl
   val isRemoved = Bool
   val isWrite = Bool
   val address = UInt(p.addressWidth bit)
-  val mmuBus  = MemoryTranslatorBus()
+  val translatorBus  = MemoryTranslatorBus()
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved, address)
     in(isWrite)
-    slave(mmuBus)
+    slave(translatorBus)
   }
 }
 
@@ -133,14 +133,12 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   val isWrite = Bool
   val data = Bits(p.cpuDataWidth bit)
   val address = UInt(p.addressWidth bit)
-  val mmuException, unalignedAccess , accessError = Bool
+  val pageFault, accessMisaligned, accessFault = Bool
   val clearLrsc = ifGen(p.withLrSc) {Bool}
-
-  //  val exceptionBus = if(p.catchSomething) Flow(ExceptionCause()) else null
 
   override def asMaster(): Unit = {
     out(isValid,isStuck,isUser, address)
-    in(haltIt, data, mmuException, unalignedAccess, accessError, isWrite)
+    in(haltIt, data, pageFault, accessMisaligned, accessFault, isWrite)
     outWithNull(clearLrsc)
   }
 }
@@ -451,13 +449,13 @@ class DataCache(p : DataCacheConfig) extends Component{
     def stagePipe[T <: Data](that : T) = if(mergeExecuteMemory) CombInit(that) else RegNextWhen(that, !io.cpu.memory.isStuck)
     val request = stagePipe(io.cpu.execute.args)
     val mask = stagePipe(stage0.mask)
-    io.cpu.memory.mmuBus.cmd.isValid := io.cpu.memory.isValid
-    io.cpu.memory.mmuBus.cmd.virtualAddress := io.cpu.memory.address
-    io.cpu.memory.mmuBus.cmd.bypassTranslation := False
-    io.cpu.memory.mmuBus.end := !io.cpu.memory.isStuck || io.cpu.memory.isRemoved
+    io.cpu.memory.translatorBus.cmd.isValid := io.cpu.memory.isValid
+    io.cpu.memory.translatorBus.cmd.virtualAddress := io.cpu.memory.address
+    io.cpu.memory.translatorBus.cmd.bypassTranslation := False
+    io.cpu.memory.translatorBus.end := !io.cpu.memory.isStuck || io.cpu.memory.isRemoved
     io.cpu.memory.isWrite := request.wr
 
-    val wayHits = earlyWaysHits generate ways.map(way => (io.cpu.memory.mmuBus.rsp.physicalAddress(tagRange) === way.tagsReadRsp.address && way.tagsReadRsp.valid))
+    val wayHits = earlyWaysHits generate ways.map(way => (io.cpu.memory.translatorBus.rsp.physicalAddress(tagRange) === way.tagsReadRsp.address && way.tagsReadRsp.valid))
     val dataMux = earlyDataMux generate MuxOH(wayHits, ways.map(_.dataReadRsp))
     val colisions = if(mergeExecuteMemory){
       stagePipe(stage0.colisions)
@@ -471,11 +469,11 @@ class DataCache(p : DataCacheConfig) extends Component{
     def stagePipe[T <: Data](that : T) = RegNextWhen(that, !io.cpu.writeBack.isStuck)
     def ramPipe[T <: Data](that : T) = if(mergeExecuteMemory) CombInit(that) else  RegNextWhen(that, !io.cpu.writeBack.isStuck)
     val request = RegNextWhen(stageA.request, !io.cpu.writeBack.isStuck)
-    val mmuRspFreeze = False
-    val mmuRsp = RegNextWhen(io.cpu.memory.mmuBus.rsp, !io.cpu.writeBack.isStuck && !mmuRspFreeze)
+    val translatorRspFreeze = False
+    val translatorRsp = RegNextWhen(io.cpu.memory.translatorBus.rsp, !io.cpu.writeBack.isStuck && !translatorRspFreeze)
     val tagsReadRsp = ways.map(w => ramPipe(w.tagsReadRsp))
     val dataReadRsp = !earlyDataMux generate ways.map(w => ramPipe(w.dataReadRsp))
-    val waysHits = if(earlyWaysHits) stagePipe(B(stageA.wayHits)) else B(tagsReadRsp.map(tag => mmuRsp.physicalAddress(tagRange) === tag.address && tag.valid).asBits())
+    val waysHits = if(earlyWaysHits) stagePipe(B(stageA.wayHits)) else B(tagsReadRsp.map(tag => translatorRsp.physicalAddress(tagRange) === tag.address && tag.valid).asBits())
     val waysHit = waysHits.orR
     val dataMux = if(earlyDataMux) stagePipe(stageA.dataMux) else MuxOH(waysHits, dataReadRsp)
     val mask = stagePipe(stageA.mask)
@@ -493,12 +491,12 @@ class DataCache(p : DataCacheConfig) extends Component{
       val valid = RegInit(False)
       when(valid) {
         tagsWriteCmd.valid := valid
-        tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
+        tagsWriteCmd.address := translatorRsp.physicalAddress(lineRange)
         tagsWriteCmd.way.setAll()
         tagsWriteCmd.data.valid := False
         io.cpu.writeBack.haltIt := True
-        when(mmuRsp.physicalAddress(lineRange) =/= wayLineCount - 1) {
-          mmuRsp.physicalAddress.getDrivingReg(lineRange) := mmuRsp.physicalAddress(lineRange) + 1
+        when(translatorRsp.physicalAddress(lineRange) =/= wayLineCount - 1) {
+          translatorRsp.physicalAddress.getDrivingReg(lineRange) := translatorRsp.physicalAddress(lineRange) + 1
         } otherwise {
           valid := False
         }
@@ -510,7 +508,7 @@ class DataCache(p : DataCacheConfig) extends Component{
 
       when(start){
         io.cpu.flush.ready := True
-        mmuRsp.physicalAddress.getDrivingReg(lineRange) := 0
+        translatorRsp.physicalAddress.getDrivingReg(lineRange) := 0
         valid := True
       }
     }
@@ -551,10 +549,20 @@ class DataCache(p : DataCacheConfig) extends Component{
 
 
     val memCmdSent = RegInit(False) setWhen (io.mem.cmd.ready) clearWhen (!io.cpu.writeBack.isStuck)
+    val badPermissions = (!translatorRsp.allowWrite && request.wr) || (!translatorRsp.allowRead && (!request.wr || isAmo))
+    val loadStoreFault = io.cpu.writeBack.isValid && (translatorRsp.exception || badPermissions)
+
+    if (catchLoadStoreAccess) when(translatorRsp.isIoAccess) {
+      io.cpu.writeBack.data := io.mem.rsp.data
+      io.cpu.writeBack.accessFault := io.mem.rsp.valid && io.mem.rsp.error
+    } otherwise {
+      io.cpu.writeBack.data := dataMux
+      io.cpu.writeBack.accessFault := (waysHits & B(tagsReadRsp.map(_.error))) =/= 0 || (loadStoreFault && !translatorRsp.isPaging)
+    }
+
     io.cpu.redo := False
-    io.cpu.writeBack.accessError := False
-    io.cpu.writeBack.mmuException := io.cpu.writeBack.isValid && (if(catchLoadStorePage) mmuRsp.exception || (!mmuRsp.allowWrite && request.wr) || (!mmuRsp.allowRead && (!request.wr || isAmo)) else False)
-    io.cpu.writeBack.unalignedAccess := io.cpu.writeBack.isValid && (if(catchLoadStoreMisaligned) ((request.size === 2 && mmuRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && mmuRsp.physicalAddress(0 downto 0) =/= 0)) else False)
+    io.cpu.writeBack.pageFault := loadStoreFault && (if(catchLoadStorePage) translatorRsp.isPaging else False)
+    io.cpu.writeBack.accessMisaligned := io.cpu.writeBack.isValid && (if(catchLoadStoreMisaligned) ((request.size === 2 && translatorRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && translatorRsp.physicalAddress(0 downto 0) =/= 0)) else False)
     io.cpu.writeBack.isWrite := request.wr
 
     io.mem.cmd.valid := False
@@ -566,11 +574,11 @@ class DataCache(p : DataCacheConfig) extends Component{
     io.mem.cmd.data := requestDataBypass
 
     when(io.cpu.writeBack.isValid) {
-      when(mmuRsp.isIoAccess) {
+      when(translatorRsp.isIoAccess) {
         io.cpu.writeBack.haltIt.clearWhen(request.wr ? io.mem.cmd.ready | io.mem.rsp.valid)
 
         io.mem.cmd.valid := !memCmdSent
-        io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
+        io.mem.cmd.address := translatorRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
         io.mem.cmd.length := 0
         io.mem.cmd.last := True
 
@@ -582,14 +590,14 @@ class DataCache(p : DataCacheConfig) extends Component{
         when(waysHit || request.wr && !isAmo) {   //Do not require a cache refill ?
           //Data cache update
           dataWriteCmd.valid setWhen(request.wr && waysHit)
-          dataWriteCmd.address := mmuRsp.physicalAddress(lineRange.high downto wordRange.low)
+          dataWriteCmd.address := translatorRsp.physicalAddress(lineRange.high downto wordRange.low)
           dataWriteCmd.data := requestDataBypass
           dataWriteCmd.mask := mask
           dataWriteCmd.way := waysHits
 
           //Write through
           io.mem.cmd.valid setWhen(request.wr)
-          io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
+          io.mem.cmd.address := translatorRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
           io.mem.cmd.length := 0
           io.mem.cmd.last := True
           io.cpu.writeBack.haltIt clearWhen(!request.wr || io.mem.cmd.ready)
@@ -617,7 +625,7 @@ class DataCache(p : DataCacheConfig) extends Component{
           //Emit cmd
           io.mem.cmd.valid setWhen(!memCmdSent)
           io.mem.cmd.wr := False
-          io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
+          io.mem.cmd.address := translatorRsp.physicalAddress(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
           io.mem.cmd.length := p.burstLength-1
           io.mem.cmd.last := True
 
@@ -626,23 +634,15 @@ class DataCache(p : DataCacheConfig) extends Component{
       }
     }
 
-    when(mmuRsp.isIoAccess){
-      io.cpu.writeBack.data :=  io.mem.rsp.data
-      if(catchLoadStoreAccess) io.cpu.writeBack.accessError := io.mem.rsp.valid && io.mem.rsp.error
-    } otherwise {
-      io.cpu.writeBack.data :=  dataMux
-      if(catchLoadStoreAccess) io.cpu.writeBack.accessError := (waysHits & B(tagsReadRsp.map(_.error))) =/= 0
-    }
-
     //remove side effects on exceptions
-    when(mmuRsp.refilling || io.cpu.writeBack.accessError || io.cpu.writeBack.mmuException || io.cpu.writeBack.unalignedAccess){
+    when(translatorRsp.refilling || io.cpu.writeBack.accessFault || io.cpu.writeBack.pageFault || io.cpu.writeBack.accessMisaligned) {
       io.mem.cmd.valid := False
       tagsWriteCmd.valid := False
       dataWriteCmd.valid := False
       loaderValid := False
       io.cpu.writeBack.haltIt := False
     }
-    io.cpu.redo setWhen(io.cpu.writeBack.isValid && mmuRsp.refilling)
+    io.cpu.redo setWhen(io.cpu.writeBack.isValid && translatorRsp.refilling)
 
     assert(!(io.cpu.writeBack.isValid && !io.cpu.writeBack.haltIt && io.cpu.writeBack.isStuck), "writeBack stuck by another plugin is not allowed")
 
@@ -660,7 +660,7 @@ class DataCache(p : DataCacheConfig) extends Component{
 
   val loader = new Area{
     val valid = RegInit(False) setWhen(stageB.loaderValid)
-    val baseAddress =  stageB.mmuRsp.physicalAddress
+    val baseAddress =  stageB.translatorRsp.physicalAddress
 
     val counter = Counter(memTransactionPerLine)
     val waysAllocator = Reg(Bits(wayCount bits)) init(1)
@@ -696,6 +696,6 @@ class DataCache(p : DataCacheConfig) extends Component{
     }
 
     io.cpu.redo setWhen(valid)
-    stageB.mmuRspFreeze setWhen(stageB.loaderValid || valid)
+    stageB.translatorRspFreeze setWhen(stageB.loaderValid || valid)
   }
 }

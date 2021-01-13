@@ -34,14 +34,14 @@ object GenMicro extends App{
             cmdForkOnSecondStage = false,
             cmdForkPersistence = false,
             prediction = NONE,
-            catchAccessFault = false,
+            catchInstructionAccess = false,
             compressedGen = false,
             injectorStage = !removeOneFetchStage,
             rspHoldValue = rspHoldValue
           ),
           new DBusSimplePlugin(
             catchAddressMisaligned = withCompliantCsr,
-            catchAccessFault = false,
+            catchInstructionAccess = false,
             earlyInjection = writeBackOpt,
             onlyLoadWords = onlyLoadWords
           ),
@@ -80,7 +80,7 @@ object GenMicro extends App{
         ) ++ (if(noShifter) Nil else List(new LightShifterPlugin))
          ++ (if(!withCompliantCsr) Nil else List(new CsrPlugin(
           config = if(withCompliantCsrPlusEmulation)CsrPluginConfig(
-            catchIllegalAccess = true,
+            catchInstructionPage = true,
             mvendorid      = null,
             marchid        = null,
             mimpid         = null,
@@ -102,7 +102,7 @@ object GenMicro extends App{
             ucycleAccess   = CsrAccess.NONE,
             noCsrAlu       = true
           ) else CsrPluginConfig(
-            catchIllegalAccess = false,
+            catchInstructionPage = false,
             mvendorid      = null,
             marchid        = null,
             mimpid         = null,

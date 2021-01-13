@@ -254,7 +254,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
   val catchSomething = memoryTranslatorPortConfig != null || catchInstructionAccess
-  var mmuBus : MemoryTranslatorBus = null
+  var translatorBus : MemoryTranslatorBus = null
 
 //  if(rspHoldValue) assert(busLatencyMin <= 1)
   assert(!rspHoldValue, "rspHoldValue not supported yet")
@@ -272,7 +272,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
     }
 
     if(memoryTranslatorPortConfig != null) {
-      mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_INSTRUCTION, memoryTranslatorPortConfig)
+      translatorBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_INSTRUCTION, memoryTranslatorPortConfig)
     }
   }
 
@@ -282,7 +282,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
 
     pipeline plug new FetchArea(pipeline) {
       var cmd = Stream(IBusSimpleCmd())
-      val cmdWithS2mPipe = cmdForkPersistence && (!cmdForkOnSecondStage || mmuBus != null)
+      val cmdWithS2mPipe = cmdForkPersistence && (!cmdForkOnSecondStage || translatorBus != null)
       iBus.cmd << (if(cmdWithS2mPipe) cmd.s2mPipe() else cmd)
 
       //Avoid sending to many iBus cmd
@@ -318,30 +318,30 @@ class IBusSimplePlugin(    resetVector : BigInt,
         pending.inc := enterTheMarket
       }
 
-      val mmu = (mmuBus != null) generate new Area {
-        mmuBus.cmd.isValid := cmdForkStage.input.valid
-        mmuBus.cmd.virtualAddress := cmdForkStage.input.payload
-        mmuBus.cmd.bypassTranslation := False
-        mmuBus.end := cmdForkStage.output.fire || externalFlush
+      val mmu = (translatorBus != null) generate new Area {
+        translatorBus.cmd.isValid := cmdForkStage.input.valid
+        translatorBus.cmd.virtualAddress := cmdForkStage.input.payload
+        translatorBus.cmd.bypassTranslation := False
+        translatorBus.end := cmdForkStage.output.fire || externalFlush
 
-        cmd.pc := mmuBus.rsp.physicalAddress(31 downto 2) @@ U"00"
+        cmd.pc := translatorBus.rsp.physicalAddress(31 downto 2) @@ U"00"
 
         //do not emit memory request if MMU had issues
         when(cmdForkStage.input.valid) {
-          when(mmuBus.rsp.refilling) {
+          when(translatorBus.rsp.refilling) {
             cmdForkStage.halt := True
             cmd.valid := False
           }
-          when(mmuBus.rsp.exception) {
+          when(translatorBus.rsp.exception) {
             cmdForkStage.halt := False
             cmd.valid := False
           }
         }
 
-        val joinCtx = stageXToIBusRsp(cmdForkStage, mmuBus.rsp)
+        val joinCtx = stageXToIBusRsp(cmdForkStage, translatorBus.rsp)
       }
 
-      val mmuLess = (mmuBus == null) generate new Area{
+      val mmuLess = (translatorBus == null) generate new Area{
         cmd.pc := cmdForkStage.input.payload(31 downto 2) @@ U"00"
       }
 

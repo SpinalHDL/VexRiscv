@@ -99,8 +99,8 @@ trait InstructionCacheCommons{
   val isStuck : Bool
   val pc : UInt
   val physicalAddress : UInt
-  val data   : Bits
-  val cacheMiss, error,  mmuRefilling, mmuException, isUser : Bool
+  val data : Bits
+  val cacheMiss, accessFault, mmuRefilling, pageFault, isUser : Bool
 }
 
 case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle with IMasterSlave with InstructionCacheCommons {
@@ -111,16 +111,16 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
   val data = Bits(p.cpuDataWidth bits)
   val dataBypassValid = p.bypassGen generate Bool()
   val dataBypass = p.bypassGen generate Bits(p.cpuDataWidth bits)
-  val mmuBus  = MemoryTranslatorBus()
+  val translatorBus  = MemoryTranslatorBus()
   val physicalAddress = UInt(p.addressWidth bits)
-  val cacheMiss, error, mmuRefilling, mmuException, isUser  = ifGen(!p.twoCycleCache)(Bool)
-  val haltIt  = Bool() //Used to wait on the MMU rsp busy
+  val cacheMiss, accessFault, mmuRefilling, pageFault, isUser = ifGen(!p.twoCycleCache)(Bool)
+  val haltIt = Bool() //Used to wait on the MMU rsp busy
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved, pc)
-    inWithNull(error,mmuRefilling,mmuException,data, cacheMiss,physicalAddress, haltIt)
+    inWithNull(accessFault, mmuRefilling, pageFault,data, cacheMiss, physicalAddress, haltIt)
     outWithNull(isUser, dataBypass, dataBypassValid)
-    slaveWithNull(mmuBus)
+    slaveWithNull(translatorBus)
   }
 }
 
@@ -130,13 +130,13 @@ case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle 
   val isStuck  = Bool
   val pc = UInt(p.addressWidth bits)
   val physicalAddress = UInt(p.addressWidth bits)
-  val data  =  Bits(p.cpuDataWidth bits)
-  val cacheMiss, error, mmuRefilling, mmuException, isUser  = ifGen(p.twoCycleCache)(Bool)
+  val data = Bits(p.cpuDataWidth bits)
+  val cacheMiss, accessFault, mmuRefilling, pageFault, isUser = ifGen(p.twoCycleCache)(Bool)
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, pc)
     outWithNull(isUser)
-    inWithNull(error, mmuRefilling, mmuException,data, cacheMiss, physicalAddress)
+    inWithNull(accessFault, mmuRefilling, pageFault, data, cacheMiss, physicalAddress)
   }
 }
 
@@ -321,7 +321,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }
   })
 
-  io.cpu.fetch.haltIt := io.cpu.fetch.mmuBus.busy
+  io.cpu.fetch.haltIt := io.cpu.fetch.translatorBus.busy
 
   val lineLoader = new Area{
     val fire = False
@@ -411,7 +411,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
 
     val hit = (!twoCycleRam) generate new Area{
-      val hits = read.waysValues.map(way => way.tag.valid && way.tag.address === io.cpu.fetch.mmuBus.rsp.physicalAddress(tagRange))
+      val hits = read.waysValues.map(way => way.tag.valid && way.tag.address === io.cpu.fetch.translatorBus.rsp.physicalAddress(tagRange))
       val valid = Cat(hits).orR
       val id = OHToUInt(hits)
       val error = read.waysValues.map(_.tag.error).read(id)
@@ -428,19 +428,19 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       io.cpu.fetch.data := (if(p.bypassGen) (io.cpu.fetch.dataBypassValid ? io.cpu.fetch.dataBypass | cacheData) else cacheData)
     }
 
-    io.cpu.fetch.mmuBus.cmd.isValid := io.cpu.fetch.isValid
-    io.cpu.fetch.mmuBus.cmd.virtualAddress := io.cpu.fetch.pc
-    io.cpu.fetch.mmuBus.cmd.bypassTranslation := False
-    io.cpu.fetch.mmuBus.end := !io.cpu.fetch.isStuck || io.cpu.fetch.isRemoved
-    io.cpu.fetch.physicalAddress := io.cpu.fetch.mmuBus.rsp.physicalAddress
+    io.cpu.fetch.translatorBus.cmd.isValid := io.cpu.fetch.isValid
+    io.cpu.fetch.translatorBus.cmd.virtualAddress := io.cpu.fetch.pc
+    io.cpu.fetch.translatorBus.cmd.bypassTranslation := False
+    io.cpu.fetch.translatorBus.end := !io.cpu.fetch.isStuck || io.cpu.fetch.isRemoved
+    io.cpu.fetch.physicalAddress := io.cpu.fetch.translatorBus.rsp.physicalAddress
 
     val resolution = ifGen(!twoCycleCache)( new Area{
-      val mmuRsp = io.cpu.fetch.mmuBus.rsp
+      val translatorRsp = io.cpu.fetch.translatorBus.rsp
 
       io.cpu.fetch.cacheMiss := !hit.valid
-      io.cpu.fetch.error := hit.error
-      io.cpu.fetch.mmuRefilling := mmuRsp.refilling
-      io.cpu.fetch.mmuException := !mmuRsp.refilling && (mmuRsp.exception || !mmuRsp.allowExecute)
+      io.cpu.fetch.accessFault := hit.error || (!translatorRsp.isPaging && (translatorRsp.exception || !translatorRsp.allowExecute))
+      io.cpu.fetch.mmuRefilling := translatorRsp.refilling
+      io.cpu.fetch.pageFault := !translatorRsp.refilling && translatorRsp.isPaging && (translatorRsp.exception || !translatorRsp.allowExecute)
     })
   }
 
@@ -448,14 +448,14 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
   val decodeStage = ifGen(twoCycleCache) (new Area{
     def stage[T <: Data](that : T) = RegNextWhen(that,!io.cpu.decode.isStuck)
-    val mmuRsp = stage(io.cpu.fetch.mmuBus.rsp)
+    val translatorRsp = stage(io.cpu.fetch.translatorBus.rsp)
 
     val hit = if(!twoCycleRam) new Area{
       val valid = stage(fetchStage.hit.valid)
       val error = stage(fetchStage.hit.error)
     } else new Area{
       val tags = fetchStage.read.waysValues.map(way => stage(way.tag))
-      val hits = tags.map(tag => tag.valid && tag.address === mmuRsp.physicalAddress(tagRange))
+      val hits = tags.map(tag => tag.valid && tag.address === translatorRsp.physicalAddress(tagRange))
       val valid = Cat(hits).orR
       val id = OHToUInt(hits)
       val error = tags(id).error
@@ -468,10 +468,10 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }
 
     io.cpu.decode.cacheMiss := !hit.valid
-    io.cpu.decode.error := hit.error
-    io.cpu.decode.mmuRefilling := mmuRsp.refilling
-    io.cpu.decode.mmuException := !mmuRsp.refilling && (mmuRsp.exception || !mmuRsp.allowExecute)
-    io.cpu.decode.physicalAddress := mmuRsp.physicalAddress
+    io.cpu.decode.accessFault := hit.error || (!translatorRsp.isPaging && (translatorRsp.exception || !translatorRsp.allowExecute))
+    io.cpu.decode.mmuRefilling := translatorRsp.refilling
+    io.cpu.decode.pageFault := !translatorRsp.refilling && translatorRsp.isPaging && (translatorRsp.exception || !translatorRsp.allowExecute)
+    io.cpu.decode.physicalAddress := translatorRsp.physicalAddress
   })
 }
 

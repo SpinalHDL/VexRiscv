@@ -35,8 +35,8 @@ object GenSecure extends App {
             cpuDataWidth     = 32,
             memDataWidth     = 32,
             catchLoadStoreAccess = true,
-            catchLoadStorePage     = true,
-            catchLoadStoreMisaligned   = true
+            catchLoadStorePage = true,
+            catchLoadStoreMisaligned = true
           )
         ),
         new PmpPlugin(

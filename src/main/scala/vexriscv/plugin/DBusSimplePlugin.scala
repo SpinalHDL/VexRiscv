@@ -301,7 +301,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
   var memoryExceptionPort : Flow[ExceptionCause] = null
   var rspStage : Stage = null
-  var mmuBus : MemoryTranslatorBus = null
+  var translatorBus : MemoryTranslatorBus = null
   var redoBranch : Flow[UInt] = null
   val catchSomething = catchInstructionAccess || catchAddressMisaligned || memoryTranslatorPortConfig != null
 
@@ -380,7 +380,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     }
 
     if(memoryTranslatorPortConfig != null) {
-      mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA, memoryTranslatorPortConfig)
+      translatorBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA, memoryTranslatorPortConfig)
       redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(if(pipeline.memory != null) pipeline.memory else pipeline.execute)
     }
   }
@@ -395,7 +395,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     decode plug new Area {
       import decode._
 
-      if(mmuBus != null) when(mmuBus.busy && arbitration.isValid && input(MEMORY_ENABLE)) {
+      if(translatorBus != null) when(translatorBus.busy && arbitration.isValid && input(MEMORY_ENABLE)) {
         arbitration.haltItself := True
       }
     }
@@ -439,21 +439,21 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       insert(FORMAL_MEM_RMASK) := (dBus.cmd.valid && !dBus.cmd.wr) ? formalMask | B"0000"
       insert(FORMAL_MEM_WDATA) := dBus.cmd.payload.data
 
-      val mmu = (mmuBus != null) generate new Area {
-        mmuBus.cmd.isValid := arbitration.isValid && input(MEMORY_ENABLE)
-        mmuBus.cmd.virtualAddress := input(SRC_ADD).asUInt
-        mmuBus.cmd.bypassTranslation := False
-        mmuBus.end := !arbitration.isStuck || arbitration.isRemoved
-        dBus.cmd.address := mmuBus.rsp.physicalAddress
+      val mmu = (translatorBus != null) generate new Area {
+        translatorBus.cmd.isValid := arbitration.isValid && input(MEMORY_ENABLE)
+        translatorBus.cmd.virtualAddress := input(SRC_ADD).asUInt
+        translatorBus.cmd.bypassTranslation := False
+        translatorBus.end := !arbitration.isStuck || arbitration.isRemoved
+        dBus.cmd.address := translatorBus.rsp.physicalAddress
 
         //do not emit memory request if MMU refilling
         insert(MMU_FAULT) := input(MMU_RSP).exception || (!input(MMU_RSP).allowWrite && input(MEMORY_STORE)) || (!input(MMU_RSP).allowRead && !input(MEMORY_STORE))
         skipCmd.setWhen(input(MMU_FAULT) || input(MMU_RSP).refilling)
 
-        insert(MMU_RSP) := mmuBus.rsp
+        insert(MMU_RSP) := translatorBus.rsp
       }
 
-      val mmuLess = (mmuBus == null) generate new Area{
+      val mmuLess = (translatorBus == null) generate new Area{
         dBus.cmd.address := input(SRC_ADD).asUInt
       }
 

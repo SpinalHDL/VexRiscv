@@ -144,7 +144,7 @@ object LinuxGen {
 //          cmdForkPersistence = false,
 //          prediction = DYNAMIC_TARGET,
 //          historyRamSizeLog2 = 10,
-//          catchInstructionAccess = true,
+//          catchAccessFault = true,
 //          compressedGen = true,
 //          busLatencyMin = 1,
 //          injectorStage = true,
@@ -180,7 +180,7 @@ object LinuxGen {
         //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
 //        new DBusSimplePlugin(
 //          catchAddressMisaligned = true,
-//          catchInstructionAccess = true,
+//          catchAccessFault = true,
 //          earlyInjection = false,
 //          withLrSc = true,
 //          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
@@ -198,9 +198,9 @@ object LinuxGen {
             addressWidth      = 32,
             cpuDataWidth      = 32,
             memDataWidth      = 32,
-            catchLoadStoreAccess  = true,
-            catchLoadStorePage      = true,
-            catchLoadStoreMisaligned    = true,
+            catchLoadStoreAccess = true,
+            catchLoadStorePage = true,
+            catchLoadStoreMisaligned = true,
             withLrSc = true,
             withAmo = true
 //          )
@@ -251,7 +251,7 @@ object LinuxGen {
         new CsrPlugin(CsrPluginConfig.linuxMinimal(0x80000020l).copy(ebreakGen = false)),
         //          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
         //             CsrPluginConfig(
-        //            catchInstructionPage = false,
+        //            catchIllegalAccess = false,
         //            mvendorid      = null,
         //            marchid        = null,
         //            mimpid         = null,

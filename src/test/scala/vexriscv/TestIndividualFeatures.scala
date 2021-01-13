@@ -341,7 +341,7 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
           cmdForkOnSecondStage = cmdForkOnSecondStage,
           cmdForkPersistence = cmdForkPersistence,
           prediction = prediction,
-          catchAccessFault = catchAll,
+          catchInstructionAccess = catchAll,
           compressedGen = compressed,
           busLatencyMin = latency,
           injectorStage = injectorStage,
@@ -382,8 +382,8 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
               addressWidth = 32,
               cpuDataWidth = 32,
               memDataWidth = 32,
-              catchIllegalAccess = catchAll,
-              catchAccessFault = catchAll,
+              catchInstructionPage = catchAll,
+              catchInstructionAccess = catchAll,
               asyncTagMemory = false,
               twoCycleRam = twoCycleRam,
               twoCycleCache = twoCycleCache
@@ -419,7 +419,7 @@ class DBusDimension extends VexRiscvDimension("DBus") {
         override def testParam = "DBUS=SIMPLE " + (if(withLrSc) "LRSC=yes " else "")
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new DBusSimplePlugin(
           catchAddressMisaligned = catchAll,
-          catchAccessFault = catchAll,
+          catchInstructionAccess = catchAll,
           earlyInjection = earlyInjection,
           memoryTranslatorPortConfig = mmuConfig,
           withLrSc = withLrSc
@@ -452,9 +452,9 @@ class DBusDimension extends VexRiscvDimension("DBus") {
               addressWidth = 32,
               cpuDataWidth = 32,
               memDataWidth = 32,
-              catchAccessError = catchAll,
-              catchIllegal = catchAll,
-              catchUnaligned = catchAll,
+              catchLoadStoreAccess = catchAll,
+              catchLoadStorePage = catchAll,
+              catchLoadStoreMisaligned = catchAll,
               withLrSc = withLrSc,
               withAmo = withAmo,
               earlyWaysHits = earlyWaysHits

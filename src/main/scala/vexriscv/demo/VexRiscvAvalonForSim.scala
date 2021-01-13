@@ -64,9 +64,9 @@ object VexRiscvAvalonForSim{
               addressWidth      = 32,
               cpuDataWidth      = 32,
               memDataWidth      = 32,
-              catchLoadStoreAccess  = true,
-              catchLoadStorePage      = true,
-              catchLoadStoreMisaligned    = true
+              catchLoadStoreAccess = true,
+              catchLoadStorePage = true,
+              catchLoadStoreMisaligned = true
             ),
             memoryTranslatorPortConfig = null
             //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(

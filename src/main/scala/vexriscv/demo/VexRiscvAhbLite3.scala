@@ -46,8 +46,8 @@ object VexRiscvAhbLite3{
 //              addressWidth = 32,
 //              cpuDataWidth = 32,
 //              memDataWidth = 32,
-//              catchInstructionPage = true,
-//              catchInstructionAccess = true,
+//              catchIllegalAccess = true,
+//              catchAccessFault = true,
 //              catchMemoryTranslationMiss = true,
 //              asyncTagMemory = false,
 //              twoCycleRam = true
@@ -65,9 +65,9 @@ object VexRiscvAhbLite3{
 //              addressWidth      = 32,
 //              cpuDataWidth      = 32,
 //              memDataWidth      = 32,
-//              catchLoadStoreAccess  = true,
-//              catchLoadStorePage      = true,
-//              catchLoadStoreMisaligned    = true,
+//              catchAccessError  = true,
+//              catchIllegal      = true,
+//              catchUnaligned    = true,
 //              catchMemoryTranslationMiss = true
 //            ),
 //            memoryTranslatorPortConfig = null

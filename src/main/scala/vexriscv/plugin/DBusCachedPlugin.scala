@@ -31,7 +31,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   assert(!(memoryTranslatorPortConfig != null && config.cacheSize/config.wayCount > 4096), "When the D$ is used with MMU, each way can't be bigger than a page (4096 bytes)")
 
   var dBus  : DataCacheMemBus = null
-  var mmuBus : MemoryTranslatorBus = null
+  var translatorBus : MemoryTranslatorBus = null
   var exceptionBus : Flow[ExceptionCause] = null
   var privilegeService : PrivilegeService = null
   var redoBranch : Flow[UInt] = null
@@ -144,7 +144,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
     decoderService.add(FENCE, Nil)
 
-    mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA ,memoryTranslatorPortConfig)
+    translatorBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA ,memoryTranslatorPortConfig)
     redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(if(pipeline.writeBack != null) pipeline.writeBack else pipeline.memory)
 
     if(catchSomething)
@@ -183,7 +183,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     decode plug new Area {
       import decode._
 
-      when(mmuBus.busy && arbitration.isValid && input(MEMORY_ENABLE)) {
+      when(translatorBus.busy && arbitration.isValid && input(MEMORY_ENABLE)) {
         arbitration.haltItself := True
       }
     }
@@ -243,8 +243,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       cache.io.cpu.memory.isRemoved := arbitration.removeIt
       cache.io.cpu.memory.address := (if(relaxedMemoryTranslationRegister) input(MEMORY_VIRTUAL_ADDRESS) else if(mmuAndBufferStage == execute) cache.io.cpu.execute.address else U(input(REGFILE_WRITE_DATA)))
 
-      cache.io.cpu.memory.mmuBus <> mmuBus
-      cache.io.cpu.memory.mmuBus.rsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
+      cache.io.cpu.memory.translatorBus <> translatorBus
+      cache.io.cpu.memory.translatorBus.rsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
     }
 
     val managementStage = stages.last
@@ -262,27 +262,24 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       arbitration.flushNext setWhen(redoBranch.valid)
 
       if(catchSomething) {
-        exceptionBus.valid := False //cache.io.cpu.writeBack.mmuMiss || cache.io.cpu.writeBack.accessError || cache.io.cpu.writeBack.illegalAccess || cache.io.cpu.writeBack.unalignedAccess
+        exceptionBus.valid := False
         exceptionBus.badAddr := U(input(REGFILE_WRITE_DATA))
         exceptionBus.code.assignDontCare()
       }
 
-
       when(arbitration.isValid && input(MEMORY_ENABLE)) {
-        if (catchLoadStoreAccess) when(cache.io.cpu.writeBack.accessError) {
+        if (catchLoadStoreAccess) when(cache.io.cpu.writeBack.accessFault) {
           exceptionBus.valid := True
           exceptionBus.code := (input(MEMORY_WR) ? U(7) | U(5)).resized
         }
-
-        if (catchLoadStoreMisaligned) when(cache.io.cpu.writeBack.unalignedAccess) {
-          exceptionBus.valid := True
-          exceptionBus.code := (input(MEMORY_WR) ? U(6) | U(4)).resized
-        }
-        if(catchLoadStorePage) when (cache.io.cpu.writeBack.mmuException) {
+        if (catchLoadStorePage) when(cache.io.cpu.writeBack.pageFault) {
           exceptionBus.valid := True
           exceptionBus.code := (input(MEMORY_WR) ? U(15) | U(13)).resized
         }
-
+        if (catchLoadStoreMisaligned) when(cache.io.cpu.writeBack.accessMisaligned) {
+          exceptionBus.valid := True
+          exceptionBus.code := (input(MEMORY_WR) ? U(6) | U(4)).resized
+        }
         when(cache.io.cpu.redo) {
           redoBranch.valid := True
           if(catchSomething) exceptionBus.valid := False
@@ -334,12 +331,12 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       execute.insert(IS_DBUS_SHARING) := dBusAccess.cmd.fire
 
 
-      mmuBus.cmd.bypassTranslation setWhen(mmuAndBufferStage.input(IS_DBUS_SHARING))
+      translatorBus.cmd.bypassTranslation setWhen(mmuAndBufferStage.input(IS_DBUS_SHARING))
       if(mmuAndBufferStage != execute) (cache.io.cpu.memory.isValid setWhen(mmuAndBufferStage.input(IS_DBUS_SHARING)))
       cache.io.cpu.writeBack.isValid setWhen(managementStage.input(IS_DBUS_SHARING))
       dBusAccess.rsp.valid := managementStage.input(IS_DBUS_SHARING) && !cache.io.cpu.writeBack.isWrite && (cache.io.cpu.redo || !cache.io.cpu.writeBack.haltIt)
       dBusAccess.rsp.data := cache.io.cpu.writeBack.data
-      dBusAccess.rsp.error := cache.io.cpu.writeBack.unalignedAccess || cache.io.cpu.writeBack.accessError
+      dBusAccess.rsp.error := cache.io.cpu.writeBack.accessMisaligned || cache.io.cpu.writeBack.accessFault
       dBusAccess.rsp.redo := cache.io.cpu.redo
       component.addPrePopTask{() =>
         when(forceDatapath){
