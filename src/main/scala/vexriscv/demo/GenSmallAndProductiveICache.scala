@@ -24,8 +24,8 @@ object GenSmallAndProductiveICache extends App{
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 32,
-            catchIllegalAccess = false,
-            catchAccessFault = false,
+            catchInstructionPage = false,
+            catchInstructionAccess = false,
             asyncTagMemory = false,
             twoCycleRam = false,
             twoCycleCache = true
@@ -33,7 +33,7 @@ object GenSmallAndProductiveICache extends App{
         ),
         new DBusSimplePlugin(
           catchAddressMisaligned = false,
-          catchAccessFault = false
+          catchInstructionAccess = false
         ),
         new CsrPlugin(CsrPluginConfig.smallest),
         new DecoderSimplePlugin(

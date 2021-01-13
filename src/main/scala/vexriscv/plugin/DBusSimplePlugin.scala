@@ -279,7 +279,7 @@ case class DBusSimpleBus(bigEndian : Boolean = false) extends Bundle with IMaste
 
 
 class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
-                       catchAccessFault : Boolean = false,
+                       catchInstructionAccess : Boolean = false,
                        earlyInjection : Boolean = false, /*, idempotentRegions : (UInt) => Bool = (x) => False*/
                        emitCmdInMemoryStage : Boolean = false,
                        onlyLoadWords : Boolean = false,
@@ -303,7 +303,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
   var rspStage : Stage = null
   var mmuBus : MemoryTranslatorBus = null
   var redoBranch : Flow[UInt] = null
-  val catchSomething = catchAccessFault || catchAddressMisaligned || memoryTranslatorPortConfig != null
+  val catchSomething = catchInstructionAccess || catchAddressMisaligned || memoryTranslatorPortConfig != null
 
   @dontName var dBusAccess : DBusAccess = null
   override def newDBusAccess(): DBusAccess = {
@@ -324,7 +324,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       SRC_USE_SUB_LESS  -> False,
       MEMORY_ENABLE     -> True,
       RS1_USE          -> True
-    ) ++ (if(catchAccessFault || catchAddressMisaligned) List(IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB) else Nil) //Used for access fault bad address in memory stage
+    ) ++ (if(catchInstructionAccess || catchAddressMisaligned) List(IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB) else Nil) //Used for access fault bad address in memory stage
 
     val loadActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMI,
@@ -332,7 +332,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       BYPASSABLE_EXECUTE_STAGE -> False,
       BYPASSABLE_MEMORY_STAGE  -> Bool(earlyInjection),
       MEMORY_STORE -> False
-    ) ++ (if(catchAccessFault || catchAddressMisaligned) List(HAS_SIDE_EFFECT -> True) else Nil)
+    ) ++ (if(catchInstructionAccess || catchAddressMisaligned) List(HAS_SIDE_EFFECT -> True) else Nil)
 
     val storeActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMS,
@@ -488,7 +488,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         memoryExceptionPort.code.assignDontCare()
         memoryExceptionPort.badAddr := input(REGFILE_WRITE_DATA).asUInt
 
-        if(catchAccessFault) when(dBus.rsp.ready && dBus.rsp.error && !input(MEMORY_STORE)) {
+        if(catchInstructionAccess) when(dBus.rsp.ready && dBus.rsp.error && !input(MEMORY_STORE)) {
           memoryExceptionPort.valid := True
           memoryExceptionPort.code := 5
         }

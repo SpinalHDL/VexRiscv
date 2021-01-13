@@ -17,12 +17,12 @@ object GenFullNoMmuNoCacheSimpleMul extends App{
           cmdForkOnSecondStage = false,
           cmdForkPersistence = false,
           prediction = STATIC,
-          catchAccessFault = false,
+          catchInstructionAccess = false,
           compressedGen = false
         ),
         new DBusSimplePlugin(
           catchAddressMisaligned = false,
-          catchAccessFault = false
+          catchInstructionAccess = false
         ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = true

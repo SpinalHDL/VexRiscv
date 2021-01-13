@@ -18,12 +18,12 @@ object FormalSimple extends App{
           cmdForkOnSecondStage = false,
           cmdForkPersistence = false,
           prediction = DYNAMIC_TARGET,
-          catchAccessFault = false,
+          catchInstructionAccess = false,
           compressedGen = true
         ),
         new DBusSimplePlugin(
           catchAddressMisaligned = true,
-          catchAccessFault = false
+          catchInstructionAccess = false
         ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = true,

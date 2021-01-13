@@ -74,13 +74,13 @@ object MuraxConfig{
         cmdForkOnSecondStage = true,
         cmdForkPersistence = withXip, //Required by the Xip controller
         prediction = NONE,
-        catchAccessFault = false,
+        catchInstructionAccess = false,
         compressedGen = false,
         bigEndian = bigEndian
       ),
       new DBusSimplePlugin(
         catchAddressMisaligned = false,
-        catchAccessFault = false,
+        catchInstructionAccess = false,
         earlyInjection = false,
         bigEndian = bigEndian
       ),
@@ -460,7 +460,7 @@ object MuraxDhrystoneReadyMulDivStatic{
         cmdForkOnSecondStage = true,
         cmdForkPersistence = false,
         prediction = STATIC,
-        catchAccessFault = false,
+        catchInstructionAccess = false,
         compressedGen = false
       )
       config.cpuPlugins.remove(config.cpuPlugins.indexWhere(_.isInstanceOf[LightShifterPlugin]))

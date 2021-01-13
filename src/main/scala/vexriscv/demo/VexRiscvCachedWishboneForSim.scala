@@ -30,7 +30,7 @@ object VexRiscvCachedWishboneForSim{
 //          ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = false,
-//            catchAccessFault = false
+//            catchInstructionAccess = false
 //          ),
           new IBusCachedPlugin(
             resetVector = 0x80000000l,
@@ -42,8 +42,8 @@ object VexRiscvCachedWishboneForSim{
               addressWidth = 32,
               cpuDataWidth = 32,
               memDataWidth = 32,
-              catchIllegalAccess = true,
-              catchAccessFault = true,
+              catchInstructionPage = true,
+              catchInstructionAccess = true,
               asyncTagMemory = false,
               twoCycleRam = true
             )
@@ -60,9 +60,9 @@ object VexRiscvCachedWishboneForSim{
               addressWidth      = 32,
               cpuDataWidth      = 32,
               memDataWidth      = 32,
-              catchAccessError  = true,
-              catchIllegal      = true,
-              catchUnaligned    = true
+              catchLoadStoreAccess  = true,
+              catchLoadStorePage      = true,
+              catchLoadStoreMisaligned    = true
             ),
             memoryTranslatorPortConfig = null
             //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(

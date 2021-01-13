@@ -31,12 +31,12 @@ object VexRiscvAhbLite3{
             cmdForkOnSecondStage = false,
             cmdForkPersistence = true,
             prediction = STATIC,
-            catchAccessFault = false,
+            catchInstructionAccess = false,
             compressedGen = false
           ),
           new DBusSimplePlugin(
             catchAddressMisaligned = false,
-            catchAccessFault = false
+            catchInstructionAccess = false
           ),
 //          new IBusCachedPlugin(
 //            config = InstructionCacheConfig(
@@ -46,8 +46,8 @@ object VexRiscvAhbLite3{
 //              addressWidth = 32,
 //              cpuDataWidth = 32,
 //              memDataWidth = 32,
-//              catchIllegalAccess = true,
-//              catchAccessFault = true,
+//              catchInstructionPage = true,
+//              catchInstructionAccess = true,
 //              catchMemoryTranslationMiss = true,
 //              asyncTagMemory = false,
 //              twoCycleRam = true
@@ -65,9 +65,9 @@ object VexRiscvAhbLite3{
 //              addressWidth      = 32,
 //              cpuDataWidth      = 32,
 //              memDataWidth      = 32,
-//              catchAccessError  = true,
-//              catchIllegal      = true,
-//              catchUnaligned    = true,
+//              catchLoadStoreAccess  = true,
+//              catchLoadStorePage      = true,
+//              catchLoadStoreMisaligned    = true,
 //              catchMemoryTranslationMiss = true
 //            ),
 //            memoryTranslatorPortConfig = null
@@ -109,7 +109,7 @@ object VexRiscvAhbLite3{
           ),
           new CsrPlugin(
             config = CsrPluginConfig(
-              catchIllegalAccess = false,
+              catchInstructionPage = false,
               mvendorid      = null,
               marchid        = null,
               mimpid         = null,

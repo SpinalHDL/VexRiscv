@@ -19,8 +19,8 @@ object GenSecure extends App {
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 32,
-            catchIllegalAccess = true,
-            catchAccessFault = true,
+            catchInstructionPage = true,
+            catchInstructionAccess = true,
             asyncTagMemory = false,
             twoCycleRam = true,
             twoCycleCache = true
@@ -34,9 +34,9 @@ object GenSecure extends App {
             addressWidth     = 32,
             cpuDataWidth     = 32,
             memDataWidth     = 32,
-            catchAccessError = true,
-            catchIllegal     = true,
-            catchUnaligned   = true
+            catchLoadStoreAccess = true,
+            catchLoadStorePage     = true,
+            catchLoadStoreMisaligned   = true
           )
         ),
         new PmpPlugin(

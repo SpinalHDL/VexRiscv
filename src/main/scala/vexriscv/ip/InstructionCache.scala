@@ -17,8 +17,8 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    addressWidth : Int,
                                    cpuDataWidth : Int,
                                    memDataWidth : Int,
-                                   catchIllegalAccess : Boolean,
-                                   catchAccessFault : Boolean,
+                                   catchInstructionPage : Boolean,
+                                   catchInstructionAccess : Boolean,
                                    asyncTagMemory : Boolean,
                                    twoCycleCache : Boolean = true,
                                    twoCycleRam : Boolean = false,
@@ -28,7 +28,7 @@ case class InstructionCacheConfig( cacheSize : Int,
   assert(!(twoCycleRam && !twoCycleCache))
 
   def burstSize = bytePerLine*8/memDataWidth
-  def catchSomething = catchAccessFault || catchIllegalAccess
+  def catchSomething = catchInstructionAccess || catchInstructionPage
 
   def getAxi4Config() = Axi4Config(
     addressWidth = addressWidth,

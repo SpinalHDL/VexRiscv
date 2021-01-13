@@ -218,7 +218,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
           redoFetch := True
         }
 
-        if(catchIllegalAccess) when(cacheRsp.isValid && cacheRsp.mmuException && !issueDetected) {
+        if(catchInstructionPage) when(cacheRsp.isValid && cacheRsp.mmuException && !issueDetected) {
           issueDetected \= True
           decodeExceptionPort.valid := iBusRsp.readyForError
           decodeExceptionPort.code := 12
@@ -230,7 +230,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
           redoFetch := True
         }
 
-        if(catchAccessFault) when(cacheRsp.isValid && cacheRsp.error && !issueDetected) {
+        if(catchInstructionAccess) when(cacheRsp.isValid && cacheRsp.error && !issueDetected) {
           issueDetected \= True
           decodeExceptionPort.valid := iBusRsp.readyForError
           decodeExceptionPort.code := 1

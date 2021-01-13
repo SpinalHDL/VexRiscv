@@ -53,7 +53,7 @@ object BrieyConfig{
         new PcManagerSimplePlugin(0x80000000l, false),
         //          new IBusSimplePlugin(
         //            interfaceKeepData = false,
-        //            catchAccessFault = true
+        //            catchInstructionAccess = true
         //          ),
         new IBusCachedPlugin(
           resetVector = 0x80000000l,
@@ -65,8 +65,8 @@ object BrieyConfig{
             addressWidth = 32,
             cpuDataWidth = 32,
             memDataWidth = 32,
-            catchIllegalAccess = true,
-            catchAccessFault = true,
+            catchInstructionPage = true,
+            catchInstructionAccess = true,
             asyncTagMemory = false,
             twoCycleRam = true,
             twoCycleCache = true
@@ -78,7 +78,7 @@ object BrieyConfig{
         ),
         //                    new DBusSimplePlugin(
         //                      catchAddressMisaligned = true,
-        //                      catchAccessFault = true
+        //                      catchInstructionAccess = true
         //                    ),
         new DBusCachedPlugin(
           config = new DataCacheConfig(
@@ -88,9 +88,9 @@ object BrieyConfig{
             addressWidth      = 32,
             cpuDataWidth      = 32,
             memDataWidth      = 32,
-            catchAccessError  = true,
-            catchIllegal      = true,
-            catchUnaligned    = true
+            catchLoadStoreAccess  = true,
+            catchLoadStorePage      = true,
+            catchLoadStoreMisaligned    = true
           ),
           memoryTranslatorPortConfig = null
           //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
@@ -130,7 +130,7 @@ object BrieyConfig{
         ),
         new CsrPlugin(
           config = CsrPluginConfig(
-            catchIllegalAccess = false,
+            catchInstructionPage = false,
             mvendorid      = null,
             marchid        = null,
             mimpid         = null,

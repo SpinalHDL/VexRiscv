@@ -28,11 +28,11 @@ object VexRiscvAxi4WithIntegratedJtag{
           new PcManagerSimplePlugin(0x00000000l, false),
 //          new IBusSimplePlugin(
 //            interfaceKeepData = false,
-//            catchAccessFault = false
+//            catchInstructionAccess = false
 //          ),
 //          new DBusSimplePlugin(
 //            catchAddressMisaligned = false,
-//            catchAccessFault = false
+//            catchInstructionAccess = false
 //          ),
           new IBusCachedPlugin(
             prediction = STATIC,
@@ -43,8 +43,8 @@ object VexRiscvAxi4WithIntegratedJtag{
               addressWidth = 32,
               cpuDataWidth = 32,
               memDataWidth = 32,
-              catchIllegalAccess = true,
-              catchAccessFault = true,
+              catchInstructionPage = true,
+              catchInstructionAccess = true,
               asyncTagMemory = false,
               twoCycleRam = true,
               twoCycleCache = true
@@ -62,9 +62,9 @@ object VexRiscvAxi4WithIntegratedJtag{
               addressWidth      = 32,
               cpuDataWidth      = 32,
               memDataWidth      = 32,
-              catchAccessError  = true,
-              catchIllegal      = true,
-              catchUnaligned    = true
+              catchLoadStoreAccess  = true,
+              catchLoadStorePage      = true,
+              catchLoadStoreMisaligned    = true
             ),
             memoryTranslatorPortConfig = null
             //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
@@ -105,7 +105,7 @@ object VexRiscvAxi4WithIntegratedJtag{
           ),
           new CsrPlugin(
             config = CsrPluginConfig(
-              catchIllegalAccess = false,
+              catchInstructionPage = false,
               mvendorid      = null,
               marchid        = null,
               mimpid         = null,

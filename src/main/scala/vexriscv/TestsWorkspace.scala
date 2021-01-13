@@ -37,7 +37,7 @@ object TestsWorkspace {
           //            cmdForkPersistence = false,
           //            prediction = NONE,
           //            historyRamSizeLog2 = 10,
-          //            catchAccessFault = false,
+          //            catchInstructionAccess = false,
           //            compressedGen = false,
           //            busLatencyMin = 1,
           //            injectorStage = true
@@ -54,8 +54,8 @@ object TestsWorkspace {
               addressWidth = 32,
               cpuDataWidth = 32,
               memDataWidth = 32,
-              catchIllegalAccess = true,
-              catchAccessFault = true,
+              catchInstructionPage = true,
+              catchInstructionAccess = true,
               asyncTagMemory = false,
               twoCycleRam = false,
               twoCycleCache = true
@@ -67,7 +67,7 @@ object TestsWorkspace {
 //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
           //          new DBusSimplePlugin(
           //            catchAddressMisaligned = true,
-          //            catchAccessFault = false,
+          //            catchInstructionAccess = false,
           //            earlyInjection = false
           //          ),
           new DBusCachedPlugin(
@@ -78,9 +78,9 @@ object TestsWorkspace {
               addressWidth      = 32,
               cpuDataWidth      = 32,
               memDataWidth      = 32,
-              catchAccessError  = true,
-              catchIllegal      = true,
-              catchUnaligned    = true,
+              catchLoadStoreAccess  = true,
+              catchLoadStorePage      = true,
+              catchLoadStoreMisaligned    = true,
               withLrSc = true
             ),
             //            memoryTranslatorPortConfig = null
@@ -131,7 +131,7 @@ object TestsWorkspace {
           new CsrPlugin(CsrPluginConfig.all(0x80000020l)),
           //          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
           //             CsrPluginConfig(
-          //            catchIllegalAccess = false,
+          //            catchInstructionPage = false,
           //            mvendorid      = null,
           //            marchid        = null,
           //            mimpid         = null,

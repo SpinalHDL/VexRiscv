@@ -31,12 +31,12 @@ object VexRiscvAvalonForSim{
             cmdForkOnSecondStage = false,
             cmdForkPersistence = false,
             prediction = STATIC,
-            catchAccessFault = false,
+            catchInstructionAccess = false,
             compressedGen = false
           ),
           new DBusSimplePlugin(
             catchAddressMisaligned = false,
-            catchAccessFault = false
+            catchInstructionAccess = false
           ),*/
           new IBusCachedPlugin(
             config = InstructionCacheConfig(
@@ -46,8 +46,8 @@ object VexRiscvAvalonForSim{
               addressWidth = 32,
               cpuDataWidth = 32,
               memDataWidth = 32,
-              catchIllegalAccess = true,
-              catchAccessFault = true,
+              catchInstructionPage = true,
+              catchInstructionAccess = true,
               asyncTagMemory = false,
               twoCycleRam = true
             )
@@ -64,9 +64,9 @@ object VexRiscvAvalonForSim{
               addressWidth      = 32,
               cpuDataWidth      = 32,
               memDataWidth      = 32,
-              catchAccessError  = true,
-              catchIllegal      = true,
-              catchUnaligned    = true
+              catchLoadStoreAccess  = true,
+              catchLoadStorePage      = true,
+              catchLoadStoreMisaligned    = true
             ),
             memoryTranslatorPortConfig = null
             //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
@@ -107,7 +107,7 @@ object VexRiscvAvalonForSim{
           ),
           new CsrPlugin(
             config = CsrPluginConfig(
-              catchIllegalAccess = false,
+              catchInstructionPage = false,
               mvendorid      = null,
               marchid        = null,
               mimpid         = null,

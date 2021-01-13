@@ -18,12 +18,12 @@ object GenNoCacheNoMmuMaxPerf extends App{
           cmdForkPersistence = false,
           prediction = DYNAMIC_TARGET,
           historyRamSizeLog2 = 8,
-          catchAccessFault = true,
+          catchInstructionAccess = true,
           compressedGen = false
         ),
         new DBusSimplePlugin(
           catchAddressMisaligned = true,
-          catchAccessFault = true,
+          catchInstructionAccess = true,
           earlyInjection = false
         ),
         new StaticMemoryTranslatorPlugin(

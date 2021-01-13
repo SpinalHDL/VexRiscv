@@ -17,9 +17,9 @@ case class DataCacheConfig(cacheSize : Int,
                            addressWidth : Int,
                            cpuDataWidth : Int,
                            memDataWidth : Int,
-                           catchAccessError : Boolean,
-                           catchIllegal : Boolean,
-                           catchUnaligned : Boolean,
+                           catchLoadStoreAccess : Boolean,
+                           catchLoadStorePage : Boolean,
+                           catchLoadStoreMisaligned : Boolean,
                            earlyWaysHits : Boolean = true,
                            earlyDataMux : Boolean = false,
                            tagSizeShift : Int = 0, //Used to force infering ram
@@ -30,7 +30,7 @@ case class DataCacheConfig(cacheSize : Int,
   assert(!(earlyDataMux && !earlyWaysHits))
   def burstSize = bytePerLine*8/memDataWidth
   val burstLength = bytePerLine/(memDataWidth/8)
-  def catchSomething = catchUnaligned || catchIllegal || catchAccessError
+  def catchSomething = catchLoadStoreMisaligned || catchLoadStorePage || catchLoadStoreAccess
 
   def getAxi4SharedConfig() = Axi4Config(
     addressWidth = addressWidth,
@@ -553,8 +553,8 @@ class DataCache(p : DataCacheConfig) extends Component{
     val memCmdSent = RegInit(False) setWhen (io.mem.cmd.ready) clearWhen (!io.cpu.writeBack.isStuck)
     io.cpu.redo := False
     io.cpu.writeBack.accessError := False
-    io.cpu.writeBack.mmuException := io.cpu.writeBack.isValid && (if(catchIllegal) mmuRsp.exception || (!mmuRsp.allowWrite && request.wr) || (!mmuRsp.allowRead && (!request.wr || isAmo)) else False)
-    io.cpu.writeBack.unalignedAccess := io.cpu.writeBack.isValid && (if(catchUnaligned) ((request.size === 2 && mmuRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && mmuRsp.physicalAddress(0 downto 0) =/= 0)) else False)
+    io.cpu.writeBack.mmuException := io.cpu.writeBack.isValid && (if(catchLoadStorePage) mmuRsp.exception || (!mmuRsp.allowWrite && request.wr) || (!mmuRsp.allowRead && (!request.wr || isAmo)) else False)
+    io.cpu.writeBack.unalignedAccess := io.cpu.writeBack.isValid && (if(catchLoadStoreMisaligned) ((request.size === 2 && mmuRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && mmuRsp.physicalAddress(0 downto 0) =/= 0)) else False)
     io.cpu.writeBack.isWrite := request.wr
 
     io.mem.cmd.valid := False
@@ -628,10 +628,10 @@ class DataCache(p : DataCacheConfig) extends Component{
 
     when(mmuRsp.isIoAccess){
       io.cpu.writeBack.data :=  io.mem.rsp.data
-      if(catchAccessError) io.cpu.writeBack.accessError := io.mem.rsp.valid && io.mem.rsp.error
+      if(catchLoadStoreAccess) io.cpu.writeBack.accessError := io.mem.rsp.valid && io.mem.rsp.error
     } otherwise {
       io.cpu.writeBack.data :=  dataMux
-      if(catchAccessError) io.cpu.writeBack.accessError := (waysHits & B(tagsReadRsp.map(_.error))) =/= 0
+      if(catchLoadStoreAccess) io.cpu.writeBack.accessError := (waysHits & B(tagsReadRsp.map(_.error))) =/= 0
     }
 
     //remove side effects on exceptions

@@ -16,12 +16,12 @@ object GenSmallAndProductiveCfu extends App{
           cmdForkOnSecondStage = false,
           cmdForkPersistence = false,
           prediction = NONE,
-          catchAccessFault = false,
+          catchInstructionAccess = false,
           compressedGen = false
         ),
         new DBusSimplePlugin(
           catchAddressMisaligned = false,
-          catchAccessFault = false
+          catchInstructionAccess = false
         ),
         new CsrPlugin(CsrPluginConfig.smallest),
         new DecoderSimplePlugin(

@@ -222,7 +222,7 @@ case class IBusSimpleBus(plugin: IBusSimplePlugin) extends Bundle with IMasterSl
 class IBusSimplePlugin(    resetVector : BigInt,
                        val cmdForkOnSecondStage : Boolean,
                        val cmdForkPersistence : Boolean,
-                       val catchAccessFault : Boolean = false,
+                       val catchInstructionAccess : Boolean = false,
                            prediction : BranchPrediction = NONE,
                            historyRamSizeLog2 : Int = 10,
                            keepPcPlus4 : Boolean = false,
@@ -253,7 +253,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
 
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
-  val catchSomething = memoryTranslatorPortConfig != null || catchAccessFault
+  val catchSomething = memoryTranslatorPortConfig != null || catchInstructionAccess
   var mmuBus : MemoryTranslatorBus = null
 
 //  if(rspHoldValue) assert(busLatencyMin <= 1)
@@ -397,7 +397,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
           decodeExceptionPort.code.assignDontCare()
           decodeExceptionPort.badAddr := join.pc(31 downto 2) @@ U"00"
 
-          if(catchAccessFault) when(join.valid && join.rsp.error){
+          if(catchInstructionAccess) when(join.valid && join.rsp.error){
             decodeExceptionPort.code  := 1
             exceptionDetected := True
           }

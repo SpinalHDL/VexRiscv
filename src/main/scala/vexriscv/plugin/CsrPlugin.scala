@@ -33,7 +33,7 @@ object CsrAccess {
 
 case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage, priority : Int)
 case class CsrPluginConfig(
-                            catchIllegalAccess  : Boolean,
+                            catchInstructionPage  : Boolean,
                             mvendorid           : BigInt,
                             marchid             : BigInt,
                             mimpid              : BigInt,
@@ -76,8 +76,8 @@ case class CsrPluginConfig(
                           ){
   assert(!ucycleAccess.canWrite)
   def privilegeGen = userGen || supervisorGen
-  def noException = this.copy(ecallGen = false, ebreakGen = false, catchIllegalAccess = false)
-  def noExceptionButEcall = this.copy(ecallGen = true, ebreakGen = false, catchIllegalAccess = false)
+  def noException = this.copy(ecallGen = false, ebreakGen = false, catchInstructionPage = false)
+  def noExceptionButEcall = this.copy(ecallGen = true, ebreakGen = false, catchInstructionPage = false)
 }
 
 object CsrPluginConfig{
@@ -85,7 +85,7 @@ object CsrPluginConfig{
   def small : CsrPluginConfig = small(0x00000020l)
   def smallest : CsrPluginConfig = smallest(0x00000020l)
   def linuxMinimal(mtVecInit : BigInt) = CsrPluginConfig(
-    catchIllegalAccess  = true,
+    catchInstructionPage  = true,
     mvendorid           = 1,
     marchid             = 2,
     mimpid              = 3,
@@ -126,7 +126,7 @@ object CsrPluginConfig{
 
 
   def linuxFull(mtVecInit : BigInt) = CsrPluginConfig(
-    catchIllegalAccess  = true,
+    catchInstructionPage  = true,
     mvendorid           = 1,
     marchid             = 2,
     mimpid              = 3,
@@ -166,7 +166,7 @@ object CsrPluginConfig{
   )
 
   def all(mtvecInit : BigInt) : CsrPluginConfig = CsrPluginConfig(
-    catchIllegalAccess = true,
+    catchInstructionPage = true,
     mvendorid          = 11,
     marchid            = 22,
     mimpid             = 33,
@@ -188,7 +188,7 @@ object CsrPluginConfig{
   )
 
   def all2(mtvecInit : BigInt) : CsrPluginConfig = CsrPluginConfig(
-    catchIllegalAccess = true,
+    catchInstructionPage = true,
     mvendorid      = 11,
     marchid        = 22,
     mimpid         = 33,
@@ -221,7 +221,7 @@ object CsrPluginConfig{
   )
 
   def small(mtvecInit : BigInt)  = CsrPluginConfig(
-    catchIllegalAccess = false,
+    catchInstructionPage = false,
     mvendorid      = null,
     marchid        = null,
     mimpid         = null,
@@ -243,7 +243,7 @@ object CsrPluginConfig{
   )
 
   def smallest(mtvecInit : BigInt)  = CsrPluginConfig(
-    catchIllegalAccess = false,
+    catchInstructionPage = false,
     mvendorid      = null,
     marchid        = null,
     mimpid         = null,
@@ -265,7 +265,7 @@ object CsrPluginConfig{
   )
 
   def secure(mtvecInit : BigInt) = CsrPluginConfig(
-    catchIllegalAccess = true,
+    catchInstructionPage = true,
     mvendorid           = 1,
     marchid             = 2,
     mimpid              = 3,
@@ -443,7 +443,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       REGFILE_WRITE_VALID      -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
       BYPASSABLE_MEMORY_STAGE  -> True
-    ) ++ (if(catchIllegalAccess) List(HAS_SIDE_EFFECT -> True) else Nil)
+    ) ++ (if(catchInstructionPage) List(HAS_SIDE_EFFECT -> True) else Nil)
 
     val nonImmediatActions = defaultCsrActions ++ List(
       SRC1_CTRL                -> Src1CtrlEnum.RS,
@@ -496,7 +496,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     privilege = UInt(2 bits).setName("CsrPlugin_privilege")
     forceMachineWire = False
 
-    if(catchIllegalAccess || ecallGen || ebreakGen)
+    if(catchInstructionPage || ecallGen || ebreakGen)
       selfException = newExceptionPort(pipeline.execute)
 
     allowInterrupts = True
@@ -998,7 +998,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           selfException.valid := False
           selfException.code.assignDontCare()
           selfException.badAddr := input(INSTRUCTION).asUInt
-          if(catchIllegalAccess) when(illegalAccess || illegalInstruction){
+          if(catchInstructionPage) when(illegalAccess || illegalInstruction){
             selfException.valid := True
             selfException.code := 2
           }

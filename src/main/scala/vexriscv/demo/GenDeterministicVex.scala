@@ -16,12 +16,12 @@ object GenDeterministicVex extends App{
           cmdForkOnSecondStage = false,
           cmdForkPersistence = false,
           prediction = STATIC,
-          catchAccessFault = true,
+          catchInstructionAccess = true,
           compressedGen = false
         ),
         new DBusSimplePlugin(
           catchAddressMisaligned = true,
-          catchAccessFault = true,
+          catchInstructionAccess = true,
           earlyInjection = false
         ),
         new StaticMemoryTranslatorPlugin(
