@@ -7,7 +7,7 @@ import spinal.lib.eda.bench.{Bench, Rtl, XilinxStdTargets}
 import scala.collection.mutable.ArrayBuffer
 
 object FpuDivSqrtIterationState extends SpinalEnum{
-  val IDLE, YY, XYY, Y2_XYY, DIV, Y_15_XYY2, Y_15_XYY2_RESULT, SQRT = newElement()
+  val IDLE, YY, XYY, Y2_XYY, DIV, _15_XYY2, Y_15_XYY2, Y_15_XYY2_RESULT, SQRT = newElement()
 }
 
 case class FpuCore(p : FpuParameter) extends Component{
@@ -117,9 +117,13 @@ case class FpuCore(p : FpuParameter) extends Component{
         useRs2 := True
         useRd  := True
       }
-      is(p.Opcode.DIV_SQRT){
+      is(p.Opcode.DIV){
         useRs1 := True
-        useRs2 := True //TODO
+        useRs2 := True
+        useRd  := True
+      }
+      is(p.Opcode.SQRT){
+        useRs1 := True
         useRd  := True
       }
       is(p.Opcode.FMA){
@@ -174,7 +178,7 @@ case class FpuCore(p : FpuParameter) extends Component{
     store.source := read.output.source
     store.rs2    := read.output.rs2
 
-    val divSqrtHit = input.opcode === p.Opcode.DIV_SQRT
+    val divSqrtHit = input.opcode === p.Opcode.DIV ||  input.opcode === p.Opcode.SQRT
     val divSqrt = Stream(DivSqrtInput())
     input.ready setWhen(divSqrtHit && divSqrt.ready)
     divSqrt.valid := input.valid && divSqrtHit
@@ -183,7 +187,7 @@ case class FpuCore(p : FpuParameter) extends Component{
     divSqrt.rs2    := read.output.rs2
     divSqrt.rd     := read.output.rd
     divSqrt.lockId := read.output.lockId
-    divSqrt.div    := True //TODO
+    divSqrt.div    := input.opcode === p.Opcode.DIV
 
     val fmaHit = input.opcode === p.Opcode.FMA
     val mulHit = input.opcode === p.Opcode.MUL || fmaHit
@@ -315,14 +319,21 @@ case class FpuCore(p : FpuParameter) extends Component{
       val rom = Mem(UInt(aproxWidth bits), aproxDepth * 2)
       val divTable, sqrtTable = ArrayBuffer[Double]()
       for(i <- 0 until aproxDepth){
-        val mantissa = 1+(i+0.5)/aproxDepth
-        divTable += 1/mantissa
-        sqrtTable += 1/Math.sqrt(mantissa)
+        val value = 1+(i+0.5)/aproxDepth
+        divTable += 1/value
+      }
+      for(i <- 0 until aproxDepth){
+        val scale = if(i < aproxDepth/2) 2 else 1
+        val value = scale+(scale*(i%(aproxDepth/2)+0.5)/aproxDepth*2)
+//        println(s"$i => $value" )
+        sqrtTable += 1/Math.sqrt(value)
       }
       val romElaboration = (sqrtTable ++ divTable).map(v => BigInt(((v-0.5)*2*(1 << aproxWidth)).round))
 
       rom.initBigInt(romElaboration)
-      val address = U(input.div ## (input.div ? input.rs2.mantissa | input.rs1.mantissa).takeHigh(log2Up(aproxDepth)))
+      val div = input.rs2.mantissa.takeHigh(log2Up(aproxDepth))
+      val sqrt = U(input.rs1.exponent.lsb ## input.rs1.mantissa).takeHigh(log2Up(aproxDepth))
+      val address = U(input.div ## (input.div ? div | sqrt))
       val raw = rom.readAsync(address)
       val result = U"01" @@ (raw << (mulWidth-aproxWidth-2))
     }
@@ -331,7 +342,7 @@ case class FpuCore(p : FpuParameter) extends Component{
       val value = (1 << p.internalExponentSize) - 3 - input.rs2.exponent
     }
     val sqrtExp = new Area{
-      val value = ((1 << p.internalExponentSize-1) + (1 << p.internalExponentSize-2) - 2) - (input.rs2.exponent >> 1) + input.rs2.exponent.lsb.asUInt
+      val value = ((1 << p.internalExponentSize-1) + (1 << p.internalExponentSize-2) - 2 -1) - (input.rs1.exponent >> 1) + U(!input.rs1.exponent.lsb)
     }
 
     def mulArg(rs1 : UInt, rs2 : UInt): Unit ={
@@ -345,7 +356,6 @@ case class FpuCore(p : FpuParameter) extends Component{
     mulBuffer.ready := False
 
     val iterationValue = Reg(UInt(mulWidth bits))
-    //val squareInput = (iteration === 0) ? aprox.result | iterationValue
 
     input.ready := False
     switch(state){
@@ -365,13 +375,12 @@ case class FpuCore(p : FpuParameter) extends Component{
       }
       is(XYY){
         decode.divSqrtToMul.valid := mulBuffer.valid
-        mulArg(U"1" @@ (input.div ? input.rs2.mantissa | input.rs1.mantissa), mulBuffer.payload)
+        val sqrtIn = !input.rs1.exponent.lsb ? (U"1" @@ input.rs1.mantissa) | ((U"1" @@ input.rs1.mantissa) |>> 1)
+        val divIn = U"1" @@ input.rs2.mantissa
+        mulArg(input.div ? divIn| sqrtIn, mulBuffer.payload)
         when(mulBuffer.valid && decode.divSqrtToMul.ready) {
-          state := (input.div ? Y2_XYY | Y_15_XYY2)
-          mulBuffer.ready := input.div
-          when(!input.div){
-            mulBuffer.payload.getDrivingReg := (U"11" << mulWidth-2) - (mulBuffer.payload >> 1)
-          }
+          state := (input.div ? Y2_XYY | _15_XYY2)
+          mulBuffer.ready := True
         }
       }
       is(Y2_XYY){
@@ -399,25 +408,25 @@ case class FpuCore(p : FpuParameter) extends Component{
           input.ready := True
         }
       }
+      is(_15_XYY2){
+        when(mulBuffer.valid) {
+          state := Y_15_XYY2
+          mulBuffer.payload.getDrivingReg := (U"11" << mulWidth-2) - (mulBuffer.payload)
+        }
+      }
       is(Y_15_XYY2){
         decode.divSqrtToMul.valid := True
-        mulArg(U"1" @@ input.rs1.mantissa, mulBuffer.payload)
+        mulArg(iterationValue, mulBuffer.payload)
         when(decode.divSqrtToMul.ready) {
           mulBuffer.ready := True
-          state := SQRT
+          state := Y_15_XYY2_RESULT
         }
       }
       is(Y_15_XYY2_RESULT){
-        when(iteration =/= sqrtIterationCount-1 && !input.rs1.exponent.lsb) {
-          iterationValue := mulBuffer.payload
-        } otherwise {
-          val v = 1.0/Math.sqrt(2.0)
-          val scaled = v* (BigInt(1) << mulWidth-1).toDouble
-          val bigInt = BigDecimal(scaled).toBigInt()
-          iterationValue := mulBuffer.payload + U(bigInt)
-        }
+        iterationValue := mulBuffer.payload
         mulBuffer.ready := True
         when(mulBuffer.valid) {
+          iteration := iteration + 1
           when(iteration =/= sqrtIterationCount-1){
             state := YY
           } otherwise {

@@ -23,7 +23,7 @@ case class FpuFloat(exponentSize: Int,
 }
 
 case class FpuOpcode(p : FpuParameter) extends SpinalEnum{
-  val LOAD, STORE, MUL, ADD, FMA, I2F, F2I, CMP, DIV_SQRT = newElement()
+  val LOAD, STORE, MUL, ADD, FMA, I2F, F2I, CMP, DIV, SQRT = newElement()
 }
 
 case class FpuParameter( internalMantissaSize : Int,
