@@ -32,6 +32,7 @@ class StaticMemoryTranslatorPlugin(ioRange : UInt => Bool) extends Plugin[VexRis
         port.bus.rsp.allowWrite := True
         port.bus.rsp.allowExecute := True
         port.bus.rsp.isIoAccess := ioRange(port.bus.rsp.physicalAddress)
+        port.bus.rsp.isPaging := False
         port.bus.rsp.exception := False
         port.bus.rsp.refilling := False
         port.bus.busy := False
