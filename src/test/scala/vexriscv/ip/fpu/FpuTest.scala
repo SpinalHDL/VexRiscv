@@ -96,6 +96,18 @@ class FpuTest extends FunSuite{
           }
         }
 
+        def div(rd : Int, rs1 : Int, rs2 : Int): Unit ={
+          cmdQueue += {cmd =>
+            cmd.source #= id
+            cmd.opcode #= cmd.opcode.spinalEnum.DIV_SQRT
+            cmd.value.randomize()
+            cmd.rs1 #= rs1
+            cmd.rs2 #= rs2
+            cmd.rs3.randomize()
+            cmd.rd #= rd
+          }
+        }
+
         def fma(rd : Int, rs1 : Int, rs2 : Int, rs3 : Int): Unit ={
           cmdQueue += {cmd =>
             cmd.source #= id
@@ -213,9 +225,57 @@ class FpuTest extends FunSuite{
           }
         }
 
-//        testAdd(0.1f, 1.6f)
-//        testMul(0.1f, 1.6f)
+
+        def testDiv(a : Float, b : Float): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+          load(rs2, b)
+
+          div(rd,rs1,rs2)
+          storeFloat(rd){v =>
+            val ref = a/b
+            val error = Math.abs(ref-v)/ref
+            println(f"$a / $b = $v, $ref $error")
+            assert(checkFloat(ref, v))
+          }
+        }
+
+        def testSqrt(a : Float): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+
+          div(rd,rs1,rs2)
+          storeFloat(rd){v =>
+            val ref = Math.sqrt(a).toFloat
+            val error = Math.abs(ref-v)/ref
+            println(f"sqrt($a) = $v, $ref $error")
+            assert(checkFloat(ref, v))
+          }
+        }
+
+        val b2f = lang.Float.intBitsToFloat(_)
+
+
+//        testSqrt(2.25f)
+//        dut.clockDomain.waitSampling(100)
+//        simFailure()
+
+        testAdd(0.1f, 1.6f)
+        testMul(0.1f, 1.6f)
         testFma(1.1f, 2.2f, 3.0f)
+        testDiv(1.0f, 1.1f)
+        testDiv(1.0f, 1.5f)
+        testDiv(1.0f, 1.9f)
+        testDiv(1.1f, 1.9f)
+        testDiv(1.0f, b2f(0x3f7ffffe))
+        testDiv(1.0f, b2f(0x3f7fffff))
+        testDiv(1.0f, b2f(0x3f800000))
+        testDiv(1.0f, b2f(0x3f800001))
+        testDiv(1.0f, b2f(0x3f800002))
 
         for(i <- 0 until 1000){
           testAdd(randomFloat(), randomFloat())
@@ -226,14 +286,18 @@ class FpuTest extends FunSuite{
         for(i <- 0 until 1000){
           testFma(randomFloat(), randomFloat(), randomFloat())
         }
+
+        for(i <- 0 until 1000){
+          testDiv(randomFloat(), randomFloat())
+        }
         for(i <- 0 until 1000){
           val tests = ArrayBuffer[() => Unit]()
           tests += (() =>{testAdd(randomFloat(), randomFloat())})
           tests += (() =>{testMul(randomFloat(), randomFloat())})
           tests += (() =>{testFma(randomFloat(), randomFloat(), randomFloat())})
+          tests += (() =>{testDiv(randomFloat(), randomFloat())})
           tests.randomPick().apply()
         }
-
         waitUntil(cpu.rspQueue.isEmpty)
       }
 

@@ -3,8 +3,6 @@ package vexriscv.ip.fpu
 object MiaouDiv extends App{
   val input = 2.5
   var output = 1/(input*0.95)
-//  def x = output
-//  def y = input
 
   def y = output
   def x = input
@@ -29,7 +27,7 @@ object MiaouSqrt extends App{
   def x = input
 
   for(i <- 0 until 10) {
-    output = y*(1.5-x*y*y/2)
+    output = y * (1.5 - x * y * y / 2)
     println(output)
   }
 
