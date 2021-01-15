@@ -19,7 +19,7 @@ class FpuTest extends FunSuite{
     val p = FpuParameter(
       internalMantissaSize = 23,
       withDouble = false,
-      sourceWidth = 0
+      sourceCount = 1
     )
 
     SimConfig.withFstWave.compile(new FpuCore(p)).doSim(seed = 42){ dut =>
@@ -31,7 +31,22 @@ class FpuTest extends FunSuite{
       val cpus = for(id <- 0 until 1 << p.sourceWidth) yield new {
         val cmdQueue = mutable.Queue[FpuCmd => Unit]()
         val commitQueue = mutable.Queue[FpuCommit => Unit]()
+        val loadQueue = mutable.Queue[FpuLoad => Unit]()
         val rspQueue = mutable.Queue[FpuRsp => Unit]()
+
+        StreamDriver(dut.io.port.commit(id) ,dut.clockDomain){payload =>
+          if(commitQueue.isEmpty) false else {
+            commitQueue.dequeue().apply(payload)
+            true
+          }
+        }
+
+        StreamDriver(dut.io.port.load(id) ,dut.clockDomain){payload =>
+          if(loadQueue.isEmpty) false else {
+            loadQueue.dequeue().apply(payload)
+            true
+          }
+        }
 
         def loadRaw(rd : Int, value : BigInt): Unit ={
           cmdQueue += {cmd =>
@@ -44,8 +59,9 @@ class FpuTest extends FunSuite{
             cmd.rd #= rd
           }
           commitQueue += {cmd =>
-            cmd.source #= id
             cmd.write #= true
+          }
+          loadQueue += {cmd =>
             cmd.value #= value
           }
         }
@@ -82,6 +98,9 @@ class FpuTest extends FunSuite{
             cmd.rs3.randomize()
             cmd.rd #= rd
           }
+          commitQueue += {cmd =>
+            cmd.write #= true
+          }
         }
 
         def add(rd : Int, rs1 : Int, rs2 : Int): Unit ={
@@ -93,6 +112,9 @@ class FpuTest extends FunSuite{
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
             cmd.rd #= rd
+          }
+          commitQueue += {cmd =>
+            cmd.write #= true
           }
         }
 
@@ -106,6 +128,9 @@ class FpuTest extends FunSuite{
             cmd.rs3.randomize()
             cmd.rd #= rd
           }
+          commitQueue += {cmd =>
+            cmd.write #= true
+          }
         }
 
         def sqrt(rd : Int, rs1 : Int): Unit ={
@@ -118,6 +143,9 @@ class FpuTest extends FunSuite{
             cmd.rs3.randomize()
             cmd.rd #= rd
           }
+          commitQueue += {cmd =>
+            cmd.write #= true
+          }
         }
 
         def fma(rd : Int, rs1 : Int, rs2 : Int, rs3 : Int): Unit ={
@@ -129,6 +157,9 @@ class FpuTest extends FunSuite{
             cmd.rs2 #= rs2
             cmd.rs3 #= rs3
             cmd.rd #= rd
+          }
+          commitQueue += {cmd =>
+            cmd.write #= true
           }
         }
       }
@@ -143,15 +174,7 @@ class FpuTest extends FunSuite{
         }
       }
 
-      StreamDriver(dut.io.port.commit ,dut.clockDomain){payload =>
-        cpus.map(_.commitQueue).filter(_.nonEmpty).toSeq match {
-          case Nil => false
-          case l => {
-            l.randomPick().dequeue().apply(payload)
-            true
-          }
-        }
-      }
+
 
 
       StreamMonitor(dut.io.port.rsp, dut.clockDomain){payload =>
@@ -272,6 +295,7 @@ class FpuTest extends FunSuite{
 
         val b2f = lang.Float.intBitsToFloat(_)
 
+        testAdd(0.1f, 1.6f)
 
         testSqrt(1.5625f)
         testSqrt(1.5625f*2)
@@ -289,7 +313,6 @@ class FpuTest extends FunSuite{
         //        dut.clockDomain.waitSampling(1000)
 //        simFailure()
 
-        testAdd(0.1f, 1.6f)
         testMul(0.1f, 1.6f)
         testFma(1.1f, 2.2f, 3.0f)
         testDiv(1.0f, 1.1f)

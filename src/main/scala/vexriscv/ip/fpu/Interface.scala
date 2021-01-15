@@ -22,13 +22,18 @@ case class FpuFloat(exponentSize: Int,
   val sign = Bool
 }
 
-case class FpuOpcode(p : FpuParameter) extends SpinalEnum{
+object FpuOpcode extends SpinalEnum{
   val LOAD, STORE, MUL, ADD, FMA, I2F, F2I, CMP, DIV, SQRT = newElement()
 }
 
+object FpuFormat extends SpinalEnum{
+  val FLOAT, DOUBLE = newElement()
+}
+
+
 case class FpuParameter( internalMantissaSize : Int,
                          withDouble : Boolean,
-                         sourceWidth : Int){
+                         sourceCount : Int){
 
   val storeLoadType = HardType(Bits(if(withDouble) 64 bits else 32 bits))
   val internalExponentSize = if(withDouble) 11 else 8
@@ -37,11 +42,9 @@ case class FpuParameter( internalMantissaSize : Int,
   val source = HardType(UInt(sourceWidth bits))
   val rfAddress = HardType(UInt(5 bits))
 
-  val Opcode = new FpuOpcode(this)
-  val Format = new SpinalEnum{
-    val FLOAT = newElement()
-    val DOUBLE = withDouble generate newElement()
-  }
+  val Opcode = FpuOpcode
+  val Format = FpuFormat
+  val sourceWidth = log2Up(sourceCount)
 }
 
 case class FpuCmd(p : FpuParameter) extends Bundle{
@@ -55,9 +58,11 @@ case class FpuCmd(p : FpuParameter) extends Bundle{
 }
 
 case class FpuCommit(p : FpuParameter) extends Bundle{
-  val source = UInt(p.sourceWidth bits)
   val write = Bool()
-  val value = p.storeLoadType() // IEEE 754 load
+}
+
+case class FpuLoad(p : FpuParameter) extends Bundle{
+  val value = p.storeLoadType() // IEEE 754
 }
 
 case class FpuRsp(p : FpuParameter) extends Bundle{
@@ -67,11 +72,13 @@ case class FpuRsp(p : FpuParameter) extends Bundle{
 
 case class FpuPort(p : FpuParameter) extends Bundle with IMasterSlave {
   val cmd = Stream(FpuCmd(p))
-  val commit = Stream(FpuCommit(p))
+  val commit = Vec(Stream(FpuCommit(p)), p.sourceCount)
+  val load = Vec(Stream(FpuLoad(p)), p.sourceCount)
   val rsp = Stream(FpuRsp(p))
 
   override def asMaster(): Unit = {
-    master(cmd, commit)
+    master(cmd)
+    (commit ++ load).foreach(master(_))
     slave(rsp)
   }
 }
