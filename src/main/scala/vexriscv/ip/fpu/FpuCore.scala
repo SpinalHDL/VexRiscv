@@ -15,6 +15,8 @@ case class FpuCore(p : FpuParameter) extends Component{
     val port = slave(FpuPort(p))
   }
 
+
+//  val commitPerSourceCount = 8
   val rfLockCount = 5
   val lockIdType = HardType(UInt(log2Up(rfLockCount) bits))
 
@@ -89,10 +91,43 @@ case class FpuCore(p : FpuParameter) extends Component{
       val valid = RegInit(False)
       val source = Reg(p.source)
       val address = Reg(p.rfAddress)
+      val id = Reg(UInt(log2Up(rfLockCount) bits))
+      val commited = Reg(Bool)
+      val write = Reg(Bool)
     }
     val lockFree = !lock.map(_.valid).andR
     val lockFreeId = OHMasking.first(lock.map(!_.valid))
   }
+
+  val commitLogic = for(source <- 0 until p.sourceCount) yield new Area{
+    val fire = False
+    val target, hit = Reg(UInt(log2Up(rfLockCount) bits)) init(0)
+    when(fire){
+      hit := hit + 1
+    }
+
+    io.port.commit(source).ready := False
+    when(io.port.commit(source).valid) {
+      for (lock <- rf.lock) {
+        when(lock.valid && lock.source === source && lock.id === hit) {
+          fire := True
+          lock.commited := True
+          lock.write := io.port.commit(source).write
+          io.port.commit(source).ready := True
+        }
+      }
+    }
+  }
+
+//  case class CommitLine() extends Bundle{
+//    val valid = Bool()
+//    val write = Bool()
+//  }
+//  val commits = for(i <- 0 until p.sourceCount) yield new Area{
+//    val lines = Vec(CommitLine(), commitPerSourceCount)
+//    lines.foreach(_.valid init(False))
+//
+//  }
 
   val read = new Area{
     val s0 = Stream(RfReadInput())
@@ -137,11 +172,17 @@ case class FpuCore(p : FpuParameter) extends Component{
     val hits = List((useRs1, s0.rs1), (useRs2, s0.rs2), (useRs3, s0.rs3), (useRd, s0.rd)).map{case (use, reg) => use && rf.lock.map(l => l.valid && l.source === s0.source && l.address === reg).orR}
     val hazard = hits.orR
     when(s0.fire && useRd){
+      for(i <- 0 until p.sourceCount){
+        when(s0.source === i){
+          commitLogic(i).target := commitLogic(i).target + 1
+        }
+      }
       for(i <- 0 until rfLockCount){
         when(rf.lockFreeId(i)){
           rf.lock(i).valid := True
           rf.lock(i).source := s0.source
           rf.lock(i).address := s0.rd
+          rf.lock(i).id := commitLogic.map(_.target).read(s0.source)
         }
       }
     }
@@ -224,9 +265,16 @@ case class FpuCore(p : FpuParameter) extends Component{
   }
 
   val load = new Area{
-    def input = decode.load
-
-    val output = input.stage()
+    val input = decode.load.stage()
+    def feed = io.port.load(input.source)
+    val hazard = !feed.valid
+    val output = input.haltWhen(hazard).swapPayload(WriteInput())
+    io.port.load.foreach(_.ready := False)
+    feed.ready := input.valid && output.ready
+    output.source := input.source
+    output.lockId := input.lockId
+    output.rd := input.rd
+    output.value.assignFromBits(feed.value)
   }
 
 
@@ -506,47 +554,20 @@ case class FpuCore(p : FpuParameter) extends Component{
 
 
   val write = new Area{
-    val port = rf.ram.writePort
-    port.valid := False
-    port.payload.assignDontCare()
+    val arbitrated = StreamArbiterFactory.lowerFirst.noLock.on(List(load.output, add.output, mul.output))
+    val isCommited = rf.lock.map(_.commited).read(arbitrated.lockId)
+    val commited = arbitrated.haltWhen(!isCommited).toFlow
 
-
-    val lockFree = Flow(lockIdType)
-    lockFree.valid := port.fire
-    lockFree.payload.assignDontCare()
-
-    load.output.ready := False
-    mul.output.ready := False
-    add.output.ready := True
-    io.port.commit.ready := False
-    when(add.output.valid) {
-      port.valid := True
-      port.address := add.output.source @@ add.output.rd
-      port.data := add.output.value
-
-      lockFree.payload := add.output.lockId
-    } elsewhen(mul.output.valid) {
-      port.valid := True
-      port.address := mul.output.source @@ mul.output.rd
-      port.data := mul.output.value
-
-      mul.output.ready := True
-      lockFree.payload := mul.output.lockId
-    } elsewhen(load.output.valid && io.port.commit.valid) {
-      port.valid := io.port.commit.write
-      port.address := load.output.source @@ load.output.rd
-      port.data.assignFromBits(io.port.commit.value)
-
-      load.output.ready := True
-      io.port.commit.ready := True
-      lockFree.payload := load.output.lockId
-    }
-
-    when(lockFree.fire){
-      for(i <- 0 until rfLockCount) when(lockFree.payload === i){
+    when(commited.valid){
+      for(i <- 0 until rfLockCount) when(commited.lockId === i){
         rf.lock(i).valid := False
       }
     }
+
+    val port = rf.ram.writePort
+    port.valid := commited.valid && rf.lock.map(_.write).read(commited.lockId)
+    port.address := commited.source @@ commited.rd
+    port.data := commited.value
   }
 }
 
@@ -572,7 +593,7 @@ object FpuSynthesisBench extends App{
     FpuParameter(
       internalMantissaSize = 23,
       withDouble = false,
-      sourceWidth = 0
+      sourceCount = 1
     )
   )
   rtls += new Fpu(
@@ -580,7 +601,7 @@ object FpuSynthesisBench extends App{
     FpuParameter(
       internalMantissaSize = 52,
       withDouble = true,
-      sourceWidth = 0
+      sourceCount = 1
     )
   )
 
