@@ -21,7 +21,6 @@ class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
 trait DBusEncodingService {
   def addLoadWordEncoding(key: MaskedLiteral): Unit
   def addStoreWordEncoding(key: MaskedLiteral): Unit
-  def encodingHalt(): Unit
   def bypassStore(data : Bits) : Unit
 }
 
@@ -90,9 +89,6 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
     )
   }
-
-  var haltFromEncoding : Bool = null
-  override def encodingHalt(): Unit = haltFromEncoding := True
 
   override def bypassStore(data: Bits): Unit = {
     pipeline.stages.last.input(MEMORY_STORE_DATA) := data
@@ -220,8 +216,6 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       privilegeService = pipeline.service(classOf[PrivilegeService])
 
     pipeline.update(DEBUG_BYPASS_CACHE, False)
-
-    haltFromEncoding = False
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -496,9 +490,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       }
     }
 
-    when(haltFromEncoding){
+    when(stages.last.arbitration.haltByOther){
       cache.io.cpu.writeBack.isValid := False
-      managementStage.arbitration.haltItself := True
     }
 
     if(csrInfo){

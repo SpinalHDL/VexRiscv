@@ -31,7 +31,6 @@ class FpuTest extends FunSuite{
       val cpus = for(id <- 0 until portCount) yield new {
         val cmdQueue = mutable.Queue[FpuCmd => Unit]()
         val commitQueue = mutable.Queue[FpuCommit => Unit]()
-        val loadQueue = mutable.Queue[FpuLoad => Unit]()
         val rspQueue = mutable.Queue[FpuRsp => Unit]()
 
         StreamDriver(dut.io.port(id).cmd ,dut.clockDomain){payload =>
@@ -56,12 +55,6 @@ class FpuTest extends FunSuite{
           }
         }
 
-        StreamDriver(dut.io.port(id).load ,dut.clockDomain){payload =>
-          if(loadQueue.isEmpty) false else {
-            loadQueue.dequeue().apply(payload)
-            true
-          }
-        }
 
         def loadRaw(rd : Int, value : BigInt): Unit ={
           cmdQueue += {cmd =>
@@ -74,9 +67,8 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-          }
-          loadQueue += {cmd =>
             cmd.value #= value
+            cmd.load #= true
           }
         }
 
@@ -112,6 +104,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
+            cmd.load #= false
           }
         }
 
@@ -126,6 +119,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
+            cmd.load #= false
           }
         }
 
@@ -140,6 +134,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
+            cmd.load #= false
           }
         }
 
@@ -154,6 +149,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
+            cmd.load #= false
           }
         }
 
@@ -168,6 +164,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
+            cmd.load #= false
           }
         }
       }

@@ -44,9 +44,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       val fpu = FpuCore(1, p)
       fpu.io.port(0).cmd << port.cmd
       fpu.io.port(0).commit << port.commit
-      fpu.io.port(0).load << port.load
       fpu.io.port(0).rsp >> port.rsp
-
     }
 
 
@@ -70,26 +68,12 @@ class FpuPlugin(externalFpu : Boolean = false,
       insert(FPU_FORKED) := forked || port.cmd.fire
     }
 
-    memory plug new Area{
-      import memory._
-
-      val isCommit = input(FPU_FORKED) && input(FPU_COMMIT)
-
-      val commit = Stream(FpuCommit(p))
-      commit.valid := isCommit && arbitration.isMoving
-      commit.write := arbitration.isValid
-
-      arbitration.haltItself setWhen(isCommit && !commit.ready) //Assume commit.ready do not look at commit.valid
-
-      port.commit <-/<  commit //TODO can't commit in memory, in case a load fail
-    }
-
     writeBack plug new Area{
       import writeBack._
 
       val dBusEncoding =  pipeline.service(classOf[DBusEncodingService])
-      val isLoad = input(FPU_FORKED) && input(FPU_LOAD)
       val isStore = input(FPU_FORKED) && input(FPU_STORE)
+      val isCommit = input(FPU_FORKED) && input(FPU_COMMIT)
 
       //Manage $store and port.rsp
       port.rsp.ready := False
@@ -99,20 +83,22 @@ class FpuPlugin(externalFpu : Boolean = false,
           dBusEncoding.bypassStore(port.rsp.value)
         }
         when(!port.rsp.valid){
-          dBusEncoding.encodingHalt()
+          arbitration.haltByOther := True
         }
       }
 
       // Manage $load
-      val load = Stream(FpuLoad(p))
-      load.valid := isLoad && arbitration.isMoving
-      load.value.assignFromBits(output(DBUS_DATA))
+      val commit = Stream(FpuCommit(p))
+      commit.valid := isCommit && arbitration.isMoving
+      commit.value.assignFromBits(output(DBUS_DATA))
+      commit.write := arbitration.isValid
+      commit.load := input(FPU_LOAD)
 
-      when(arbitration.isValid && !load.ready){
-        dBusEncoding.encodingHalt()
+      when(arbitration.isValid && !commit.ready){
+        arbitration.haltByOther := True
       }
 
-      port.load <-/< load
+      port.commit <-/< commit
     }
 
     Component.current.afterElaboration{

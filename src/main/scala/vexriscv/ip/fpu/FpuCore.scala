@@ -102,6 +102,16 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val lockFreeId = OHMasking.first(lock.map(!_.valid))
   }
 
+  val commitFork = new Area{
+    val load, commit = Vec(Stream(FpuCommit(p)), portCount)
+    for(i <- 0 until portCount){
+      val fork = new StreamFork(FpuCommit(p), 2)
+      fork.io.input << io.port(i).commit
+      fork.io.outputs(0) >> load(i)
+      fork.io.outputs(1) >> commit(i)
+    }
+  }
+
   val commitLogic = for(source <- 0 until portCount) yield new Area{
     val fire = False
     val target, hit = Reg(UInt(log2Up(rfLockCount) bits)) init(0)
@@ -109,14 +119,14 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       hit := hit + 1
     }
 
-    io.port(source).commit.ready := False
-    when(io.port(source).commit.valid) {
+    commitFork.commit(source).ready := False
+    when(commitFork.commit(source).valid) {
       for (lock <- rf.lock) {
         when(lock.valid && lock.source === source && lock.id === hit) {
           fire := True
           lock.commited := True
-          lock.write := io.port(source).commit.write
-          io.port(source).commit.ready := True
+          lock.write := commitFork.commit(source).write
+          commitFork.commit(source).ready := True
         }
       }
     }
@@ -274,10 +284,11 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
   val load = new Area{
     val input = decode.load.stage()
-    def feed = io.port(input.source).load
+    val filtred = commitFork.load.map(port => port.takeWhen(port.load))
+    def feed = filtred(input.source)
     val hazard = !feed.valid
     val output = input.haltWhen(hazard).swapPayload(WriteInput())
-    io.port.foreach(_.load.ready := False)
+    filtred.foreach(_.ready := False)
     feed.ready := input.valid && output.ready
     output.source := input.source
     output.lockId := input.lockId
@@ -286,7 +297,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   }
 
 
-  val store = new Area{
+  val rspLogic = new Area{
     val input = decode.store.stage()
 
     input.ready := io.port.map(_.rsp.ready).read(input.source)

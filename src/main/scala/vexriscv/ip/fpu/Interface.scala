@@ -55,9 +55,7 @@ case class FpuCmd(p : FpuParameter) extends Bundle{
 
 case class FpuCommit(p : FpuParameter) extends Bundle{
   val write = Bool()
-}
-
-case class FpuLoad(p : FpuParameter) extends Bundle{
+  val load = Bool()
   val value = p.storeLoadType() // IEEE 754
 }
 
@@ -68,11 +66,10 @@ case class FpuRsp(p : FpuParameter) extends Bundle{
 case class FpuPort(p : FpuParameter) extends Bundle with IMasterSlave {
   val cmd = Stream(FpuCmd(p))
   val commit = Stream(FpuCommit(p))
-  val load = Stream(FpuLoad(p))
   val rsp = Stream(FpuRsp(p))
 
   override def asMaster(): Unit = {
-    master(cmd, commit, load)
+    master(cmd, commit)
     slave(rsp)
   }
 }
