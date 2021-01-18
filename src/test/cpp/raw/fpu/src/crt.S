@@ -100,7 +100,6 @@ test6:
 .align 6
 test7:
     li TEST_ID, 7
-
     la x1, test3_data
     la x2, test4_data
     la x3, test5_data
@@ -111,6 +110,28 @@ test7:
     fsw f4, 0(x2)
     fsw f5, 0(x3)
     fsw f1, 0(x4)
+    nop
+    nop
+    nop
+    nop
+    j test8
+
+.align 6
+test8:
+    li TEST_ID, 8
+    fcvt.wu.s x1, f3
+    nop
+    nop
+    nop
+    nop
+    j test9
+
+.align 6
+test9:
+    li TEST_ID, 9
+    fle.s x1, f2, f3
+    fle.s x2, f3, f2
+    fle.s x3, f3, f3
     nop
     nop
     nop

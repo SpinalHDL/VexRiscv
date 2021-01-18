@@ -19,7 +19,15 @@ case class FpuFloat(exponentSize: Int,
                     mantissaSize: Int) extends Bundle {
   val mantissa = UInt(mantissaSize bits)
   val exponent = UInt(exponentSize bits)
-  val sign = Bool
+  val sign = Bool()
+
+  def withInvertSign : FpuFloat ={
+    val ret = FpuFloat(exponentSize,mantissaSize)
+    ret.sign := !sign
+    ret.exponent := exponent
+    ret.mantissa := mantissa
+    ret
+  }
 }
 
 object FpuOpcode extends SpinalEnum{

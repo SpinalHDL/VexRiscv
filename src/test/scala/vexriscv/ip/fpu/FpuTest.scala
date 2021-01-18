@@ -167,6 +167,31 @@ class FpuTest extends FunSuite{
             cmd.load #= false
           }
         }
+
+
+        def cmp(rs1 : Int, rs2 : Int)(body : FpuRsp => Unit): Unit ={
+          cmdQueue += {cmd =>
+            cmd.opcode #= cmd.opcode.spinalEnum.CMP
+            cmd.value.randomize()
+            cmd.rs1 #= rs1
+            cmd.rs2 #= rs2
+            cmd.rs3.randomize()
+            cmd.rd.randomize()
+          }
+          rspQueue += body
+        }
+
+        def f2i(rs1 : Int)(body : FpuRsp => Unit): Unit ={
+          cmdQueue += {cmd =>
+            cmd.opcode #= cmd.opcode.spinalEnum.F2I
+            cmd.value.randomize()
+            cmd.rs1 #= rs1
+            cmd.rs2.randomize()
+            cmd.rs3.randomize()
+            cmd.rd.randomize()
+          }
+          rspQueue += body
+        }
       }
 
 
@@ -243,7 +268,8 @@ class FpuTest extends FunSuite{
           storeFloat(rd){v =>
             val ref = a.toDouble * b.toDouble + c.toDouble
             println(f"$a%.20f * $b%.20f + $c%.20f = $v%.20f, $ref%.20f")
-            assert(checkFloat(ref.toFloat, v))
+            val mul = a.toDouble * b.toDouble
+            if((mul.abs-c.abs)/mul.abs > 0.1)  assert(checkFloat(ref.toFloat, v))
           }
         }
 
@@ -279,7 +305,53 @@ class FpuTest extends FunSuite{
           }
         }
 
+        def testF2i(a : Float): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+          f2i(rs1){rsp =>
+            val ref = a.toInt
+            val v = rsp.value.toBigInt
+            println(f"f2i($a) = $v, $ref")
+            assert(v === ref)
+          }
+        }
+
+        def testCmp(a : Float, b : Float): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+          load(rs2, b)
+          cmp(rs1, rs2){rsp =>
+            val ref = if(a < b) 1 else 0
+            val v = rsp.value.toBigInt
+            println(f"$a < $b = $v, $ref")
+            assert(v === ref)
+          }
+        }
+
         val b2f = lang.Float.intBitsToFloat(_)
+
+        //TODO Test corner cases
+        testCmp(1.0f, 2.0f)
+        testCmp(1.5f, 2.0f)
+        testCmp(1.5f, 3.5f)
+        testCmp(1.5f, 1.5f)
+        testCmp(1.5f, -1.5f)
+        testCmp(-1.5f, 1.5f)
+        testCmp(-1.5f, -1.5f)
+        testCmp(1.5f, -3.5f)
+
+        //TODO Test corner cases
+        testF2i(16.0f)
+        testF2i(18.0f)
+        testF2i(1200.0f)
+        testF2i(1.0f)
+//        dut.clockDomain.waitSampling(1000)
+//        simFailure()
+
 
         testAdd(0.1f, 1.6f)
 
@@ -296,8 +368,7 @@ class FpuTest extends FunSuite{
         testSqrt(b2f(0x3f800002))
         testSqrt(b2f(0x3f800003))
 
-        //        dut.clockDomain.waitSampling(1000)
-//        simFailure()
+
 
         testMul(0.1f, 1.6f)
         testFma(1.1f, 2.2f, 3.0f)
@@ -324,7 +395,10 @@ class FpuTest extends FunSuite{
           testDiv(randomFloat(), randomFloat())
         }
         for(i <- 0 until 1000){
-          testSqrt(Math.abs(randomFloat())) //TODO
+          testSqrt(Math.abs(randomFloat()))
+        }
+        for(i <- 0 until 1000){
+          testCmp(randomFloat(), randomFloat())
         }
         for(i <- 0 until 1000){
           val tests = ArrayBuffer[() => Unit]()
@@ -333,6 +407,7 @@ class FpuTest extends FunSuite{
           tests += (() =>{testFma(randomFloat(), randomFloat(), randomFloat())})
           tests += (() =>{testDiv(randomFloat(), randomFloat())})
           tests += (() =>{testSqrt(randomFloat().abs)})
+          tests += (() =>{testCmp(randomFloat(), randomFloat())})
           tests.randomPick().apply()
         }
         waitUntil(cpu.rspQueue.isEmpty)

@@ -17,6 +17,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
   val portCountWidth = log2Up(portCount)
   val Source = HardType(UInt(portCountWidth bits))
+  val exponentOne = (1 << p.internalExponentSize-1) - 1
 
 
 //  val commitPerportCount = 8
@@ -51,7 +52,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
   case class StoreInput() extends Bundle{
     val source = Source()
-    val rs2 = p.internalFloating()
+    val opcode = p.Opcode()
+    val rs1, rs2 = p.internalFloating()
   }
 
   case class MulInput() extends Bundle{
@@ -184,6 +186,16 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         useRs3 := True //Can be delayed to have less hazard
         useRd  := True
       }
+      is(p.Opcode.I2F){
+        useRd  := True
+      }
+      is(p.Opcode.F2I){
+        useRs1 := True
+      }
+      is(p.Opcode.CMP){
+        useRs1 := True
+        useRs2 := True
+      }
     }
 
     val hits = List((useRs1, s0.rs1), (useRs2, s0.rs2), (useRs3, s0.rs3), (useRd, s0.rd)).map{case (use, reg) => use && rf.lock.map(l => l.valid && l.source === s0.source && l.address === reg).orR}
@@ -230,12 +242,14 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     load.rs1    := read.output.rs1
     load.lockId := read.output.lockId
 
-    val storeHit = input.opcode === p.Opcode.STORE
-    val store = Stream(StoreInput())
-    input.ready setWhen(storeHit && store.ready)
-    store.valid := input.valid && storeHit
-    store.source := read.output.source
-    store.rs2    := read.output.rs2
+    val coreRspHit = List(FpuOpcode.STORE, FpuOpcode.F2I, FpuOpcode.CMP).map(input.opcode === _).orR
+    val coreRsp = Stream(StoreInput())
+    input.ready setWhen(coreRspHit && coreRsp.ready)
+    coreRsp.valid := input.valid && coreRspHit
+    coreRsp.source := read.output.source
+    coreRsp.opcode := read.output.opcode
+    coreRsp.rs1    := read.output.rs1
+    coreRsp.rs2    := read.output.rs2
 
     val divSqrtHit = input.opcode === p.Opcode.DIV ||  input.opcode === p.Opcode.SQRT
     val divSqrt = Stream(DivSqrtInput())
@@ -297,14 +311,37 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   }
 
 
-  val rspLogic = new Area{
-    val input = decode.store.stage()
+  val coreRsp = new Area{
+    val input = decode.coreRsp.stage()
+
+    val result = p.storeLoadType().assignDontCare()
+    val storeResult = input.rs2.asBits
+
+    val f2iShift = input.rs1.exponent - U(exponentOne)
+    val f2iShifted = (U"1" @@ input.rs1.mantissa) << (f2iShift.resize(5 bits))
+    val f2iResult = f2iShifted.asBits >> p.internalMantissaSize
+
+    val rs1Equal = input.rs1 === input.rs2
+    val rs1AbsSmaller = (input.rs1.exponent @@ input.rs1.mantissa) < (input.rs2.exponent @@ input.rs2.mantissa)
+    val rs1Smaller = (input.rs1.sign ## input.rs2.sign).mux(
+      0 -> rs1AbsSmaller,
+      1 -> False,
+      2 -> True,
+      3 -> (!rs1AbsSmaller && !rs1Equal)
+    )
+    val cmpResult = B(rs1Smaller)
+
+    switch(input.opcode){
+      is(FpuOpcode.STORE){ result := storeResult }
+      is(FpuOpcode.F2I)  { result := f2iResult }
+      is(FpuOpcode.CMP)  { result := cmpResult.resized }
+    }
 
     input.ready := io.port.map(_.rsp.ready).read(input.source)
     for(i <- 0 until portCount){
       def rsp = io.port(i).rsp
       rsp.valid := input.valid && input.source === i
-      rsp.value := input.rs2.asBits
+      rsp.value := result
     }
   }
 

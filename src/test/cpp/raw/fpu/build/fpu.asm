@@ -25,7 +25,7 @@ Disassembly of section .crt_section:
 80000040 <test2>:
 80000040:	00200e13          	li	t3,2
 80000044:	00000097          	auipc	ra,0x0
-80000048:	1fc0a083          	lw	ra,508(ra) # 80000240 <test1_data>
+80000048:	2900a083          	lw	ra,656(ra) # 800002d4 <test1_data>
 8000004c:	00107153          	fadd.s	ft2,ft0,ft1
 80000050:	00000013          	nop
 80000054:	00000013          	nop
@@ -67,7 +67,7 @@ Disassembly of section .crt_section:
 800000cc:	00000013          	nop
 800000d0:	00000013          	nop
 800000d4:	00000097          	auipc	ra,0x0
-800000d8:	16c08093          	addi	ra,ra,364 # 80000240 <test1_data>
+800000d8:	20008093          	addi	ra,ra,512 # 800002d4 <test1_data>
 800000dc:	0000a107          	flw	ft2,0(ra)
 800000e0:	00000013          	nop
 800000e4:	00000013          	nop
@@ -85,9 +85,9 @@ Disassembly of section .crt_section:
 8000010c:	00000013          	nop
 80000110:	00000013          	nop
 80000114:	00000097          	auipc	ra,0x0
-80000118:	12c08093          	addi	ra,ra,300 # 80000240 <test1_data>
+80000118:	1c008093          	addi	ra,ra,448 # 800002d4 <test1_data>
 8000011c:	00000117          	auipc	sp,0x0
-80000120:	12810113          	addi	sp,sp,296 # 80000244 <test2_data>
+80000120:	1bc10113          	addi	sp,sp,444 # 800002d8 <test2_data>
 80000124:	0000a087          	flw	ft1,0(ra)
 80000128:	00012107          	flw	ft2,0(sp)
 8000012c:	0020f1d3          	fadd.s	ft3,ft1,ft2
@@ -119,7 +119,7 @@ Disassembly of section .crt_section:
 8000018c:	00000013          	nop
 80000190:	00000013          	nop
 80000194:	00000097          	auipc	ra,0x0
-80000198:	0b408093          	addi	ra,ra,180 # 80000248 <test3_data>
+80000198:	14808093          	addi	ra,ra,328 # 800002dc <test3_data>
 8000019c:	0030a027          	fsw	ft3,0(ra)
 800001a0:	00000013          	nop
 800001a4:	00000013          	nop
@@ -133,13 +133,13 @@ Disassembly of section .crt_section:
 800001c0 <test7>:
 800001c0:	00700e13          	li	t3,7
 800001c4:	00000097          	auipc	ra,0x0
-800001c8:	08408093          	addi	ra,ra,132 # 80000248 <test3_data>
+800001c8:	11808093          	addi	ra,ra,280 # 800002dc <test3_data>
 800001cc:	00000117          	auipc	sp,0x0
-800001d0:	08010113          	addi	sp,sp,128 # 8000024c <test4_data>
+800001d0:	11410113          	addi	sp,sp,276 # 800002e0 <test4_data>
 800001d4:	00000197          	auipc	gp,0x0
-800001d8:	07c18193          	addi	gp,gp,124 # 80000250 <test5_data>
+800001d8:	11018193          	addi	gp,gp,272 # 800002e4 <test5_data>
 800001dc:	00000217          	auipc	tp,0x0
-800001e0:	07820213          	addi	tp,tp,120 # 80000254 <test6_data>
+800001e0:	10c20213          	addi	tp,tp,268 # 800002e8 <test6_data>
 800001e4:	0000a207          	flw	ft4,0(ra)
 800001e8:	00427253          	fadd.s	ft4,ft4,ft4
 800001ec:	0040f2d3          	fadd.s	ft5,ft1,ft4
@@ -150,17 +150,13 @@ Disassembly of section .crt_section:
 80000200:	00000013          	nop
 80000204:	00000013          	nop
 80000208:	00000013          	nop
-8000020c:	0100006f          	j	8000021c <pass>
-
-80000210 <fail>:
-80000210:	f0100137          	lui	sp,0xf0100
-80000214:	f2410113          	addi	sp,sp,-220 # f00fff24 <test14_data+0x700ffcb0>
-80000218:	01c12023          	sw	t3,0(sp)
-
-8000021c <pass>:
-8000021c:	f0100137          	lui	sp,0xf0100
-80000220:	f2010113          	addi	sp,sp,-224 # f00fff20 <test14_data+0x700ffcac>
-80000224:	00012023          	sw	zero,0(sp)
+8000020c:	0340006f          	j	80000240 <test8>
+80000210:	00000013          	nop
+80000214:	00000013          	nop
+80000218:	00000013          	nop
+8000021c:	00000013          	nop
+80000220:	00000013          	nop
+80000224:	00000013          	nop
 80000228:	00000013          	nop
 8000022c:	00000013          	nop
 80000230:	00000013          	nop
@@ -168,57 +164,101 @@ Disassembly of section .crt_section:
 80000238:	00000013          	nop
 8000023c:	00000013          	nop
 
-80000240 <test1_data>:
-80000240:	0000                	unimp
-80000242:	3fc0                	fld	fs0,184(a5)
+80000240 <test8>:
+80000240:	00800e13          	li	t3,8
+80000244:	c011f0d3          	fcvt.wu.s	ra,ft3
+80000248:	00000013          	nop
+8000024c:	00000013          	nop
+80000250:	00000013          	nop
+80000254:	00000013          	nop
+80000258:	0280006f          	j	80000280 <test9>
+8000025c:	00000013          	nop
+80000260:	00000013          	nop
+80000264:	00000013          	nop
+80000268:	00000013          	nop
+8000026c:	00000013          	nop
+80000270:	00000013          	nop
+80000274:	00000013          	nop
+80000278:	00000013          	nop
+8000027c:	00000013          	nop
 
-80000244 <test2_data>:
-80000244:	0000                	unimp
-80000246:	40a0                	lw	s0,64(s1)
+80000280 <test9>:
+80000280:	00900e13          	li	t3,9
+80000284:	a03100d3          	fle.s	ra,ft2,ft3
+80000288:	a0218153          	fle.s	sp,ft3,ft2
+8000028c:	a03181d3          	fle.s	gp,ft3,ft3
+80000290:	00000013          	nop
+80000294:	00000013          	nop
+80000298:	00000013          	nop
+8000029c:	00000013          	nop
+800002a0:	0100006f          	j	800002b0 <pass>
 
-80000248 <test3_data>:
-80000248:	0049                	c.nop	18
+800002a4 <fail>:
+800002a4:	f0100137          	lui	sp,0xf0100
+800002a8:	f2410113          	addi	sp,sp,-220 # f00fff24 <test14_data+0x700ffc1c>
+800002ac:	01c12023          	sw	t3,0(sp)
+
+800002b0 <pass>:
+800002b0:	f0100137          	lui	sp,0xf0100
+800002b4:	f2010113          	addi	sp,sp,-224 # f00fff20 <test14_data+0x700ffc18>
+800002b8:	00012023          	sw	zero,0(sp)
+800002bc:	00000013          	nop
+800002c0:	00000013          	nop
+800002c4:	00000013          	nop
+800002c8:	00000013          	nop
+800002cc:	00000013          	nop
+800002d0:	00000013          	nop
+
+800002d4 <test1_data>:
+800002d4:	0000                	unimp
+800002d6:	3fc0                	fld	fs0,184(a5)
+
+800002d8 <test2_data>:
+800002d8:	0000                	unimp
+800002da:	40a0                	lw	s0,64(s1)
+
+800002dc <test3_data>:
+800002dc:	0049                	c.nop	18
 	...
 
-8000024c <test4_data>:
-8000024c:	003a                	c.slli	zero,0xe
+800002e0 <test4_data>:
+800002e0:	003a                	c.slli	zero,0xe
 	...
 
-80000250 <test5_data>:
-80000250:	0038                	addi	a4,sp,8
+800002e4 <test5_data>:
+800002e4:	0038                	addi	a4,sp,8
 	...
 
-80000254 <test6_data>:
-80000254:	0000004b          	fnmsub.s	ft0,ft0,ft0,ft0,rne
+800002e8 <test6_data>:
+800002e8:	0000004b          	fnmsub.s	ft0,ft0,ft0,ft0,rne
 
-80000258 <test7_data>:
-80000258:	0038                	addi	a4,sp,8
+800002ec <test7_data>:
+800002ec:	0038                	addi	a4,sp,8
 	...
 
-8000025c <test8_data>:
-8000025c:	00000053          	fadd.s	ft0,ft0,ft0,rne
+800002f0 <test8_data>:
+800002f0:	00000053          	fadd.s	ft0,ft0,ft0,rne
 
-80000260 <test9_data>:
-80000260:	0021                	c.nop	8
+800002f4 <test9_data>:
+800002f4:	0021                	c.nop	8
 	...
 
-80000264 <test10_data>:
-80000264:	ffffffbf  	0xffffffbf
+800002f8 <test10_data>:
+800002f8:	ffffffbf  	0xffffffbf
 
-80000268 <test11_data>:
-80000268:	ffa9                	bnez	a5,800001c2 <test7+0x2>
-8000026a:	ffff                	0xffff
+800002fc <test11_data>:
+800002fc:	ffa9                	bnez	a5,80000256 <test8+0x16>
+800002fe:	ffff                	0xffff
 
-8000026c <test12_data>:
-8000026c:	ffc9                	bnez	a5,80000206 <test7+0x46>
-8000026e:	ffff                	0xffff
+80000300 <test12_data>:
+80000300:	ffc9                	bnez	a5,8000029a <test9+0x1a>
+80000302:	ffff                	0xffff
 
-80000270 <test13_data>:
-80000270:	0004                	0x4
-80000272:	ffff                	0xffff
+80000304 <test13_data>:
+80000304:	0004                	0x4
+80000306:	ffff                	0xffff
 
-80000274 <test14_data>:
-80000274:	0005                	c.nop	1
-80000276:	ffff                	0xffff
-80000278:	0000                	unimp
+80000308 <test14_data>:
+80000308:	0005                	c.nop	1
+8000030a:	ffff                	0xffff
 	...

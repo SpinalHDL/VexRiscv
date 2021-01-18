@@ -12,7 +12,7 @@ class FpuPlugin(externalFpu : Boolean = false,
   object FPU_ENABLE extends Stageable(Bool())
   object FPU_COMMIT extends Stageable(Bool())
   object FPU_LOAD extends Stageable(Bool())
-  object FPU_STORE extends Stageable(Bool())
+  object FPU_RSP extends Stageable(Bool())
   object FPU_ALU extends Stageable(Bool())
   object FPU_FORKED extends Stageable(Bool())
   object FPU_OPCODE extends Stageable(FpuOpcode())
@@ -20,12 +20,16 @@ class FpuPlugin(externalFpu : Boolean = false,
   var port : FpuPort = null
 
   override def setup(pipeline: VexRiscv): Unit = {
+    import pipeline.config._
+
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(FPU_ENABLE, False)
     decoderService.add(List(
-      FADD_S -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.ADD,  FPU_COMMIT -> True,  FPU_ALU -> True , FPU_LOAD -> False,  FPU_STORE -> False),
-      FLW    -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.LOAD, FPU_COMMIT -> True,  FPU_ALU -> False, FPU_LOAD -> True ,  FPU_STORE -> False),
-      FSW    -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.STORE,FPU_COMMIT -> False, FPU_ALU -> False, FPU_LOAD -> False,  FPU_STORE -> True)
+      FADD_S    -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.ADD,   FPU_COMMIT -> True,  FPU_ALU -> True , FPU_LOAD -> False,  FPU_RSP -> False),
+      FLW       -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.LOAD,  FPU_COMMIT -> True,  FPU_ALU -> False, FPU_LOAD -> True ,  FPU_RSP -> False),
+      FSW       -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.STORE, FPU_COMMIT -> False, FPU_ALU -> False, FPU_LOAD -> False,  FPU_RSP -> True),
+      FCVT_WU_S -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.F2I  , FPU_COMMIT -> False, FPU_ALU -> False, FPU_LOAD -> False,  FPU_RSP -> True,  REGFILE_WRITE_VALID -> True, BYPASSABLE_EXECUTE_STAGE -> False, BYPASSABLE_MEMORY_STAGE  -> False),
+      FLE_S     -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.CMP  , FPU_COMMIT -> False, FPU_ALU -> False, FPU_LOAD -> False,  FPU_RSP -> True,  REGFILE_WRITE_VALID -> True, BYPASSABLE_EXECUTE_STAGE -> False, BYPASSABLE_MEMORY_STAGE  -> False)
     ))
 
     port = FpuPort(p)
@@ -72,15 +76,16 @@ class FpuPlugin(externalFpu : Boolean = false,
       import writeBack._
 
       val dBusEncoding =  pipeline.service(classOf[DBusEncodingService])
-      val isStore = input(FPU_FORKED) && input(FPU_STORE)
+      val isRsp = input(FPU_FORKED) && input(FPU_RSP)
       val isCommit = input(FPU_FORKED) && input(FPU_COMMIT)
 
       //Manage $store and port.rsp
       port.rsp.ready := False
-      when(isStore){
+      when(isRsp){
         port.rsp.ready := True
         when(arbitration.isValid) {
           dBusEncoding.bypassStore(port.rsp.value)
+          output(REGFILE_WRITE_DATA) := port.rsp.value
         }
         when(!port.rsp.valid){
           arbitration.haltByOther := True
@@ -105,6 +110,4 @@ class FpuPlugin(externalFpu : Boolean = false,
       pipeline.stages.tail.foreach(_.input(FPU_FORKED).init(False))
     }
   }
-
-
 }
