@@ -551,9 +551,20 @@ class DataCache(p : DataCacheConfig) extends Component{
 
 
     val memCmdSent = RegInit(False) setWhen (io.mem.cmd.ready) clearWhen (!io.cpu.writeBack.isStuck)
-    io.cpu.redo := False
+    val badPermissions = (!mmuRsp.allowWrite && request.wr) || (!mmuRsp.allowRead && (!request.wr || isAmo))
+    val loadStoreFault = io.cpu.writeBack.isValid && (mmuRsp.exception || badPermissions)
+
     io.cpu.writeBack.accessError := False
-    io.cpu.writeBack.mmuException := io.cpu.writeBack.isValid && (if(catchIllegal) mmuRsp.exception || (!mmuRsp.allowWrite && request.wr) || (!mmuRsp.allowRead && (!request.wr || isAmo)) else False)
+    when(mmuRsp.isIoAccess) {
+      io.cpu.writeBack.data := io.mem.rsp.data
+      if (catchAccessError) io.cpu.writeBack.accessError := io.mem.rsp.valid && io.mem.rsp.error
+    } otherwise {
+      io.cpu.writeBack.data := dataMux
+      if (catchAccessError) io.cpu.writeBack.accessError := (waysHits & B(tagsReadRsp.map(_.error))) =/= 0 || (loadStoreFault && !mmuRsp.isPaging)
+    }
+
+    io.cpu.redo := False
+    io.cpu.writeBack.mmuException := loadStoreFault && (if(catchIllegal) mmuRsp.isPaging else False)
     io.cpu.writeBack.unalignedAccess := io.cpu.writeBack.isValid && (if(catchUnaligned) ((request.size === 2 && mmuRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && mmuRsp.physicalAddress(0 downto 0) =/= 0)) else False)
     io.cpu.writeBack.isWrite := request.wr
 
@@ -624,14 +635,6 @@ class DataCache(p : DataCacheConfig) extends Component{
           loaderValid setWhen(io.mem.cmd.ready)
         }
       }
-    }
-
-    when(mmuRsp.isIoAccess){
-      io.cpu.writeBack.data :=  io.mem.rsp.data
-      if(catchAccessError) io.cpu.writeBack.accessError := io.mem.rsp.valid && io.mem.rsp.error
-    } otherwise {
-      io.cpu.writeBack.data :=  dataMux
-      if(catchAccessError) io.cpu.writeBack.accessError := (waysHits & B(tagsReadRsp.map(_.error))) =/= 0
     }
 
     //remove side effects on exceptions

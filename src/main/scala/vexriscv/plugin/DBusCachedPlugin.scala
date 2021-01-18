@@ -273,14 +273,13 @@ class DBusCachedPlugin(val config : DataCacheConfig,
           exceptionBus.valid := True
           exceptionBus.code := (input(MEMORY_WR) ? U(7) | U(5)).resized
         }
-
-        if (catchUnaligned) when(cache.io.cpu.writeBack.unalignedAccess) {
-          exceptionBus.valid := True
-          exceptionBus.code := (input(MEMORY_WR) ? U(6) | U(4)).resized
-        }
         if(catchIllegal) when (cache.io.cpu.writeBack.mmuException) {
           exceptionBus.valid := True
           exceptionBus.code := (input(MEMORY_WR) ? U(15) | U(13)).resized
+        }
+        if (catchUnaligned) when(cache.io.cpu.writeBack.unalignedAccess) {
+          exceptionBus.valid := True
+          exceptionBus.code := (input(MEMORY_WR) ? U(6) | U(4)).resized
         }
 
         when(cache.io.cpu.redo) {
