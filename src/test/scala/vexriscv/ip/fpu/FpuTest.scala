@@ -192,6 +192,21 @@ class FpuTest extends FunSuite{
           }
           rspQueue += body
         }
+
+        def i2f(rd : Int, value : Int): Unit ={
+          cmdQueue += {cmd =>
+            cmd.opcode #= cmd.opcode.spinalEnum.I2F
+            cmd.value #= value
+            cmd.rs1.randomize()
+            cmd.rs2.randomize()
+            cmd.rs3.randomize()
+            cmd.rd #= rd
+          }
+          commitQueue += {cmd =>
+            cmd.write #= true
+            cmd.load #= false
+          }
+        }
       }
 
 
@@ -318,6 +333,17 @@ class FpuTest extends FunSuite{
           }
         }
 
+        def testI2f(a : Int): Unit ={
+          val rs = new RegAllocator()
+          val rd = Random.nextInt(32)
+          i2f(rd, a)
+          storeFloat(rd){v =>
+            val ref = a.toInt
+            println(f"i2f($a) = $v, $ref")
+            assert(v === ref)
+          }
+        }
+
         def testCmp(a : Float, b : Float): Unit ={
           val rs = new RegAllocator()
           val rs1, rs2, rs3 = rs.allocate()
@@ -334,6 +360,15 @@ class FpuTest extends FunSuite{
 
         val b2f = lang.Float.intBitsToFloat(_)
 
+
+        //TODO Test corner cases
+        testI2f(17)
+        testI2f(12)
+        testI2f(512)
+        testI2f(1)
+//        dut.clockDomain.waitSampling(1000)
+//        simFailure()
+
         //TODO Test corner cases
         testCmp(1.0f, 2.0f)
         testCmp(1.5f, 2.0f)
@@ -349,8 +384,7 @@ class FpuTest extends FunSuite{
         testF2i(18.0f)
         testF2i(1200.0f)
         testF2i(1.0f)
-//        dut.clockDomain.waitSampling(1000)
-//        simFailure()
+
 
 
         testAdd(0.1f, 1.6f)

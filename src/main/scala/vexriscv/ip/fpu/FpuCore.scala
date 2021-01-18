@@ -32,6 +32,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val opcode = p.Opcode()
     val rs1, rs2, rs3 = p.rfAddress()
     val rd = p.rfAddress()
+    val value = Bits(32 bits)
   }
 
   case class RfReadOutput() extends Bundle{
@@ -40,6 +41,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val lockId = lockIdType()
     val rs1, rs2, rs3 = p.internalFloating()
     val rd = p.rfAddress()
+    val value = Bits(32 bits)
   }
 
 
@@ -67,6 +69,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val minus = Bool()
   }
 
+
   case class DivSqrtInput() extends Bundle{
     val source = Source()
     val rs1, rs2 = p.internalFloating()
@@ -74,6 +77,14 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val lockId = lockIdType()
     val div = Bool()
   }
+
+  case class I2fInput() extends Bundle{
+    val source = Source()
+    val rd = p.rfAddress()
+    val lockId = lockIdType()
+    val value = Bits(32 bits)
+  }
+
 
   case class AddInput() extends Bundle{
     val source = Source()
@@ -223,6 +234,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.source := s1.source
     output.opcode := s1.opcode
     output.lockId := s1LockId
+    output.value := s1.value
     output.rd := s1.rd
     output.rs1 := rf.ram.readSync(s0.source @@ s0.rs1,enable = !output.isStall)
     output.rs2 := rf.ram.readSync(s0.source @@ s0.rs2,enable = !output.isStall)
@@ -250,6 +262,17 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     coreRsp.opcode := read.output.opcode
     coreRsp.rs1    := read.output.rs1
     coreRsp.rs2    := read.output.rs2
+
+
+    val i2fHit = input.opcode === p.Opcode.I2F
+    val i2f = Stream(I2fInput())
+    i2f.valid := input.valid && i2fHit
+    input.ready setWhen(i2fHit && i2f.ready)
+    i2f.source := read.output.source
+    i2f.rd     := read.output.rd
+    i2f.value  := read.output.value
+    i2f.lockId := read.output.lockId
+
 
     val divSqrtHit = input.opcode === p.Opcode.DIV ||  input.opcode === p.Opcode.SQRT
     val divSqrt = Stream(DivSqrtInput())
@@ -295,6 +318,23 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       add.payload.assignSomeByName(read.output.payload)
     }
   }
+
+  val i2f = new Area{
+    val input = decode.i2f.stage()
+    val output = input.swapPayload(WriteInput())
+
+    val iLog2 = OHToUInt(OHMasking.last(input.value))
+    val shifted = (input.value << p.internalMantissaSize) >> iLog2
+
+    output.source := input.source
+    output.lockId := input.lockId
+    output.rd := input.rd
+    output.value.sign := False
+    output.value.exponent := iLog2 +^ exponentOne
+    output.value.mantissa := U(shifted).resized
+  }
+
+
 
   val load = new Area{
     val input = decode.load.stage()
@@ -610,7 +650,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
 
   val write = new Area{
-    val arbitrated = StreamArbiterFactory.lowerFirst.noLock.on(List(load.output, add.output, mul.output))
+    val arbitrated = StreamArbiterFactory.lowerFirst.noLock.on(List(load.output, add.output, mul.output, i2f.output))
     val isCommited = rf.lock.map(_.commited).read(arbitrated.lockId)
     val commited = arbitrated.haltWhen(!isCommited).toFlow
 

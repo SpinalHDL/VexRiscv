@@ -136,6 +136,23 @@ test9:
     nop
     nop
     nop
+    j test10
+
+.align 6
+test10:
+    li TEST_ID, 10
+    li x1, 16
+    fcvt.s.wu f1, x1
+    li x2, 18
+    li x3, 512
+    fcvt.s.wu f2, x2
+    fcvt.s.wu f3, x3
+    lw x4, test10_data
+    fcvt.s.wu f5, x4
+    nop
+    nop
+    nop
+    nop
 
   /*  la x1, test1_data
     li x2, 45
@@ -172,11 +189,5 @@ test3_data: .word 73
 test4_data: .word 58
 test5_data: .word 56
 test6_data: .word 75
-test7_data: .word 56
-test8_data: .word 83
-test9_data: .word 33
-test10_data: .word -65
-test11_data: .word -87
-test12_data: .word -55
-test13_data: .word 0xFFFF0004
-test14_data: .word 0xFFFF0005
+.align 6
+test10_data: .word 468

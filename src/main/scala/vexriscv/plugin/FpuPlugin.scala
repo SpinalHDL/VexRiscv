@@ -27,6 +27,7 @@ class FpuPlugin(externalFpu : Boolean = false,
     decoderService.add(List(
       FADD_S    -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.ADD,   FPU_COMMIT -> True,  FPU_ALU -> True , FPU_LOAD -> False,  FPU_RSP -> False),
       FLW       -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.LOAD,  FPU_COMMIT -> True,  FPU_ALU -> False, FPU_LOAD -> True ,  FPU_RSP -> False),
+      FCVT_S_WU -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.I2F  , FPU_COMMIT -> True , FPU_ALU -> True,  FPU_LOAD -> False,  FPU_RSP -> False, RS1_USE -> True),
       FSW       -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.STORE, FPU_COMMIT -> False, FPU_ALU -> False, FPU_LOAD -> False,  FPU_RSP -> True),
       FCVT_WU_S -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.F2I  , FPU_COMMIT -> False, FPU_ALU -> False, FPU_LOAD -> False,  FPU_RSP -> True,  REGFILE_WRITE_VALID -> True, BYPASSABLE_EXECUTE_STAGE -> False, BYPASSABLE_MEMORY_STAGE  -> False),
       FLE_S     -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.CMP  , FPU_COMMIT -> False, FPU_ALU -> False, FPU_LOAD -> False,  FPU_RSP -> True,  REGFILE_WRITE_VALID -> True, BYPASSABLE_EXECUTE_STAGE -> False, BYPASSABLE_MEMORY_STAGE  -> False)
@@ -58,10 +59,15 @@ class FpuPlugin(externalFpu : Boolean = false,
       //Maybe it might be better to not fork before fire to avoid RF stall on commits
       val forked = Reg(Bool) setWhen(port.cmd.fire) clearWhen(!arbitration.isStuck) init(False)
 
+      val i2fReady = Reg(Bool()) setWhen(!arbitration.isStuckByOthers) clearWhen(!arbitration.isStuck)
+      val i2fHazard = input(FPU_OPCODE) === FpuOpcode.I2F && !i2fReady
+
+      arbitration.haltItself setWhen(arbitration.isValid && i2fHazard)
       arbitration.haltItself setWhen(port.cmd.isStall)
-      port.cmd.valid := arbitration.isValid && input(FPU_ENABLE) && !forked
+
+      port.cmd.valid    := arbitration.isValid && input(FPU_ENABLE) && !forked && !i2fHazard
       port.cmd.opcode   := input(FPU_OPCODE)
-      port.cmd.value    := output(RS1)
+      port.cmd.value    := RegNext(output(RS1))
       port.cmd.function := 0
       port.cmd.rs1      := input(INSTRUCTION)(rs1Range).asUInt
       port.cmd.rs2      := input(INSTRUCTION)(rs2Range).asUInt
