@@ -16,32 +16,47 @@ class FpuTest extends FunSuite{
 
 
   test("directed"){
+    val portCount = 1
     val p = FpuParameter(
       internalMantissaSize = 23,
-      withDouble = false,
-      sourceCount = 1
+      withDouble = false
     )
 
-    SimConfig.withFstWave.compile(new FpuCore(p)).doSim(seed = 42){ dut =>
+    SimConfig.withFstWave.compile(new FpuCore(1, p)).doSim(seed = 42){ dut =>
       dut.clockDomain.forkStimulus(10)
 
 
 
 
-      val cpus = for(id <- 0 until 1 << p.sourceWidth) yield new {
+      val cpus = for(id <- 0 until portCount) yield new {
         val cmdQueue = mutable.Queue[FpuCmd => Unit]()
         val commitQueue = mutable.Queue[FpuCommit => Unit]()
         val loadQueue = mutable.Queue[FpuLoad => Unit]()
         val rspQueue = mutable.Queue[FpuRsp => Unit]()
 
-        StreamDriver(dut.io.port.commit(id) ,dut.clockDomain){payload =>
+        StreamDriver(dut.io.port(id).cmd ,dut.clockDomain){payload =>
+          if(cmdQueue.isEmpty) false else {
+            cmdQueue.dequeue().apply(payload)
+            true
+          }
+        }
+
+
+        StreamMonitor(dut.io.port(id)rsp, dut.clockDomain){payload =>
+          rspQueue.dequeue().apply(payload)
+        }
+
+        StreamReadyRandomizer(dut.io.port(id).rsp, dut.clockDomain)
+
+
+        StreamDriver(dut.io.port(id).commit ,dut.clockDomain){payload =>
           if(commitQueue.isEmpty) false else {
             commitQueue.dequeue().apply(payload)
             true
           }
         }
 
-        StreamDriver(dut.io.port.load(id) ,dut.clockDomain){payload =>
+        StreamDriver(dut.io.port(id).load ,dut.clockDomain){payload =>
           if(loadQueue.isEmpty) false else {
             loadQueue.dequeue().apply(payload)
             true
@@ -50,7 +65,6 @@ class FpuTest extends FunSuite{
 
         def loadRaw(rd : Int, value : BigInt): Unit ={
           cmdQueue += {cmd =>
-            cmd.source #= id
             cmd.opcode #= cmd.opcode.spinalEnum.LOAD
             cmd.value.randomize()
             cmd.rs1.randomize()
@@ -72,7 +86,6 @@ class FpuTest extends FunSuite{
 
         def storeRaw(rs : Int)(body : FpuRsp => Unit): Unit ={
           cmdQueue += {cmd =>
-            cmd.source #= id
             cmd.opcode #= cmd.opcode.spinalEnum.STORE
             cmd.value.randomize()
             cmd.rs1.randomize()
@@ -90,7 +103,6 @@ class FpuTest extends FunSuite{
 
         def mul(rd : Int, rs1 : Int, rs2 : Int): Unit ={
           cmdQueue += {cmd =>
-            cmd.source #= id
             cmd.opcode #= cmd.opcode.spinalEnum.MUL
             cmd.value.randomize()
             cmd.rs1 #= rs1
@@ -105,7 +117,6 @@ class FpuTest extends FunSuite{
 
         def add(rd : Int, rs1 : Int, rs2 : Int): Unit ={
           cmdQueue += {cmd =>
-            cmd.source #= id
             cmd.opcode #= cmd.opcode.spinalEnum.ADD
             cmd.value.randomize()
             cmd.rs1 #= rs1
@@ -120,7 +131,6 @@ class FpuTest extends FunSuite{
 
         def div(rd : Int, rs1 : Int, rs2 : Int): Unit ={
           cmdQueue += {cmd =>
-            cmd.source #= id
             cmd.opcode #= cmd.opcode.spinalEnum.DIV
             cmd.value.randomize()
             cmd.rs1 #= rs1
@@ -135,7 +145,6 @@ class FpuTest extends FunSuite{
 
         def sqrt(rd : Int, rs1 : Int): Unit ={
           cmdQueue += {cmd =>
-            cmd.source #= id
             cmd.opcode #= cmd.opcode.spinalEnum.SQRT
             cmd.value.randomize()
             cmd.rs1 #= rs1
@@ -150,7 +159,6 @@ class FpuTest extends FunSuite{
 
         def fma(rd : Int, rs1 : Int, rs2 : Int, rs3 : Int): Unit ={
           cmdQueue += {cmd =>
-            cmd.source #= id
             cmd.opcode #= cmd.opcode.spinalEnum.FMA
             cmd.value.randomize()
             cmd.rs1 #= rs1
@@ -163,25 +171,6 @@ class FpuTest extends FunSuite{
           }
         }
       }
-
-      StreamDriver(dut.io.port.cmd ,dut.clockDomain){payload =>
-        cpus.map(_.cmdQueue).filter(_.nonEmpty).toSeq match {
-          case Nil => false
-          case l => {
-            l.randomPick().dequeue().apply(payload)
-            true
-          }
-        }
-      }
-
-
-
-
-      StreamMonitor(dut.io.port.rsp, dut.clockDomain){payload =>
-        cpus(payload.source.toInt).rspQueue.dequeue().apply(payload)
-      }
-
-      StreamReadyRandomizer(dut.io.port.rsp, dut.clockDomain)
 
 
 

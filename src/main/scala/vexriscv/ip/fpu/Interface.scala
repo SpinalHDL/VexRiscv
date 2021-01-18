@@ -32,23 +32,19 @@ object FpuFormat extends SpinalEnum{
 
 
 case class FpuParameter( internalMantissaSize : Int,
-                         withDouble : Boolean,
-                         sourceCount : Int){
+                         withDouble : Boolean){
 
   val storeLoadType = HardType(Bits(if(withDouble) 64 bits else 32 bits))
   val internalExponentSize = if(withDouble) 11 else 8
   val internalFloating = HardType(FpuFloat(exponentSize = internalExponentSize, mantissaSize = internalMantissaSize))
-//  val opcode = HardType(UInt(2 bits))
-  val source = HardType(UInt(sourceWidth bits))
+
   val rfAddress = HardType(UInt(5 bits))
 
   val Opcode = FpuOpcode
   val Format = FpuFormat
-  val sourceWidth = log2Up(sourceCount)
 }
 
 case class FpuCmd(p : FpuParameter) extends Bundle{
-  val source = UInt(p.sourceWidth bits)
   val opcode = p.Opcode()
   val value = Bits(32 bits) // Int to float
   val function = Bits(3 bits) // Int to float
@@ -66,19 +62,17 @@ case class FpuLoad(p : FpuParameter) extends Bundle{
 }
 
 case class FpuRsp(p : FpuParameter) extends Bundle{
-  val source = UInt(p.sourceWidth bits)
   val value = p.storeLoadType() // IEEE754 store || Integer
 }
 
 case class FpuPort(p : FpuParameter) extends Bundle with IMasterSlave {
   val cmd = Stream(FpuCmd(p))
-  val commit = Vec(Stream(FpuCommit(p)), p.sourceCount)
-  val load = Vec(Stream(FpuLoad(p)), p.sourceCount)
+  val commit = Stream(FpuCommit(p))
+  val load = Stream(FpuLoad(p))
   val rsp = Stream(FpuRsp(p))
 
   override def asMaster(): Unit = {
-    master(cmd)
-    (commit ++ load).foreach(master(_))
+    master(cmd, commit, load)
     slave(rsp)
   }
 }

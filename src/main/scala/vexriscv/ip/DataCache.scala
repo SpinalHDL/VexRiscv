@@ -120,7 +120,6 @@ case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterS
 
 case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
   val wr = Bool
-  val data = Bits(p.cpuDataWidth bit)
   val size = UInt(2 bits)
   val isLrsc = p.withLrSc generate Bool()
   val isAmo = p.withAmo generate Bool()
@@ -169,6 +168,7 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   val isUser = Bool()
   val haltIt = Bool()
   val isWrite = Bool()
+  val storeData = Bits(p.cpuDataWidth bit)
   val data = Bits(p.cpuDataWidth bit)
   val address = UInt(p.addressWidth bit)
   val mmuException, unalignedAccess, accessError = Bool()
@@ -176,7 +176,7 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   val fence = FenceFlags()
 
   override def asMaster(): Unit = {
-    out(isValid,isStuck,isUser, address, fence)
+    out(isValid,isStuck,isUser, address, fence, storeData)
     in(haltIt, data, mmuException, unalignedAccess, accessError, isWrite, keepMemRspData)
   }
 }
@@ -804,35 +804,32 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
 
     val ioMemRspMuxed = io.mem.rsp.data.subdivideIn(cpuDataWidth bits).read(io.cpu.writeBack.address(memWordToCpuWordRange))
 
-    io.cpu.writeBack.haltIt := io.cpu.writeBack.isValid
+    io.cpu.writeBack.haltIt := True
 
     //Evict the cache after reset logics
     val flusher = new Area {
-      val valid = RegInit(False)
+      val waitDone = RegInit(False) clearWhen(io.cpu.flush.ready)
       val hold = False
-      when(valid) {
-        tagsWriteCmd.valid := valid
-        tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
+      val counter = Reg(UInt(lineRange.size + 1 bits)) init(0)
+      when(!counter.msb) {
+        tagsWriteCmd.valid := True
+        tagsWriteCmd.address := counter.resized
         tagsWriteCmd.way.setAll()
         tagsWriteCmd.data.valid := False
-        io.cpu.writeBack.haltIt := True
+        io.cpu.execute.haltIt := True
         when(!hold) {
-          when(mmuRsp.physicalAddress(lineRange) =/= wayLineCount - 1) {
-            mmuRsp.physicalAddress.getDrivingReg(lineRange) := mmuRsp.physicalAddress(lineRange) + 1
-          } otherwise {
-            valid := False
-          }
+          counter := counter + 1
         }
       }
 
-      io.cpu.flush.ready := False
+      io.cpu.flush.ready := waitDone && counter.msb
+
       val start = RegInit(True) //Used to relax timings
-      start := !start && io.cpu.flush.valid && !io.cpu.execute.isValid && !io.cpu.memory.isValid && !io.cpu.writeBack.isValid && !io.cpu.redo
+      start := !waitDone && !start && io.cpu.flush.valid && !io.cpu.execute.isValid && !io.cpu.memory.isValid && !io.cpu.writeBack.isValid && !io.cpu.redo
 
       when(start){
-        io.cpu.flush.ready := True
-        mmuRsp.physicalAddress.getDrivingReg(lineRange) := 0
-        valid := True
+        waitDone := True
+        counter := 0
       }
     }
 
@@ -848,10 +845,10 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
     val isExternalLsrc = if(withExternalLrSc) request.isLrsc else False
     val isExternalAmo  = if(withExternalAmo)  request.isAmo  else False
 
-    val requestDataBypass = CombInit(request.data)
+    val requestDataBypass = CombInit(io.cpu.writeBack.storeData)
     import DataCacheExternalAmoStates._
     val amo = withAmo generate new Area{
-      def rf = request.data
+      def rf = io.cpu.writeBack.storeData
       def mem = if(withInternalAmo) dataMux else ioMemRspMuxed
       val compare = request.amoCtrl.alu.msb
       val unsigned = request.amoCtrl.alu(2 downto 1) === B"11"

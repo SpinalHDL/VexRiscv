@@ -1309,7 +1309,9 @@ public:
     }
 
     Workspace* withRiscvRef(){
+        #ifdef WITH_RISCV_REF
     	riscvRefEnable = true;
+        #endif
 		return this;
     }
 
@@ -3860,8 +3862,6 @@ int main(int argc, char **argv, char **env) {
 
 	printf("BOOT\n");
 	timespec startedAt = timer_start();
-
-
 
 
 //#ifdef LITEX

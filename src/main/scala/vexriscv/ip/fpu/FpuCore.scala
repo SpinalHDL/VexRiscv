@@ -10,28 +10,31 @@ object FpuDivSqrtIterationState extends SpinalEnum{
   val IDLE, YY, XYY, Y2_XYY, DIV, _15_XYY2, Y_15_XYY2, Y_15_XYY2_RESULT, SQRT = newElement()
 }
 
-case class FpuCore(p : FpuParameter) extends Component{
+case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   val io = new Bundle {
-    val port = slave(FpuPort(p))
+    val port = Vec(slave(FpuPort(p)), portCount)
   }
 
+  val portCountWidth = log2Up(portCount)
+  val Source = HardType(UInt(portCountWidth bits))
 
-//  val commitPerSourceCount = 8
+
+//  val commitPerportCount = 8
   val rfLockCount = 5
   val lockIdType = HardType(UInt(log2Up(rfLockCount) bits))
 
-  io.port.rsp.valid := False
-  io.port.rsp.payload.assignDontCare()
+//  io.port.rsp.valid := False
+//  io.port.rsp.payload.assignDontCare()
 
   case class RfReadInput() extends Bundle{
-    val source = p.source()
+    val source = Source()
     val opcode = p.Opcode()
     val rs1, rs2, rs3 = p.rfAddress()
     val rd = p.rfAddress()
   }
 
   case class RfReadOutput() extends Bundle{
-    val source = p.source()
+    val source = Source()
     val opcode = p.Opcode()
     val lockId = lockIdType()
     val rs1, rs2, rs3 = p.internalFloating()
@@ -40,19 +43,19 @@ case class FpuCore(p : FpuParameter) extends Component{
 
 
   case class LoadInput() extends Bundle{
-    val source = p.source()
+    val source = Source()
     val rs1 = p.internalFloating()
     val rd = p.rfAddress()
     val lockId = lockIdType()
   }
 
   case class StoreInput() extends Bundle{
-    val source = p.source()
+    val source = Source()
     val rs2 = p.internalFloating()
   }
 
   case class MulInput() extends Bundle{
-    val source = p.source()
+    val source = Source()
     val rs1, rs2, rs3 = p.internalFloating()
     val rd = p.rfAddress()
     val lockId = lockIdType()
@@ -63,7 +66,7 @@ case class FpuCore(p : FpuParameter) extends Component{
   }
 
   case class DivSqrtInput() extends Bundle{
-    val source = p.source()
+    val source = Source()
     val rs1, rs2 = p.internalFloating()
     val rd = p.rfAddress()
     val lockId = lockIdType()
@@ -71,14 +74,14 @@ case class FpuCore(p : FpuParameter) extends Component{
   }
 
   case class AddInput() extends Bundle{
-    val source = p.source()
+    val source = Source()
     val rs1, rs2 = p.internalFloating()
     val rd = p.rfAddress()
     val lockId = lockIdType()
   }
   
   case class WriteInput() extends Bundle{
-    val source = p.source()
+    val source = Source()
     val lockId = lockIdType()
     val rd = p.rfAddress()
     val value = p.internalFloating()
@@ -86,10 +89,10 @@ case class FpuCore(p : FpuParameter) extends Component{
 
 
   val rf = new Area{
-    val ram = Mem(p.internalFloating, 32*(1 << p.sourceWidth))
+    val ram = Mem(p.internalFloating, 32*portCount)
     val lock = for(i <- 0 until rfLockCount) yield new Area{
       val valid = RegInit(False)
-      val source = Reg(p.source)
+      val source = Reg(Source())
       val address = Reg(p.rfAddress)
       val id = Reg(UInt(log2Up(rfLockCount) bits))
       val commited = Reg(Bool)
@@ -99,21 +102,21 @@ case class FpuCore(p : FpuParameter) extends Component{
     val lockFreeId = OHMasking.first(lock.map(!_.valid))
   }
 
-  val commitLogic = for(source <- 0 until p.sourceCount) yield new Area{
+  val commitLogic = for(source <- 0 until portCount) yield new Area{
     val fire = False
     val target, hit = Reg(UInt(log2Up(rfLockCount) bits)) init(0)
     when(fire){
       hit := hit + 1
     }
 
-    io.port.commit(source).ready := False
-    when(io.port.commit(source).valid) {
+    io.port(source).commit.ready := False
+    when(io.port(source).commit.valid) {
       for (lock <- rf.lock) {
         when(lock.valid && lock.source === source && lock.id === hit) {
           fire := True
           lock.commited := True
-          lock.write := io.port.commit(source).write
-          io.port.commit(source).ready := True
+          lock.write := io.port(source).commit.write
+          io.port(source).commit.ready := True
         }
       }
     }
@@ -123,16 +126,20 @@ case class FpuCore(p : FpuParameter) extends Component{
 //    val valid = Bool()
 //    val write = Bool()
 //  }
-//  val commits = for(i <- 0 until p.sourceCount) yield new Area{
-//    val lines = Vec(CommitLine(), commitPerSourceCount)
+//  val commits = for(i <- 0 until portCount) yield new Area{
+//    val lines = Vec(CommitLine(), commitPerportCount)
 //    lines.foreach(_.valid init(False))
 //
 //  }
 
   val read = new Area{
+    val arbiter = StreamArbiterFactory.noLock.lowerFirst.build(FpuCmd(p), portCount)
+    arbiter.io.inputs <> Vec(io.port.map(_.cmd))
+
     val s0 = Stream(RfReadInput())
-    s0.arbitrationFrom(io.port.cmd)
-    s0.payload.assignSomeByName(io.port.cmd.payload)
+    s0.arbitrationFrom(arbiter.io.output)
+    s0.source := arbiter.io.chosen
+    s0.payload.assignSomeByName(arbiter.io.output.payload)
 
     val useRs1, useRs2, useRs3, useRd = False
     switch(s0.opcode){
@@ -172,7 +179,7 @@ case class FpuCore(p : FpuParameter) extends Component{
     val hits = List((useRs1, s0.rs1), (useRs2, s0.rs2), (useRs3, s0.rs3), (useRd, s0.rd)).map{case (use, reg) => use && rf.lock.map(l => l.valid && l.source === s0.source && l.address === reg).orR}
     val hazard = hits.orR
     when(s0.fire && useRd){
-      for(i <- 0 until p.sourceCount){
+      for(i <- 0 until portCount){
         when(s0.source === i){
           commitLogic(i).target := commitLogic(i).target + 1
         }
@@ -183,6 +190,7 @@ case class FpuCore(p : FpuParameter) extends Component{
           rf.lock(i).source := s0.source
           rf.lock(i).address := s0.rd
           rf.lock(i).id := commitLogic.map(_.target).read(s0.source)
+          rf.lock(i).commited := False
         }
       }
     }
@@ -194,9 +202,9 @@ case class FpuCore(p : FpuParameter) extends Component{
     output.opcode := s1.opcode
     output.lockId := s1LockId
     output.rd := s1.rd
-    output.rs1 := rf.ram.readSync(s0.rs1,enable = !output.isStall)
-    output.rs2 := rf.ram.readSync(s0.rs2,enable = !output.isStall)
-    output.rs3 := rf.ram.readSync(s0.rs3,enable = !output.isStall)
+    output.rs1 := rf.ram.readSync(s0.source @@ s0.rs1,enable = !output.isStall)
+    output.rs2 := rf.ram.readSync(s0.source @@ s0.rs2,enable = !output.isStall)
+    output.rs3 := rf.ram.readSync(s0.source @@ s0.rs3,enable = !output.isStall)
   }
 
   val decode = new Area{
@@ -266,10 +274,10 @@ case class FpuCore(p : FpuParameter) extends Component{
 
   val load = new Area{
     val input = decode.load.stage()
-    def feed = io.port.load(input.source)
+    def feed = io.port(input.source).load
     val hazard = !feed.valid
     val output = input.haltWhen(hazard).swapPayload(WriteInput())
-    io.port.load.foreach(_.ready := False)
+    io.port.foreach(_.load.ready := False)
     feed.ready := input.valid && output.ready
     output.source := input.source
     output.lockId := input.lockId
@@ -281,11 +289,11 @@ case class FpuCore(p : FpuParameter) extends Component{
   val store = new Area{
     val input = decode.store.stage()
 
-    input.ready := io.port.rsp.ready
-    when(input.valid){
-      io.port.rsp.valid := True
-      io.port.rsp.source := input.source
-      io.port.rsp.value := input.rs2.asBits
+    input.ready := io.port.map(_.rsp.ready).read(input.source)
+    for(i <- 0 until portCount){
+      def rsp = io.port(i).rsp
+      rsp.valid := input.valid && input.source === i
+      rsp.value := input.rs2.asBits
     }
   }
 
@@ -576,10 +584,10 @@ case class FpuCore(p : FpuParameter) extends Component{
 
 object FpuSynthesisBench extends App{
   val payloadType = HardType(Bits(8 bits))
-  class Fpu(name : String, p : FpuParameter) extends Rtl{
+  class Fpu(name : String, portCount : Int, p : FpuParameter) extends Rtl{
     override def getName(): String = "Fpu_" + name
     override def getRtlPath(): String = getName() + ".v"
-    SpinalVerilog(new FpuCore(p){
+    SpinalVerilog(new FpuCore(portCount, p){
 
       setDefinitionName(Fpu.this.getName())
     })
@@ -590,18 +598,18 @@ object FpuSynthesisBench extends App{
   val rtls = ArrayBuffer[Fpu]()
   rtls += new Fpu(
     "32",
+    portCount = 1,
     FpuParameter(
       internalMantissaSize = 23,
-      withDouble = false,
-      sourceCount = 1
+      withDouble = false
     )
   )
   rtls += new Fpu(
     "64",
+    portCount = 1,
     FpuParameter(
       internalMantissaSize = 52,
-      withDouble = true,
-      sourceCount = 1
+      withDouble = true
     )
   )
 

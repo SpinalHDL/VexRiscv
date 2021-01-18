@@ -18,13 +18,20 @@ class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : An
   }
 }
 
+trait DBusEncodingService {
+  def addLoadWordEncoding(key: MaskedLiteral): Unit
+  def addStoreWordEncoding(key: MaskedLiteral): Unit
+  def encodingHalt(): Unit
+  def bypassStore(data : Bits) : Unit
+}
+
 class DBusCachedPlugin(val config : DataCacheConfig,
                        memoryTranslatorPortConfig : Any = null,
                        dBusCmdMasterPipe : Boolean = false,
                        dBusCmdSlavePipe : Boolean = false,
                        dBusRspSlavePipe : Boolean = false,
                        relaxedMemoryTranslationRegister : Boolean = false,
-                       csrInfo : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService {
+                       csrInfo : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService with DBusEncodingService {
   import config._
   assert(!(config.withExternalAmo && !dBusRspSlavePipe))
   assert(isPow2(cacheSize))
@@ -43,6 +50,54 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     dBusAccess
   }
 
+  override def addLoadWordEncoding(key : MaskedLiteral): Unit = {
+    val decoderService = pipeline.service(classOf[DecoderService])
+    val cfg = pipeline.config
+    import cfg._
+
+    decoderService.add(
+      key,
+      List(
+        SRC1_CTRL         -> Src1CtrlEnum.RS,
+        SRC_USE_SUB_LESS  -> False,
+        MEMORY_ENABLE     -> True,
+        RS1_USE          -> True,
+        IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB,
+        SRC2_CTRL -> Src2CtrlEnum.IMI,
+        //        REGFILE_WRITE_VALID -> True,
+        //        BYPASSABLE_EXECUTE_STAGE -> False,
+        //        BYPASSABLE_MEMORY_STAGE -> False,
+        MEMORY_WR -> False
+      ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
+    )
+  }
+  override def addStoreWordEncoding(key : MaskedLiteral): Unit = {
+    val decoderService = pipeline.service(classOf[DecoderService])
+    val cfg = pipeline.config
+    import cfg._
+
+    decoderService.add(
+      key,
+      List(
+        SRC1_CTRL         -> Src1CtrlEnum.RS,
+        SRC_USE_SUB_LESS  -> False,
+        MEMORY_ENABLE     -> True,
+        RS1_USE          -> True,
+        IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB,
+        SRC2_CTRL -> Src2CtrlEnum.IMS,
+//        RS2_USE -> True,
+        MEMORY_WR -> True
+      ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
+    )
+  }
+
+  var haltFromEncoding : Bool = null
+  override def encodingHalt(): Unit = haltFromEncoding := True
+
+  override def bypassStore(data: Bits): Unit = {
+    pipeline.stages.last.input(MEMORY_STORE_DATA) := data
+  }
+
   object MEMORY_ENABLE extends Stageable(Bool)
   object MEMORY_MANAGMENT extends Stageable(Bool)
   object MEMORY_WR extends Stageable(Bool)
@@ -53,6 +108,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   object MEMORY_FORCE_CONSTISTENCY extends Stageable(Bool)
   object IS_DBUS_SHARING extends Stageable(Bool())
   object MEMORY_VIRTUAL_ADDRESS extends Stageable(UInt(32 bits))
+  object MEMORY_STORE_DATA extends Stageable(Bits(32 bits))
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -164,6 +220,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       privilegeService = pipeline.service(classOf[PrivilegeService])
 
     pipeline.update(DEBUG_BYPASS_CACHE, False)
+
+    haltFromEncoding = False
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -240,7 +298,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       cache.io.cpu.execute.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.execute.address := input(SRC_ADD).asUInt
       cache.io.cpu.execute.args.wr := input(MEMORY_WR)
-      cache.io.cpu.execute.args.data := size.mux(
+      insert(MEMORY_STORE_DATA) := size.mux(
         U(0)    -> input(RS2)( 7 downto 0) ## input(RS2)( 7 downto 0) ## input(RS2)(7 downto 0) ## input(RS2)(7 downto 0),
         U(1)    -> input(RS2)(15 downto 0) ## input(RS2)(15 downto 0),
         default -> input(RS2)(31 downto 0)
@@ -312,6 +370,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
       cache.io.cpu.writeBack.address := U(input(REGFILE_WRITE_DATA))
+      cache.io.cpu.writeBack.storeData := input(MEMORY_STORE_DATA)
 
       val fence = if(withInvalidate) new Area {
         cache.io.cpu.writeBack.fence := input(INSTRUCTION)(31 downto 20).as(FenceFlags())
@@ -371,7 +430,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         }
       }
 
-      arbitration.haltItself.setWhen(cache.io.cpu.writeBack.haltIt)
+      arbitration.haltItself.setWhen(cache.io.cpu.writeBack.isValid && cache.io.cpu.writeBack.haltIt)
 
       val rspShifted = Bits(32 bits)
       rspShifted := cache.io.cpu.writeBack.data
@@ -390,6 +449,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       when(arbitration.isValid && input(MEMORY_ENABLE)) {
         output(REGFILE_WRITE_DATA) := rspFormated
       }
+
+      insert(DBUS_DATA) := cache.io.cpu.writeBack.data
     }
 
     //Share access to the dBus (used by self refilled MMU)
@@ -405,7 +466,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
             dBusAccess.cmd.ready := !execute.arbitration.isStuck
           }
           cache.io.cpu.execute.args.wr := dBusAccess.cmd.write
-          cache.io.cpu.execute.args.data := dBusAccess.cmd.data
+          execute.insert(MEMORY_STORE_DATA) := dBusAccess.cmd.data
           cache.io.cpu.execute.args.size := dBusAccess.cmd.size
           if(withLrSc) cache.io.cpu.execute.args.isLrsc := False
           if(withAmo) cache.io.cpu.execute.args.isAmo := False
@@ -433,6 +494,11 @@ class DBusCachedPlugin(val config : DataCacheConfig,
           managementStage.input(IS_DBUS_SHARING).getDrivingReg := False
         }
       }
+    }
+
+    when(haltFromEncoding){
+      cache.io.cpu.writeBack.isValid := False
+      managementStage.arbitration.haltItself := True
     }
 
     if(csrInfo){
