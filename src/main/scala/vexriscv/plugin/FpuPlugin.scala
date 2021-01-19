@@ -71,13 +71,19 @@ class FpuPlugin(externalFpu : Boolean = false,
       val service = pipeline.service(classOf[CsrInterface])
       val rm = Reg(Bits(3 bits))
 
-      service.rw(CSR.FCSR, 5,rm)
-      service.rw(CSR.FCSR, 0, flags)
-      service.rw(CSR.FRM, 5,rm)
-      service.rw(CSR.FFLAGS, 0,flags)
+      service.rw(CSR.FCSR,   5, rm)
+      service.rw(CSR.FCSR,   0, flags)
+      service.rw(CSR.FRM,    5, rm)
+      service.rw(CSR.FFLAGS, 0, flags)
 
       val csrActive = service.duringAny()
       execute.arbitration.haltByOther setWhen(csrActive && hasPending) // pessimistic
+
+      val fs = Reg(Bits(2 bits)) init(1)
+      when(hasPending){
+        fs := 3 //DIRTY
+      }
+      service.rw(CSR.SSTATUS, 13, fs)
     }
 
     decode plug new Area{
@@ -89,7 +95,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       val i2fReady = Reg(Bool()) setWhen(!arbitration.isStuckByOthers) clearWhen(!arbitration.isStuck)
       val hazard = input(FPU_OPCODE) === FpuOpcode.I2F && !i2fReady || csr.pendings.msb || csr.csrActive
 
-      arbitration.haltItself setWhen(arbitration.isValid && hazard)
+      arbitration.haltItself setWhen(arbitration.isValid && input(FPU_ENABLE) && hazard)
       arbitration.haltItself setWhen(port.cmd.isStall)
 
       port.cmd.valid    := arbitration.isValid && input(FPU_ENABLE) && !forked && !hazard
