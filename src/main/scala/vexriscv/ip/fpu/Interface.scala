@@ -52,6 +52,15 @@ case class FpuParameter( internalMantissaSize : Int,
   val Format = FpuFormat
 }
 
+case class FpuFlags() extends Bundle{
+  val NV,  DZ,  OF,  UF,  NX = Bool()
+}
+
+case class FpuCompletion() extends Bundle{
+  val flag = FpuFlags()
+  val count = UInt(2 bits)
+}
+
 case class FpuCmd(p : FpuParameter) extends Bundle{
   val opcode = p.Opcode()
   val value = Bits(32 bits) // Int to float
@@ -75,9 +84,11 @@ case class FpuPort(p : FpuParameter) extends Bundle with IMasterSlave {
   val cmd = Stream(FpuCmd(p))
   val commit = Stream(FpuCommit(p))
   val rsp = Stream(FpuRsp(p))
+  val completion = FpuCompletion()
 
   override def asMaster(): Unit = {
     master(cmd, commit)
     slave(rsp)
+    in(completion)
   }
 }

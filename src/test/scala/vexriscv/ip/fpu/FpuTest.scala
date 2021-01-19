@@ -16,13 +16,13 @@ class FpuTest extends FunSuite{
 
 
   test("directed"){
-    val portCount = 1
+    val portCount = 4
     val p = FpuParameter(
       internalMantissaSize = 23,
       withDouble = false
     )
 
-    SimConfig.withFstWave.compile(new FpuCore(1, p)).doSim(seed = 42){ dut =>
+    SimConfig.withFstWave.compile(new FpuCore(portCount, p)).doSim(seed = 42){ dut =>
       dut.clockDomain.forkStimulus(10)
 
 

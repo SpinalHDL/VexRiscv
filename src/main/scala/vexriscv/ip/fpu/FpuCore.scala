@@ -19,13 +19,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   val Source = HardType(UInt(portCountWidth bits))
   val exponentOne = (1 << p.internalExponentSize-1) - 1
 
-
-//  val commitPerportCount = 8
   val rfLockCount = 5
   val lockIdType = HardType(UInt(log2Up(rfLockCount) bits))
-
-//  io.port.rsp.valid := False
-//  io.port.rsp.payload.assignDontCare()
 
   case class RfReadInput() extends Bundle{
     val source = Source()
@@ -52,7 +47,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val lockId = lockIdType()
   }
 
-  case class StoreInput() extends Bundle{
+  case class ShortPipInput() extends Bundle{
     val source = Source()
     val opcode = p.Opcode()
     val rs1, rs2 = p.internalFloating()
@@ -88,7 +83,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val rd = p.rfAddress()
     val lockId = lockIdType()
   }
-  
+
   case class WriteInput() extends Bundle{
     val source = Source()
     val lockId = lockIdType()
@@ -109,6 +104,31 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
     val lockFree = !lock.map(_.valid).andR
     val lockFreeId = OHMasking.first(lock.map(!_.valid))
+  }
+
+  val completion = for(source <- 0 until portCount) yield new Area{
+    def port = io.port(source)
+    port.completion.flag.NV := False
+    port.completion.flag.DZ := False
+    port.completion.flag.OF := False
+    port.completion.flag.UF := False
+    port.completion.flag.NX := False
+
+    val increments = ArrayBuffer[Bool]()
+
+//    def increment(): Unit ={
+//      //This is a SpinalHDL trick which allow to go back in time
+//      val swapContext =  dslBody.swap()
+//      val cond = False
+//      swapContext.appendBack()
+//
+//      cond := True
+//      incs += cond
+//    }
+
+    afterElaboration{
+      port.completion.count := increments.map(_.asUInt.resize(log2Up(increments.size + 1))).reduceBalancedTree(_ + _)
+    }
   }
 
   val commitFork = new Area{
@@ -141,16 +161,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
   }
 
-//  case class CommitLine() extends Bundle{
-//    val valid = Bool()
-//    val write = Bool()
-//  }
-//  val commits = for(i <- 0 until portCount) yield new Area{
-//    val lines = Vec(CommitLine(), commitPerportCount)
-//    lines.foreach(_.valid init(False))
-//
-//  }
-
   val read = new Area{
     val arbiter = StreamArbiterFactory.noLock.lowerFirst.build(FpuCmd(p), portCount)
     arbiter.io.inputs <> Vec(io.port.map(_.cmd))
@@ -162,63 +172,20 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
     val useRs1, useRs2, useRs3, useRd = False
     switch(s0.opcode){
-      is(p.Opcode.LOAD){
-        useRd := True
-      }
-      is(p.Opcode.STORE){
-        useRs2 := True
-      }
-      is(p.Opcode.ADD){
-        useRs1 := True
-        useRs2 := True
-        useRd  := True
-      }
-      is(p.Opcode.MUL){
-        useRs1 := True
-        useRs2 := True
-        useRd  := True
-      }
-      is(p.Opcode.DIV){
-        useRs1 := True
-        useRs2 := True
-        useRd  := True
-      }
-      is(p.Opcode.SQRT){
-        useRs1 := True
-        useRd  := True
-      }
-      is(p.Opcode.FMA){
-        useRs1 := True
-        useRs2 := True
-        useRs3 := True //Can be delayed to have less hazard
-        useRd  := True
-      }
-      is(p.Opcode.I2F){
-        useRd  := True
-      }
-      is(p.Opcode.F2I){
-        useRs1 := True
-      }
-      is(p.Opcode.MIN_MAX){
-        useRd  := True
-        useRs1 := True
-        useRs2 := True
-      }
-      is(p.Opcode.CMP){
-        useRs1 := True
-        useRs2 := True
-      }
-      is(p.Opcode.SGNJ){
-        useRd  := True
-        useRs1 := True
-        useRs2 := True
-      }
-      is(p.Opcode.FMV_X_W){
-        useRs1 := True
-      }
-      is(p.Opcode.FMV_W_X){
-        useRd  := True
-      }
+      is(p.Opcode.LOAD)    {  useRd := True }
+      is(p.Opcode.STORE)   { useRs2 := True }
+      is(p.Opcode.ADD)     { useRd  := True; useRs1 := True; useRs2 := True }
+      is(p.Opcode.MUL)     { useRd  := True; useRs1 := True; useRs2 := True }
+      is(p.Opcode.DIV)     { useRd  := True; useRs1 := True; useRs2 := True }
+      is(p.Opcode.SQRT)    { useRd  := True; useRs1 := True }
+      is(p.Opcode.FMA)     { useRd  := True; useRs1 := True; useRs2 := True; useRs3 := True }
+      is(p.Opcode.I2F)     { useRd  := True }
+      is(p.Opcode.F2I)     { useRs1 := True }
+      is(p.Opcode.MIN_MAX) { useRd  := True; useRs1 := True; useRs2 := True }
+      is(p.Opcode.CMP)     { useRs1 := True; useRs2 := True }
+      is(p.Opcode.SGNJ)    { useRd  := True; useRs1 := True; useRs2 := True }
+      is(p.Opcode.FMV_X_W) { useRs1 := True }
+      is(p.Opcode.FMV_W_X) { useRd  := True}
     }
 
     val hits = List((useRs1, s0.rs1), (useRs2, s0.rs2), (useRs3, s0.rs3), (useRd, s0.rd)).map{case (use, reg) => use && rf.lock.map(l => l.valid && l.source === s0.source && l.address === reg).orR}
@@ -261,32 +228,19 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val load = Stream(LoadInput())
     load.valid := input.valid && loadHit
     input.ready setWhen(loadHit && load.ready)
-    load.source := read.output.source
-    load.rd     := read.output.rd
-    load.rs1    := read.output.rs1
-    load.lockId := read.output.lockId
+    load.payload.assignSomeByName(read.output.payload)
 
-    val coreRspHit = List(FpuOpcode.STORE, FpuOpcode.F2I, FpuOpcode.CMP, FpuOpcode.I2F, FpuOpcode.MIN_MAX, FpuOpcode.SGNJ, FpuOpcode.FMV_X_W, FpuOpcode.FMV_W_X).map(input.opcode === _).orR
-    val coreRsp = Stream(StoreInput())
-    input.ready setWhen(coreRspHit && coreRsp.ready)
-    coreRsp.valid := input.valid && coreRspHit
-    coreRsp.source := read.output.source
-    coreRsp.opcode := read.output.opcode
-    coreRsp.rs1    := read.output.rs1
-    coreRsp.rs2    := read.output.rs2
-    coreRsp.lockId := read.output.lockId
-    coreRsp.rd := read.output.rd
-    coreRsp.value  := read.output.value
+    val shortPipHit = List(FpuOpcode.STORE, FpuOpcode.F2I, FpuOpcode.CMP, FpuOpcode.I2F, FpuOpcode.MIN_MAX, FpuOpcode.SGNJ, FpuOpcode.FMV_X_W, FpuOpcode.FMV_W_X).map(input.opcode === _).orR
+    val shortPip = Stream(ShortPipInput())
+    input.ready setWhen(shortPipHit && shortPip.ready)
+    shortPip.valid := input.valid && shortPipHit
+    shortPip.payload.assignSomeByName(read.output.payload)
 
     val divSqrtHit = input.opcode === p.Opcode.DIV ||  input.opcode === p.Opcode.SQRT
     val divSqrt = Stream(DivSqrtInput())
     input.ready setWhen(divSqrtHit && divSqrt.ready)
     divSqrt.valid := input.valid && divSqrtHit
-    divSqrt.source := read.output.source
-    divSqrt.rs1    := read.output.rs1
-    divSqrt.rs2    := read.output.rs2
-    divSqrt.rd     := read.output.rd
-    divSqrt.lockId := read.output.lockId
+    divSqrt.payload.assignSomeByName(read.output.payload)
     divSqrt.div    := input.opcode === p.Opcode.DIV
 
     val fmaHit = input.opcode === p.Opcode.FMA
@@ -323,8 +277,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
   }
 
-
-
   val load = new Area{
     val input = decode.load.stage()
     val filtred = commitFork.load.map(port => port.takeWhen(port.load))
@@ -339,11 +291,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.value.assignFromBits(feed.value)
   }
 
-
-
-
   val shortPip = new Area{
-    val input = decode.coreRsp.stage()
+    val input = decode.shortPip.stage()
 
     val rfOutput = Stream(WriteInput())
 
@@ -407,6 +356,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       def rsp = io.port(i).rsp
       rsp.valid := input.valid && input.source === i && !toFpuRf
       rsp.value := result
+      completion(i).increments += (RegNext(rsp.fire) init(False))
     }
   }
 
@@ -689,6 +639,10 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     port.valid := commited.valid && rf.lock.map(_.write).read(commited.lockId)
     port.address := commited.source @@ commited.rd
     port.data := commited.value
+
+    for(i <- 0 until portCount){
+      completion(i).increments += (RegNext(port.fire && commited.source === i) init(False))
+    }
   }
 }
 
