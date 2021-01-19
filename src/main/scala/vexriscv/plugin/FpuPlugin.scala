@@ -13,24 +13,96 @@ class FpuPlugin(externalFpu : Boolean = false,
   object FPU_COMMIT extends Stageable(Bool())
   object FPU_LOAD extends Stageable(Bool())
   object FPU_RSP extends Stageable(Bool())
-  object FPU_ALU extends Stageable(Bool())
   object FPU_FORKED extends Stageable(Bool())
   object FPU_OPCODE extends Stageable(FpuOpcode())
+  object FPU_ARG extends Stageable(Bits(2 bits))
 
   var port : FpuPort = null
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
 
+    type ENC = (Stageable[_ <: BaseType],Any)
+
+    val intRfWrite = List[ENC](
+      FPU_ENABLE -> True,
+      FPU_COMMIT -> False,
+      FPU_RSP -> True,
+      FPU_LOAD -> False,
+      REGFILE_WRITE_VALID -> True,
+      BYPASSABLE_EXECUTE_STAGE -> False,
+      BYPASSABLE_MEMORY_STAGE  -> False
+    )
+
+    val floatRfWrite = List[ENC](
+      FPU_ENABLE -> True,
+      FPU_COMMIT -> True,
+      FPU_RSP -> False,
+      FPU_LOAD -> False
+    )
+
+    val addSub  = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.ADD
+    val mul     = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.MUL
+    val fma     = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.FMA
+    val div     = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.DIV
+    val sqrt    = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.SQRT
+    val fsgnj   = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.SGNJ
+    val fminMax = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.MIN_MAX
+    val fmvWx   = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.FMV_W_X :+ RS1_USE -> True
+    val fcvtI2f = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.I2F     :+ RS1_USE -> True
+
+    val fcmp    = intRfWrite   :+ FPU_OPCODE -> FpuOpcode.CMP
+    val fclass  = intRfWrite   :+ FPU_OPCODE -> FpuOpcode.FCLASS
+    val fmvXw   = intRfWrite   :+ FPU_OPCODE -> FpuOpcode.FMV_X_W
+    val fcvtF2i = intRfWrite   :+ FPU_OPCODE -> FpuOpcode.F2I
+
+    val fl = List[ENC](
+      FPU_ENABLE -> True,
+      FPU_OPCODE -> FpuOpcode.LOAD,
+      FPU_COMMIT -> True,
+      FPU_LOAD -> True,
+      FPU_RSP -> False
+    )
+
+    val fs = List[ENC](
+      FPU_ENABLE -> True,
+      FPU_OPCODE -> FpuOpcode.STORE,
+      FPU_COMMIT -> False,
+      FPU_LOAD -> False,
+      FPU_RSP -> True
+    )
+
+
+    def arg(v : Int) = FPU_ARG -> U(v, 2 bits)
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(FPU_ENABLE, False)
     decoderService.add(List(
-      FADD_S    -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.ADD,   FPU_COMMIT -> True,  FPU_ALU -> True , FPU_LOAD -> False,  FPU_RSP -> False),
-      FLW       -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.LOAD,  FPU_COMMIT -> True,  FPU_ALU -> False, FPU_LOAD -> True ,  FPU_RSP -> False),
-      FCVT_S_WU -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.I2F  , FPU_COMMIT -> True , FPU_ALU -> True,  FPU_LOAD -> False,  FPU_RSP -> False, RS1_USE -> True),
-      FSW       -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.STORE, FPU_COMMIT -> False, FPU_ALU -> False, FPU_LOAD -> False,  FPU_RSP -> True),
-      FCVT_WU_S -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.F2I  , FPU_COMMIT -> False, FPU_ALU -> False, FPU_LOAD -> False,  FPU_RSP -> True,  REGFILE_WRITE_VALID -> True, BYPASSABLE_EXECUTE_STAGE -> False, BYPASSABLE_MEMORY_STAGE  -> False),
-      FLE_S     -> List(FPU_ENABLE -> True, FPU_OPCODE -> FpuOpcode.CMP  , FPU_COMMIT -> False, FPU_ALU -> False, FPU_LOAD -> False,  FPU_RSP -> True,  REGFILE_WRITE_VALID -> True, BYPASSABLE_EXECUTE_STAGE -> False, BYPASSABLE_MEMORY_STAGE  -> False)
+      FADD_S    -> (addSub :+ arg(0)),
+      FSUB_S    -> (addSub :+ arg(1)),
+      FMADD_S   -> (fma :+ arg(0)),
+      FMSUB_S   -> (fma :+ arg(1)),
+      FNMSUB_S  -> (fma :+ arg(2)),
+      FNMADD_S  -> (fma :+ arg(3)),
+      FMUL_S    -> (mul),
+      FDIV_S    -> (div),
+      FSQRT_S   -> (sqrt),
+      FLW       -> (fl),
+      FSW       -> (fs),
+      FCVT_S_WU -> (fcvtI2f :+ arg(0)),
+      FCVT_S_W  -> (fcvtI2f :+ arg(1)),
+      FCVT_WU_S -> (fcvtF2i :+ arg(0)),
+      FCVT_W_S ->  (fcvtF2i :+ arg(1)),
+      FCLASS_S  -> (fclass),
+      FLE_S     -> (fcmp :+ arg(0)),
+      FEQ_S     -> (fcmp :+ arg(1)),
+      FLT_S     -> (fcmp :+ arg(2)),
+      FSGNJ_S   -> (fsgnj :+ arg(0)),
+      FSGNJN_S  -> (fsgnj :+ arg(1)),
+      FSGNJX_S  -> (fsgnj :+ arg(2)),
+      FMIN_S    -> (fminMax :+ arg(0)),
+      FMAX_S    -> (fminMax :+ arg(1)),
+      FMV_X_W   -> (fmvXw),
+      FMV_W_X   -> (fmvWx)
     ))
 
     port = FpuPort(p)
@@ -92,8 +164,8 @@ class FpuPlugin(externalFpu : Boolean = false,
       //Maybe it might be better to not fork before fire to avoid RF stall on commits
       val forked = Reg(Bool) setWhen(port.cmd.fire) clearWhen(!arbitration.isStuck) init(False)
 
-      val i2fReady = Reg(Bool()) setWhen(!arbitration.isStuckByOthers) clearWhen(!arbitration.isStuck)
-      val hazard = input(FPU_OPCODE) === FpuOpcode.I2F && !i2fReady || csr.pendings.msb || csr.csrActive
+      val intRfReady = Reg(Bool()) setWhen(!arbitration.isStuckByOthers) clearWhen(!arbitration.isStuck)
+      val hazard = (input(RS1_USE) && !intRfReady) || csr.pendings.msb || csr.csrActive
 
       arbitration.haltItself setWhen(arbitration.isValid && input(FPU_ENABLE) && hazard)
       arbitration.haltItself setWhen(port.cmd.isStall)
@@ -101,7 +173,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       port.cmd.valid    := arbitration.isValid && input(FPU_ENABLE) && !forked && !hazard
       port.cmd.opcode   := input(FPU_OPCODE)
       port.cmd.value    := RegNext(output(RS1))
-      port.cmd.function := 0
+      port.cmd.arg      := input(FPU_ARG)
       port.cmd.rs1      := input(INSTRUCTION)(rs1Range).asUInt
       port.cmd.rs2      := input(INSTRUCTION)(rs2Range).asUInt
       port.cmd.rs3      := input(INSTRUCTION)(rs3Range).asUInt

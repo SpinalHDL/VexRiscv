@@ -185,7 +185,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       is(p.Opcode.CMP)     { useRs1 := True; useRs2 := True }
       is(p.Opcode.SGNJ)    { useRd  := True; useRs1 := True; useRs2 := True }
       is(p.Opcode.FMV_X_W) { useRs1 := True }
-      is(p.Opcode.FMV_W_X) { useRd  := True}
+      is(p.Opcode.FMV_W_X) { useRd  := True }
+      is(p.Opcode.FCLASS ) { useRs1  := True }
     }
 
     val hits = List((useRs1, s0.rs1), (useRs2, s0.rs2), (useRs3, s0.rs3), (useRd, s0.rd)).map{case (use, reg) => use && rf.lock.map(l => l.valid && l.source === s0.source && l.address === reg).orR}
@@ -230,7 +231,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     input.ready setWhen(loadHit && load.ready)
     load.payload.assignSomeByName(read.output.payload)
 
-    val shortPipHit = List(FpuOpcode.STORE, FpuOpcode.F2I, FpuOpcode.CMP, FpuOpcode.I2F, FpuOpcode.MIN_MAX, FpuOpcode.SGNJ, FpuOpcode.FMV_X_W, FpuOpcode.FMV_W_X).map(input.opcode === _).orR
+    val shortPipHit = List(FpuOpcode.STORE, FpuOpcode.F2I, FpuOpcode.CMP, FpuOpcode.I2F, FpuOpcode.MIN_MAX, FpuOpcode.SGNJ, FpuOpcode.FMV_X_W, FpuOpcode.FMV_W_X, FpuOpcode.FCLASS).map(input.opcode === _).orR
     val shortPip = Stream(ShortPipInput())
     input.ready setWhen(shortPipHit && shortPip.ready)
     shortPip.valid := input.valid && shortPipHit
@@ -317,12 +318,14 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
     val minMaxResult = rs1Smaller ? input.rs1 | input.rs2
     val cmpResult = B(rs1Smaller)
+    val fclassResult = B(0) //TODO
 
     switch(input.opcode){
       is(FpuOpcode.STORE)   { result := storeResult }
       is(FpuOpcode.F2I)     { result := f2iResult }
       is(FpuOpcode.CMP)     { result := cmpResult.resized } //TODO
       is(FpuOpcode.FMV_X_W) { result := input.rs1.asBits } //TODO
+      is(FpuOpcode.FCLASS)  { result := fclassResult.resized }
     }
 
     val toFpuRf = List(FpuOpcode.MIN_MAX, FpuOpcode.I2F, FpuOpcode.SGNJ, FpuOpcode.FMV_W_X).map(input.opcode === _).orR

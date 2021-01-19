@@ -31,7 +31,7 @@ case class FpuFloat(exponentSize: Int,
 }
 
 object FpuOpcode extends SpinalEnum{
-  val LOAD, STORE, MUL, ADD, FMA, I2F, F2I, CMP, DIV, SQRT, MIN_MAX, SGNJ, FMV_X_W, FMV_W_X = newElement()
+  val LOAD, STORE, MUL, ADD, FMA, I2F, F2I, CMP, DIV, SQRT, MIN_MAX, SGNJ, FMV_X_W, FMV_W_X, FCLASS = newElement()
 }
 
 object FpuFormat extends SpinalEnum{
@@ -64,7 +64,7 @@ case class FpuCompletion() extends Bundle{
 case class FpuCmd(p : FpuParameter) extends Bundle{
   val opcode = p.Opcode()
   val value = Bits(32 bits) // Int to float
-  val function = Bits(3 bits) // Int to float
+  val arg = Bits(2 bits) 
   val rs1, rs2, rs3 = p.rfAddress()
   val rd = p.rfAddress()
   val format = p.Format()
