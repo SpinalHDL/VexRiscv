@@ -221,12 +221,14 @@ object Riscv{
     val SIP         = 0x144
     val SATP        = 0x180
 
-
-
     def UCYCLE   = 0xC00 // UR Machine ucycle counter.
     def UCYCLEH  = 0xC80
     def UTIME    = 0xC01 // rdtime
     def UTIMEH   = 0xC81
+
+    val FFLAGS = 0x1
+    val FRM = 0x2
+    val FCSR = 0x3
 
   }
 }

@@ -53,7 +53,7 @@ case class FpuParameter( internalMantissaSize : Int,
 }
 
 case class FpuFlags() extends Bundle{
-  val NV,  DZ,  OF,  UF,  NX = Bool()
+  val NX,  UF,  OF,  DZ,  NV = Bool()
 }
 
 case class FpuCompletion() extends Bundle{

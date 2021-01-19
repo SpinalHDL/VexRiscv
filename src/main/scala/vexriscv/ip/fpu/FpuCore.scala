@@ -629,6 +629,10 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val isCommited = rf.lock.map(_.commited).read(arbitrated.lockId)
     val commited = arbitrated.haltWhen(!isCommited).toFlow
 
+    for(i <- 0 until portCount){
+      completion(i).increments += (RegNext(commited.fire && commited.source === i) init(False))
+    }
+
     when(commited.valid){
       for(i <- 0 until rfLockCount) when(commited.lockId === i){
         rf.lock(i).valid := False
@@ -639,10 +643,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     port.valid := commited.valid && rf.lock.map(_.write).read(commited.lockId)
     port.address := commited.source @@ commited.rd
     port.data := commited.value
-
-    for(i <- 0 until portCount){
-      completion(i).increments += (RegNext(port.fire && commited.source === i) init(False))
-    }
   }
 }
 
