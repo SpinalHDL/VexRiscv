@@ -207,6 +207,64 @@ class FpuTest extends FunSuite{
             cmd.load #= false
           }
         }
+
+        def fmv_x_w(rs1 : Int)(body : FpuRsp => Unit): Unit ={
+          cmdQueue += {cmd =>
+            cmd.opcode #= cmd.opcode.spinalEnum.FMV_X_W
+            cmd.value.randomize()
+            cmd.rs1 #= rs1
+            cmd.rs2.randomize()
+            cmd.rs3.randomize()
+            cmd.rd.randomize()
+          }
+          rspQueue += body
+        }
+
+        def fmv_w_x(rd : Int, value : Int): Unit ={
+          cmdQueue += {cmd =>
+            cmd.opcode #= cmd.opcode.spinalEnum.FMV_W_X
+            cmd.value #= value.toLong & 0xFFFFFFFFl
+            cmd.rs1.randomize()
+            cmd.rs2.randomize()
+            cmd.rs3.randomize()
+            cmd.rd #= rd
+          }
+          commitQueue += {cmd =>
+            cmd.write #= true
+            cmd.load #= false
+          }
+        }
+
+        def min(rd : Int, rs1 : Int, rs2 : Int): Unit ={
+          cmdQueue += {cmd =>
+            cmd.opcode #= cmd.opcode.spinalEnum.MIN_MAX
+            cmd.value.randomize()
+            cmd.rs1 #= rs1
+            cmd.rs2 #= rs2
+            cmd.rs3.randomize()
+            cmd.rd #= rd
+          }
+          commitQueue += {cmd =>
+            cmd.write #= true
+            cmd.load #= false
+          }
+        }
+
+
+        def sgnj(rd : Int, rs1 : Int, rs2 : Int): Unit ={
+          cmdQueue += {cmd =>
+            cmd.opcode #= cmd.opcode.spinalEnum.SGNJ
+            cmd.value.randomize()
+            cmd.rs1 #= rs1
+            cmd.rs2 #= rs2
+            cmd.rs3.randomize()
+            cmd.rd #= rd
+          }
+          commitQueue += {cmd =>
+            cmd.write #= true
+            cmd.load #= false
+          }
+        }
       }
 
 
@@ -358,7 +416,88 @@ class FpuTest extends FunSuite{
           }
         }
 
+        def testFmv_x_w(a : Float): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+          fmv_x_w(rs1){rsp =>
+            val ref = lang.Float.floatToIntBits(a).toLong & 0xFFFFFFFFl
+            val v = rsp.value.toBigInt
+            println(f"fmv_x_w $a = $v, $ref")
+            assert(v === ref)
+          }
+        }
+
+        def testFmv_w_x(a : Int): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          fmv_w_x(rd, a)
+          storeFloat(rd){v =>
+            val ref = lang.Float.intBitsToFloat(a)
+            println(f"fmv_w_x $a = $v, $ref")
+            assert(v === ref)
+          }
+        }
+
+
+
+        def testMin(a : Float, b : Float): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+          load(rs2, b)
+
+          min(rd,rs1,rs2)
+          storeFloat(rd){v =>
+            val ref = a min b
+            println(f"min $a $b = $v, $ref")
+            assert(ref ==  v)
+          }
+        }
+
+        def testSgnj(a : Float, b : Float): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+          load(rs2, b)
+
+          sgnj(rd,rs1,rs2)
+          storeFloat(rd){v =>
+            val ref = a * a.signum * b.signum
+            println(f"sgnf $a $b = $v, $ref")
+            assert(ref ==  v)
+          }
+        }
+
+
         val b2f = lang.Float.intBitsToFloat(_)
+
+
+        testFmv_x_w(1.246f)
+        testFmv_w_x(lang.Float.floatToIntBits(7.234f))
+
+        testMin(1.0f, 2.0f)
+        testMin(1.5f, 2.0f)
+        testMin(1.5f, 3.5f)
+        testMin(1.5f, 1.5f)
+        testMin(1.5f, -1.5f)
+        testMin(-1.5f, 1.5f)
+        testMin(-1.5f, -1.5f)
+        testMin(1.5f, -3.5f)
+
+        testSgnj(1.0f, 2.0f)
+        testSgnj(1.5f, 2.0f)
+        testSgnj(1.5f, 3.5f)
+        testSgnj(1.5f, 1.5f)
+        testSgnj(1.5f, -1.5f)
+        testSgnj(-1.5f, 1.5f)
+        testSgnj(-1.5f, -1.5f)
+        testSgnj(1.5f, -3.5f)
+
 
 
         //TODO Test corner cases
@@ -442,6 +581,12 @@ class FpuTest extends FunSuite{
           tests += (() =>{testDiv(randomFloat(), randomFloat())})
           tests += (() =>{testSqrt(randomFloat().abs)})
           tests += (() =>{testCmp(randomFloat(), randomFloat())})
+          tests += (() =>{testFmv_x_w(randomFloat())})
+          tests += (() =>{testFmv_w_x(lang.Float.floatToIntBits(randomFloat()))})
+          tests += (() =>{testMin(randomFloat(), randomFloat())})
+          tests += (() =>{testSgnj(randomFloat(), randomFloat())})
+
+
           tests.randomPick().apply()
         }
         waitUntil(cpu.rspQueue.isEmpty)

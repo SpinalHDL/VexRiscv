@@ -56,6 +56,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val source = Source()
     val opcode = p.Opcode()
     val rs1, rs2 = p.internalFloating()
+    val lockId = lockIdType()
+    val rd = p.rfAddress()
+    val value = Bits(32 bits)
   }
 
   case class MulInput() extends Bundle{
@@ -76,13 +79,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val rd = p.rfAddress()
     val lockId = lockIdType()
     val div = Bool()
-  }
-
-  case class I2fInput() extends Bundle{
-    val source = Source()
-    val rd = p.rfAddress()
-    val lockId = lockIdType()
-    val value = Bits(32 bits)
   }
 
 
@@ -203,9 +199,25 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       is(p.Opcode.F2I){
         useRs1 := True
       }
+      is(p.Opcode.MIN_MAX){
+        useRd  := True
+        useRs1 := True
+        useRs2 := True
+      }
       is(p.Opcode.CMP){
         useRs1 := True
         useRs2 := True
+      }
+      is(p.Opcode.SGNJ){
+        useRd  := True
+        useRs1 := True
+        useRs2 := True
+      }
+      is(p.Opcode.FMV_X_W){
+        useRs1 := True
+      }
+      is(p.Opcode.FMV_W_X){
+        useRd  := True
       }
     }
 
@@ -254,7 +266,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     load.rs1    := read.output.rs1
     load.lockId := read.output.lockId
 
-    val coreRspHit = List(FpuOpcode.STORE, FpuOpcode.F2I, FpuOpcode.CMP).map(input.opcode === _).orR
+    val coreRspHit = List(FpuOpcode.STORE, FpuOpcode.F2I, FpuOpcode.CMP, FpuOpcode.I2F, FpuOpcode.MIN_MAX, FpuOpcode.SGNJ, FpuOpcode.FMV_X_W, FpuOpcode.FMV_W_X).map(input.opcode === _).orR
     val coreRsp = Stream(StoreInput())
     input.ready setWhen(coreRspHit && coreRsp.ready)
     coreRsp.valid := input.valid && coreRspHit
@@ -262,17 +274,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     coreRsp.opcode := read.output.opcode
     coreRsp.rs1    := read.output.rs1
     coreRsp.rs2    := read.output.rs2
-
-
-    val i2fHit = input.opcode === p.Opcode.I2F
-    val i2f = Stream(I2fInput())
-    i2f.valid := input.valid && i2fHit
-    input.ready setWhen(i2fHit && i2f.ready)
-    i2f.source := read.output.source
-    i2f.rd     := read.output.rd
-    i2f.value  := read.output.value
-    i2f.lockId := read.output.lockId
-
+    coreRsp.lockId := read.output.lockId
+    coreRsp.rd := read.output.rd
+    coreRsp.value  := read.output.value
 
     val divSqrtHit = input.opcode === p.Opcode.DIV ||  input.opcode === p.Opcode.SQRT
     val divSqrt = Stream(DivSqrtInput())
@@ -319,21 +323,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
   }
 
-  val i2f = new Area{
-    val input = decode.i2f.stage()
-    val output = input.swapPayload(WriteInput())
-
-    val iLog2 = OHToUInt(OHMasking.last(input.value))
-    val shifted = (input.value << p.internalMantissaSize) >> iLog2
-
-    output.source := input.source
-    output.lockId := input.lockId
-    output.rd := input.rd
-    output.value.sign := False
-    output.value.exponent := iLog2 +^ exponentOne
-    output.value.mantissa := U(shifted).resized
-  }
-
 
 
   val load = new Area{
@@ -351,8 +340,12 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   }
 
 
-  val coreRsp = new Area{
+
+
+  val shortPip = new Area{
     val input = decode.coreRsp.stage()
+
+    val rfOutput = Stream(WriteInput())
 
     val result = p.storeLoadType().assignDontCare()
     val storeResult = input.rs2.asBits
@@ -360,6 +353,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val f2iShift = input.rs1.exponent - U(exponentOne)
     val f2iShifted = (U"1" @@ input.rs1.mantissa) << (f2iShift.resize(5 bits))
     val f2iResult = f2iShifted.asBits >> p.internalMantissaSize
+
+    val i2fLog2 = OHToUInt(OHMasking.last(input.value))
+    val i2fShifted = (input.value << p.internalMantissaSize) >> i2fLog2
 
     val rs1Equal = input.rs1 === input.rs2
     val rs1AbsSmaller = (input.rs1.exponent @@ input.rs1.mantissa) < (input.rs2.exponent @@ input.rs2.mantissa)
@@ -369,18 +365,47 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       2 -> True,
       3 -> (!rs1AbsSmaller && !rs1Equal)
     )
+
+    val minMaxResult = rs1Smaller ? input.rs1 | input.rs2
     val cmpResult = B(rs1Smaller)
 
     switch(input.opcode){
-      is(FpuOpcode.STORE){ result := storeResult }
-      is(FpuOpcode.F2I)  { result := f2iResult }
-      is(FpuOpcode.CMP)  { result := cmpResult.resized }
+      is(FpuOpcode.STORE)   { result := storeResult }
+      is(FpuOpcode.F2I)     { result := f2iResult }
+      is(FpuOpcode.CMP)     { result := cmpResult.resized } //TODO
+      is(FpuOpcode.FMV_X_W) { result := input.rs1.asBits } //TODO
     }
 
-    input.ready := io.port.map(_.rsp.ready).read(input.source)
+    val toFpuRf = List(FpuOpcode.MIN_MAX, FpuOpcode.I2F, FpuOpcode.SGNJ, FpuOpcode.FMV_W_X).map(input.opcode === _).orR
+
+    rfOutput.valid := input.valid && toFpuRf
+    rfOutput.source := input.source
+    rfOutput.lockId := input.lockId
+    rfOutput.rd := input.rd
+    rfOutput.value.assignDontCare()
+    switch(input.opcode){
+      is(FpuOpcode.I2F){
+        rfOutput.value.sign := False
+        rfOutput.value.exponent := i2fLog2 +^ exponentOne
+        rfOutput.value.mantissa := U(i2fShifted).resized
+      }
+      is(FpuOpcode.MIN_MAX){
+        rfOutput.value := minMaxResult
+      }
+      is(FpuOpcode.SGNJ){
+        rfOutput.value.sign     := input.rs2.sign
+        rfOutput.value.exponent := input.rs1.exponent
+        rfOutput.value.mantissa := input.rs1.mantissa
+      }
+      is(FpuOpcode.FMV_W_X){
+        rfOutput.value.assignFromBits(input.value) //TODO
+      }
+    }
+
+    input.ready := (toFpuRf ? rfOutput.ready | io.port.map(_.rsp.ready).read(input.source))
     for(i <- 0 until portCount){
       def rsp = io.port(i).rsp
-      rsp.valid := input.valid && input.source === i
+      rsp.valid := input.valid && input.source === i && !toFpuRf
       rsp.value := result
     }
   }
@@ -650,7 +675,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
 
   val write = new Area{
-    val arbitrated = StreamArbiterFactory.lowerFirst.noLock.on(List(load.output, add.output, mul.output, i2f.output))
+    val arbitrated = StreamArbiterFactory.lowerFirst.noLock.on(List(load.output, add.output, mul.output, shortPip.rfOutput))
     val isCommited = rf.lock.map(_.commited).read(arbitrated.lockId)
     val commited = arbitrated.haltWhen(!isCommited).toFlow
 
@@ -692,14 +717,14 @@ object FpuSynthesisBench extends App{
       withDouble = false
     )
   )
-  rtls += new Fpu(
-    "64",
-    portCount = 1,
-    FpuParameter(
-      internalMantissaSize = 52,
-      withDouble = true
-    )
-  )
+//  rtls += new Fpu(
+//    "64",
+//    portCount = 1,
+//    FpuParameter(
+//      internalMantissaSize = 52,
+//      withDouble = true
+//    )
+//  )
 
   val targets = XilinxStdTargets()// ++ AlteraStdTargets()
 
