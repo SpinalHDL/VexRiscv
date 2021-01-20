@@ -14,7 +14,14 @@ object Fpu{
 }
 
 
-
+case class FpuFloatDecoded() extends Bundle{
+  val isNan = Bool()
+  val isNormal = Bool()
+  val isSubnormal = Bool()
+  val isZero = Bool()
+  val isInfinity = Bool()
+  val isQuiet = Bool()
+}
 case class FpuFloat(exponentSize: Int,
                     mantissaSize: Int) extends Bundle {
   val mantissa = UInt(mantissaSize bits)
@@ -26,6 +33,21 @@ case class FpuFloat(exponentSize: Int,
     ret.sign := !sign
     ret.exponent := exponent
     ret.mantissa := mantissa
+    ret
+  }
+
+
+  def decode() = {
+    val ret = FpuFloatDecoded()
+    val expZero = exponent === 0
+    val expOne = exponent === exponent.maxValue
+    val manZero = mantissa === 0
+    ret.isZero := expZero && manZero
+    ret.isSubnormal := expZero && !manZero
+    ret.isNormal := !expOne && !expZero
+    ret.isInfinity := expOne && manZero
+    ret.isNan := expOne && !manZero// && !sign
+    ret.isQuiet := mantissa.msb
     ret
   }
 }
@@ -50,6 +72,8 @@ case class FpuParameter( internalMantissaSize : Int,
 
   val Opcode = FpuOpcode
   val Format = FpuFormat
+  val argWidth = 2
+  val Arg = HardType(Bits(2 bits))
 }
 
 case class FpuFlags() extends Bundle{

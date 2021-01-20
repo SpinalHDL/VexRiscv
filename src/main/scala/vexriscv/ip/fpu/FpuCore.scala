@@ -28,6 +28,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val rs1, rs2, rs3 = p.rfAddress()
     val rd = p.rfAddress()
     val value = Bits(32 bits)
+    val arg = p.Arg()
   }
 
   case class RfReadOutput() extends Bundle{
@@ -37,6 +38,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val rs1, rs2, rs3 = p.internalFloating()
     val rd = p.rfAddress()
     val value = Bits(32 bits)
+    val arg = p.Arg()
   }
 
 
@@ -54,6 +56,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val lockId = lockIdType()
     val rd = p.rfAddress()
     val value = Bits(32 bits)
+    val arg = Bits(2 bits)
   }
 
   case class MulInput() extends Bundle{
@@ -64,7 +67,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val add = Bool()
     val divSqrt = Bool()
     val msb1, msb2 = Bool() //allow usage of msb bits of mul
-    val minus = Bool()
   }
 
 
@@ -215,6 +217,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.opcode := s1.opcode
     output.lockId := s1LockId
     output.value := s1.value
+    output.arg := s1.arg
     output.rd := s1.rd
     output.rs1 := rf.ram.readSync(s0.source @@ s0.rs1,enable = !output.isStall)
     output.rs2 := rf.ram.readSync(s0.source @@ s0.rs2,enable = !output.isStall)
@@ -260,7 +263,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       mul.divSqrt := False
       mul.msb1 := True
       mul.msb2 := True
-      mul.minus := False //TODO
+      mul.rs2.sign.allowOverride(); mul.rs2.sign := read.output.rs2.sign ^ input.arg(0)
+      mul.rs3.sign.allowOverride(); mul.rs3.sign := read.output.rs3.sign ^ input.arg(1)
     }
 
     val addHit = input.opcode === p.Opcode.ADD
@@ -275,6 +279,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     add.payload := mulToAdd.payload
     when(!mulToAdd.valid) {
       add.payload.assignSomeByName(read.output.payload)
+      add.rs2.sign.allowOverride; add.rs2.sign := read.output.rs2.sign ^ input.arg(0)
     }
   }
 
@@ -316,9 +321,22 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       3 -> (!rs1AbsSmaller && !rs1Equal)
     )
 
-    val minMaxResult = rs1Smaller ? input.rs1 | input.rs2
-    val cmpResult = B(rs1Smaller)
-    val fclassResult = B(0) //TODO
+    val minMaxResult = (rs1Smaller ^ input.arg(0)) ? input.rs1 | input.rs2
+    val cmpResult = B(rs1Smaller && !input.arg(1) || rs1Equal && !input.arg(0))
+    val sgnjResult = (input.rs1.sign && input.arg(1)) ^ input.rs2.sign ^ input.arg(0)
+    val fclassResult = B(0, 32 bits)
+    val decoded = input.rs1.decode()
+    fclassResult(0) :=  input.rs1.sign &&  decoded.isInfinity
+    fclassResult(1) :=  input.rs1.sign &&  decoded.isNormal
+    fclassResult(2) :=  input.rs1.sign &&  decoded.isSubnormal
+    fclassResult(3) :=  input.rs1.sign &&  decoded.isZero
+    fclassResult(4) := !input.rs1.sign &&  decoded.isZero
+    fclassResult(5) := !input.rs1.sign &&  decoded.isSubnormal
+    fclassResult(6) := !input.rs1.sign &&  decoded.isNormal
+    fclassResult(7) := !input.rs1.sign &&  decoded.isInfinity
+    fclassResult(8) :=   decoded.isNan && !decoded.isQuiet
+    fclassResult(9) :=   decoded.isNan &&  decoded.isQuiet
+
 
     switch(input.opcode){
       is(FpuOpcode.STORE)   { result := storeResult }
@@ -345,7 +363,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         rfOutput.value := minMaxResult
       }
       is(FpuOpcode.SGNJ){
-        rfOutput.value.sign     := input.rs2.sign
+        rfOutput.value.sign     := sgnjResult
         rfOutput.value.exponent := input.rs1.exponent
         rfOutput.value.mantissa := input.rs1.mantissa
       }
@@ -401,7 +419,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     decode.mulToAdd.source := input.source
     decode.mulToAdd.rs1.mantissa := norm.output.mantissa
     decode.mulToAdd.rs1.exponent := norm.output.exponent
-    decode.mulToAdd.rs1.sign := norm.output.sign ^ input.minus
+    decode.mulToAdd.rs1.sign := norm.output.sign
     decode.mulToAdd.rs2 := input.rs3
     decode.mulToAdd.rd := input.rd
     decode.mulToAdd.lockId := input.lockId
@@ -434,7 +452,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     decode.divSqrtToMul.divSqrt := True
     decode.divSqrtToMul.msb1 := True
     decode.divSqrtToMul.msb2 := True
-    decode.divSqrtToMul.minus := False
 
 
     val aprox = new Area {

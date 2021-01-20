@@ -64,6 +64,7 @@ class FpuTest extends FunSuite{
             cmd.rs2.randomize()
             cmd.rs3.randomize()
             cmd.rd #= rd
+            cmd.arg.randomize()
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -84,6 +85,7 @@ class FpuTest extends FunSuite{
             cmd.rs2 #= rs
             cmd.rs3.randomize()
             cmd.rd.randomize()
+            cmd.arg.randomize()
           }
 
           rspQueue += body
@@ -101,6 +103,7 @@ class FpuTest extends FunSuite{
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
             cmd.rd #= rd
+            cmd.arg #= 0
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -116,6 +119,7 @@ class FpuTest extends FunSuite{
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
             cmd.rd #= rd
+            cmd.arg #= 0
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -131,6 +135,7 @@ class FpuTest extends FunSuite{
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
             cmd.rd #= rd
+            cmd.arg.randomize()
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -146,6 +151,7 @@ class FpuTest extends FunSuite{
             cmd.rs2.randomize()
             cmd.rs3.randomize()
             cmd.rd #= rd
+            cmd.arg.randomize()
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -161,6 +167,7 @@ class FpuTest extends FunSuite{
             cmd.rs2 #= rs2
             cmd.rs3 #= rs3
             cmd.rd #= rd
+            cmd.arg #= 0
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -177,6 +184,7 @@ class FpuTest extends FunSuite{
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
             cmd.rd.randomize()
+            cmd.arg #= 1
           }
           rspQueue += body
         }
@@ -189,6 +197,7 @@ class FpuTest extends FunSuite{
             cmd.rs2.randomize()
             cmd.rs3.randomize()
             cmd.rd.randomize()
+            cmd.arg.randomize()
           }
           rspQueue += body
         }
@@ -201,6 +210,7 @@ class FpuTest extends FunSuite{
             cmd.rs2.randomize()
             cmd.rs3.randomize()
             cmd.rd #= rd
+            cmd.arg.randomize()
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -216,6 +226,7 @@ class FpuTest extends FunSuite{
             cmd.rs2.randomize()
             cmd.rs3.randomize()
             cmd.rd.randomize()
+            cmd.arg #= 0
           }
           rspQueue += body
         }
@@ -228,6 +239,7 @@ class FpuTest extends FunSuite{
             cmd.rs2.randomize()
             cmd.rs3.randomize()
             cmd.rd #= rd
+            cmd.arg #= 0
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -243,6 +255,7 @@ class FpuTest extends FunSuite{
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
             cmd.rd #= rd
+            cmd.arg #= 0
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -259,6 +272,7 @@ class FpuTest extends FunSuite{
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
             cmd.rd #= rd
+            cmd.arg #= 0
           }
           commitQueue += {cmd =>
             cmd.write #= true
