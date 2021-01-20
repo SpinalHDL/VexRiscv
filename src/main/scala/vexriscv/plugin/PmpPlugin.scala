@@ -70,61 +70,78 @@ case class PmpRegister(previous : PmpRegister) extends Area {
   def NA4 = 2
   def NAPOT = 3
 
-  // Software-accessible CSR interface
-  val csr = new Area {
+  val state = new Area {
     val r, w, x = Reg(Bool)
     val l = RegInit(False)
     val a = Reg(UInt(2 bits)) init(0)
     val addr = Reg(UInt(32 bits))
   }
 
-  // Active region bounds and permissions (internal)
+  // CSR writes connect to these signals rather than the internal state
+  // registers. This makes locking and WARL possible.
+  val csr = new Area {
+    val r, w, x = Bool
+    val l = Bool
+    val a = UInt(2 bits)
+    val addr = UInt(32 bits)
+  }
+
+  // Last assignment wins; nothing happens if a user-initiated write did not
+  // occur on this clock cycle.
+  csr.r    := state.r
+  csr.w    := state.w
+  csr.x    := state.x
+  csr.l    := state.l
+  csr.a    := state.a
+  csr.addr := state.addr
+
+  // Computed PMP region bounds
   val region = new Area {
-    val r, w, x = Reg(Bool)
-    val l, valid = RegInit(False)
+    val valid = Bool
     val start, end = Reg(UInt(32 bits))
   }
-  
-  when(~region.l) {
-    region.r := csr.r
-    region.w := csr.w
-    region.x := csr.x
-    region.l := csr.l
 
-    val shifted = csr.addr |<< 2
-    region.valid := True
+  when(~state.l) {
+    state.r    := csr.r
+    state.w    := csr.w
+    state.x    := csr.x
+    state.l    := csr.l
+    state.a    := csr.a
+    state.addr := csr.addr
 
-    switch(csr.a) {
+    if (csr.l == True & csr.a == TOR) {
+      previous.state.l := True
+    }
+  }
 
-      is(TOR) {
-        if (previous == null) {
-          region.start := 0
-        } else {
-          region.start := previous.region.end
-        }
-        if (csr.l == True) {
-          previous.region.l := True
-        }
-        region.end := shifted
+  val shifted = csr.addr |<< 2
+  region.valid := True
+
+  switch(state.a) {
+    is(TOR) {
+      if (previous == null) {
+        region.start := 0
+      } else {
+        region.start := previous.region.end
       }
+      region.end := shifted
+    }
 
-      is(NA4) {
-        region.start := shifted
-        region.end := shifted + 4
-      }
+    is(NA4) {
+      region.start := shifted
+      region.end := shifted + 4
+    }
 
-      is(NAPOT) {
-        val mask = csr.addr & ~(csr.addr + 1)
-        val masked = (csr.addr & ~mask) |<< 2
-        region.start := masked
-        region.end := masked + ((mask + 1) |<< 3)
-      }
+    is(NAPOT) {
+      val mask = state.addr & ~(state.addr + 1)
+      val masked = (state.addr & ~mask) |<< 2
+      region.start := masked
+      region.end := masked + ((mask + 1) |<< 3)
+    }
 
-      default {
-        region.end := shifted
-        region.valid := False
-      }
-
+    default {
+      region.end := shifted
+      region.valid := False
     }
   }
 }
@@ -162,12 +179,25 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
         } else {
           pmps += PmpRegister(pmps.last)
         }
-        csrService.rw(0x3b0 + i, pmps(i).csr.addr)
+        csrService.r(0x3b0 + i, pmps(i).state.addr)
+        csrService.w(0x3b0 + i, pmps(i).csr.addr)
       }
 
       // Instantiate pmpcfg0 ... pmpcfg# CSRs.
       for (i <- 0 until (regions / 4)) {
-        csrService.rw(0x3a0 + i,
+        csrService.r(0x3a0 + i,
+          31 -> pmps((i * 4) + 3).state.l, 23 -> pmps((i * 4) + 2).state.l,
+          15 -> pmps((i * 4) + 1).state.l,  7 -> pmps((i * 4)    ).state.l,
+          27 -> pmps((i * 4) + 3).state.a, 26 -> pmps((i * 4) + 3).state.x,
+          25 -> pmps((i * 4) + 3).state.w, 24 -> pmps((i * 4) + 3).state.r,
+          19 -> pmps((i * 4) + 2).state.a, 18 -> pmps((i * 4) + 2).state.x,
+          17 -> pmps((i * 4) + 2).state.w, 16 -> pmps((i * 4) + 2).state.r,
+          11 -> pmps((i * 4) + 1).state.a, 10 -> pmps((i * 4) + 1).state.x,
+           9 -> pmps((i * 4) + 1).state.w,  8 -> pmps((i * 4) + 1).state.r,
+           3 -> pmps((i * 4)    ).state.a,  2 -> pmps((i * 4)    ).state.x,
+           1 -> pmps((i * 4)    ).state.w,  0 -> pmps((i * 4)    ).state.r
+        )
+        csrService.w(0x3a0 + i,
           31 -> pmps((i * 4) + 3).csr.l, 23 -> pmps((i * 4) + 2).csr.l,
           15 -> pmps((i * 4) + 1).csr.l,  7 -> pmps((i * 4)    ).csr.l,
           27 -> pmps((i * 4) + 3).csr.a, 26 -> pmps((i * 4) + 3).csr.x,
@@ -188,10 +218,10 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
         port.bus.rsp.physicalAddress := address
 
         // Only the first matching PMP region applies.
-        val hits = pmps.map(pmp => pmp.region.valid && 
-                                   pmp.region.start <= address && 
-                                   pmp.region.end > address &&
-                                  (pmp.region.l || ~privilegeService.isMachine()))
+        val hits = pmps.map(pmp => pmp.region.valid &
+                                   pmp.region.start <= address &
+                                   pmp.region.end > address &
+                                  (pmp.state.l | ~privilegeService.isMachine()))
 
         // M-mode has full access by default, others have none.
         when(CountOne(hits) === 0) {
@@ -199,9 +229,9 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
           port.bus.rsp.allowWrite := privilegeService.isMachine()
           port.bus.rsp.allowExecute := privilegeService.isMachine()
         } otherwise {
-          port.bus.rsp.allowRead := MuxOH(OHMasking.first(hits), pmps.map(_.region.r))
-          port.bus.rsp.allowWrite := MuxOH(OHMasking.first(hits), pmps.map(_.region.w))
-          port.bus.rsp.allowExecute := MuxOH(OHMasking.first(hits), pmps.map(_.region.x))
+          port.bus.rsp.allowRead := MuxOH(OHMasking.first(hits), pmps.map(_.state.r))
+          port.bus.rsp.allowWrite := MuxOH(OHMasking.first(hits), pmps.map(_.state.w))
+          port.bus.rsp.allowExecute := MuxOH(OHMasking.first(hits), pmps.map(_.state.x))
         }
 
         port.bus.rsp.isIoAccess := ioRange(port.bus.rsp.physicalAddress)
