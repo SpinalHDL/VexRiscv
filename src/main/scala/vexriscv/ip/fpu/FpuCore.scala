@@ -307,10 +307,13 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
     val f2iShift = input.rs1.exponent - U(exponentOne)
     val f2iShifted = (U"1" @@ input.rs1.mantissa) << (f2iShift.resize(5 bits))
-    val f2iResult = f2iShifted.asBits >> p.internalMantissaSize
+    val f2iUnsigned = f2iShifted >> p.internalMantissaSize
+    val f2iResult = (f2iUnsigned.twoComplement(input.arg(0) && input.rs1.sign)).asBits.resize(32 bits)
 
-    val i2fLog2 = OHToUInt(OHMasking.last(input.value))
-    val i2fShifted = (input.value << p.internalMantissaSize) >> i2fLog2
+    val i2fSign = input.arg(0) && input.value.msb
+    val i2fUnsigned = input.value.asUInt.twoComplement(i2fSign).resize(32 bits)
+    val i2fLog2 = OHToUInt(OHMasking.last(i2fUnsigned))
+    val i2fShifted = (i2fUnsigned << p.internalMantissaSize) >> i2fLog2
 
     val rs1Equal = input.rs1 === input.rs2
     val rs1AbsSmaller = (input.rs1.exponent @@ input.rs1.mantissa) < (input.rs2.exponent @@ input.rs2.mantissa)
@@ -355,7 +358,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     rfOutput.value.assignDontCare()
     switch(input.opcode){
       is(FpuOpcode.I2F){
-        rfOutput.value.sign := False
+        rfOutput.value.sign := i2fSign
         rfOutput.value.exponent := i2fLog2 +^ exponentOne
         rfOutput.value.mantissa := U(i2fShifted).resized
       }

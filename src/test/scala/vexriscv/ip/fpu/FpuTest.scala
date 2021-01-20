@@ -16,7 +16,7 @@ class FpuTest extends FunSuite{
 
 
   test("directed"){
-    val portCount = 4
+    val portCount = 1
     val p = FpuParameter(
       internalMantissaSize = 23,
       withDouble = false
@@ -189,7 +189,7 @@ class FpuTest extends FunSuite{
           rspQueue += body
         }
 
-        def f2i(rs1 : Int)(body : FpuRsp => Unit): Unit ={
+        def f2i(rs1 : Int, signed : Boolean)(body : FpuRsp => Unit): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.F2I
             cmd.value.randomize()
@@ -197,20 +197,20 @@ class FpuTest extends FunSuite{
             cmd.rs2.randomize()
             cmd.rs3.randomize()
             cmd.rd.randomize()
-            cmd.arg.randomize()
+            cmd.arg #= (if(signed) 1 else 0)
           }
           rspQueue += body
         }
 
-        def i2f(rd : Int, value : Int): Unit ={
+        def i2f(rd : Int, value : Int, signed : Boolean): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.I2F
-            cmd.value #= value
+            cmd.value #= value.toLong & 0xFFFFFFFFl
             cmd.rs1.randomize()
             cmd.rs2.randomize()
             cmd.rs3.randomize()
             cmd.rd #= rd
-            cmd.arg.randomize()
+            cmd.arg #= (if(signed) 1 else 0)
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -392,23 +392,23 @@ class FpuTest extends FunSuite{
           }
         }
 
-        def testF2i(a : Float): Unit ={
+        def testF2i(a : Float, signed : Boolean): Unit ={
           val rs = new RegAllocator()
           val rs1, rs2, rs3 = rs.allocate()
           val rd = Random.nextInt(32)
           load(rs1, a)
-          f2i(rs1){rsp =>
+          f2i(rs1, signed){rsp =>
             val ref = a.toInt
-            val v = rsp.value.toBigInt
+            val v = (rsp.value.toBigInt & 0xFFFFFFFF).toInt
             println(f"f2i($a) = $v, $ref")
             assert(v === ref)
           }
         }
 
-        def testI2f(a : Int): Unit ={
+        def testI2f(a : Int, signed : Boolean): Unit ={
           val rs = new RegAllocator()
           val rd = Random.nextInt(32)
-          i2f(rd, a)
+          i2f(rd, a, signed)
           storeFloat(rd){v =>
             val ref = a.toInt
             println(f"i2f($a) = $v, $ref")
@@ -515,10 +515,17 @@ class FpuTest extends FunSuite{
 
 
         //TODO Test corner cases
-        testI2f(17)
-        testI2f(12)
-        testI2f(512)
-        testI2f(1)
+        for(signed <- List(false, true)) {
+          testI2f(17, signed)
+          testI2f(12, signed)
+          testI2f(512, signed)
+          testI2f(1, signed)
+        }
+
+        testI2f(-17, true)
+        testI2f(-12, true)
+        testI2f(-512, true)
+        testI2f(-1, true)
 //        dut.clockDomain.waitSampling(1000)
 //        simFailure()
 
@@ -533,11 +540,17 @@ class FpuTest extends FunSuite{
         testCmp(1.5f, -3.5f)
 
         //TODO Test corner cases
-        testF2i(16.0f)
-        testF2i(18.0f)
-        testF2i(1200.0f)
-        testF2i(1.0f)
+        for(signed <- List(false, true)) {
+          testF2i(16.0f, signed)
+          testF2i(18.0f, signed)
+          testF2i(1200.0f, signed)
+          testF2i(1.0f, signed)
+        }
 
+        testF2i(-16.0f, true)
+        testF2i(-18.0f, true)
+        testF2i(-1200.0f, true)
+        testF2i(-1.0f, true)
 
 
         testAdd(0.1f, 1.6f)
