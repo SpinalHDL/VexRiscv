@@ -132,6 +132,9 @@ test2:
     li x5, PMPCFG0
     csrw pmpcfg0, x5            // "unlock" region 2
     csrr x6, pmpcfg0
+    csrwi pmpaddr2, 0x0
+    csrr x6, pmpaddr2
+    beqz x6, fail
     beq x5, x6, fail
     li x1, 0x80008000
     li x2, 0xdeadbeef

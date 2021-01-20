@@ -86,8 +86,8 @@ case class PmpRegister(previous : PmpRegister) extends Area {
     val addr = UInt(32 bits)
   }
 
-  // Last assignment wins; nothing happens if a user-initiated write did not
-  // occur on this clock cycle.
+  // Last valid assignment wins; nothing happens if a user-initiated write did 
+  // not occur on this clock cycle.
   csr.r    := state.r
   csr.w    := state.w
   csr.x    := state.x
@@ -97,8 +97,8 @@ case class PmpRegister(previous : PmpRegister) extends Area {
 
   // Computed PMP region bounds
   val region = new Area {
-    val valid = Bool
-    val start, end = Reg(UInt(32 bits))
+    val valid, locked = Bool
+    val start, end = UInt(32 bits)
   }
 
   when(~state.l) {
@@ -114,32 +114,31 @@ case class PmpRegister(previous : PmpRegister) extends Area {
     }
   }
 
-  val shifted = csr.addr |<< 2
+  val shifted = state.addr |<< 2
+  val mask = state.addr & ~(state.addr + 1)
+  val masked = (state.addr & ~mask) |<< 2
+
+  // PMP changes take effect two clock cycles after the initial CSR write (i.e.,
+  // settings propagate from csr -> state -> region).
+  region.locked := state.l
   region.valid := True
 
-  switch(state.a) {
+  switch(csr.a) {
     is(TOR) {
-      if (previous == null) {
-        region.start := 0
-      } else {
-        region.start := previous.region.end
-      }
+      if (previous == null) region.start := 0
+      else region.start := previous.region.end
       region.end := shifted
     }
-
     is(NA4) {
       region.start := shifted
       region.end := shifted + 4
     }
-
     is(NAPOT) {
-      val mask = state.addr & ~(state.addr + 1)
-      val masked = (state.addr & ~mask) |<< 2
       region.start := masked
       region.end := masked + ((mask + 1) |<< 3)
     }
-
     default {
+      region.start := 0
       region.end := shifted
       region.valid := False
     }
@@ -221,7 +220,7 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
         val hits = pmps.map(pmp => pmp.region.valid &
                                    pmp.region.start <= address &
                                    pmp.region.end > address &
-                                  (pmp.state.l | ~privilegeService.isMachine()))
+                                  (pmp.region.locked | ~privilegeService.isMachine()))
 
         // M-mode has full access by default, others have none.
         when(CountOne(hits) === 0) {
