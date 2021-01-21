@@ -58,6 +58,8 @@ test0:
 
     li x5, PMPCFG0
     csrw pmpcfg0, x5
+    csrr x6, pmpcfg0
+    bne x5, x6, fail
     li x5, PMPCFG1
     csrw pmpcfg1, x5
     li x5, PMPCFG2
@@ -66,6 +68,8 @@ test0:
     csrw pmpcfg3, x5
     li x5, PMPADDR0
     csrw pmpaddr0, x5
+    csrr x6, pmpaddr0
+    bne x5, x6, fail
     li x5, PMPADDR1
     csrw pmpaddr1, x5
     li x5, PMPADDR2
@@ -112,6 +116,8 @@ test1:
     la TRAP_RA, fail 
     li x5, PMPCFG0_
     csrw pmpcfg0, x5            // lock region 2
+    csrr x6, pmpcfg0
+    bne x5, x6, fail
     li x1, 0x80008000
     li x2, 0xdeadbeef
     sw x2, 0x0(x1)              // should be OK (write 0x80008000)
@@ -125,6 +131,11 @@ test2:
     la TRAP_RA, fail 
     li x5, PMPCFG0
     csrw pmpcfg0, x5            // "unlock" region 2
+    csrr x6, pmpcfg0
+    csrwi pmpaddr2, 0x0
+    csrr x6, pmpaddr2
+    beqz x6, fail
+    beq x5, x6, fail
     li x1, 0x80008000
     li x2, 0xdeadbeef
     sw x2, 0x0(x1)              // should still be OK (write 0x80008000)
