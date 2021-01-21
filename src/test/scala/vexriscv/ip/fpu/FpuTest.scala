@@ -304,6 +304,7 @@ class FpuTest extends FunSuite{
           }
         }
         def checkFloat(ref : Float, dut : Float): Boolean ={
+          if(ref === dut) return  true
           ref.abs * 1.0001 > dut.abs && ref.abs * 0.9999 < dut.abs && ref.signum == dut.signum
         }
 
@@ -490,6 +491,13 @@ class FpuTest extends FunSuite{
 
         val b2f = lang.Float.intBitsToFloat(_)
 
+
+        testAdd(1.2f, -1.2f)
+        testAdd(-1.2f, 1.2f)
+        testAdd(0.0f, -1.2f)
+        testAdd(-0.0f, -1.2f)
+        testAdd(1.2f, -0f)
+        testAdd(1.2f, 0f)
 
         testFmv_x_w(1.246f)
         testFmv_w_x(lang.Float.floatToIntBits(7.234f))

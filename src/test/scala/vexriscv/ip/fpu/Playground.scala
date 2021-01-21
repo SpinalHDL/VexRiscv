@@ -35,3 +35,11 @@ object MiaouSqrt extends App{
   println(output)
   println(s"ref ${Math.sqrt(input)}")
 }
+
+
+object MiaouNan extends App{
+  println(Float.NaN + 3.0f)
+  println(3.0f + Float.NaN )
+  println(0.0f*Float.PositiveInfinity )
+  println(1.0f/0.0f )
+}

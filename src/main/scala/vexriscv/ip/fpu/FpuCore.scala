@@ -628,12 +628,20 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val norm = new Area{
       def xyExponent = math.xyExponent
       def xyMantissa = math.xyMantissa
-      def xySign = math.xySign
+      val xySign = CombInit(math.xySign)
 
       val shiftOh = OHMasking.first(xyMantissa.asBools.reverse)
       val shift = OHToUInt(shiftOh)
       val mantissa = (xyMantissa |<< shift) >> 1
       val exponent = xyExponent - shift + 1
+      val forceZero = xyMantissa === 0
+      val forceOverflow = exponent === exponent.maxValue
+      val forceNan =
+//      val
+      when(forceZero){ //TODO
+        exponent := 0
+        xySign := False
+      }
     }
 
 
