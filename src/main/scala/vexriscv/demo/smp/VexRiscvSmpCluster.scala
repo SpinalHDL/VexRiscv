@@ -15,7 +15,7 @@ import spinal.lib.generator.Handle
 import spinal.lib.misc.plic.PlicMapping
 import spinal.lib.system.debugger.SystemDebuggerConfig
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
-import vexriscv.plugin.{BranchPlugin, CsrAccess, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
+import vexriscv.plugin.{BranchPlugin, CsrAccess, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, StaticMemoryTranslatorPlugin, YamlPlugin}
 import vexriscv.{Riscv, VexRiscv, VexRiscvBmbGenerator, VexRiscvConfig, plugin}
 
 import scala.collection.mutable
@@ -160,12 +160,17 @@ object VexRiscvSmpClusterGen {
                      dCacheWays : Int = 2,
                      iBusRelax : Boolean = false,
                      earlyBranch : Boolean = false,
-                     dBusCmdMasterPipe : Boolean = false) = {
+                     dBusCmdMasterPipe : Boolean = false,
+                     withMmu : Boolean = true,
+                     withSupervisor : Boolean = true
+                    ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
     val config = VexRiscvConfig(
       plugins = List(
-        new MmuPlugin(
+        if(withMmu)new MmuPlugin(
+          ioRange = ioRange
+        )else new StaticMemoryTranslatorPlugin(
           ioRange = ioRange
         ),
         //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
