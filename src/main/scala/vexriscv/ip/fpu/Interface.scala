@@ -22,11 +22,20 @@ case class FpuFloatDecoded() extends Bundle{
   val isInfinity = Bool()
   val isQuiet = Bool()
 }
+
+object FpuFloat{
+  val ZERO = 0
+  val SUBNORMAL = 1
+  val INFINITY = 2
+  val NAN = 3
+}
+
 case class FpuFloat(exponentSize: Int,
                     mantissaSize: Int) extends Bundle {
   val mantissa = UInt(mantissaSize bits)
   val exponent = UInt(exponentSize bits)
   val sign = Bool()
+  val special = Bool()
 
   def withInvertSign : FpuFloat ={
     val ret = FpuFloat(exponentSize,mantissaSize)
@@ -37,7 +46,34 @@ case class FpuFloat(exponentSize: Int,
   }
 
 
+  def isZeroOrSubnormal =  special && exponent(1) === False
+
+  def isNormal    = !special
+  def isZero      =  special && exponent(1 downto 0) === 0
+  def isSubnormal =  special && exponent(1 downto 0) === 1
+  def isInfinity  =  special && exponent(1 downto 0) === 2
+  def isNan       =  special && exponent(1 downto 0) === 3
+  def isQuiet     =  mantissa.msb
+
+  def setNormal    =  { special := False }
+  def setZero      =  { special := True; exponent(1 downto 0) := 0 }
+  def setSubnormal =  { special := True; exponent(1 downto 0) := 1 }
+  def setInfinity  =  { special := True; exponent(1 downto 0) := 2 }
+  def setNan       =  { special := True; exponent(1 downto 0) := 3 }
+  def setNanQuiet  =  { special := True; exponent(1 downto 0) := 3; mantissa.msb := True }
+
   def decode() = {
+    val ret = FpuFloatDecoded()
+    ret.isZero      := isZero
+    ret.isSubnormal := isSubnormal
+    ret.isNormal    := isNormal
+    ret.isInfinity  := isInfinity
+    ret.isNan       := isNan
+    ret.isQuiet     := mantissa.msb
+    ret
+  }
+
+  def decodeIeee754() = {
     val ret = FpuFloatDecoded()
     val expZero = exponent === 0
     val expOne = exponent === exponent.maxValue
@@ -46,7 +82,7 @@ case class FpuFloat(exponentSize: Int,
     ret.isSubnormal := expZero && !manZero
     ret.isNormal := !expOne && !expZero
     ret.isInfinity := expOne && manZero
-    ret.isNan := expOne && !manZero// && !sign
+    ret.isNan := expOne && !manZero
     ret.isQuiet := mantissa.msb
     ret
   }

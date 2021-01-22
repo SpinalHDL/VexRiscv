@@ -42,4 +42,6 @@ object MiaouNan extends App{
   println(3.0f + Float.NaN )
   println(0.0f*Float.PositiveInfinity )
   println(1.0f/0.0f )
+  println(Float.MaxValue -1 )
+  println(Float.PositiveInfinity - Float.PositiveInfinity)
 }

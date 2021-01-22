@@ -174,7 +174,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       port.cmd.opcode   := input(FPU_OPCODE)
       port.cmd.value    := RegNext(output(RS1))
       port.cmd.arg      := input(FPU_ARG)
-      port.cmd.rs1      := input(INSTRUCTION)(rs1Range).asUInt
+      port.cmd.rs1      := ((input(FPU_OPCODE) === FpuOpcode.STORE) ? input(INSTRUCTION)(rs2Range).asUInt | input(INSTRUCTION)(rs1Range).asUInt)
       port.cmd.rs2      := input(INSTRUCTION)(rs2Range).asUInt
       port.cmd.rs3      := input(INSTRUCTION)(rs3Range).asUInt
       port.cmd.rd       := input(INSTRUCTION)(rdRange).asUInt
