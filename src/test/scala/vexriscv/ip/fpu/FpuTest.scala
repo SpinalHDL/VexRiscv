@@ -15,8 +15,9 @@ import scala.util.Random
 class FpuTest extends FunSuite{
 
   val b2f = lang.Float.intBitsToFloat(_)
+  val f2b = lang.Float.floatToIntBits(_)
   def clamp(f : Float) = {
-    if(f.abs < b2f(0x00800000)) 0.0f*f.signum else f
+    if(f.abs < b2f(0x00800000)) b2f(f2b(f) & 0x80000000) else f
   }
 
   test("directed"){
@@ -308,7 +309,8 @@ class FpuTest extends FunSuite{
           }
         }
         def checkFloat(ref : Float, dut : Float): Boolean ={
-          if(ref.signum != dut.signum === dut) return  false
+          if(ref.signum != dut.signum) return  false
+          if(ref == 0.0 && dut == 0.0 && f2b(ref) != f2b(dut)) return false
           if(ref.isNaN && dut.isNaN) return true
           if(ref == dut) return true
           if(ref.abs * 1.0001 > dut.abs && ref.abs * 0.9999 < dut.abs && ref.signum == dut.signum) return true
@@ -353,9 +355,13 @@ class FpuTest extends FunSuite{
 
           mul(rd,rs1,rs2)
           storeFloat(rd){v =>
-            val ref = a*b
+            val refUnclamped = a*b
+            val refClamped = clamp(clamp(a)*clamp(b))
+            val ref = if(refClamped.isNaN) refUnclamped else refClamped
             println(f"$a * $b = $v, $ref")
-            assert(checkFloat(ref, v))
+            var checkIt = true
+            if(v == 0.0f && ref.abs == b2f(0x00800000)) checkIt = false //Rounding
+            if(checkIt) assert(checkFloat(ref, v))
           }
         }
 
@@ -504,7 +510,7 @@ class FpuTest extends FunSuite{
           }
         }
 
-        //Todo negative
+
         def withMinus(that : Seq[Float]) = that.flatMap(f => List(f, -f))
         val fZeros = withMinus(List(0.0f))
         val fSubnormals = withMinus(List(b2f(0x00000000+1), b2f(0x00000000+2), b2f(0x00800000-2), b2f(0x00800000-1)))
@@ -514,6 +520,14 @@ class FpuTest extends FunSuite{
         val fInfinity = withMinus(List(Float.PositiveInfinity))
         val fNan = List(Float.NaN, b2f(0x7f820000), b2f(0x7fc00000))
         val fAll = fZeros ++ fSubnormals ++ fExpSmall ++ fExpNormal ++ fExpBig ++ fInfinity ++ fNan
+
+
+
+        testMul(1.2f, 0f)
+        for(a <- fAll; _ <- 0 until 50) testMul(a, randomFloat())
+        for(b <- fAll; _ <- 0 until 50) testMul(randomFloat(), b)
+        for(a <- fAll; b <- fAll) testMul(a, b)
+        for(_ <- 0 until 1000) testMul(randomFloat(), randomFloat())
 
 
         testAdd(b2f(0x3f800000), b2f(0x3f800000-1))
@@ -531,7 +545,11 @@ class FpuTest extends FunSuite{
         for(a <- fAll; b <- fAll) testAdd(a, b)
         for(_ <- 0 until 1000) testAdd(randomFloat(), randomFloat())
 
-//        dut.clockDomain.waitSampling(10000000)
+
+
+
+
+        //        dut.clockDomain.waitSampling(10000000)
 
 
         testFmv_x_w(1.246f)

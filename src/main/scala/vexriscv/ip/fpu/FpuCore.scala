@@ -463,19 +463,41 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val mulA = U(input.msb1) @@ input.rs1.mantissa
       val mulB = U(input.msb2) @@ input.rs2.mantissa
       val mulC = mulA * mulB
-      val exp = input.rs1.exponent +^ input.rs2.exponent - ((1 << p.internalExponentSize - 1) - 1)
+      val expOffset = ((1 << p.internalExponentSize - 1) - 1)
+      val exp = input.rs1.exponent +^ input.rs2.exponent
     }
 
     val norm = new Area{
-      val needShift = math.mulC.msb
+//      val needShift = math.mulC.msb
+//      val exp = math.exp + U(needShift)
+//      val man = needShift ? math.mulC(p.internalMantissaSize + 1, p.internalMantissaSize bits) | math.mulC(p.internalMantissaSize, p.internalMantissaSize bits)
+
+      val mulRounded = (math.mulC >> p.internalMantissaSize)  + math.mulC(p.internalMantissaSize-1).asUInt
+      val needShift = mulRounded.msb
       val exp = math.exp + U(needShift)
-      val man = needShift ? math.mulC(p.internalMantissaSize + 1, p.internalMantissaSize bits) | math.mulC(p.internalMantissaSize, p.internalMantissaSize bits)
+      val man = needShift ? mulRounded(1, p.internalMantissaSize bits) | mulRounded(0, p.internalMantissaSize bits)
+
+      val forceZero = input.rs1.isZeroOrSubnormal || input.rs2.isZeroOrSubnormal
+      val forceUnderflow = exp <= math.expOffset
+      val forceOverflow = exp > math.expOffset+254 || input.rs1.isInfinity || input.rs2.isInfinity
+      val forceNan = input.rs1.isNan || input.rs2.isNan || ((input.rs1.isInfinity || input.rs2.isInfinity) && (input.rs1.isZero || input.rs2.isZero))
 
       val output = FpuFloat(p.internalExponentSize, p.internalMantissaSize)
       output.sign := input.rs1.sign ^ input.rs2.sign
-      output.exponent := exp.resized
+      output.exponent := (exp - math.expOffset).resized
       output.mantissa := man
-      output.special := False //TODO
+      output.setNormal
+
+      when(forceNan) {
+        output.setNanQuiet
+      } elsewhen(forceOverflow) {
+        output.setInfinity
+      } elsewhen(forceZero) {
+        output.setZero
+      } elsewhen(forceUnderflow) {
+        output.setZero
+      }
+
     }
 
     val notMul = new Area{
@@ -529,6 +551,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     decode.divSqrtToMul.divSqrt := True
     decode.divSqrtToMul.msb1 := True
     decode.divSqrtToMul.msb2 := True
+    decode.divSqrtToMul.rs1.special := False //TODO
+    decode.divSqrtToMul.rs2.special := False
 
 
     val aprox = new Area {
@@ -712,6 +736,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 //      val mantissaShifted = (xyMantissa |<< shift)
 //      val mantissa = ((xyMantissa ) >> 2) + U(xyMantissa(1))
       val exponent = xyExponent -^ shift + 1
+      xySign clearWhen(input.rs1.isZeroOrSubnormal && input.rs2.isZeroOrSubnormal)
       val forceZero = xyMantissa === 0 || exponent.msb || (input.rs1.isZeroOrSubnormal && input.rs2.isZeroOrSubnormal)
       val forceOverflow = exponent(7 downto 0) === 255 ||  (input.rs1.isInfinity || input.rs2.isInfinity)
       val forceNan = input.rs1.isNan || input.rs2.isNan || (input.rs1.isInfinity && input.rs2.isInfinity && (input.rs1.sign ^ input.rs2.sign))
@@ -730,8 +755,10 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     when(norm.forceNan) {
       output.value.setNanQuiet
     } elsewhen(norm.forceZero) {
-      output.value.setZero;
-      output.value.sign := False
+      output.value.setZero
+      when(norm.xyMantissa === 0 || input.rs1.isZeroOrSubnormal && input.rs2.isZeroOrSubnormal){
+        output.value.sign := input.rs1.sign && input.rs2.sign
+      }
     } elsewhen(norm.forceOverflow) {
       output.value.setInfinity
     }
@@ -757,6 +784,11 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     port.valid := commited.valid && rf.lock.map(_.write).read(commited.lockId)
     port.address := commited.source @@ commited.rd
     port.data := commited.value
+
+    when(port.valid){
+      assert(!(port.data.exponent === 0 && !port.data.special))
+      assert(!(port.data.exponent === port.data.exponent.maxValue && !port.data.special))
+    }
   }
 }
 
