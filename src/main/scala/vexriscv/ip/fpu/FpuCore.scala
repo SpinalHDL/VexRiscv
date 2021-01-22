@@ -643,6 +643,14 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         decode.divSqrtToMul.rs2.sign := input.rs2.sign
         decode.divSqrtToMul.rs2.exponent := divExp.value + iterationValue.msb.asUInt
         decode.divSqrtToMul.rs2.mantissa := (iterationValue << 1).resized
+        val overflow = input.rs2.isZeroOrSubnormal
+        val nan = input.rs2.isNan || (input.rs1.isZeroOrSubnormal && input.rs2.isZeroOrSubnormal)
+
+        when(nan){
+          decode.divSqrtToMul.rs2.setNanQuiet
+        } elsewhen(overflow) {
+          decode.divSqrtToMul.rs2.setInfinity
+        }
         when(decode.divSqrtToMul.ready) {
           state := IDLE
           input.ready := True
@@ -806,17 +814,37 @@ object FpuSynthesisBench extends App{
     })
   }
 
+  class Shifter(width : Int) extends Rtl{
+    override def getName(): String = "shifter_" + width
+    override def getRtlPath(): String = getName() + ".v"
+    SpinalVerilog(new Component{
+      val a = in UInt(width bits)
+      val sel = in UInt(log2Up(width) bits)
+      val result = out(a >> sel)
+      setDefinitionName(Shifter.this.getName())
+    })
+  }
 
+  class Rotate(width : Int) extends Rtl{
+    override def getName(): String = "rotate_" + width
+    override def getRtlPath(): String = getName() + ".v"
+    SpinalVerilog(new Component{
+      val a = in UInt(width bits)
+      val sel = in UInt(log2Up(width) bits)
+      val result = out(a.rotateLeft(sel))
+      setDefinitionName(Rotate.this.getName())
+    })
+  }
 
-  val rtls = ArrayBuffer[Fpu]()
-  rtls += new Fpu(
-    "32",
-    portCount = 1,
-    FpuParameter(
-      internalMantissaSize = 23,
-      withDouble = false
-    )
-  )
+  val rtls = ArrayBuffer[Rtl]()
+//  rtls += new Fpu(
+//    "32",
+//    portCount = 1,
+//    FpuParameter(
+//      internalMantissaSize = 23,
+//      withDouble = false
+//    )
+//  )
 //  rtls += new Fpu(
 //    "64",
 //    portCount = 1,
@@ -825,6 +853,15 @@ object FpuSynthesisBench extends App{
 //      withDouble = true
 //    )
 //  )
+
+//  rtls += new Shifter(24)
+//  rtls += new Shifter(32)
+//  rtls += new Shifter(52)
+//  rtls += new Shifter(64)
+  rtls += new Rotate(24)
+  rtls += new Rotate(32)
+  rtls += new Rotate(52)
+  rtls += new Rotate(64)
 
   val targets = XilinxStdTargets()// ++ AlteraStdTargets()
 

@@ -393,7 +393,9 @@ class FpuTest extends FunSuite{
 
           div(rd,rs1,rs2)
           storeFloat(rd){v =>
-            val ref = a/b
+            val refUnclamped = a/b
+            val refClamped = clamp(clamp(a)/clamp(b))
+            val ref = refClamped
             val error = Math.abs(ref-v)/ref
             println(f"$a / $b = $v, $ref $error")
             assert(checkFloat(ref, v))
@@ -520,6 +522,14 @@ class FpuTest extends FunSuite{
         val fInfinity = withMinus(List(Float.PositiveInfinity))
         val fNan = List(Float.NaN, b2f(0x7f820000), b2f(0x7fc00000))
         val fAll = fZeros ++ fSubnormals ++ fExpSmall ++ fExpNormal ++ fExpBig ++ fInfinity ++ fNan
+
+
+//        testDiv(0.0f, 1.2f )
+//        testDiv(1.2f, 0.0f )
+//        testDiv(0.0f, 0.0f )
+//        for(a <- fAll; _ <- 0 until 50) testDiv(a, randomFloat())
+//        for(a <- fAll; b <- fAll) testDiv(a, b)
+//        for(_ <- 0 until 1000) testDiv(randomFloat(), randomFloat())
 
 
 
