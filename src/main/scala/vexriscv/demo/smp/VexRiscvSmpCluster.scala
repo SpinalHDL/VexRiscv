@@ -22,7 +22,7 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import spinal.lib.generator._
 
-case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig], withExclusiveAndInvalidation : Boolean)
+case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig], withExclusiveAndInvalidation : Boolean, forcePeripheralWidth : Boolean = true, outOfOrderDecoder : Boolean = true)
 
 class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator{
   val cpuCount = p.cpuConfigs.size
@@ -54,7 +54,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator{
     val invalidationMonitor = BmbInvalidateMonitorGenerator()
     interconnect.addConnection(exclusiveMonitor.output, invalidationMonitor.input)
     interconnect.addConnection(invalidationMonitor.output, dBusNonCoherent.bmb)
-    interconnect.masters(invalidationMonitor.output).withOutOfOrderDecoder()
+    if(p.outOfOrderDecoder) interconnect.masters(invalidationMonitor.output).withOutOfOrderDecoder()
   }
 
   val noSmp = !p.withExclusiveAndInvalidation generate new Area{
@@ -80,7 +80,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator{
 class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends VexRiscvSmpClusterBase(p) {
   val peripheralBridge = BmbToWishboneGenerator(DefaultMapping)
   val peripheral = peripheralBridge.produceIo(peripheralBridge.logic.io.output)
-  interconnect.slaves(peripheralBridge.bmb).forceAccessSourceDataWidth(32)
+  if(p.forcePeripheralWidth) interconnect.slaves(peripheralBridge.bmb).forceAccessSourceDataWidth(32)
 
   val plic = BmbPlicGenerator()(interconnect = null)
   plic.priorityWidth.load(2)

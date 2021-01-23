@@ -12,24 +12,31 @@ import vexriscv.plugin.{AesPlugin, DBusCachedPlugin}
 case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParameter,
                                              liteDram : LiteDramNativeParameter,
                                              liteDramMapping : AddressMapping,
-                                             coherentDma : Boolean)
+                                             coherentDma : Boolean,
+                                             wishboneMemory : Boolean)
 
 
 class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexRiscvSmpClusterWithPeripherals(p.cluster) {
   val iArbiter = BmbBridgeGenerator()
-  val iBridge = BmbToLiteDramGenerator(p.liteDramMapping)
-  val dBridge = BmbToLiteDramGenerator(p.liteDramMapping)
+  val iBridge = !p.wishboneMemory generate BmbToLiteDramGenerator(p.liteDramMapping)
+  val dBridge = !p.wishboneMemory generate BmbToLiteDramGenerator(p.liteDramMapping)
 
   for(core <- cores) interconnect.addConnection(core.cpu.iBus -> List(iArbiter.bmb))
+  !p.wishboneMemory generate interconnect.addConnection(
+    iArbiter.bmb        -> List(iBridge.bmb),
+    dBusNonCoherent.bmb -> List(dBridge.bmb)
+  )
   interconnect.addConnection(
-    iArbiter.bmb        -> List(iBridge.bmb, peripheralBridge.bmb),
-    dBusNonCoherent.bmb -> List(dBridge.bmb, peripheralBridge.bmb)
+    iArbiter.bmb        -> List(peripheralBridge.bmb),
+    dBusNonCoherent.bmb -> List(peripheralBridge.bmb)
   )
 
   if(p.cluster.withExclusiveAndInvalidation) interconnect.masters(dBusNonCoherent.bmb).withOutOfOrderDecoder()
 
-  dBridge.liteDramParameter.load(p.liteDram)
-  iBridge.liteDramParameter.load(p.liteDram)
+  if(!p.wishboneMemory) {
+    dBridge.liteDramParameter.load(p.liteDram)
+    iBridge.liteDramParameter.load(p.liteDram)
+  }
 
   // Coherent DMA interface
   val dma = p.coherentDma generate new Area {
@@ -52,7 +59,7 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
     interconnect.setPipelining(iArbiter.bmb)(cmdHalfRate = true, rspValid = true)
   }
   interconnect.setPipelining(dBusNonCoherent.bmb)(cmdValid = true, cmdReady = true, rspValid = true)
-  interconnect.setPipelining(peripheralBridge.bmb)(cmdHalfRate = true, rspValid = true)
+  interconnect.setPipelining(peripheralBridge.bmb)(cmdHalfRate = !p.wishboneMemory, cmdValid = p.wishboneMemory, cmdReady = p.wishboneMemory, rspValid = true)
 }
 
 
@@ -66,6 +73,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var dCacheWays = 2
   var liteDramWidth = 128
   var coherentDma = false
+  var wishboneMemory = false
+  var outOfOrderDecoder = true
   var aesInstruction = false
   var netlistDirectory = "."
   var netlistName = "VexRiscvLitexSmpCluster"
@@ -83,6 +92,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("netlist-directory") action { (v, c) => netlistDirectory = v }
     opt[String]("netlist-name") action { (v, c) => netlistName = v }
     opt[String]("aes-instruction") action { (v, c) => aesInstruction = v.toBoolean }
+    opt[Unit]("in-order-decoder") action { (v, c) => outOfOrderDecoder = false }
+    opt[Unit]("wishbone-memory") action { (v, c) => wishboneMemory = true }
   }.parse(args))
 
   val coherency = coherentDma || cpuCount > 1
@@ -104,11 +115,14 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
         if(aesInstruction) c.add(new AesPlugin)
         c
       }},
-      withExclusiveAndInvalidation = coherency
+      withExclusiveAndInvalidation = coherency,
+      forcePeripheralWidth = !wishboneMemory,
+      outOfOrderDecoder = outOfOrderDecoder
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = liteDramWidth),
     liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
-    coherentDma = coherentDma
+    coherentDma = coherentDma,
+    wishboneMemory = wishboneMemory
   )
 
   def dutGen = {
@@ -124,36 +138,36 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
 }
 
 
-object VexRiscvLitexSmpClusterGen extends App {
-  for(cpuCount <- List(1,2,4,8)) {
-    def parameter = VexRiscvLitexSmpClusterParameter(
-      cluster = VexRiscvSmpClusterParameter(
-        cpuConfigs = List.tabulate(cpuCount) { hartId =>
-          vexRiscvConfig(
-            hartId = hartId,
-            ioRange = address => address.msb,
-            resetVector = 0
-          )
-        },
-        withExclusiveAndInvalidation = true
-      ),
-      liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
-      liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
-      coherentDma = false
-    )
-
-    def dutGen = {
-      val toplevel = new VexRiscvLitexSmpCluster(
-        p = parameter
-      ).toComponent()
-      toplevel
-    }
-
-    val genConfig = SpinalConfig().addStandardMemBlackboxing(blackboxByteEnables)
-    //  genConfig.generateVerilog(Bench.compressIo(dutGen))
-    genConfig.generateVerilog(dutGen.setDefinitionName(s"VexRiscvLitexSmpCluster_${cpuCount}c"))
-  }
-}
+//object VexRiscvLitexSmpClusterGen extends App {
+//  for(cpuCount <- List(1,2,4,8)) {
+//    def parameter = VexRiscvLitexSmpClusterParameter(
+//      cluster = VexRiscvSmpClusterParameter(
+//        cpuConfigs = List.tabulate(cpuCount) { hartId =>
+//          vexRiscvConfig(
+//            hartId = hartId,
+//            ioRange = address => address.msb,
+//            resetVector = 0
+//          )
+//        },
+//        withExclusiveAndInvalidation = true
+//      ),
+//      liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
+//      liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
+//      coherentDma = false
+//    )
+//
+//    def dutGen = {
+//      val toplevel = new VexRiscvLitexSmpCluster(
+//        p = parameter
+//      ).toComponent()
+//      toplevel
+//    }
+//
+//    val genConfig = SpinalConfig().addStandardMemBlackboxing(blackboxByteEnables)
+//    //  genConfig.generateVerilog(Bench.compressIo(dutGen))
+//    genConfig.generateVerilog(dutGen.setDefinitionName(s"VexRiscvLitexSmpCluster_${cpuCount}c"))
+//  }
+//}
 
 ////addAttribute("""mark_debug = "true"""")
 object VexRiscvLitexSmpClusterOpenSbi extends App{
@@ -178,7 +192,8 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
     liteDramMapping = SizeMapping(0x80000000l, 0x70000000l),
-    coherentDma = false
+    coherentDma = false,
+    wishboneMemory = false
   )
 
   def dutGen = {
