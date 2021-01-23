@@ -92,8 +92,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("netlist-directory") action { (v, c) => netlistDirectory = v }
     opt[String]("netlist-name") action { (v, c) => netlistName = v }
     opt[String]("aes-instruction") action { (v, c) => aesInstruction = v.toBoolean }
-    opt[Unit]("in-order-decoder") action { (v, c) => outOfOrderDecoder = false }
-    opt[Unit]("wishbone-memory") action { (v, c) => wishboneMemory = true }
+    opt[String]("out-of-order-decoder") action { (v, c) => outOfOrderDecoder = v.toBoolean  }
+    opt[String]("wishbone-memory" ) action { (v, c) => wishboneMemory = v.toBoolean  }
   }.parse(args))
 
   val coherency = coherentDma || cpuCount > 1
