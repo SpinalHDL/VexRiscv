@@ -64,7 +64,6 @@ class FpuTest extends FunSuite{
         def loadRaw(rd : Int, value : BigInt): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.LOAD
-            cmd.value.randomize()
             cmd.rs1.randomize()
             cmd.rs2.randomize()
             cmd.rs3.randomize()
@@ -85,7 +84,6 @@ class FpuTest extends FunSuite{
         def storeRaw(rs : Int)(body : FpuRsp => Unit): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.STORE
-            cmd.value.randomize()
             cmd.rs1 #= rs
             cmd.rs2.randomize()
             cmd.rs3.randomize()
@@ -103,7 +101,6 @@ class FpuTest extends FunSuite{
         def mul(rd : Int, rs1 : Int, rs2 : Int): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.MUL
-            cmd.value.randomize()
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
@@ -119,7 +116,6 @@ class FpuTest extends FunSuite{
         def add(rd : Int, rs1 : Int, rs2 : Int): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.ADD
-            cmd.value.randomize()
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
@@ -135,7 +131,6 @@ class FpuTest extends FunSuite{
         def div(rd : Int, rs1 : Int, rs2 : Int): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.DIV
-            cmd.value.randomize()
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
@@ -151,7 +146,6 @@ class FpuTest extends FunSuite{
         def sqrt(rd : Int, rs1 : Int): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.SQRT
-            cmd.value.randomize()
             cmd.rs1 #= rs1
             cmd.rs2.randomize()
             cmd.rs3.randomize()
@@ -167,7 +161,6 @@ class FpuTest extends FunSuite{
         def fma(rd : Int, rs1 : Int, rs2 : Int, rs3 : Int): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.FMA
-            cmd.value.randomize()
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
             cmd.rs3 #= rs3
@@ -184,7 +177,6 @@ class FpuTest extends FunSuite{
         def cmp(rs1 : Int, rs2 : Int)(body : FpuRsp => Unit): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.CMP
-            cmd.value.randomize()
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
@@ -197,7 +189,6 @@ class FpuTest extends FunSuite{
         def f2i(rs1 : Int, signed : Boolean)(body : FpuRsp => Unit): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.F2I
-            cmd.value.randomize()
             cmd.rs1 #= rs1
             cmd.rs2.randomize()
             cmd.rs3.randomize()
@@ -210,7 +201,6 @@ class FpuTest extends FunSuite{
         def i2f(rd : Int, value : Int, signed : Boolean): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.I2F
-            cmd.value #= value.toLong & 0xFFFFFFFFl
             cmd.rs1.randomize()
             cmd.rs2.randomize()
             cmd.rs3.randomize()
@@ -219,14 +209,14 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.sync #= false
+            cmd.sync #= true
+            cmd.value #= value.toLong & 0xFFFFFFFFl
           }
         }
 
         def fmv_x_w(rs1 : Int)(body : FpuRsp => Unit): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.FMV_X_W
-            cmd.value.randomize()
             cmd.rs1 #= rs1
             cmd.rs2.randomize()
             cmd.rs3.randomize()
@@ -239,7 +229,6 @@ class FpuTest extends FunSuite{
         def fmv_w_x(rd : Int, value : Int): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.FMV_W_X
-            cmd.value.randomize()
             cmd.rs1.randomize()
             cmd.rs2.randomize()
             cmd.rs3.randomize()
@@ -256,7 +245,6 @@ class FpuTest extends FunSuite{
         def min(rd : Int, rs1 : Int, rs2 : Int): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.MIN_MAX
-            cmd.value.randomize()
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
@@ -273,7 +261,6 @@ class FpuTest extends FunSuite{
         def sgnj(rd : Int, rs1 : Int, rs2 : Int): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.SGNJ
-            cmd.value.randomize()
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
@@ -447,9 +434,11 @@ class FpuTest extends FunSuite{
           val rd = Random.nextInt(32)
           i2f(rd, a, signed)
           storeFloat(rd){v =>
-            val ref = a.toInt
-            println(f"i2f($a) = $v, $ref")
-            assert(v === ref)
+            val aLong = if(signed) a.toLong else a.toLong & 0xFFFFFFFFl
+            val ref = if(signed) a.toFloat else (a.toLong & 0xFFFFFFFFl).toFloat
+            println(f"i2f($aLong) = $v, $ref")
+            if(ref.abs < (1 << 22)) assert(v === ref)
+            assert(checkFloat(v, ref))
           }
         }
 
@@ -542,6 +531,65 @@ class FpuTest extends FunSuite{
         val fNan = List(Float.NaN, b2f(0x7f820000), b2f(0x7fc00000))
         val fAll = fZeros ++ fSubnormals ++ fExpSmall ++ fExpNormal ++ fExpBig ++ fInfinity ++ fNan
 
+        val iSmall = (0 to 20)
+        val iBigUnsigned = (0 to 20).map(e => 0xFFFFFFFF - e)
+        val iBigSigned = (0 to 20).map(e => 0x7FFFFFFF - e) ++ (0 to 20).map(e => 0x80000000 + e)
+        val iUnsigned = iSmall ++ iBigUnsigned
+        val iSigned = iSmall ++ iSmall.map(-_) ++ iBigSigned
+
+
+        testLoadStore(1.17549435082e-38f)
+        testLoadStore(1.4E-45f)
+        testLoadStore(3.44383110592e-41f)
+
+        testAdd(b2f(0x3f800000), b2f(0x3f800000-1))
+        testAdd(1.1f, 2.3f)
+        testAdd(1.2f, -1.2f)
+        testAdd(-1.2f, 1.2f)
+        testAdd(0.0f, -1.2f)
+        testAdd(-0.0f, -1.2f)
+        testAdd(1.2f, -0f)
+        testAdd(1.2f, 0f)
+        testAdd(1.1f, Float.MinPositiveValue)
+
+        for(a <- fAll; _ <- 0 until 50) testAdd(a, randomFloat())
+        for(b <- fAll; _ <- 0 until 50) testAdd(randomFloat(), b)
+        for(a <- fAll; b <- fAll) testAdd(a, b)
+        for(_ <- 0 until 1000) testAdd(randomFloat(), randomFloat())
+
+
+
+        testLoadStore(1.2f)
+        testMul(1.2f, 2.5f)
+        testMul(b2f(0x00400000), 16.0f)
+        testMul(b2f(0x00100000), 16.0f)
+        testMul(b2f(0x00180000), 16.0f)
+        testMul(b2f(0x00000004), 16.0f)
+        testMul(b2f(0x00000040), 16.0f)
+        testMul(b2f(0x00000041), 16.0f)
+        testMul(b2f(0x00000001), b2f(0x00000001))
+        testMul(1.0f, b2f(0x00000001))
+        testMul(0.5f, b2f(0x00000001))
+
+        //        dut.clockDomain.waitSampling(1000)
+        //        simSuccess()
+
+        testMul(1.2f, 0f)
+        for(a <- fAll; _ <- 0 until 50) testMul(a, randomFloat())
+        for(b <- fAll; _ <- 0 until 50) testMul(randomFloat(), b)
+        for(a <- fAll; b <- fAll) testMul(a, b)
+        for(_ <- 0 until 1000) testMul(randomFloat(), randomFloat())
+
+
+
+        testLoadStore(1.765f)
+        testFmv_w_x(lang.Float.floatToIntBits(7.234f))
+        testI2f(64, false)
+        for(i <- iUnsigned) testI2f(i, false)
+        for(i <- iSigned) testI2f(i, true)
+        for(_ <- 0 until 1000) testI2f(Random.nextInt(), Random.nextBoolean())
+
+
         testCmp(0.0f, 1.2f )
         testCmp(1.2f, 0.0f )
         testCmp(0.0f, -0.0f )
@@ -576,41 +624,6 @@ class FpuTest extends FunSuite{
 
 
 
-        testAdd(b2f(0x3f800000), b2f(0x3f800000-1))
-        testAdd(1.1f, 2.3f)
-        testAdd(1.2f, -1.2f)
-        testAdd(-1.2f, 1.2f)
-        testAdd(0.0f, -1.2f)
-        testAdd(-0.0f, -1.2f)
-        testAdd(1.2f, -0f)
-        testAdd(1.2f, 0f)
-        testAdd(1.1f, Float.MinPositiveValue)
-
-        for(a <- fAll; _ <- 0 until 50) testAdd(a, randomFloat())
-        for(b <- fAll; _ <- 0 until 50) testAdd(randomFloat(), b)
-        for(a <- fAll; b <- fAll) testAdd(a, b)
-        for(_ <- 0 until 1000) testAdd(randomFloat(), randomFloat())
-
-        testLoadStore(1.2f)
-        testMul(1.2f, 2.5f)
-        testMul(b2f(0x00400000), 16.0f)
-        testMul(b2f(0x00100000), 16.0f)
-        testMul(b2f(0x00180000), 16.0f)
-        testMul(b2f(0x00000004), 16.0f)
-        testMul(b2f(0x00000040), 16.0f)
-        testMul(b2f(0x00000041), 16.0f)
-        testMul(b2f(0x00000001), b2f(0x00000001))
-        testMul(1.0f, b2f(0x00000001))
-        testMul(0.5f, b2f(0x00000001))
-
-//        dut.clockDomain.waitSampling(1000)
-//        simSuccess()
-
-        testMul(1.2f, 0f)
-        for(a <- fAll; _ <- 0 until 50) testMul(a, randomFloat())
-        for(b <- fAll; _ <- 0 until 50) testMul(randomFloat(), b)
-        for(a <- fAll; b <- fAll) testMul(a, b)
-        for(_ <- 0 until 1000) testMul(randomFloat(), randomFloat())
 
 
 

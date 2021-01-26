@@ -161,15 +161,13 @@ class FpuPlugin(externalFpu : Boolean = false,
       //Maybe it might be better to not fork before fire to avoid RF stall on commits
       val forked = Reg(Bool) setWhen(port.cmd.fire) clearWhen(!arbitration.isStuck) init(False)
 
-      val intRfReady = Reg(Bool()) setWhen(!arbitration.isStuckByOthers) clearWhen(!arbitration.isStuck) //TODO is that still in use ?
-      val hazard = (input(RS1_USE) && !intRfReady) || csr.pendings.msb || csr.csrActive
+      val hazard = csr.pendings.msb || csr.csrActive
 
       arbitration.haltItself setWhen(arbitration.isValid && input(FPU_ENABLE) && hazard)
       arbitration.haltItself setWhen(port.cmd.isStall)
 
       port.cmd.valid    := arbitration.isValid && input(FPU_ENABLE) && !forked && !hazard
       port.cmd.opcode   := input(FPU_OPCODE)
-      port.cmd.value    := RegNext(output(RS1))
       port.cmd.arg      := input(FPU_ARG)
       port.cmd.rs1      := ((input(FPU_OPCODE) === FpuOpcode.STORE) ? input(INSTRUCTION)(rs2Range).asUInt | input(INSTRUCTION)(rs1Range).asUInt)
       port.cmd.rs2      := input(INSTRUCTION)(rs2Range).asUInt
@@ -179,7 +177,7 @@ class FpuPlugin(externalFpu : Boolean = false,
 
       insert(FPU_FORKED) := forked || port.cmd.fire
 
-      insert(FPU_COMMIT_SYNC) := List(FpuOpcode.LOAD, FpuOpcode.FMV_W_X).map(_ === input(FPU_OPCODE)).orR
+      insert(FPU_COMMIT_SYNC) := List(FpuOpcode.LOAD, FpuOpcode.FMV_W_X, FpuOpcode.I2F).map(_ === input(FPU_OPCODE)).orR
       insert(FPU_COMMIT_LOAD) := input(FPU_OPCODE) === FpuOpcode.LOAD
     }
 

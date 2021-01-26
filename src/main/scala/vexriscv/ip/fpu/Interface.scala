@@ -25,9 +25,8 @@ case class FpuFloatDecoded() extends Bundle{
 
 object FpuFloat{
   val ZERO = 0
-  val SUBNORMAL = 1
-  val INFINITY = 2
-  val NAN = 3
+  val INFINITY = 1
+  val NAN = 2
 }
 
 case class FpuFloat(exponentSize: Int,
@@ -45,22 +44,17 @@ case class FpuFloat(exponentSize: Int,
     ret
   }
 
-
-  def isZeroOrSubnormal =  special && exponent(1) === False
-
   def isNormal    = !special
-  def isZero      =  special && exponent(1 downto 0) === 0
-  //def isSubnormal =  special && exponent(1 downto 0) === 1
-  def isInfinity  =  special && exponent(1 downto 0) === 2
-  def isNan       =  special && exponent(1 downto 0) === 3
+  def isZero      =  special && exponent(1 downto 0) === FpuFloat.ZERO
+  def isInfinity  =  special && exponent(1 downto 0) === FpuFloat.INFINITY
+  def isNan       =  special && exponent(1 downto 0) === FpuFloat.NAN
   def isQuiet     =  mantissa.msb
 
   def setNormal    =  { special := False }
-  def setZero      =  { special := True; exponent(1 downto 0) := 0 }
-  //def setSubnormal =  { special := True; exponent(1 downto 0) := 1 }
-  def setInfinity  =  { special := True; exponent(1 downto 0) := 2 }
-  def setNan       =  { special := True; exponent(1 downto 0) := 3 }
-  def setNanQuiet  =  { special := True; exponent(1 downto 0) := 3; mantissa.msb := True }
+  def setZero      =  { special := True; exponent(1 downto 0) := FpuFloat.ZERO }
+  def setInfinity  =  { special := True; exponent(1 downto 0) := FpuFloat.INFINITY }
+  def setNan       =  { special := True; exponent(1 downto 0) := FpuFloat.NAN }
+  def setNanQuiet  =  { special := True; exponent(1 downto 0) := FpuFloat.NAN ; mantissa.msb := True }
 
   def decode() = {
     val ret = FpuFloatDecoded()
@@ -122,7 +116,6 @@ case class FpuCompletion() extends Bundle{
 
 case class FpuCmd(p : FpuParameter) extends Bundle{
   val opcode = p.Opcode()
-  val value = Bits(32 bits) // Int to float
   val arg = Bits(2 bits) 
   val rs1, rs2, rs3 = p.rfAddress()
   val rd = p.rfAddress()
