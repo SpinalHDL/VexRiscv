@@ -10,6 +10,7 @@ object FpuDivSqrtIterationState extends SpinalEnum{
   val IDLE, YY, XYY, Y2_XYY, DIV, _15_XYY2, Y_15_XYY2, Y_15_XYY2_RESULT, SQRT = newElement()
 }
 
+//TODO cleanup rounding
 case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   val io = new Bundle {
     val port = Vec(slave(FpuPort(p)), portCount)
@@ -396,13 +397,14 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
     recodedResult := recoded.sign ## f32.exp ## f32.man
 
+    val isSubnormal = !recoded.special && recoded.exponent <= exponentOne - 127
     val subnormal = new Area{
-      val isSubnormal = !recoded.special && recoded.exponent <= exponentOne - 127
+      val needRecoding = List(FpuOpcode.FMV_X_W, FpuOpcode.STORE).map(_ === input.opcode).orR
       val manTop = Reg(UInt(log2Up(p.internalMantissaSize) bits))
       val shift = isSubnormal ? manTop | U(0)
       val counter = Reg(UInt(log2Up(p.internalMantissaSize+1) bits))
       val done, boot = Reg(Bool())
-      when(isSubnormal && !done){
+      when(needRecoding && isSubnormal && !done){
         halt := True
         when(boot){
           manTop := (U(exponentOne - 127) - recoded.exponent).resized
@@ -453,8 +455,13 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val i2fLog2 = OHToUInt(OHMasking.last(i2fUnsigned))
     val i2fShifted = (i2fUnsigned << p.internalMantissaSize) >> i2fLog2
 
+    val bothZero = input.rs1.isZero && input.rs2.isZero
     val rs1Equal = input.rs1 === input.rs2
     val rs1AbsSmaller = (input.rs1.exponent @@ input.rs1.mantissa) < (input.rs2.exponent @@ input.rs2.mantissa)
+    rs1AbsSmaller.setWhen(input.rs2.isInfinity)
+    rs1AbsSmaller.setWhen(input.rs1.isZero)
+    rs1AbsSmaller.clearWhen(input.rs2.isZero)
+    rs1AbsSmaller.clearWhen(input.rs1.isInfinity)
     val rs1Smaller = (input.rs1.sign ## input.rs2.sign).mux(
       0 -> rs1AbsSmaller,
       1 -> False,
@@ -462,45 +469,19 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       3 -> (!rs1AbsSmaller && !rs1Equal)
     )
 
-    //TODO
-//    val rawToFpu = new Area{
-//      val f32Mantissa = input.value(0, 23 bits).asUInt
-//      val f32Exponent = input.value(23, 8 bits).asUInt
-//      val f32Sign     = input.value(31)
-//
-//      val expZero = f32Exponent === 0
-//      val expOne =  f32Exponent === 255
-//      val manZero = f32Mantissa === 0
-//
-//      val isZero      =  expZero &&  manZero
-//      val isSubnormal =  expZero && !manZero
-//      val isNormal    = !expOne  && !expZero
-//      val isInfinity  =  expOne  &&  manZero
-//      val isNan       =  expOne  && !manZero
-//      val isQuiet     = f32Mantissa.msb
-//
-//      val recoded = p.internalFloating()
-//      recoded.mantissa := f32Mantissa
-//      recoded.exponent := f32Exponent
-//      recoded.sign     := f32Sign
-//      recoded.setNormal
-//      when(isZero){recoded.setZero}
-//      when(isSubnormal){recoded.setSubnormal}
-//      when(isInfinity){recoded.setInfinity}
-//      when(isNan){recoded.setNan}
-//    }
 
-    val minMaxResult = (rs1Smaller ^ input.arg(0)) ? input.rs1 | input.rs2
-    val cmpResult = B(rs1Smaller && !input.arg(1) || rs1Equal && !input.arg(0))
+    val minMaxResult = ((rs1Smaller ^ input.arg(0)) && !input.rs1.isNan || input.rs2.isNan) ? input.rs1 | input.rs2
+    val cmpResult = B(rs1Smaller && !bothZero && !input.arg(1) || (rs1Equal || bothZero) && !input.arg(0))
+    when(input.rs1.isNan || input.rs2.isNan) { cmpResult := 0 }
     val sgnjResult = (input.rs1.sign && input.arg(1)) ^ input.rs2.sign ^ input.arg(0)
     val fclassResult = B(0, 32 bits)
     val decoded = input.rs1.decode()
     fclassResult(0) :=  input.rs1.sign &&  decoded.isInfinity
     fclassResult(1) :=  input.rs1.sign &&  decoded.isNormal
-//    fclassResult(2) :=  input.rs1.sign &&  decoded.isSubnormal //TODO
+    fclassResult(2) :=  input.rs1.sign &&  isSubnormal //TODO
     fclassResult(3) :=  input.rs1.sign &&  decoded.isZero
     fclassResult(4) := !input.rs1.sign &&  decoded.isZero
-//    fclassResult(5) := !input.rs1.sign &&  decoded.isSubnormal //TODO
+    fclassResult(5) := !input.rs1.sign &&  isSubnormal //TODO
     fclassResult(6) := !input.rs1.sign &&  decoded.isNormal
     fclassResult(7) := !input.rs1.sign &&  decoded.isInfinity
     fclassResult(8) :=   decoded.isNan && !decoded.isQuiet
@@ -735,6 +716,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         decode.divSqrtToMul.rs2.sign := input.rs2.sign
         decode.divSqrtToMul.rs2.exponent := divExp.value + iterationValue.msb.asUInt
         decode.divSqrtToMul.rs2.mantissa := (iterationValue << 1).resized
+        val zero = input.rs2.isInfinity
         val overflow = input.rs2.isZeroOrSubnormal
         val nan = input.rs2.isNan || (input.rs1.isZeroOrSubnormal && input.rs2.isZeroOrSubnormal)
 
@@ -742,6 +724,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
           decode.divSqrtToMul.rs2.setNanQuiet
         } elsewhen(overflow) {
           decode.divSqrtToMul.rs2.setInfinity
+        } elsewhen(zero) {
+          decode.divSqrtToMul.rs2.setZero
         }
         when(decode.divSqrtToMul.ready) {
           state := IDLE
@@ -781,6 +765,13 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         decode.divSqrtToMul.rs2.sign := False
         decode.divSqrtToMul.rs2.exponent := sqrtExp.value + iterationValue.msb.asUInt
         decode.divSqrtToMul.rs2.mantissa := (iterationValue << 1).resized
+
+        val nan       = input.rs1.sign && !input.rs1.isZero
+
+        when(nan){
+          decode.divSqrtToMul.rs2.setNanQuiet
+        }
+
         when(decode.divSqrtToMul.ready) {
           state := IDLE
           input.ready := True
@@ -985,14 +976,14 @@ object FpuSynthesisBench extends App{
 
 
   val rtls = ArrayBuffer[Rtl]()
-//  rtls += new Fpu(
-//    "32",
-//    portCount = 1,
-//    FpuParameter(
-//      internalMantissaSize = 23,
-//      withDouble = false
-//    )
-//  )
+  rtls += new Fpu(
+    "32",
+    portCount = 1,
+    FpuParameter(
+      internalMantissaSize = 23,
+      withDouble = false
+    )
+  )
 //  rtls += new Fpu(
 //    "64",
 //    portCount = 1,
@@ -1010,10 +1001,10 @@ object FpuSynthesisBench extends App{
 //  rtls += new Rotate(32)
 //  rtls += new Rotate(52)
 //  rtls += new Rotate(64)
-  rtls += new Rotate3(24)
-  rtls += new Rotate3(32)
-  rtls += new Rotate3(52)
-  rtls += new Rotate3(64)
+//  rtls += new Rotate3(24)
+//  rtls += new Rotate3(32)
+//  rtls += new Rotate3(52)
+//  rtls += new Rotate3(64)
 
   val targets = XilinxStdTargets()// ++ AlteraStdTargets()
 

@@ -314,7 +314,7 @@ class FpuTest extends FunSuite{
           if(ref == 0.0 && dut == 0.0 && f2b(ref) != f2b(dut)) return false
           if(ref.isNaN && dut.isNaN) return true
           if(ref == dut) return true
-          if(ref.abs * 1.0001 + Float.MinPositiveValue >= dut.abs && ref.abs * 0.9999 - Float.MinPositiveValue  <= dut.abs) return true
+          if(ref.abs * 1.0001f + Float.MinPositiveValue >= dut.abs*0.9999f && ref.abs * 0.9999f - Float.MinPositiveValue  <= dut.abs*1.0001f) return true
 //          if(ref + Float.MinPositiveValue*2.0f  === dut || dut + Float.MinPositiveValue*2.0f  === ref)
           false
         }
@@ -460,7 +460,10 @@ class FpuTest extends FunSuite{
           load(rs1, a)
           load(rs2, b)
           cmp(rs1, rs2){rsp =>
-            val ref = if(a < b) 1 else 0
+            var ref = if(a < b) 1 else 0
+            if(a.isNaN || b.isNaN){
+              ref = 0
+            }
             val v = rsp.value.toBigInt
             println(f"$a < $b = $v, $ref")
             assert(v === ref)
@@ -503,9 +506,13 @@ class FpuTest extends FunSuite{
 
           min(rd,rs1,rs2)
           storeFloat(rd){v =>
-            val ref = a min b
+            val ref = (a,b) match {
+              case _ if a.isNaN => b
+              case _ if b.isNaN => a
+              case _ => Math.min(a,b)
+            }
             println(f"min $a $b = $v, $ref")
-            assert(ref ==  v)
+            assert(f2b(ref) ==  f2b(v))
           }
         }
 
@@ -535,13 +542,37 @@ class FpuTest extends FunSuite{
         val fNan = List(Float.NaN, b2f(0x7f820000), b2f(0x7fc00000))
         val fAll = fZeros ++ fSubnormals ++ fExpSmall ++ fExpNormal ++ fExpBig ++ fInfinity ++ fNan
 
+        testCmp(0.0f, 1.2f )
+        testCmp(1.2f, 0.0f )
+        testCmp(0.0f, -0.0f )
+        testCmp(-0.0f, 0.0f )
+        for(a <- fAll; _ <- 0 until 50) testCmp(a, randomFloat())
+        for(b <- fAll; _ <- 0 until 50) testCmp(randomFloat(), b)
+        for(a <- fAll; b <- fAll) testCmp(a, b)
+        for(_ <- 0 until 1000) testCmp(randomFloat(), randomFloat())
 
-//        testDiv(0.0f, 1.2f )
-//        testDiv(1.2f, 0.0f )
-//        testDiv(0.0f, 0.0f )
-//        for(a <- fAll; _ <- 0 until 50) testDiv(a, randomFloat())
-//        for(a <- fAll; b <- fAll) testDiv(a, b)
-//        for(_ <- 0 until 1000) testDiv(randomFloat(), randomFloat())
+        testMin(0.0f, 1.2f )
+        testMin(1.2f, 0.0f )
+        testMin(0.0f, -0.0f )
+        testMin(-0.0f, 0.0f )
+        for(a <- fAll; _ <- 0 until 50) testMin(a, randomFloat())
+        for(b <- fAll; _ <- 0 until 50) testMin(randomFloat(), b)
+        for(a <- fAll; b <- fAll) testMin(a, b)
+        for(_ <- 0 until 1000) testMin(randomFloat(), randomFloat())
+
+        testSqrt(1.2f)
+        testSqrt(0.0f)
+        for(a <- fAll) testSqrt(a)
+        for(_ <- 0 until 1000) testSqrt(randomFloat())
+
+
+        testDiv(0.0f, 1.2f )
+        testDiv(1.2f, 0.0f )
+        testDiv(0.0f, 0.0f )
+        for(a <- fAll; _ <- 0 until 50) testDiv(a, randomFloat())
+        for(b <- fAll; _ <- 0 until 50) testDiv(randomFloat(), b)
+        for(a <- fAll; b <- fAll) testDiv(a, b)
+        for(_ <- 0 until 1000) testDiv(randomFloat(), randomFloat())
 
 
 

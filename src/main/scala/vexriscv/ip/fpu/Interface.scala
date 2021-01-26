@@ -65,7 +65,6 @@ case class FpuFloat(exponentSize: Int,
   def decode() = {
     val ret = FpuFloatDecoded()
     ret.isZero      := isZero
-    //ret.isSubnormal := isSubnormal
     ret.isNormal    := isNormal
     ret.isInfinity  := isInfinity
     ret.isNan       := isNan
