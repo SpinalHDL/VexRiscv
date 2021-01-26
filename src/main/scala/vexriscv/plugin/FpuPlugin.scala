@@ -11,7 +11,8 @@ class FpuPlugin(externalFpu : Boolean = false,
 
   object FPU_ENABLE extends Stageable(Bool())
   object FPU_COMMIT extends Stageable(Bool())
-  object FPU_LOAD extends Stageable(Bool())
+  object FPU_COMMIT_SYNC extends Stageable(Bool())
+  object FPU_COMMIT_LOAD extends Stageable(Bool())
   object FPU_RSP extends Stageable(Bool())
   object FPU_FORKED extends Stageable(Bool())
   object FPU_OPCODE extends Stageable(FpuOpcode())
@@ -28,7 +29,6 @@ class FpuPlugin(externalFpu : Boolean = false,
       FPU_ENABLE -> True,
       FPU_COMMIT -> False,
       FPU_RSP -> True,
-      FPU_LOAD -> False,
       REGFILE_WRITE_VALID -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
       BYPASSABLE_MEMORY_STAGE  -> False
@@ -37,8 +37,7 @@ class FpuPlugin(externalFpu : Boolean = false,
     val floatRfWrite = List[ENC](
       FPU_ENABLE -> True,
       FPU_COMMIT -> True,
-      FPU_RSP -> False,
-      FPU_LOAD -> False
+      FPU_RSP -> False
     )
 
     val addSub  = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.ADD
@@ -60,7 +59,6 @@ class FpuPlugin(externalFpu : Boolean = false,
       FPU_ENABLE -> True,
       FPU_OPCODE -> FpuOpcode.LOAD,
       FPU_COMMIT -> True,
-      FPU_LOAD -> True,
       FPU_RSP -> False
     )
 
@@ -68,7 +66,6 @@ class FpuPlugin(externalFpu : Boolean = false,
       FPU_ENABLE -> True,
       FPU_OPCODE -> FpuOpcode.STORE,
       FPU_COMMIT -> False,
-      FPU_LOAD -> False,
       FPU_RSP -> True
     )
 
@@ -164,7 +161,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       //Maybe it might be better to not fork before fire to avoid RF stall on commits
       val forked = Reg(Bool) setWhen(port.cmd.fire) clearWhen(!arbitration.isStuck) init(False)
 
-      val intRfReady = Reg(Bool()) setWhen(!arbitration.isStuckByOthers) clearWhen(!arbitration.isStuck)
+      val intRfReady = Reg(Bool()) setWhen(!arbitration.isStuckByOthers) clearWhen(!arbitration.isStuck) //TODO is that still in use ?
       val hazard = (input(RS1_USE) && !intRfReady) || csr.pendings.msb || csr.csrActive
 
       arbitration.haltItself setWhen(arbitration.isValid && input(FPU_ENABLE) && hazard)
@@ -181,6 +178,9 @@ class FpuPlugin(externalFpu : Boolean = false,
       port.cmd.format   := FpuFormat.FLOAT
 
       insert(FPU_FORKED) := forked || port.cmd.fire
+
+      insert(FPU_COMMIT_SYNC) := List(FpuOpcode.LOAD, FpuOpcode.FMV_W_X).map(_ === input(FPU_OPCODE)).orR
+      insert(FPU_COMMIT_LOAD) := input(FPU_OPCODE) === FpuOpcode.LOAD
     }
 
     writeBack plug new Area{
@@ -206,9 +206,9 @@ class FpuPlugin(externalFpu : Boolean = false,
       // Manage $load
       val commit = Stream(FpuCommit(p))
       commit.valid := isCommit && arbitration.isMoving
-      commit.value.assignFromBits(output(DBUS_DATA))
+      commit.value := (input(FPU_COMMIT_LOAD) ? output(DBUS_DATA) | input(RS1))
       commit.write := arbitration.isValid
-      commit.load := input(FPU_LOAD)
+      commit.sync := input(FPU_COMMIT_SYNC)
 
       when(arbitration.isValid && !commit.ready){
         arbitration.haltByOther := True

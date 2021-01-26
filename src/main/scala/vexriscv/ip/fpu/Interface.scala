@@ -50,14 +50,14 @@ case class FpuFloat(exponentSize: Int,
 
   def isNormal    = !special
   def isZero      =  special && exponent(1 downto 0) === 0
-  def isSubnormal =  special && exponent(1 downto 0) === 1
+  //def isSubnormal =  special && exponent(1 downto 0) === 1
   def isInfinity  =  special && exponent(1 downto 0) === 2
   def isNan       =  special && exponent(1 downto 0) === 3
   def isQuiet     =  mantissa.msb
 
   def setNormal    =  { special := False }
   def setZero      =  { special := True; exponent(1 downto 0) := 0 }
-  def setSubnormal =  { special := True; exponent(1 downto 0) := 1 }
+  //def setSubnormal =  { special := True; exponent(1 downto 0) := 1 }
   def setInfinity  =  { special := True; exponent(1 downto 0) := 2 }
   def setNan       =  { special := True; exponent(1 downto 0) := 3 }
   def setNanQuiet  =  { special := True; exponent(1 downto 0) := 3; mantissa.msb := True }
@@ -65,7 +65,7 @@ case class FpuFloat(exponentSize: Int,
   def decode() = {
     val ret = FpuFloatDecoded()
     ret.isZero      := isZero
-    ret.isSubnormal := isSubnormal
+    //ret.isSubnormal := isSubnormal
     ret.isNormal    := isNormal
     ret.isInfinity  := isInfinity
     ret.isNan       := isNan
@@ -101,7 +101,7 @@ case class FpuParameter( internalMantissaSize : Int,
                          withDouble : Boolean){
 
   val storeLoadType = HardType(Bits(if(withDouble) 64 bits else 32 bits))
-  val internalExponentSize = if(withDouble) 11 else 8
+  val internalExponentSize = (if(withDouble) 11 else 8) + 1
   val internalFloating = HardType(FpuFloat(exponentSize = internalExponentSize, mantissaSize = internalMantissaSize))
 
   val rfAddress = HardType(UInt(5 bits))
@@ -132,7 +132,7 @@ case class FpuCmd(p : FpuParameter) extends Bundle{
 
 case class FpuCommit(p : FpuParameter) extends Bundle{
   val write = Bool()
-  val load = Bool()
+  val sync = Bool()
   val value = p.storeLoadType() // IEEE 754
 }
 

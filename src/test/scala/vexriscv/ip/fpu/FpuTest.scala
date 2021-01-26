@@ -17,7 +17,7 @@ class FpuTest extends FunSuite{
   val b2f = lang.Float.intBitsToFloat(_)
   val f2b = lang.Float.floatToIntBits(_)
   def clamp(f : Float) = {
-    if(f.abs < b2f(0x00800000)) b2f(f2b(f) & 0x80000000) else f
+   f // if(f.abs < b2f(0x00800000)) b2f(f2b(f) & 0x80000000) else f
   }
 
   test("directed"){
@@ -74,7 +74,7 @@ class FpuTest extends FunSuite{
           commitQueue += {cmd =>
             cmd.write #= true
             cmd.value #= value
-            cmd.load #= true
+            cmd.sync #= true
           }
         }
 
@@ -112,7 +112,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.load #= false
+            cmd.sync #= false
           }
         }
 
@@ -128,7 +128,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.load #= false
+            cmd.sync #= false
           }
         }
 
@@ -144,7 +144,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.load #= false
+            cmd.sync #= false
           }
         }
 
@@ -160,7 +160,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.load #= false
+            cmd.sync #= false
           }
         }
 
@@ -176,7 +176,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.load #= false
+            cmd.sync #= false
           }
         }
 
@@ -219,7 +219,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.load #= false
+            cmd.sync #= false
           }
         }
 
@@ -239,7 +239,7 @@ class FpuTest extends FunSuite{
         def fmv_w_x(rd : Int, value : Int): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.FMV_W_X
-            cmd.value #= value.toLong & 0xFFFFFFFFl
+            cmd.value.randomize()
             cmd.rs1.randomize()
             cmd.rs2.randomize()
             cmd.rs3.randomize()
@@ -248,7 +248,8 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.load #= false
+            cmd.sync #= true
+            cmd.value #= value.toLong & 0xFFFFFFFFl
           }
         }
 
@@ -264,7 +265,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.load #= false
+            cmd.sync #= false
           }
         }
 
@@ -281,7 +282,7 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.load #= false
+            cmd.sync #= false
           }
         }
       }
@@ -309,11 +310,12 @@ class FpuTest extends FunSuite{
           }
         }
         def checkFloat(ref : Float, dut : Float): Boolean ={
-          if(ref.signum != dut.signum) return  false
+          if((f2b(ref) & 0x80000000) != (f2b(dut) & 0x80000000)) return  false
           if(ref == 0.0 && dut == 0.0 && f2b(ref) != f2b(dut)) return false
           if(ref.isNaN && dut.isNaN) return true
           if(ref == dut) return true
-          if(ref.abs * 1.0001 > dut.abs && ref.abs * 0.9999 < dut.abs && ref.signum == dut.signum) return true
+          if(ref.abs * 1.0001 + Float.MinPositiveValue >= dut.abs && ref.abs * 0.9999 - Float.MinPositiveValue  <= dut.abs) return true
+//          if(ref + Float.MinPositiveValue*2.0f  === dut || dut + Float.MinPositiveValue*2.0f  === ref)
           false
         }
         def checkFloatExact(ref : Float, dut : Float): Boolean ={
@@ -346,6 +348,16 @@ class FpuTest extends FunSuite{
           }
         }
 
+        def testLoadStore(a : Float): Unit ={
+          val rd = Random.nextInt(32)
+          load(rd, a)
+          storeFloat(rd){v =>
+            val refUnclamped = a
+            val ref = a
+            println(f"$a = $v, $ref")
+            assert(f2b(v) == f2b(ref))
+          }
+        }
         def testMul(a : Float, b : Float): Unit ={
           val rs = new RegAllocator()
           val rs1, rs2, rs3 = rs.allocate()
@@ -515,7 +527,7 @@ class FpuTest extends FunSuite{
 
         def withMinus(that : Seq[Float]) = that.flatMap(f => List(f, -f))
         val fZeros = withMinus(List(0.0f))
-        val fSubnormals = withMinus(List(b2f(0x00000000+1), b2f(0x00000000+2), b2f(0x00800000-2), b2f(0x00800000-1)))
+        val fSubnormals = withMinus(List(b2f(0x00000000+1), b2f(0x00000000+2), b2f(0x00006800), b2f(0x00800000-2), b2f(0x00800000-1)))
         val fExpSmall = withMinus(List(b2f(0x00800000), b2f(0x00800000+1), b2f(0x00800000 + 2)))
         val fExpNormal = withMinus(List(b2f(0x3f800000-2), b2f(0x3f800000-1), b2f(0x3f800000), b2f(0x3f800000+1), b2f(0x3f800000+2)))
         val fExpBig = withMinus(List(b2f(0x7f7fffff-2), b2f(0x7f7fffff-1), b2f(0x7f7fffff)))
@@ -533,13 +545,6 @@ class FpuTest extends FunSuite{
 
 
 
-        testMul(1.2f, 0f)
-        for(a <- fAll; _ <- 0 until 50) testMul(a, randomFloat())
-        for(b <- fAll; _ <- 0 until 50) testMul(randomFloat(), b)
-        for(a <- fAll; b <- fAll) testMul(a, b)
-        for(_ <- 0 until 1000) testMul(randomFloat(), randomFloat())
-
-
         testAdd(b2f(0x3f800000), b2f(0x3f800000-1))
         testAdd(1.1f, 2.3f)
         testAdd(1.2f, -1.2f)
@@ -554,6 +559,28 @@ class FpuTest extends FunSuite{
         for(b <- fAll; _ <- 0 until 50) testAdd(randomFloat(), b)
         for(a <- fAll; b <- fAll) testAdd(a, b)
         for(_ <- 0 until 1000) testAdd(randomFloat(), randomFloat())
+
+        testLoadStore(1.2f)
+        testMul(1.2f, 2.5f)
+        testMul(b2f(0x00400000), 16.0f)
+        testMul(b2f(0x00100000), 16.0f)
+        testMul(b2f(0x00180000), 16.0f)
+        testMul(b2f(0x00000004), 16.0f)
+        testMul(b2f(0x00000040), 16.0f)
+        testMul(b2f(0x00000041), 16.0f)
+        testMul(b2f(0x00000001), b2f(0x00000001))
+        testMul(1.0f, b2f(0x00000001))
+        testMul(0.5f, b2f(0x00000001))
+
+//        dut.clockDomain.waitSampling(1000)
+//        simSuccess()
+
+        testMul(1.2f, 0f)
+        for(a <- fAll; _ <- 0 until 50) testMul(a, randomFloat())
+        for(b <- fAll; _ <- 0 until 50) testMul(randomFloat(), b)
+        for(a <- fAll; b <- fAll) testMul(a, b)
+        for(_ <- 0 until 1000) testMul(randomFloat(), randomFloat())
+
 
 
 
