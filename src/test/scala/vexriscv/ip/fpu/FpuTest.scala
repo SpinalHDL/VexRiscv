@@ -422,10 +422,19 @@ class FpuTest extends FunSuite{
           val rd = Random.nextInt(32)
           load(rs1, a)
           f2i(rs1, signed){rsp =>
-            val ref = a.toInt
-            val v = (rsp.value.toBigInt & 0xFFFFFFFF).toInt
-            println(f"f2i($a) = $v, $ref")
-            assert(v === ref)
+            if(signed) {
+              val ref = a.toInt
+              val v = (rsp.value.toBigInt & 0xFFFFFFFFl).toInt
+              println(f"f2i($a) = $v, $ref")
+              if (a.abs < 1024 * 1024) assert(v == ref)
+              assert(checkFloat(v, ref))
+            } else {
+              val ref = a.toLong.min(0xFFFFFFFFl)
+              val v = (rsp.value.toBigInt & 0xFFFFFFFFl).toLong
+              println(f"f2i($a) = $v, $ref")
+              if (a.abs < 1024 * 1024) assert(v == ref)
+              assert(checkFloat(v, ref))
+            }
           }
         }
 
@@ -541,6 +550,28 @@ class FpuTest extends FunSuite{
         testLoadStore(1.17549435082e-38f)
         testLoadStore(1.4E-45f)
         testLoadStore(3.44383110592e-41f)
+
+//TODO bring back those tests and test overflow / underflow (F2I)
+//        testF2i(16.0f  , false)
+//        testF2i(18.0f  , false)
+//        testF2i(1200.0f, false)
+//        testF2i(1.0f   , false)
+//        testF2i(0.0f   , false)
+//        testF2i(1024*1024*1024*2l   , false)
+//        testF2i(1024*1024*4095l   , false)
+//        testF2i(1024*1024*5000l   , false)
+//
+//        val f2iUnsigned = ((0l to 32l) ++ (4060 to 4095).map(_*1024*1024l)).map(_.toFloat) ++ List(-0.0f)
+//        val f2iSigned = ((-32 to 32) ++ ((2030 to 2047)++(-2047 to -2030)).map(_*1024*1024)).map(_.toFloat) ++ List(-0.0f)
+//        for(f <- f2iUnsigned) testF2i(f, false)
+//        for(f <- f2iSigned) testF2i(f, true)
+//        for(f <- fAll) testF2i(f, false)
+//        for(f <- fAll) testF2i(f, true)
+//        for(_ <- 0 until 1000) testF2i(Random.nextFloat(), Random.nextBoolean())
+
+
+
+
 
         testAdd(b2f(0x3f800000), b2f(0x3f800000-1))
         testAdd(1.1f, 2.3f)
