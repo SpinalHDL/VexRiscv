@@ -1,12 +1,16 @@
 package vexriscv.ip.fpu
 
+import java.io.File
 import java.lang
 
+import org.apache.commons.io.FileUtils
 import org.scalatest.FunSuite
 import spinal.core.SpinalEnumElement
 import spinal.core.sim._
+import spinal.lib.DoCmd
 import spinal.lib.experimental.math.Floating
 import spinal.lib.sim._
+import spinal.sim.Backend.{isMac, isWindows}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
@@ -113,7 +117,7 @@ class FpuTest extends FunSuite{
           }
         }
 
-        def add(rd : Int, rs1 : Int, rs2 : Int): Unit ={
+        def add(rd : Int, rs1 : Int, rs2 : Int, rounding : FpuRoundMode.E = FpuRoundMode.RNE): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.ADD
             cmd.rs1 #= rs1
@@ -121,6 +125,7 @@ class FpuTest extends FunSuite{
             cmd.rs3.randomize()
             cmd.rd #= rd
             cmd.arg #= 0
+            cmd.roundMode #= rounding
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -318,20 +323,21 @@ class FpuTest extends FunSuite{
           (Random.nextDouble() * (Math.pow(2.0, exp)) * (if(Random.nextBoolean()) -1.0 else 1.0)).toFloat
         }
 
-        def testAdd(a : Float, b : Float): Unit ={
+        def testAdd(a : Float, b : Float, rounding : FpuRoundMode.E = FpuRoundMode.RNE): Unit ={
           val rs = new RegAllocator()
           val rs1, rs2, rs3 = rs.allocate()
           val rd = Random.nextInt(32)
           load(rs1, a)
           load(rs2, b)
 
-          add(rd,rs1,rs2)
+          add(rd,rs1,rs2, rounding)
           storeFloat(rd){v =>
             val a_ = clamp(a)
             val b_ = clamp(b)
-            val ref = clamp(a_ + b_)
-            println(f"$a + $b = $v, $ref")
-            assert(checkFloat(ref, v))
+            val ref = Clib.math.addF32(a,b, rounding.position)
+            println(f"${a}%.19f  + $b%.19f = $v, $ref $rounding")
+            println(f"${f2b(a).toHexString}  + ${f2b(b).toHexString}")
+            assert(checkFloatExact(ref, v))
           }
         }
 
@@ -547,6 +553,39 @@ class FpuTest extends FunSuite{
         val iSigned = iSmall ++ iSmall.map(-_) ++ iBigSigned
 
 
+        val roundingModes = FpuRoundMode.elements
+        def foreachRounding(body : FpuRoundMode.E => Unit): Unit ={
+          for(rounding <- roundingModes){
+            body(rounding)
+          }
+        }
+
+        //TODO test and fix a - b rounding
+        foreachRounding(testAdd(1.0f, b2f(0x3f800001), _)) //1.00001
+        foreachRounding(testAdd(4.0f, b2f(0x3f800001), _)) //1.00001
+        for(_ <- 0 until 10000; a = randomFloat(); b = randomFloat()) foreachRounding(testAdd(a.abs, b.abs,_)) //TODO negative
+
+
+        waitUntil(cmdQueue.isEmpty)
+        dut.clockDomain.waitSampling(1000)
+        simSuccess()
+
+        testAdd(b2f(0x3f800000), b2f(0x3f800000-1))
+        testAdd(1.1f, 2.3f)
+        testAdd(1.2f, -1.2f)
+        testAdd(-1.2f, 1.2f)
+        testAdd(0.0f, -1.2f)
+        testAdd(-0.0f, -1.2f)
+        testAdd(1.2f, -0f)
+        testAdd(1.2f, 0f)
+        testAdd(1.1f, Float.MinPositiveValue)
+
+        for(a <- fAll; _ <- 0 until 50) testAdd(a, randomFloat())
+        for(b <- fAll; _ <- 0 until 50) testAdd(randomFloat(), b)
+        for(a <- fAll; b <- fAll) testAdd(a, b)
+        for(_ <- 0 until 1000) testAdd(randomFloat(), randomFloat())
+
+
         testLoadStore(1.17549435082e-38f)
         testLoadStore(1.4E-45f)
         testLoadStore(3.44383110592e-41f)
@@ -572,21 +611,6 @@ class FpuTest extends FunSuite{
 
 
 
-
-        testAdd(b2f(0x3f800000), b2f(0x3f800000-1))
-        testAdd(1.1f, 2.3f)
-        testAdd(1.2f, -1.2f)
-        testAdd(-1.2f, 1.2f)
-        testAdd(0.0f, -1.2f)
-        testAdd(-0.0f, -1.2f)
-        testAdd(1.2f, -0f)
-        testAdd(1.2f, 0f)
-        testAdd(1.1f, Float.MinPositiveValue)
-
-        for(a <- fAll; _ <- 0 until 50) testAdd(a, randomFloat())
-        for(b <- fAll; _ <- 0 until 50) testAdd(randomFloat(), b)
-        for(a <- fAll; b <- fAll) testAdd(a, b)
-        for(_ <- 0 until 1000) testAdd(randomFloat(), randomFloat())
 
 
 
@@ -795,4 +819,25 @@ class FpuTest extends FunSuite{
       dut.clockDomain.waitSampling(100)
     }
   }
+}
+
+
+object Clib {
+  val java_home = System.getProperty("java.home")
+  assert(java_home != "" && java_home != null, "JAVA_HOME need to be set")
+  val jdk = java_home.replace("/jre","").replace("\\jre","")
+  val jdkIncludes = jdk + "/include"
+  val flags   = List("-fPIC", "-m64", "-shared", "-Wno-attributes") //-Wl,--whole-archive
+  val os = new File("/media/data/open/SaxonSoc/berkeley-softfloat-3/build/Linux-x86_64-GCC").listFiles().map(_.getAbsolutePath).filter(_.toString.endsWith(".o"))
+  val cmd = s"gcc -I/media/data/open/SaxonSoc/berkeley-softfloat-3/source/include -I$jdkIncludes  -I$jdkIncludes/linux ${flags.mkString(" ")} -o src/test/cpp/fpu/math/fpu_math.so src/test/cpp/fpu/math/fpu_math.c src/test/cpp/fpu/math/softfloat.a" // src/test/cpp/fpu/math/softfloat.a
+  DoCmd.doCmd(cmd)
+  val math = new FpuMath
+}
+
+object FpuCompileSo extends App{
+
+  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RNE.position))
+  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RTZ.position))
+  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RDN.position))
+  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RUP.position))
 }

@@ -166,14 +166,18 @@ class FpuPlugin(externalFpu : Boolean = false,
       arbitration.haltItself setWhen(arbitration.isValid && input(FPU_ENABLE) && hazard)
       arbitration.haltItself setWhen(port.cmd.isStall)
 
-      port.cmd.valid    := arbitration.isValid && input(FPU_ENABLE) && !forked && !hazard
-      port.cmd.opcode   := input(FPU_OPCODE)
-      port.cmd.arg      := input(FPU_ARG)
-      port.cmd.rs1      := ((input(FPU_OPCODE) === FpuOpcode.STORE) ? input(INSTRUCTION)(rs2Range).asUInt | input(INSTRUCTION)(rs1Range).asUInt)
-      port.cmd.rs2      := input(INSTRUCTION)(rs2Range).asUInt
-      port.cmd.rs3      := input(INSTRUCTION)(rs3Range).asUInt
-      port.cmd.rd       := input(INSTRUCTION)(rdRange).asUInt
-      port.cmd.format   := FpuFormat.FLOAT
+      val iRoundMode = input(INSTRUCTION)(funct3Range)
+      val roundMode = (input(INSTRUCTION)(funct3Range) === B"111") ? csr.rm | input(INSTRUCTION)(funct3Range)
+
+      port.cmd.valid     := arbitration.isValid && input(FPU_ENABLE) && !forked && !hazard
+      port.cmd.opcode    := input(FPU_OPCODE)
+      port.cmd.arg       := input(FPU_ARG)
+      port.cmd.rs1       := ((input(FPU_OPCODE) === FpuOpcode.STORE) ? input(INSTRUCTION)(rs2Range).asUInt | input(INSTRUCTION)(rs1Range).asUInt)
+      port.cmd.rs2       := input(INSTRUCTION)(rs2Range).asUInt
+      port.cmd.rs3       := input(INSTRUCTION)(rs3Range).asUInt
+      port.cmd.rd        := input(INSTRUCTION)(rdRange).asUInt
+      port.cmd.format    := FpuFormat.FLOAT
+      port.cmd.roundMode := roundMode.as(FpuRoundMode())
 
       insert(FPU_FORKED) := forked || port.cmd.fire
 

@@ -30,6 +30,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val rd = p.rfAddress()
     val value = Bits(32 bits)
     val arg = p.Arg()
+    val roundMode = FpuRoundMode()
   }
 
   case class RfReadOutput() extends Bundle{
@@ -40,6 +41,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val rd = p.rfAddress()
     val value = Bits(32 bits)
     val arg = p.Arg()
+    val roundMode = FpuRoundMode()
   }
 
 
@@ -49,6 +51,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val lockId = lockIdType()
     val i2f = Bool()
     val arg = Bits(2 bits)
+    val roundMode = FpuRoundMode()
   }
 
   case class ShortPipInput() extends Bundle{
@@ -61,6 +64,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val value = Bits(32 bits)
     val arg = Bits(2 bits)
     def rs1 = rs1Raw.as(p.internalFloating)
+    val roundMode = FpuRoundMode()
   }
 
   case class MulInput() extends Bundle{
@@ -71,6 +75,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val add = Bool()
     val divSqrt = Bool()
     val msb1, msb2 = Bool() //allow usage of msb bits of mul
+    val roundMode = FpuRoundMode()
   }
 
 
@@ -80,6 +85,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val rd = p.rfAddress()
     val lockId = lockIdType()
     val div = Bool()
+    val roundMode = FpuRoundMode()
   }
 
 
@@ -88,15 +94,25 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val rs1, rs2 = p.internalFloating()
     val rd = p.rfAddress()
     val lockId = lockIdType()
+    val roundMode = FpuRoundMode()
   }
 
-  case class WriteInput() extends Bundle{
+
+  case class MergeInput() extends Bundle{
+    val source = Source()
+    val lockId = lockIdType()
+    val rd = p.rfAddress()
+    val value = p.internalFloating()
+    val round = UInt(2 bits)
+    val roundMode = FpuRoundMode()
+  }
+
+  case class RoundOutput() extends Bundle{
     val source = Source()
     val lockId = lockIdType()
     val rd = p.rfAddress()
     val value = p.internalFloating()
   }
-
 
   val rf = new Area{
     val ram = Mem(p.internalFloating, 32*portCount)
@@ -222,6 +238,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.lockId := s1LockId
     output.value := s1.value
     output.arg := s1.arg
+    output.roundMode := s1.roundMode
     output.rd := s1.rd
     output.rs1 := rf.ram.readSync(s0.source @@ s0.rs1,enable = !output.isStall)
     output.rs2 := rf.ram.readSync(s0.source @@ s0.rs2,enable = !output.isStall)
@@ -298,6 +315,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val value = p.storeLoadType()
       val i2f = Bool()
       val arg = Bits(2 bits)
+      val roundMode = FpuRoundMode()
     }
 
     val s0 = new Area{
@@ -315,6 +333,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       output.value := feed.value
       output.i2f := input.i2f
       output.arg := input.arg
+      output.roundMode := input.roundMode
     }
 
 
@@ -406,17 +425,20 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       when(isInfinity){recoded.setInfinity}
       when(isNan){recoded.setNan}
 
-      val output = input.haltWhen(busy).swapPayload(WriteInput())
+      val output = input.haltWhen(busy).swapPayload(MergeInput())
       output.source := input.source
       output.lockId := input.lockId
+      output.roundMode := input.roundMode
       output.rd := input.rd
       output.value := recoded
+      output.round := 0
       when(input.i2f){
         output.value.sign := i2fSign
         output.value.exponent := (U(exponentOne+31) - fsm.manTop).resized
         output.value.mantissa := U(i2fShifted)
         output.value.setNormal
         when(fsm.i2fZero) { output.value.setZero }
+        //TODO ROUND
       }
     }
   }
@@ -424,7 +446,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   val shortPip = new Area{
     val input = decode.shortPip.stage()
 
-    val rfOutput = Stream(WriteInput())
+    val rfOutput = Stream(MergeInput())
 
     val result = p.storeLoadType().assignDontCare()
 
@@ -563,6 +585,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     rfOutput.source := input.source
     rfOutput.lockId := input.lockId
     rfOutput.rd := input.rd
+    rfOutput.roundMode := input.roundMode
+    rfOutput.round := 0 //TODO
     rfOutput.value.assignDontCare()
     switch(input.opcode){
       is(FpuOpcode.MIN_MAX){
@@ -634,11 +658,13 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       output.payload := math.mulC(p.internalMantissaSize, p.internalMantissaSize+1 bits)
     }
 
-    val output = Stream(WriteInput())
+    val output = Stream(MergeInput())
     output.valid  := input.valid && !input.add && !input.divSqrt
     output.source := input.source
     output.lockId := input.lockId
     output.rd     := input.rd
+    output.roundMode := input.roundMode
+    output.round := 0 //TODO
     output.value  := norm.output
 
     decode.mulToAdd.valid := input.valid && input.add
@@ -650,6 +676,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     decode.mulToAdd.rs2 := input.rs3
     decode.mulToAdd.rd := input.rd
     decode.mulToAdd.lockId := input.lockId
+    decode.mulToAdd.roundMode := input.roundMode
 
     input.ready := (input.add ? decode.mulToAdd.ready | output.ready) || input.divSqrt
   }
@@ -681,6 +708,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     decode.divSqrtToMul.msb2 := True
     decode.divSqrtToMul.rs1.special := False //TODO
     decode.divSqrtToMul.rs2.special := False
+    decode.divSqrtToMul.roundMode := input.roundMode
 
 
     val aprox = new Area {
@@ -845,7 +873,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val rs1MantissaBigger = input.rs1.mantissa > input.rs2.mantissa
       val absRs1Bigger = ((rs1ExponentBigger || rs1ExponentEqual && rs1MantissaBigger) && !input.rs1.isZero || input.rs1.isInfinity) && !input.rs2.isInfinity
       val shiftBy = rs1ExponentBigger ? (0-exp21) | exp21
-      val passThrough = shiftBy >= p.internalMantissaSize || (input.rs1.isZero) || (input.rs2.isZero)
+      val shiftOverflow = shiftBy >= p.internalMantissaSize
+      val passThrough = shiftOverflow || (input.rs1.isZero) || (input.rs2.isZero)
 
       //Note that rs1ExponentBigger can be replaced by absRs1Bigger bellow to avoid xsigned two complement in math block at expense of combinatorial path
       val xySign = absRs1Bigger ? input.rs1.sign | input.rs2.sign
@@ -853,7 +882,14 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val ySign = xySign ^ (rs1ExponentBigger ? input.rs2.sign | input.rs1.sign)
       val xMantissa = U"1" @@ (rs1ExponentBigger ? input.rs1.mantissa | input.rs2.mantissa) @@ U"0"
       val yMantissaUnshifted = U"1" @@ (rs1ExponentBigger ? input.rs2.mantissa | input.rs1.mantissa) @@ U"0"
-      val yMantissa = yMantissaUnshifted >> (passThrough.asUInt @@ shiftBy.resize(log2Up(p.internalMantissaSize)))
+      var yMantissa = yMantissaUnshifted
+      val roundingScrap = CombInit(shiftOverflow)
+      for(i <- 0 until log2Up(p.internalMantissaSize)){
+        roundingScrap setWhen(shiftBy(i) && yMantissa(0, 1 << i bits) =/= 0)
+        yMantissa \= shiftBy(i) ? (yMantissa |>> (BigInt(1) << i)) | yMantissa
+      }
+      when(passThrough) { yMantissa := 0 }
+     // val yMantissa = yMantissaUnshifted >> (passThrough.asUInt @@ shiftBy.resize(log2Up(p.internalMantissaSize))) //Maybe  passThrough.asUInt @@  do not infer small logic
       val xyExponent = rs1ExponentBigger ? input.rs1.exponent | input.rs2.exponent
     }
 
@@ -866,9 +902,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       def xySign = shifter.xySign
 
       val xSigned = xMantissa.twoComplement(xSign)
-//      val ySigned = (yMantissa +^ (yMantissa.lsb && !ySign).asUInt).twoComplement(ySign)
-      val ySigned = ((ySign ## Mux(ySign, ~yMantissa, yMantissa)).asUInt +^ (ySign || yMantissa.lsb).asUInt).asSInt //rounding here
-      val xyMantissa = U(xSigned + ySigned).trim(1 bits)
+      val ySigned = yMantissa.twoComplement(ySign)
+//      val ySigned = ((ySign ## Mux(ySign, ~yMantissa, yMantissa)).asUInt +^ (ySign || yMantissa.lsb).asUInt).asSInt //rounding here
+      val xyMantissa = U(xSigned +^ ySigned).trim(1 bits)
     }
 
     val norm = new Area{
@@ -878,9 +914,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
       val shiftOh = OHMasking.first(xyMantissa.asBools.reverse)
       val shift = OHToUInt(shiftOh)
-      val mantissa = (xyMantissa |<< shift) >> 2
-//      val mantissaShifted = (xyMantissa |<< shift)
-//      val mantissa = ((xyMantissa ) >> 2) + U(xyMantissa(1))
+      val mantissa = (xyMantissa |<< shift)
       val exponent = xyExponent -^ shift + 1
       xySign clearWhen(input.rs1.isZero && input.rs2.isZero)
       val forceZero = xyMantissa === 0 || exponent.msb || (input.rs1.isZero && input.rs2.isZero)
@@ -889,14 +923,16 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
 
 
-    val output = input.swapPayload(WriteInput())
+    val output = input.swapPayload(MergeInput())
     output.source := input.source
     output.lockId := input.lockId
     output.rd     := input.rd
     output.value.sign := norm.xySign
-    output.value.mantissa := norm.mantissa.resized
+    output.value.mantissa := (norm.mantissa >> 2).resized
     output.value.exponent := norm.exponent.resized
     output.value.special := False
+    output.roundMode := input.roundMode
+    output.round := norm.mantissa(1 downto 0) | (U"0" @@ shifter.roundingScrap)
 
     when(norm.forceNan) {
       output.value.setNanQuiet
@@ -911,25 +947,59 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   }
 
 
-  val write = new Area{
+  val merge = new Area {
     val arbitrated = StreamArbiterFactory.lowerFirst.noLock.on(List(load.s1.output, add.output, mul.output, shortPip.rfOutput))
     val isCommited = rf.lock.map(_.commited).read(arbitrated.lockId)
     val commited = arbitrated.haltWhen(!isCommited).toFlow
+  }
 
-    for(i <- 0 until portCount){
-      completion(i).increments += (RegNext(commited.fire && commited.source === i) init(False))
+  val round = new Area{
+    val input = merge.commited.combStage
+
+    val mantissaIncrement = !input.value.special && input.roundMode.mux(
+      FpuRoundMode.RNE -> (input.round(1) && (input.round(0) || input.value.mantissa.lsb)),
+      FpuRoundMode.RTZ -> False,
+      FpuRoundMode.RDN -> (input.round =/= 0 &&  input.value.sign),
+      FpuRoundMode.RUP -> (input.round =/= 0 && !input.value.sign),
+      FpuRoundMode.RMM -> (input.round(1))
+    )
+
+    val math = p.internalFloating()
+    val adder = (input.value.exponent @@ input.value.mantissa) + U(mantissaIncrement)
+    math.special := input.value.special
+    math.sign := input.value.sign
+    math.exponent := adder(p.internalMantissaSize, p.internalExponentSize bits)
+    math.mantissa := adder(0, p.internalMantissaSize bits)
+
+    val patched = CombInit(math)
+    when(!input.value.special && math.exponent === exponentOne + 128){
+      patched.setInfinity
     }
 
-    when(commited.valid){
-      for(i <- 0 until rfLockCount) when(commited.lockId === i){
+    val output = input.swapPayload(RoundOutput())
+    output.source := input.source
+    output.lockId := input.lockId
+    output.rd := input.rd
+    output.value := patched
+  }
+
+  val writeback = new Area{
+    val input = round.output.combStage
+
+    for(i <- 0 until portCount){
+      completion(i).increments += (RegNext(input.fire && input.source === i) init(False))
+    }
+
+    when(input.valid){
+      for(i <- 0 until rfLockCount) when(input.lockId === i){
         rf.lock(i).valid := False
       }
     }
 
     val port = rf.ram.writePort
-    port.valid := commited.valid && rf.lock.map(_.write).read(commited.lockId)
-    port.address := commited.source @@ commited.rd
-    port.data := commited.value
+    port.valid := input.valid && rf.lock.map(_.write).read(input.lockId)
+    port.address := input.source @@ input.rd
+    port.data := input.value
 
     when(port.valid){
       assert(!(port.data.exponent === 0 && !port.data.special), "Special violation")

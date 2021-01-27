@@ -89,6 +89,21 @@ object FpuFormat extends SpinalEnum{
   val FLOAT, DOUBLE = newElement()
 }
 
+object FpuRoundMode extends SpinalEnum(defaultEncoding = binarySequential){
+  val RNE, RTZ, RDN, RUP, RMM = newElement()
+}
+object FpuRoundModeInstr extends SpinalEnum(){
+  val RNE, RTZ, RDN, RUP, RMM, DYN = newElement()
+  defaultEncoding = SpinalEnumEncoding("opt")(
+    RNE -> 0,
+    RTZ -> 1,
+    RDN -> 2,
+    RUP -> 3,
+    RMM -> 4,
+    DYN -> 7
+  )
+}
+
 
 case class FpuParameter( internalMantissaSize : Int,
                          withDouble : Boolean){
@@ -120,6 +135,7 @@ case class FpuCmd(p : FpuParameter) extends Bundle{
   val rs1, rs2, rs3 = p.rfAddress()
   val rd = p.rfAddress()
   val format = p.Format()
+  val roundMode = FpuRoundMode()
 }
 
 case class FpuCommit(p : FpuParameter) extends Bundle{
