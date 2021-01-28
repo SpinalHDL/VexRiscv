@@ -2,6 +2,7 @@ package vexriscv.ip.fpu
 
 import java.io.File
 import java.lang
+import java.util.Scanner
 
 import org.apache.commons.io.FileUtils
 import org.scalatest.FunSuite
@@ -14,12 +15,15 @@ import spinal.sim.Backend.{isMac, isWindows}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
+import scala.sys.process.ProcessLogger
 import scala.util.Random
+
 
 class FpuTest extends FunSuite{
 
   val b2f = lang.Float.intBitsToFloat(_)
   val f2b = lang.Float.floatToIntBits(_)
+
   def clamp(f : Float) = {
    f // if(f.abs < b2f(0x00800000)) b2f(f2b(f) & 0x80000000) else f
   }
@@ -31,11 +35,41 @@ class FpuTest extends FunSuite{
       withDouble = false
     )
 
-    SimConfig.withFstWave.compile(new FpuCore(portCount, p)).doSim(seed = 42){ dut =>
+    val config = SimConfig
+//    config.withFstWave
+    config.compile(new FpuCore(portCount, p)).doSim(seed = 42){ dut =>
       dut.clockDomain.forkStimulus(10)
+      dut.clockDomain.forkSimSpeedPrinter()
 
 
 
+      class TestCase(t : String, op : String){
+        def build(arg : String) = new ProcessStream(s"testfloat_gen $arg -forever -${t}_$op"){
+          def f32_2 ={
+            val l = next
+            val s = new Scanner(l)
+            (b2f(s.nextLong(16).toInt), b2f(s.nextLong(16).toInt), b2f(s.nextLong(16).toInt), s.nextInt(16))
+          }
+        }
+        val RNE = build("-rnear_even")
+        val RTZ = build("-rminMag")
+        val RDN = build("-rmin")
+        val RUP = build("-rmax")
+        val RMM = build("-rnear_maxMag")
+        val all = List(RNE, RTZ, RDN, RUP, RMM)
+        def kill = all.foreach(_.kill)
+        def apply(rounding : FpuRoundMode.E) = rounding match {
+          case FpuRoundMode.RNE => RNE
+          case FpuRoundMode.RTZ => RTZ
+          case FpuRoundMode.RDN => RDN
+          case FpuRoundMode.RUP => RUP
+          case FpuRoundMode.RMM => RMM
+        }
+      }
+
+      val f32 = new {
+        val add = new TestCase("f32", "add")
+      }
 
       val cpus = for(id <- 0 until portCount) yield new {
         val cmdQueue = mutable.Queue[FpuCmd => Unit]()
@@ -96,6 +130,7 @@ class FpuTest extends FunSuite{
           }
 
           rspQueue += body
+          waitUntil(rspQueue.isEmpty)
         }
 
         def storeFloat(rs : Int)(body : Float => Unit): Unit ={
@@ -341,6 +376,18 @@ class FpuTest extends FunSuite{
           }
         }
 
+        def testAddExact(a : Float, b : Float, ref : Float, flag : Int, rounding : FpuRoundMode.E): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+          load(rs2, b)
+          add(rd,rs1,rs2, rounding)
+          storeFloat(rd){v =>
+            assert(f2b(v) == f2b(ref), f"## ${a}  + $b = $v, $ref $rounding")
+          }
+        }
+
         def testLoadStore(a : Float): Unit ={
           val rd = Random.nextInt(32)
           load(rd, a)
@@ -560,15 +607,56 @@ class FpuTest extends FunSuite{
           }
         }
 
+
+
+//        roundingModes.foreach(rounding => println(Clib.math.addF32(0.0f, 0.0f, rounding.position)))
+//        roundingModes.foreach(rounding => println(Clib.math.addF32(1.0f,-1.0f, rounding.position)))
+
+        println()
+        println(Clib.math.addF32(8.0f, b2f(0xBf800000), 0))
+        println(Clib.math.addF32(8.0f, b2f(0xBf800001), 0))
+        println(Clib.math.addF32(8.0f, b2f(0xBf800002), 0))
+        println(Clib.math.addF32(8.0f, b2f(0xBf800003), 0))
+        println(Clib.math.addF32(8.0f, b2f(0xBf800004), 0))
+        println(Clib.math.addF32(8.0f, b2f(0xBf800005), 0))
+        println(Clib.math.addF32(8.0f, b2f(0xBf800006), 0))
+        println(Clib.math.addF32(8.0f, b2f(0xBf800007), 0))
+        println(Clib.math.addF32(8.0f, b2f(0xBf800008), 0))
+
+        testAdd(-5.3687091E8f, 16.249022f, FpuRoundMode.RNE)
+        testAdd(-5.3687091E8f, 16.0f, FpuRoundMode.RNE)
+        testAdd(-5.3687091E8f, 15.0f, FpuRoundMode.RNE)
+        for(i <- 0 until 20) testAdd(4.0f, b2f(0xBf800000 + i), FpuRoundMode.RNE)
+        for(i <- 0 until 64) testAdd(12.0f, b2f(0xBf801000 + i), FpuRoundMode.RNE)
+        for(i <- 0 until 64) testAdd(8.0f, b2f(0xBf801000 + i), FpuRoundMode.RNE)
+        for(i <- 0 until 64) testAdd(12.0f, b2f(0x3f801000 + i), FpuRoundMode.RNE)
+        for(i <- 0 until 64) testAdd(8.0f, b2f(0x3f801000 + i), FpuRoundMode.RNE)
+        for(i <- 0 until 20) testAdd(b2f(0x40800000+3), b2f(0xBf800000 + i+1), FpuRoundMode.RNE)
+        for(i <- 0 until 20) testAdd(8.0f, b2f(0xBf800000 + i), FpuRoundMode.RNE)
+        for(i <- 0 until 20) testAdd(16.0f, b2f(0xBf800000 + i), FpuRoundMode.RNE)
+//        testAdd(8.0f, b2f(0xBf800001), FpuRoundMode.RNE)
+//        testAdd(8.0f, b2f(0xBf800002), FpuRoundMode.RNE)
+//        testAdd(8.0f, b2f(0xBf800003), FpuRoundMode.RNE)
+//        testAdd(8.0f, b2f(0xBf800004), FpuRoundMode.RNE)
+//        testAddExact(-256.2578f,1.8905041f ,-254.36731f,0, FpuRoundMode.RNE)
+
+
+
+        for(_ <- 0 until 1000000){
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,c,f) = f32.add(rounding).f32_2
+          if(/*a > 0 && b < 0 && */!c.isInfinity) testAddExact(a,b,c,f, rounding)
+        }
+
+        waitUntil(cmdQueue.isEmpty)
+        dut.clockDomain.waitSampling(1000)
+        simSuccess()
+
         //TODO test and fix a - b rounding
         foreachRounding(testAdd(1.0f, b2f(0x3f800001), _)) //1.00001
         foreachRounding(testAdd(4.0f, b2f(0x3f800001), _)) //1.00001
         for(_ <- 0 until 10000; a = randomFloat(); b = randomFloat()) foreachRounding(testAdd(a.abs, b.abs,_)) //TODO negative
 
-
-        waitUntil(cmdQueue.isEmpty)
-        dut.clockDomain.waitSampling(1000)
-        simSuccess()
 
         testAdd(b2f(0x3f800000), b2f(0x3f800000-1))
         testAdd(1.1f, 2.3f)
@@ -840,4 +928,40 @@ object FpuCompileSo extends App{
   println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RTZ.position))
   println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RDN.position))
   println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RUP.position))
+}
+
+class ProcessStream(cmd : String){
+  import sys.process._
+
+  val buf = mutable.Queue[() => String]()
+  val p = Process(cmd).run(new ProcessLogger {
+    override def out(s: => String): Unit = {
+      while(buf.size > 10000) Thread.sleep(10)
+      buf.enqueue(() => s)
+    }
+    override def err(s: => String): Unit = {}
+    override def buffer[T](f: => T): T = f
+  })
+
+  def kill = p.destroy()
+  def next = {
+    while(buf.isEmpty) { Thread.sleep(10) }
+    buf.dequeue()()
+  }
+}
+
+object TestSoftFloat extends App{
+  val p = new ProcessStream("testfloat_gen -forever f32_add")
+  Thread.sleep(1000)
+  println(p.next)
+  println(p.next)
+  println(p.next)
+  println(p.next)
+  println(p.next)
+  Thread.sleep(1000)
+  println(p.next)
+  while(true) {
+    Thread.sleep(10)
+    println(p.next)
+  }
 }

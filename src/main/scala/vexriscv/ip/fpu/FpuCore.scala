@@ -873,23 +873,24 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val rs1MantissaBigger = input.rs1.mantissa > input.rs2.mantissa
       val absRs1Bigger = ((rs1ExponentBigger || rs1ExponentEqual && rs1MantissaBigger) && !input.rs1.isZero || input.rs1.isInfinity) && !input.rs2.isInfinity
       val shiftBy = rs1ExponentBigger ? (0-exp21) | exp21
-      val shiftOverflow = shiftBy >= p.internalMantissaSize
+      val shiftOverflow = (shiftBy >= p.internalMantissaSize+3)
       val passThrough = shiftOverflow || (input.rs1.isZero) || (input.rs2.isZero)
 
       //Note that rs1ExponentBigger can be replaced by absRs1Bigger bellow to avoid xsigned two complement in math block at expense of combinatorial path
       val xySign = absRs1Bigger ? input.rs1.sign | input.rs2.sign
       val xSign = xySign ^ (rs1ExponentBigger ? input.rs1.sign | input.rs2.sign)
       val ySign = xySign ^ (rs1ExponentBigger ? input.rs2.sign | input.rs1.sign)
-      val xMantissa = U"1" @@ (rs1ExponentBigger ? input.rs1.mantissa | input.rs2.mantissa) @@ U"0"
-      val yMantissaUnshifted = U"1" @@ (rs1ExponentBigger ? input.rs2.mantissa | input.rs1.mantissa) @@ U"0"
-      var yMantissa = yMantissaUnshifted
+      val xMantissa = U"1" @@ (rs1ExponentBigger ? input.rs1.mantissa | input.rs2.mantissa) @@ U"00"
+      val yMantissaUnshifted = U"1" @@ (rs1ExponentBigger ? input.rs2.mantissa | input.rs1.mantissa) @@ U"00"
+      var yMantissa = CombInit(yMantissaUnshifted)
       val roundingScrap = CombInit(shiftOverflow)
       for(i <- 0 until log2Up(p.internalMantissaSize)){
         roundingScrap setWhen(shiftBy(i) && yMantissa(0, 1 << i bits) =/= 0)
         yMantissa \= shiftBy(i) ? (yMantissa |>> (BigInt(1) << i)) | yMantissa
       }
       when(passThrough) { yMantissa := 0 }
-     // val yMantissa = yMantissaUnshifted >> (passThrough.asUInt @@ shiftBy.resize(log2Up(p.internalMantissaSize))) //Maybe  passThrough.asUInt @@  do not infer small logic
+      when(shiftOverflow) { roundingScrap := True }
+      when(input.rs1.special || input.rs2.special){ roundingScrap := False }
       val xyExponent = rs1ExponentBigger ? input.rs1.exponent | input.rs2.exponent
     }
 
@@ -901,9 +902,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       def xyExponent = shifter.xyExponent
       def xySign = shifter.xySign
 
-      val xSigned = xMantissa.twoComplement(xSign)
-      val ySigned = yMantissa.twoComplement(ySign)
-//      val ySigned = ((ySign ## Mux(ySign, ~yMantissa, yMantissa)).asUInt +^ (ySign || yMantissa.lsb).asUInt).asSInt //rounding here
+      val xSigned = xMantissa.twoComplement(xSign) //TODO Is that necessary ?
+      val overshot = (ySign && shifter.roundingScrap)
+      val ySigned = ((ySign ## Mux(ySign, ~yMantissa, yMantissa)).asUInt + (ySign && !shifter.roundingScrap).asUInt).asSInt //rounding here
       val xyMantissa = U(xSigned +^ ySigned).trim(1 bits)
     }
 
@@ -915,10 +916,12 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val shiftOh = OHMasking.first(xyMantissa.asBools.reverse)
       val shift = OHToUInt(shiftOh)
       val mantissa = (xyMantissa |<< shift)
+//      val mantissa = ((shifter.roundingScrap.asUInt @@ xyMantissa.reversed) |>> shift).reversed >> 1
       val exponent = xyExponent -^ shift + 1
       xySign clearWhen(input.rs1.isZero && input.rs2.isZero)
       val forceZero = xyMantissa === 0 || exponent.msb || (input.rs1.isZero && input.rs2.isZero)
-      val forceOverflow = exponent === exponentOne + 128 ||  (input.rs1.isInfinity || input.rs2.isInfinity)
+      val forceOverflow = exponent === exponentOne + 128
+      val forceInfinity = (input.rs1.isInfinity || input.rs2.isInfinity)
       val forceNan = input.rs1.isNan || input.rs2.isNan || (input.rs1.isInfinity && input.rs2.isInfinity && (input.rs1.sign ^ input.rs2.sign))
     }
 
@@ -928,11 +931,11 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.lockId := input.lockId
     output.rd     := input.rd
     output.value.sign := norm.xySign
-    output.value.mantissa := (norm.mantissa >> 2).resized
+    output.value.mantissa := (norm.mantissa >> 3).resized
     output.value.exponent := norm.exponent.resized
     output.value.special := False
     output.roundMode := input.roundMode
-    output.round := norm.mantissa(1 downto 0) | (U"0" @@ shifter.roundingScrap)
+    output.round := U(norm.mantissa(2)) @@ U(norm.mantissa(1) | norm.mantissa(0) | shifter.roundingScrap)
 
     when(norm.forceNan) {
       output.value.setNanQuiet
@@ -941,8 +944,25 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       when(norm.xyMantissa === 0 || input.rs1.isZero && input.rs2.isZero){
         output.value.sign := input.rs1.sign && input.rs2.sign
       }
-    } elsewhen(norm.forceOverflow) {
+      when((input.rs1.sign || input.rs2.sign) && input.roundMode === FpuRoundMode.RDN){
+        output.value.sign := True
+      }
+    } elsewhen(norm.forceInfinity) {
       output.value.setInfinity
+    } elsewhen(norm.forceOverflow) {
+      val doMax = input.roundMode.mux(
+        FpuRoundMode.RNE -> (True),
+        FpuRoundMode.RTZ -> (True),
+        FpuRoundMode.RDN -> (!output.value.sign),
+        FpuRoundMode.RUP -> (output.value.sign),
+        FpuRoundMode.RMM -> (True)
+      )
+      when(doMax){
+        output.value.exponent := exponentOne + 127
+        output.value.mantissa.setAll()
+      } otherwise {
+        output.value.setInfinity
+      }
     }
   }
 
