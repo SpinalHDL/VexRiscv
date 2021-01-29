@@ -624,7 +624,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 //      val exp = math.exp + U(needShift)
 //      val man = needShift ? math.mulC(p.internalMantissaSize + 1, p.internalMantissaSize bits) | math.mulC(p.internalMantissaSize, p.internalMantissaSize bits)
 
-      val mulRounded = (math.mulC >> p.internalMantissaSize)  + math.mulC(p.internalMantissaSize-1).asUInt
+      val mulRounded = (math.mulC >> p.internalMantissaSize)
       val needShift = mulRounded.msb
       val exp = math.exp + U(needShift)
       val man = needShift ? mulRounded(1, p.internalMantissaSize bits) | mulRounded(0, p.internalMantissaSize bits)
@@ -903,7 +903,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       def xySign = shifter.xySign
 
       val xSigned = xMantissa.twoComplement(xSign) //TODO Is that necessary ?
-      val overshot = (ySign && shifter.roundingScrap)
       val ySigned = ((ySign ## Mux(ySign, ~yMantissa, yMantissa)).asUInt + (ySign && !shifter.roundingScrap).asUInt).asSInt //rounding here
       val xyMantissa = U(xSigned +^ ySigned).trim(1 bits)
     }
@@ -916,11 +915,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val shiftOh = OHMasking.first(xyMantissa.asBools.reverse)
       val shift = OHToUInt(shiftOh)
       val mantissa = (xyMantissa |<< shift)
-//      val mantissa = ((shifter.roundingScrap.asUInt @@ xyMantissa.reversed) |>> shift).reversed >> 1
       val exponent = xyExponent -^ shift + 1
-      xySign clearWhen(input.rs1.isZero && input.rs2.isZero)
-      val forceZero = xyMantissa === 0 || exponent.msb || (input.rs1.isZero && input.rs2.isZero)
-      val forceOverflow = exponent === exponentOne + 128
+      val forceZero = xyMantissa === 0 || (input.rs1.isZero && input.rs2.isZero)
+//      val forceOverflow = exponent === exponentOne + 128  //Handled by writeback rounding
       val forceInfinity = (input.rs1.isInfinity || input.rs2.isInfinity)
       val forceNan = input.rs1.isNan || input.rs2.isNan || (input.rs1.isInfinity && input.rs2.isInfinity && (input.rs1.sign ^ input.rs2.sign))
     }
@@ -949,13 +946,13 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       }
     } elsewhen(norm.forceInfinity) {
       output.value.setInfinity
-    } elsewhen(norm.forceOverflow) {
+    } /*elsewhen(norm.forceOverflow) {
       val doMax = input.roundMode.mux(
-        FpuRoundMode.RNE -> (True),
+        FpuRoundMode.RNE -> (False),
         FpuRoundMode.RTZ -> (True),
         FpuRoundMode.RDN -> (!output.value.sign),
         FpuRoundMode.RUP -> (output.value.sign),
-        FpuRoundMode.RMM -> (True)
+        FpuRoundMode.RMM -> (False)
       )
       when(doMax){
         output.value.exponent := exponentOne + 127
@@ -963,7 +960,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       } otherwise {
         output.value.setInfinity
       }
-    }
+    }*/
   }
 
 
@@ -992,9 +989,24 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     math.mantissa := adder(0, p.internalMantissaSize bits)
 
     val patched = CombInit(math)
-    when(!input.value.special && math.exponent === exponentOne + 128){
-      patched.setInfinity
+    when(!math.special && math.exponent >= exponentOne + 128){
+//      patched.setInfinity
+      val doMax = input.roundMode.mux(
+        FpuRoundMode.RNE -> (False),
+        FpuRoundMode.RTZ -> (True),
+        FpuRoundMode.RDN -> (!math.sign),
+        FpuRoundMode.RUP -> (math.sign),
+        FpuRoundMode.RMM -> (False)
+      )
+      when(doMax){
+        patched.exponent := exponentOne + 127
+        patched.mantissa.setAll()
+      } otherwise {
+        patched.setInfinity
+      }
     }
+
+
 
     val output = input.swapPayload(RoundOutput())
     output.source := input.source

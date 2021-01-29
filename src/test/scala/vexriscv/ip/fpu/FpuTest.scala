@@ -69,6 +69,7 @@ class FpuTest extends FunSuite{
 
       val f32 = new {
         val add = new TestCase("f32", "add")
+        val mul = new TestCase("f32", "mul")
       }
 
       val cpus = for(id <- 0 until portCount) yield new {
@@ -137,7 +138,7 @@ class FpuTest extends FunSuite{
           storeRaw(rs){rsp => body(b2f(rsp.value.toLong.toInt))}
         }
 
-        def mul(rd : Int, rs1 : Int, rs2 : Int): Unit ={
+        def mul(rd : Int, rs1 : Int, rs2 : Int, rounding : FpuRoundMode.E = FpuRoundMode.RNE): Unit ={
           cmdQueue += {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.MUL
             cmd.rs1 #= rs1
@@ -145,6 +146,7 @@ class FpuTest extends FunSuite{
             cmd.rs3.randomize()
             cmd.rd #= rd
             cmd.arg #= 0
+            cmd.roundMode #= rounding
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -388,6 +390,19 @@ class FpuTest extends FunSuite{
           }
         }
 
+
+        def testMulExact(a : Float, b : Float, ref : Float, flag : Int, rounding : FpuRoundMode.E): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+          load(rs2, b)
+          mul(rd,rs1,rs2, rounding)
+          storeFloat(rd){v =>
+            assert(f2b(v) == f2b(ref), f"## ${a}  * $b = $v, $ref $rounding")
+          }
+        }
+
         def testLoadStore(a : Float): Unit ={
           val rd = Random.nextInt(32)
           load(rd, a)
@@ -416,6 +431,7 @@ class FpuTest extends FunSuite{
             if(checkIt) assert(checkFloat(ref, v))
           }
         }
+
 
 
         def testFma(a : Float, b : Float, c : Float): Unit ={
@@ -609,19 +625,34 @@ class FpuTest extends FunSuite{
 
 
 
+//        for(_ <- 0 until 1000000){
+//          val rounding = FpuRoundMode.RTZ
+//          val (a,b,c,f) = f32.mul(rounding).f32_2
+//          if(a > 0 && b > 0 && !c.isInfinity) testMulExact(a,b,c,f, rounding)
+//        }
+
+
 //        roundingModes.foreach(rounding => println(Clib.math.addF32(0.0f, 0.0f, rounding.position)))
 //        roundingModes.foreach(rounding => println(Clib.math.addF32(1.0f,-1.0f, rounding.position)))
 
-        println()
-        println(Clib.math.addF32(8.0f, b2f(0xBf800000), 0))
-        println(Clib.math.addF32(8.0f, b2f(0xBf800001), 0))
-        println(Clib.math.addF32(8.0f, b2f(0xBf800002), 0))
-        println(Clib.math.addF32(8.0f, b2f(0xBf800003), 0))
-        println(Clib.math.addF32(8.0f, b2f(0xBf800004), 0))
-        println(Clib.math.addF32(8.0f, b2f(0xBf800005), 0))
-        println(Clib.math.addF32(8.0f, b2f(0xBf800006), 0))
-        println(Clib.math.addF32(8.0f, b2f(0xBf800007), 0))
-        println(Clib.math.addF32(8.0f, b2f(0xBf800008), 0))
+        println("Mul done")
+
+        for(i <- 0 until 20) println(Clib.math.addF32(b2f(0x7f000000), b2f(0x7f000000-10+i), 0))
+//        simSuccess()
+
+        foreachRounding(r => println(Clib.math.addF32(b2f(0x7f7fffff), b2f(0x7f7fffff),r.position)))
+        println("")
+        foreachRounding(r => println(Clib.math.addF32(2.5787021E38f, 3.4027196E38f,r.position)))
+        println("")
+//        println(Clib.math.addF32(8.0f, b2f(0xBf800000), 0))
+//        println(Clib.math.addF32(8.0f, b2f(0xBf800001), 0))
+//        println(Clib.math.addF32(8.0f, b2f(0xBf800002), 0))
+//        println(Clib.math.addF32(8.0f, b2f(0xBf800003), 0))
+//        println(Clib.math.addF32(8.0f, b2f(0xBf800004), 0))
+//        println(Clib.math.addF32(8.0f, b2f(0xBf800005), 0))
+//        println(Clib.math.addF32(8.0f, b2f(0xBf800006), 0))
+//        println(Clib.math.addF32(8.0f, b2f(0xBf800007), 0))
+//        println(Clib.math.addF32(8.0f, b2f(0xBf800008), 0))
 
         testAdd(-5.3687091E8f, 16.249022f, FpuRoundMode.RNE)
         testAdd(-5.3687091E8f, 16.0f, FpuRoundMode.RNE)
@@ -645,7 +676,13 @@ class FpuTest extends FunSuite{
         for(_ <- 0 until 1000000){
           val rounding = FpuRoundMode.elements.randomPick()
           val (a,b,c,f) = f32.add(rounding).f32_2
-          if(/*a > 0 && b < 0 && */!c.isInfinity) testAddExact(a,b,c,f, rounding)
+//          if(a.isNaN) println("Nan")
+//          if(b.isNaN) println("Nan")
+//          if(a.isInfinity) println("Inf")
+//          if(b.isInfinity) println("Inf")
+//          if(a == 0f) println("Zero")
+//          if(b == 0f) println("Zero")
+          /*if(/*a > 0 && b < 0 && */!c.isInfinity) */testAddExact(a,b,c,f, rounding)
         }
 
         waitUntil(cmdQueue.isEmpty)
@@ -924,10 +961,17 @@ object Clib {
 
 object FpuCompileSo extends App{
 
-  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RNE.position))
-  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RTZ.position))
-  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RDN.position))
-  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RUP.position))
+  val b2f = lang.Float.intBitsToFloat(_)
+  for(e <- FpuRoundMode.elements) {
+    println(e)
+    for (i <- -2 until 50) println(i + " => " + Clib.math.addF32(b2f(0x7f000000), b2f(0x7f000000 + i), e.position))
+    println("")
+  }
+
+//  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RNE.position))
+//  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RTZ.position))
+//  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RDN.position))
+//  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RUP.position))
 }
 
 class ProcessStream(cmd : String){
