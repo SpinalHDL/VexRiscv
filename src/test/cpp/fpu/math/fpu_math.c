@@ -48,3 +48,9 @@ JNIEXPORT jfloat API JNICALL Java_vexriscv_ip_fpu_FpuMath_addF32(JNIEnv * env, j
     float32_t v = f32_add(toF32(a), toF32(b));
     return fromF32(v);
 }
+
+JNIEXPORT jfloat API JNICALL Java_vexriscv_ip_fpu_FpuMath_mulF32(JNIEnv * env, jobject obj, jfloat a, jfloat b, jint rounding){
+    applyRounding(rounding);
+    float32_t v = f32_mul(toF32(a), toF32(b));
+    return fromF32(v);
+}

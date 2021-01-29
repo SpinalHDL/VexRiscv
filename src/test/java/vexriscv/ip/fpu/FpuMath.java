@@ -4,6 +4,7 @@ import java.io.File;
 
 public class FpuMath {
     public native float addF32(float a, float b, int rounding);
+    public native float mulF32(float a, float b, int rounding);
 
     static{
         System.load(new File("src/test/cpp/fpu/math/fpu_math.so").getAbsolutePath());

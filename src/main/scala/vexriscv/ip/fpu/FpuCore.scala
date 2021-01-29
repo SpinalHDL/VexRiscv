@@ -624,21 +624,24 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 //      val exp = math.exp + U(needShift)
 //      val man = needShift ? math.mulC(p.internalMantissaSize + 1, p.internalMantissaSize bits) | math.mulC(p.internalMantissaSize, p.internalMantissaSize bits)
 
-      val mulRounded = (math.mulC >> p.internalMantissaSize)
-      val needShift = mulRounded.msb
+      val (mulHigh, mulLow) = math.mulC.splitAt(p.internalMantissaSize-1)
+      val scrap = mulLow =/= 0
+      val needShift = mulHigh.msb
       val exp = math.exp + U(needShift)
-      val man = needShift ? mulRounded(1, p.internalMantissaSize bits) | mulRounded(0, p.internalMantissaSize bits)
-
+      val man = needShift ? mulHigh(1, p.internalMantissaSize+1 bits) | mulHigh(0, p.internalMantissaSize+1 bits)
+      scrap setWhen(needShift && mulHigh(0))
       val forceZero = input.rs1.isZero || input.rs2.isZero
       val forceUnderflow = exp <= exponentOne + exponentOne - 127 - 23  // 0x6A //TODO
-      val forceOverflow = exp > exponentOne + exponentOne + 127 || input.rs1.isInfinity || input.rs2.isInfinity
+      val forceOverflow = /*exp > exponentOne + exponentOne + 127 || */input.rs1.isInfinity || input.rs2.isInfinity
       val forceNan = input.rs1.isNan || input.rs2.isNan || ((input.rs1.isInfinity || input.rs2.isInfinity) && (input.rs1.isZero || input.rs2.isZero))
 
       val output = FpuFloat(p.internalExponentSize, p.internalMantissaSize)
       output.sign := input.rs1.sign ^ input.rs2.sign
       output.exponent := (exp - exponentOne).resized
-      output.mantissa := man
+      output.mantissa := man.asUInt >> 1
       output.setNormal
+
+      val round = man(0) ## (scrap)
 
       when(forceNan) {
         output.setNanQuiet
@@ -664,7 +667,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.lockId := input.lockId
     output.rd     := input.rd
     output.roundMode := input.roundMode
-    output.round := 0 //TODO
+    output.round  := norm.round.asUInt
     output.value  := norm.output
 
     decode.mulToAdd.valid := input.valid && input.add

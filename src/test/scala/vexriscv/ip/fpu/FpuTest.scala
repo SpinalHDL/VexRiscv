@@ -624,12 +624,22 @@ class FpuTest extends FunSuite{
         }
 
 
+        for(i <- 0 until 64){
+          val rounding = FpuRoundMode.RMM
+          val a = 24f
+          val b = b2f(0x3f800000+i)
+          val c = Clib.math.mulF32(a, b, rounding.position)
+          val f = 0
+          testMulExact(a,b,c,f, rounding)
+        }
 
-//        for(_ <- 0 until 1000000){
-//          val rounding = FpuRoundMode.RTZ
-//          val (a,b,c,f) = f32.mul(rounding).f32_2
-//          if(a > 0 && b > 0 && !c.isInfinity) testMulExact(a,b,c,f, rounding)
-//        }
+//        simSuccess()
+
+        for(_ <- 0 until 1000000){
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,c,f) = f32.mul(rounding).f32_2
+          if(!(c.abs < 1e-35f && c.abs > 0f)) testMulExact(a,b,c,f, rounding)
+        }
 
 
 //        roundingModes.foreach(rounding => println(Clib.math.addF32(0.0f, 0.0f, rounding.position)))
