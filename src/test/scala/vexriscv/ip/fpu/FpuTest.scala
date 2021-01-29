@@ -638,7 +638,8 @@ class FpuTest extends FunSuite{
         for(_ <- 0 until 1000000){
           val rounding = FpuRoundMode.elements.randomPick()
           val (a,b,c,f) = f32.mul(rounding).f32_2
-          if(!(c.abs < 1e-35f && c.abs > 0f)) testMulExact(a,b,c,f, rounding)
+//          if(!(c.abs < 1e-35f && c.abs > 0f)) testMulExact(a,b,c,f, rounding)
+          /*if(! (a.toDouble*b.toDouble.abs <= 2E-45)) */testMulExact(a,b,c,f, rounding)
         }
 
 
