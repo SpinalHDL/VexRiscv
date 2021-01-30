@@ -234,7 +234,8 @@ class IBusSimplePlugin(    resetVector : BigInt,
                        val singleInstructionPipeline : Boolean = false,
                        val memoryTranslatorPortConfig : Any = null,
                            relaxPredictorAddress : Boolean = true,
-                           predictionBuffer : Boolean = true
+                           predictionBuffer : Boolean = true,
+                           bigEndian : Boolean = false
                       ) extends IBusFetcherImpl(
     resetVector = resetVector,
     keepPcPlus4 = keepPcPlus4,
@@ -371,6 +372,11 @@ class IBusSimplePlugin(    resetVector : BigInt,
         fetchRsp.pc := stages.last.output.payload
         fetchRsp.rsp := rspBuffer.output.payload
         fetchRsp.rsp.error.clearWhen(!rspBuffer.output.valid) //Avoid interference with instruction injection from the debug plugin
+        if(bigEndian){
+          // instructions are stored in little endian byteorder
+          fetchRsp.rsp.inst.allowOverride
+          fetchRsp.rsp.inst := EndiannessSwap(rspBuffer.output.payload.inst)
+        }
 
         val join = Stream(FetchRsp())
         val exceptionDetected = False

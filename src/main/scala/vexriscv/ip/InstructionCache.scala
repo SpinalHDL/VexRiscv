@@ -447,9 +447,9 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
       val mmuRsp = io.cpu.fetch.mmuRsp
 
       io.cpu.fetch.cacheMiss := !hit.valid
-      io.cpu.fetch.error := hit.error
+      io.cpu.fetch.error := hit.error || (!mmuRsp.isPaging && (mmuRsp.exception || !mmuRsp.allowExecute))
       io.cpu.fetch.mmuRefilling := mmuRsp.refilling
-      io.cpu.fetch.mmuException := !mmuRsp.refilling && (mmuRsp.exception || !mmuRsp.allowExecute)
+      io.cpu.fetch.mmuException := !mmuRsp.refilling && mmuRsp.isPaging && (mmuRsp.exception || !mmuRsp.allowExecute)
     })
   }
 
@@ -478,9 +478,9 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
     }
 
     io.cpu.decode.cacheMiss := !hit.valid
-    io.cpu.decode.error := hit.error
+    io.cpu.decode.error := hit.error || (!mmuRsp.isPaging && (mmuRsp.exception || !mmuRsp.allowExecute))
     io.cpu.decode.mmuRefilling := mmuRsp.refilling
-    io.cpu.decode.mmuException := !mmuRsp.refilling && (mmuRsp.exception || !mmuRsp.allowExecute)
+    io.cpu.decode.mmuException := !mmuRsp.refilling && mmuRsp.isPaging && (mmuRsp.exception || !mmuRsp.allowExecute)
     io.cpu.decode.physicalAddress := mmuRsp.physicalAddress
   })
 }

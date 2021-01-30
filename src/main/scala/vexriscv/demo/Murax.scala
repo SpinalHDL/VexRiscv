@@ -52,8 +52,8 @@ case class MuraxConfig(coreFrequency : HertzNumber,
 
 
 object MuraxConfig{
-  def default : MuraxConfig = default(false)
-  def default(withXip : Boolean) =  MuraxConfig(
+  def default : MuraxConfig = default(false, false)
+  def default(withXip : Boolean = false, bigEndian : Boolean = false) =  MuraxConfig(
     coreFrequency         = 12 MHz,
     onChipRamSize         = 8 kB,
     onChipRamHexFile      = null,
@@ -75,12 +75,14 @@ object MuraxConfig{
         cmdForkPersistence = withXip, //Required by the Xip controller
         prediction = NONE,
         catchAccessFault = false,
-        compressedGen = false
+        compressedGen = false,
+        bigEndian = bigEndian
       ),
       new DBusSimplePlugin(
         catchAddressMisaligned = false,
         catchAccessFault = false,
-        earlyInjection = false
+        earlyInjection = false,
+        bigEndian = bigEndian
       ),
       new CsrPlugin(CsrPluginConfig.smallest(mtvecInit = if(withXip) 0xE0040020l else 0x80000020l)),
       new DecoderSimplePlugin(
@@ -214,9 +216,11 @@ case class Murax(config : MuraxConfig) extends Component{
       dataWidth = 32
     )
 
+    val bigEndianDBus = config.cpuPlugins.exists(_ match{ case plugin : DBusSimplePlugin => plugin.bigEndian case _ => false})
+
     //Arbiter of the cpu dBus/iBus to drive the mainBus
     //Priority to dBus, !! cmd transactions can change on the fly !!
-    val mainBusArbiter = new MuraxMasterArbiter(pipelinedMemoryBusConfig)
+    val mainBusArbiter = new MuraxMasterArbiter(pipelinedMemoryBusConfig, bigEndianDBus)
 
     //Instanciate the CPU
     val cpu = new VexRiscv(
@@ -258,7 +262,8 @@ case class Murax(config : MuraxConfig) extends Component{
     val ram = new MuraxPipelinedMemoryBusRam(
       onChipRamSize = onChipRamSize,
       onChipRamHexFile = onChipRamHexFile,
-      pipelinedMemoryBusConfig = pipelinedMemoryBusConfig
+      pipelinedMemoryBusConfig = pipelinedMemoryBusConfig,
+      bigEndian = bigEndianDBus
     )
     mainBusMapping += ram.io.bus -> (0x80000000l, onChipRamSize)
 

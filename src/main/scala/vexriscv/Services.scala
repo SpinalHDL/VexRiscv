@@ -72,6 +72,7 @@ case class MemoryTranslatorCmd() extends Bundle{
 case class MemoryTranslatorRsp(p : MemoryTranslatorBusParameter) extends Bundle{
   val physicalAddress = UInt(32 bits)
   val isIoAccess = Bool
+  val isPaging = Bool
   val allowRead, allowWrite, allowExecute = Bool
   val exception = Bool
   val refilling = Bool
