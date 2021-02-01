@@ -336,16 +336,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       output.roundMode := input.roundMode
     }
 
-
-//    val i2fSign = input.arg(0) && input.value.msb
-//    val i2fUnsigned = input.value.asUInt.twoComplement(i2fSign).resize(32 bits)
-//    val i2fLog2 = OHToUInt(OHMasking.last(i2fUnsigned))
-//    val i2fShifted = (i2fUnsigned << p.internalMantissaSize) >> i2fLog2
-//    rfOutput.value.sign := i2fSign
-//    rfOutput.value.exponent := i2fLog2 +^ exponentOne
-//    rfOutput.value.mantissa := U(i2fShifted).resized
-//    rfOutput.value.special := False //TODO
-
     val s1 = new Area{
       val input = s0.output.stage()
       val busy = False
@@ -414,7 +404,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
 
       val i2fSign = fsm.patched
-      val i2fShifted = input.value.takeHigh(23)
+      val (i2fHigh, i2fLow) = input.value.splitAt(widthOf(input.value)-24)
+      val i2fShifted = i2fHigh >> 1
+      val i2fRound = U(i2fHigh.lsb ## (i2fLow =/= 0))
 
       val recoded = p.internalFloating()
       recoded.mantissa := f32Mantissa
@@ -437,6 +429,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         output.value.exponent := (U(exponentOne+31) - fsm.manTop).resized
         output.value.mantissa := U(i2fShifted)
         output.value.setNormal
+        output.round := i2fRound
         when(fsm.i2fZero) { output.value.setZero }
         //TODO ROUND
       }
@@ -977,7 +970,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   val round = new Area{
     val input = merge.commited.combStage
 
-    //TODO do not break NAN payload
+    //TODO do not break NAN payload (seems already fine)
     val manAggregate = input.value.mantissa @@ input.round
     val expDif = (exponentOne-126) - input.value.exponent
     val discardCount = expDif.msb ? U(0) | expDif.resize(log2Up(p.internalMantissaSize) bits)
