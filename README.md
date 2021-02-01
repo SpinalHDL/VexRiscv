@@ -179,7 +179,7 @@ sbt "runMain vexriscv.demo.GenSmallest"
 NOTES:
 - It could take time the first time you run it.
 - The VexRiscv project may need an unreleased master-head of the SpinalHDL repo. If it fails to compile, just get the SpinalHDL repository and
-   do a "sbt clean compile publish-local" in it as described in the dependencies chapter.
+   do a "sbt clean compile publishLocal" in it as described in the dependencies chapter.
 
 ## Regression tests
 
@@ -417,10 +417,10 @@ A prebuild GCC toolsuite can be found here:
 The VexRiscvSocSoftware makefiles are expecting to find this prebuild version in /opt/riscv/__contentOfThisPreBuild__
 
 ```sh
-wget https://static.dev.sifive.com/dev-tools/riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6.tar.gz
-tar -xzvf riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6.tar.gz
-sudo mv riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6 /opt/riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6
-sudo mv /opt/riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6 /opt/riscv
+version=riscv64-unknown-elf-gcc-8.3.0-2019.08.0-x86_64-linux-ubuntu14
+wget -O riscv64-unknown-elf-gcc.tar.gz riscv https://static.dev.sifive.com/dev-tools/$version.tar.gz
+tar -xzvf riscv64-unknown-elf-gcc.tar.gz
+sudo mv $version /opt/riscv
 echo 'export PATH=/opt/riscv/bin:$PATH' >> ~/.bashrc
 ```
 

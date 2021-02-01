@@ -5,7 +5,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4Shared}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
-import spinal.lib.bus.bmb.{Bmb, BmbParameter}
+import spinal.lib.bus.bmb.{Bmb, BmbAccessParameter, BmbCmd, BmbInvalidationParameter, BmbParameter, BmbSourceParameter}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 import vexriscv.plugin.DBusSimpleBus
@@ -25,13 +25,26 @@ case class DataCacheConfig(cacheSize : Int,
                            tagSizeShift : Int = 0, //Used to force infering ram
                            withLrSc : Boolean = false,
                            withAmo : Boolean = false,
-                           mergeExecuteMemory : Boolean = false){
+                           withExclusive : Boolean = false,
+                           withInvalidate : Boolean = false,
+                           pendingMax : Int = 64,
+                           directTlbHit : Boolean = false,
+                           mergeExecuteMemory : Boolean = false,
+                           asyncTagMemory : Boolean = false,
+                           aggregationWidth : Int = 0){
   assert(!(mergeExecuteMemory && (earlyDataMux || earlyWaysHits)))
   assert(!(earlyDataMux && !earlyWaysHits))
+  assert(isPow2(pendingMax))
+  def withWriteResponse = withExclusive
   def burstSize = bytePerLine*8/memDataWidth
-  val burstLength = bytePerLine/(memDataWidth/8)
+  val burstLength = bytePerLine/(cpuDataWidth/8)
   def catchSomething = catchUnaligned || catchIllegal || catchAccessError
-
+  def withInternalAmo = withAmo && !withExclusive
+  def withInternalLrSc = withLrSc && !withExclusive
+  def withExternalLrSc = withLrSc && withExclusive
+  def withExternalAmo = withAmo && withExclusive
+  def cpuDataBytes = cpuDataWidth/8
+  def memDataBytes = memDataWidth/8
   def getAxi4SharedConfig() = Axi4Config(
     addressWidth = addressWidth,
     dataWidth = memDataWidth,
@@ -69,15 +82,22 @@ case class DataCacheConfig(cacheSize : Int,
   )
 
   def getBmbParameter() = BmbParameter(
-    addressWidth = 32,
-    dataWidth = 32,
-    lengthWidth = log2Up(this.bytePerLine),
-    sourceWidth = 0,
-    contextWidth = 1,
-    canRead = true,
-    canWrite = true,
-    alignment  = BmbParameter.BurstAlignement.LENGTH,
-    maximumPendingTransactionPerId = Int.MaxValue
+    BmbAccessParameter(
+      addressWidth = 32,
+      dataWidth = memDataWidth
+    ).addSources(1, BmbSourceParameter(
+      lengthWidth = log2Up(this.bytePerLine),
+      contextWidth = (if(!withWriteResponse) 1 else 0) + (if(cpuDataWidth != memDataWidth) log2Up(memDataBytes) else 0),
+      alignment  = BmbParameter.BurstAlignement.LENGTH,
+      canExclusive = withExclusive,
+      withCachedRead = true
+    )),
+    BmbInvalidationParameter(
+      canInvalidate = withInvalidate,
+      canSync = withInvalidate,
+      invalidateLength = log2Up(this.bytePerLine),
+      invalidateAlignment = BmbParameter.BurstAlignement.LENGTH
+    )
   )
 }
 
@@ -88,12 +108,13 @@ object DataCacheCpuExecute{
 case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterSlave{
   val isValid = Bool
   val address = UInt(p.addressWidth bit)
-  //  val haltIt = Bool
+  val haltIt = Bool
   val args = DataCacheCpuExecuteArgs(p)
+  val refilling = Bool
 
   override def asMaster(): Unit = {
     out(isValid, args, address)
-    //    in(haltIt)
+    in(haltIt, refilling)
   }
 }
 
@@ -107,47 +128,62 @@ case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
     val swap = Bool()
     val alu = Bits(3 bits)
   }
+
+  val totalyConsistent = Bool() //Only for AMO/LRSC
 }
 
-case class DataCacheCpuMemory(p : DataCacheConfig) extends Bundle with IMasterSlave{
+case class DataCacheCpuMemory(p : DataCacheConfig, mmu : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave{
   val isValid = Bool
   val isStuck = Bool
-  val isRemoved = Bool
   val isWrite = Bool
   val address = UInt(p.addressWidth bit)
-  val mmuBus  = MemoryTranslatorBus()
+  val mmuRsp  = MemoryTranslatorRsp(mmu)
 
   override def asMaster(): Unit = {
-    out(isValid, isStuck, isRemoved, address)
+    out(isValid, isStuck, address)
     in(isWrite)
-    slave(mmuBus)
+    out(mmuRsp)
   }
 }
 
+
+case class FenceFlags() extends Bundle {
+  val SW,SR,SO,SI,PW,PR,PO,PI = Bool()
+  val FM = Bits(4 bits)
+
+  def SL = SR || SI
+  def SS = SW || SO
+  def PL = PR || PI
+  def PS = PW || PO
+  def forceAll(): Unit ={
+    List(SW,SR,SO,SI,PW,PR,PO,PI).foreach(_ := True)
+  }
+  def clearAll(): Unit ={
+    List(SW,SR,SO,SI,PW,PR,PO,PI).foreach(_ := False)
+  }
+}
 
 case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMasterSlave{
-  val isValid = Bool
-  val isStuck = Bool
-  val isUser = Bool
-  val haltIt = Bool
-  val isWrite = Bool
+  val isValid = Bool()
+  val isStuck = Bool()
+  val isUser = Bool()
+  val haltIt = Bool()
+  val isWrite = Bool()
   val data = Bits(p.cpuDataWidth bit)
   val address = UInt(p.addressWidth bit)
-  val mmuException, unalignedAccess , accessError = Bool
-  val clearLrsc = ifGen(p.withLrSc) {Bool}
-
-  //  val exceptionBus = if(p.catchSomething) Flow(ExceptionCause()) else null
+  val mmuException, unalignedAccess, accessError = Bool()
+  val keepMemRspData = Bool() //Used by external AMO to avoid having an internal buffer
+  val fence = FenceFlags()
 
   override def asMaster(): Unit = {
-    out(isValid,isStuck,isUser, address)
-    in(haltIt, data, mmuException, unalignedAccess, accessError, isWrite)
-    outWithNull(clearLrsc)
+    out(isValid,isStuck,isUser, address, fence)
+    in(haltIt, data, mmuException, unalignedAccess, accessError, isWrite, keepMemRspData)
   }
 }
 
-case class DataCacheCpuBus(p : DataCacheConfig) extends Bundle with IMasterSlave{
+case class DataCacheCpuBus(p : DataCacheConfig, mmu : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave{
   val execute   = DataCacheCpuExecute(p)
-  val memory    = DataCacheCpuMemory(p)
+  val memory    = DataCacheCpuMemory(p, mmu)
   val writeBack = DataCacheCpuWriteBack(p)
 
   val redo = Bool()
@@ -165,24 +201,50 @@ case class DataCacheCpuBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
 case class DataCacheMemCmd(p : DataCacheConfig) extends Bundle{
   val wr = Bool
+  val uncached = Bool
   val address = UInt(p.addressWidth bit)
-  val data = Bits(p.memDataWidth bits)
-  val mask = Bits(p.memDataWidth/8 bits)
+  val data = Bits(p.cpuDataWidth bits)
+  val mask = Bits(p.cpuDataWidth/8 bits)
   val length = UInt(log2Up(p.burstLength) bits)
+  val exclusive = p.withExclusive generate Bool()
   val last = Bool
 }
 case class DataCacheMemRsp(p : DataCacheConfig) extends Bundle{
+  val aggregated = UInt(p.aggregationWidth bits)
+  val last = Bool()
   val data = Bits(p.memDataWidth bit)
   val error = Bool
+  val exclusive = p.withExclusive generate Bool()
+}
+case class DataCacheInv(p : DataCacheConfig) extends Bundle{
+  val enable = Bool()
+  val address = UInt(p.addressWidth bit)
+}
+case class DataCacheAck(p : DataCacheConfig) extends Bundle{
+  val hit = Bool()
+}
+
+case class DataCacheSync(p : DataCacheConfig) extends Bundle{
+  val aggregated = UInt(p.aggregationWidth bits)
 }
 
 case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave{
   val cmd = Stream (DataCacheMemCmd(p))
   val rsp = Flow (DataCacheMemRsp(p))
 
+  val inv = p.withInvalidate generate Stream(Fragment(DataCacheInv(p)))
+  val ack = p.withInvalidate generate Stream(Fragment(DataCacheAck(p)))
+  val sync = p.withInvalidate generate Stream(DataCacheSync(p))
+
   override def asMaster(): Unit = {
     master(cmd)
     slave(rsp)
+
+    if(p.withInvalidate) {
+      slave(inv)
+      master(ack)
+      slave(sync)
+    }
   }
 
   def toAxi4Shared(stageCmd : Boolean = false, pendingWritesMax  : Int = 7): Axi4Shared = {
@@ -221,15 +283,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     axi.r.ready := True
     axi.b.ready := True
 
-
-    //TODO remove
-    val axi2 = cloneOf(axi)
-    //    axi.arw >/-> axi2.arw
-    //    axi.w >/-> axi2.w
-    //    axi.r <-/< axi2.r
-    //    axi.b <-/< axi2.b
-    axi2 << axi
-    axi2
+    axi
   }
 
 
@@ -315,57 +369,200 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
   }
 
 
-  def toBmb() : Bmb = {
+  def toBmb(syncPendingMax : Int = 32,
+            timeoutCycles : Int = 16) : Bmb = new Area{
+    setCompositeName(DataCacheMemBus.this, "Bridge", true)
     val pipelinedMemoryBusConfig = p.getBmbParameter()
-    val bus = Bmb(pipelinedMemoryBusConfig)
+    val bus = Bmb(pipelinedMemoryBusConfig).setCompositeName(this,"toBmb", true)
+    val aggregationMax = p.memDataBytes
 
-    bus.cmd.valid := cmd.valid
-    bus.cmd.last := cmd.last
-    bus.cmd.context(0) := cmd.wr
-    bus.cmd.opcode := (cmd.wr ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
-    bus.cmd.address := cmd.address.resized
-    bus.cmd.data := cmd.data
-    bus.cmd.length := (cmd.length << 2) | 3 //TODO better sub word access
-    bus.cmd.mask := cmd.mask
+    case class Context() extends Bundle{
+      val isWrite = !p.withWriteResponse generate Bool()
+      val rspCount = (p.cpuDataWidth != p.memDataWidth) generate UInt(log2Up(aggregationMax) bits)
+    }
 
-    cmd.ready := bus.cmd.ready
+    val withoutWriteBuffer = if(p.cpuDataWidth == p.memDataWidth) new Area {
+      val busCmdContext = Context()
 
-    rsp.valid := bus.rsp.valid && !bus.rsp.context(0)
+      bus.cmd.valid := cmd.valid
+      bus.cmd.last := cmd.last
+      bus.cmd.opcode := (cmd.wr ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
+      bus.cmd.address := cmd.address.resized
+      bus.cmd.data := cmd.data
+      bus.cmd.length := (cmd.length << 2) | 3
+      bus.cmd.mask := cmd.mask
+      if (p.withExclusive) bus.cmd.exclusive := cmd.exclusive
+      if (!p.withWriteResponse) busCmdContext.isWrite := cmd.wr
+      bus.cmd.context := B(busCmdContext)
+
+      cmd.ready := bus.cmd.ready
+      if(p.withInvalidate) sync.arbitrationFrom(bus.sync)
+    }
+
+    val withWriteBuffer = if(p.cpuDataWidth != p.memDataWidth) new Area {
+      val buffer = new Area {
+        val stream = cmd.toEvent().m2sPipe()
+        val address = Reg(UInt(p.addressWidth bits))
+        val length = Reg(UInt(pipelinedMemoryBusConfig.access.lengthWidth bits))
+        val write  = Reg(Bool)
+        val exclusive = Reg(Bool)
+        val data = Reg(Bits(p.memDataWidth bits))
+        val mask = Reg(Bits(p.memDataWidth/8 bits)) init(0)
+      }
+
+      val aggregationRange = log2Up(p.memDataWidth/8)-1 downto log2Up(p.cpuDataWidth/8)
+      val tagRange = p.addressWidth-1 downto aggregationRange.high+1
+      val aggregationEnabled = Reg(Bool)
+      val aggregationCounter = Reg(UInt(log2Up(aggregationMax) bits)) init(0)
+      val aggregationCounterFull = aggregationCounter === aggregationCounter.maxValue
+      val timer = Reg(UInt(log2Up(timeoutCycles)+1 bits)) init(0)
+      val timerFull = timer.msb
+      val hit = cmd.address(tagRange) === buffer.address(tagRange)
+      val cmdExclusive = if(p.withExclusive) cmd.exclusive else False
+      val canAggregate = cmd.valid && cmd.wr && !cmd.uncached && !cmdExclusive && !timerFull && !aggregationCounterFull && (!buffer.stream.valid || aggregationEnabled && hit)
+      val doFlush = cmd.valid && !canAggregate || timerFull || aggregationCounterFull || !aggregationEnabled
+//      val canAggregate = False
+//      val doFlush = True
+      val busCmdContext = Context()
+      val halt = False
+
+      when(cmd.fire){
+        aggregationCounter := aggregationCounter + 1
+      }
+      when(buffer.stream.valid && !timerFull){
+        timer := timer + 1
+      }
+      when(bus.cmd.fire || !buffer.stream.valid){
+        buffer.mask := 0
+        aggregationCounter := 0
+        timer := 0
+      }
+
+      buffer.stream.ready := (bus.cmd.ready && doFlush || canAggregate) && !halt
+      bus.cmd.valid := buffer.stream.valid && doFlush && !halt
+      bus.cmd.last := True
+      bus.cmd.opcode := (buffer.write ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
+      bus.cmd.address := buffer.address
+      bus.cmd.length := buffer.length
+      bus.cmd.data := buffer.data
+      bus.cmd.mask := buffer.mask
+
+      if (p.withExclusive) bus.cmd.exclusive := buffer.exclusive
+      bus.cmd.context.removeAssignments() := B(busCmdContext)
+      if (!p.withWriteResponse) busCmdContext.isWrite := bus.cmd.isWrite
+      busCmdContext.rspCount := aggregationCounter
+
+      val aggregationSel = cmd.address(aggregationRange)
+      when(cmd.fire){
+        val dIn = cmd.data.subdivideIn(8 bits)
+        val dReg = buffer.data.subdivideIn(8 bits)
+        for(byteId <- 0 until p.memDataBytes){
+          when(aggregationSel === byteId / p.cpuDataBytes && cmd.mask(byteId % p.cpuDataBytes)){
+            dReg.write(byteId, dIn(byteId % p.cpuDataBytes))
+            buffer.mask(byteId) := True
+          }
+        }
+      }
+
+      when(cmd.fire){
+        buffer.write := cmd.wr
+        buffer.address := cmd.address.resized
+        buffer.length := (cmd.length << 2) | 3
+        if (p.withExclusive) buffer.exclusive := cmd.exclusive
+
+        when(cmd.wr && !cmd.uncached && !cmdExclusive){
+          aggregationEnabled := True
+          buffer.address(aggregationRange.high downto 0) := 0
+          buffer.length := p.memDataBytes-1
+        } otherwise {
+          aggregationEnabled := False
+        }
+      }
+
+
+      val rspCtx = bus.rsp.context.as(Context())
+      rsp.aggregated := rspCtx.rspCount
+
+      val syncLogic = p.withInvalidate generate new Area{
+        val cmdCtx = Stream(UInt(log2Up(aggregationMax) bits))
+        cmdCtx.valid := bus.cmd.fire && bus.cmd.isWrite
+        cmdCtx.payload := aggregationCounter
+        halt setWhen(!cmdCtx.ready)
+
+        val syncCtx = cmdCtx.queue(syncPendingMax)
+        syncCtx.ready := bus.sync.fire
+
+        sync.arbitrationFrom(bus.sync)
+        sync.aggregated := syncCtx.payload
+      }
+    }
+
+
+    rsp.valid := bus.rsp.valid
+    if(!p.withWriteResponse) rsp.valid clearWhen(bus.rsp.context(0))
     rsp.data  := bus.rsp.data
     rsp.error := bus.rsp.isError
+    rsp.last := bus.rsp.last
+    if(p.withExclusive) rsp.exclusive := bus.rsp.exclusive
     bus.rsp.ready := True
 
-    bus
-  }
+    val invalidateLogic = p.withInvalidate generate new Area{
+      val beatCountMinusOne = bus.inv.transferBeatCountMinusOne(p.bytePerLine)
+      val counter = Reg(UInt(widthOf(beatCountMinusOne) bits)) init(0)
+
+      inv.valid := bus.inv.valid
+      inv.address := bus.inv.address + (counter << log2Up(p.bytePerLine))
+      inv.enable  := bus.inv.all
+      inv.last := counter === beatCountMinusOne
+      bus.inv.ready := inv.last && inv.ready
+
+      if(widthOf(counter) != 0) when(inv.fire){
+        counter := counter + 1
+        when(inv.last){
+          counter := 0
+        }
+      }
+
+      bus.ack.arbitrationFrom(ack.throwWhen(!ack.last))
+    }
+  }.bus
 
 }
 
+object DataCacheExternalAmoStates extends SpinalEnum{
+  val LR_CMD, LR_RSP, SC_CMD, SC_RSP = newElement();
+}
 
-class DataCache(p : DataCacheConfig) extends Component{
+//If external amo, mem rsp should stay
+class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParameter) extends Component{
   import p._
-  assert(cpuDataWidth == memDataWidth)
 
   val io = new Bundle{
-    val cpu = slave(DataCacheCpuBus(p))
+    val cpu = slave(DataCacheCpuBus(p, mmuParameter))
     val mem = master(DataCacheMemBus(p))
-    //    val flushDone = out Bool //It pulse at the same time than the manager.request.fire
   }
 
   val haltCpu = False
   val lineWidth = bytePerLine*8
   val lineCount = cacheSize/bytePerLine
-  val wordWidth = Math.max(memDataWidth,cpuDataWidth)
+  val wordWidth = cpuDataWidth
   val wordWidthLog2 = log2Up(wordWidth)
   val wordPerLine = lineWidth/wordWidth
   val bytePerWord = wordWidth/8
   val wayLineCount = lineCount/wayCount
   val wayLineLog2 = log2Up(wayLineCount)
   val wayWordCount = wayLineCount * wordPerLine
+  val memWordPerLine = lineWidth/memDataWidth
   val memTransactionPerLine = p.bytePerLine / (p.memDataWidth/8)
+  val bytePerMemWord = memDataWidth/8
+  val wayMemWordCount = wayLineCount * memWordPerLine
 
   val tagRange = addressWidth-1 downto log2Up(wayLineCount*bytePerLine)
   val lineRange = tagRange.low-1 downto log2Up(bytePerLine)
-  val wordRange = log2Up(bytePerLine)-1 downto log2Up(bytePerWord)
+  val cpuWordRange = log2Up(bytePerLine)-1 downto log2Up(bytePerWord)
+  val memWordRange = log2Up(bytePerLine)-1 downto log2Up(bytePerMemWord)
+  val hitRange = tagRange.high downto lineRange.low
+  val memWordToCpuWordRange = log2Up(bytePerMemWord)-1 downto log2Up(bytePerWord)
 
 
   class LineInfo() extends Bundle{
@@ -374,6 +571,7 @@ class DataCache(p : DataCacheConfig) extends Component{
   }
 
   val tagsReadCmd =  Flow(UInt(log2Up(wayLineCount) bits))
+  val tagsInvReadCmd = withInvalidate generate Flow(UInt(log2Up(wayLineCount) bits))
   val tagsWriteCmd = Flow(new Bundle{
     val way = Bits(wayCount bits)
     val address = UInt(log2Up(wayLineCount) bits)
@@ -382,23 +580,32 @@ class DataCache(p : DataCacheConfig) extends Component{
 
   val tagsWriteLastCmd = RegNext(tagsWriteCmd)
 
-  val dataReadCmd =  Flow(UInt(log2Up(wayWordCount) bits))
+  val dataReadCmd =  Flow(UInt(log2Up(wayMemWordCount) bits))
   val dataWriteCmd = Flow(new Bundle{
     val way = Bits(wayCount bits)
-    val address = UInt(log2Up(wayWordCount) bits)
-    val data = Bits(wordWidth bits)
-    val mask = Bits(wordWidth/8 bits)
+    val address = UInt(log2Up(wayMemWordCount) bits)
+    val data = Bits(memDataWidth bits)
+    val mask = Bits(memDataWidth/8 bits)
   })
-
 
 
   val ways = for(i <- 0 until wayCount) yield new Area{
     val tags = Mem(new LineInfo(), wayLineCount)
-    val data = Mem(Bits(wordWidth bit), wayWordCount)
+    val data = Mem(Bits(memDataWidth bit), wayMemWordCount)
 
     //Reads
-    val tagsReadRsp = tags.readSync(tagsReadCmd.payload, tagsReadCmd.valid && !io.cpu.memory.isStuck)
-    val dataReadRsp = data.readSync(dataReadCmd.payload, dataReadCmd.valid && !io.cpu.memory.isStuck)
+    val tagsReadRsp = asyncTagMemory match {
+      case false => tags.readSync(tagsReadCmd.payload, tagsReadCmd.valid && !io.cpu.memory.isStuck)
+      case true => tags.readAsync(RegNextWhen(tagsReadCmd.payload, io.cpu.execute.isValid && !io.cpu.memory.isStuck))
+    }
+    val dataReadRspMem = data.readSync(dataReadCmd.payload, dataReadCmd.valid && !io.cpu.memory.isStuck)
+    val dataReadRspSel = if(mergeExecuteMemory) io.cpu.writeBack.address else io.cpu.memory.address
+    val dataReadRsp = dataReadRspMem.subdivideIn(cpuDataWidth bits).read(dataReadRspSel(memWordToCpuWordRange))
+
+    val tagsInvReadRsp = withInvalidate generate(asyncTagMemory match {
+      case false => tags.readSync(tagsInvReadCmd.payload, tagsInvReadCmd.valid)
+      case true => tags.readAsync(RegNextWhen(tagsInvReadCmd.payload, tagsInvReadCmd.valid))
+    })
 
     //Writes
     when(tagsWriteCmd.valid && tagsWriteCmd.way(i)){
@@ -427,16 +634,91 @@ class DataCache(p : DataCacheConfig) extends Component{
     tagsReadCmd.valid   := True
     dataReadCmd.valid   := True
     tagsReadCmd.payload := io.cpu.execute.address(lineRange)
-    dataReadCmd.payload := io.cpu.execute.address(lineRange.high downto wordRange.low)
+    dataReadCmd.payload := io.cpu.execute.address(lineRange.high downto memWordRange.low)
   }
 
   def collisionProcess(readAddress : UInt, readMask : Bits): Bits ={
     val ret = Bits(wayCount bits)
+    val readAddressAligned = (readAddress >> log2Up(memDataWidth/cpuDataWidth))
+    val dataWriteMaskAligned = dataWriteCmd.mask.subdivideIn(memDataWidth/cpuDataWidth slices).read(readAddress(log2Up(memDataWidth/cpuDataWidth)-1 downto 0))
     for(i <- 0 until wayCount){
-      ret(i) := dataWriteCmd.valid && dataWriteCmd.way(i) && dataWriteCmd.address === readAddress && (readMask & dataWriteCmd.mask) =/= 0
+      ret(i) := dataWriteCmd.valid && dataWriteCmd.way(i) && dataWriteCmd.address === readAddressAligned && (readMask & dataWriteMaskAligned) =/= 0
     }
     ret
   }
+
+
+  io.cpu.execute.haltIt := False
+
+  val rspSync = True
+  val rspLast = True
+  val memCmdSent = RegInit(False) setWhen (io.mem.cmd.ready) clearWhen (!io.cpu.writeBack.isStuck)
+  val pending = withExclusive generate new Area{
+    val counter = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
+    val counterNext = counter + U(io.mem.cmd.fire && io.mem.cmd.last) - ((io.mem.rsp.valid  && io.mem.rsp.last) ? (io.mem.rsp.aggregated +^ 1) | 0)
+    counter := counterNext
+
+    val done = RegNext(counterNext === 0)
+    val full = RegNext(counter.msb)       //Has margin
+    val last = RegNext(counterNext === 1) //Equivalent to counter === 1 but pipelined
+
+    if(!withInvalidate) {
+      io.cpu.execute.haltIt setWhen(full)
+    }
+
+    rspSync clearWhen (!last || !memCmdSent)
+    rspLast clearWhen (!last)
+  }
+
+  val sync = withInvalidate generate new Area{
+    io.mem.sync.ready := True
+    val syncCount = io.mem.sync.aggregated +^ 1
+    val syncContext = new Area{
+      val history = Mem(Bool, pendingMax)
+      val wPtr, rPtr = Reg(UInt(log2Up(pendingMax)+1 bits)) init(0)
+      when(io.mem.cmd.fire && io.mem.cmd.wr){
+        history.write(wPtr.resized, io.mem.cmd.uncached)
+        wPtr := wPtr + 1
+      }
+
+      when(io.mem.sync.fire){
+        rPtr := rPtr + syncCount
+      }
+      val uncached = history.readAsync(rPtr.resized)
+      val full = RegNext(wPtr - rPtr >= pendingMax-1)
+      io.cpu.execute.haltIt setWhen(full)
+    }
+
+    def pending(inc : Bool, dec : Bool) = new Area {
+      val pendingSync = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
+      val pendingSyncNext = pendingSync + U(io.mem.cmd.fire && io.mem.cmd.wr && inc) - ((io.mem.sync.fire && dec) ? syncCount | 0)
+      pendingSync := pendingSyncNext
+    }
+
+    val writeCached = pending(inc = !io.mem.cmd.uncached, dec = !syncContext.uncached)
+    val writeUncached = pending(inc = io.mem.cmd.uncached, dec = syncContext.uncached)
+
+    def track(load : Bool, uncached : Boolean) = new Area {
+      val counter = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
+      counter := counter - ((io.mem.sync.fire && counter =/= 0 && (if(uncached) syncContext.uncached else !syncContext.uncached)) ? syncCount | 0)
+      when(load){ counter := (if(uncached) writeUncached.pendingSyncNext else writeCached.pendingSyncNext) }
+
+      val busy = counter =/= 0
+    }
+
+    val w2w = track(load = io.cpu.writeBack.fence.PW && io.cpu.writeBack.fence.SW, uncached = false)
+    val w2r = track(load = io.cpu.writeBack.fence.PW && io.cpu.writeBack.fence.SR, uncached = false)
+    val w2i = track(load = io.cpu.writeBack.fence.PW && io.cpu.writeBack.fence.SI, uncached = false)
+    val w2o = track(load = io.cpu.writeBack.fence.PW && io.cpu.writeBack.fence.SO, uncached = false)
+    val o2w = track(load = io.cpu.writeBack.fence.PO && io.cpu.writeBack.fence.SW, uncached =  true)
+    val o2r = track(load = io.cpu.writeBack.fence.PO && io.cpu.writeBack.fence.SR, uncached =  true)
+    //Assume o2i and o2o are ordered by the interconnect
+
+    val notTotalyConsistent = w2w.busy || w2r.busy || w2i.busy || w2o.busy || o2w.busy || o2r.busy
+  }
+
+
+
 
   val stage0 = new Area{
     val mask = io.cpu.execute.size.mux (
@@ -444,26 +726,58 @@ class DataCache(p : DataCacheConfig) extends Component{
       U(1)    -> B"0011",
       default -> B"1111"
     ) |<< io.cpu.execute.address(1 downto 0)
-    val colisions = collisionProcess(io.cpu.execute.address(lineRange.high downto wordRange.low), mask)
+    val dataColisions = collisionProcess(io.cpu.execute.address(lineRange.high downto cpuWordRange.low), mask)
+    val wayInvalidate = B(0, wayCount bits) //Used if invalidate enabled
+
+    val isAmo = if(withAmo) io.cpu.execute.isAmo else False
   }
 
   val stageA = new Area{
     def stagePipe[T <: Data](that : T) = if(mergeExecuteMemory) CombInit(that) else RegNextWhen(that, !io.cpu.memory.isStuck)
     val request = stagePipe(io.cpu.execute.args)
     val mask = stagePipe(stage0.mask)
-    io.cpu.memory.mmuBus.cmd.isValid := io.cpu.memory.isValid
-    io.cpu.memory.mmuBus.cmd.virtualAddress := io.cpu.memory.address
-    io.cpu.memory.mmuBus.cmd.bypassTranslation := False
-    io.cpu.memory.mmuBus.end := !io.cpu.memory.isStuck || io.cpu.memory.isRemoved
     io.cpu.memory.isWrite := request.wr
 
-    val wayHits = earlyWaysHits generate ways.map(way => (io.cpu.memory.mmuBus.rsp.physicalAddress(tagRange) === way.tagsReadRsp.address && way.tagsReadRsp.valid))
+    val isAmo = if(withAmo) request.isAmo else False
+    val isLrsc = if(withAmo) request.isLrsc else False
+    val consistancyCheck = (withInvalidate || withWriteResponse) generate new Area {
+      val hazard = False
+      val w = sync.w2w.busy || sync.o2w.busy
+      val r = stagePipe(sync.w2r.busy || sync.o2r.busy) || sync.w2r.busy || sync.o2r.busy // As it use the cache, need to check against the execute stage status too
+      val o = CombInit(sync.w2o.busy)
+      val i = CombInit(sync.w2i.busy)
+
+      val s = io.cpu.memory.mmuRsp.isIoAccess ? o | w
+      val l = io.cpu.memory.mmuRsp.isIoAccess ? i | r
+
+      when(isAmo? (s || l) | (request.wr ? s | l)){
+        hazard := True
+      }
+      when(request.totalyConsistent && (sync.notTotalyConsistent || io.cpu.writeBack.isValid && io.cpu.writeBack.isWrite)){
+        hazard := True
+      }
+    }
+
+    val wayHits = earlyWaysHits generate Bits(wayCount bits)
+    val indirectTlbHitGen = (earlyWaysHits && !directTlbHit) generate new Area {
+      wayHits := B(ways.map(way => (io.cpu.memory.mmuRsp.physicalAddress(tagRange) === way.tagsReadRsp.address && way.tagsReadRsp.valid)))
+    }
+    val directTlbHitGen = (earlyWaysHits && directTlbHit) generate new Area {
+      val wayTlbHits = for (way <- ways) yield for (tlb <- io.cpu.memory.mmuRsp.ways) yield {
+        way.tagsReadRsp.address === tlb.physical(tagRange) && tlb.sel
+      }
+      val translatedHits = B(wayTlbHits.map(_.orR))
+      val bypassHits = B(ways.map(_.tagsReadRsp.address === io.cpu.memory.address(tagRange)))
+      wayHits := (io.cpu.memory.mmuRsp.bypassTranslation ? bypassHits | translatedHits) & B(ways.map(_.tagsReadRsp.valid))
+    }
+
     val dataMux = earlyDataMux generate MuxOH(wayHits, ways.map(_.dataReadRsp))
-    val colisions = if(mergeExecuteMemory){
-      stagePipe(stage0.colisions)
+    val wayInvalidate = stagePipe(stage0. wayInvalidate)
+    val dataColisions = if(mergeExecuteMemory){
+      stagePipe(stage0.dataColisions)
     } else {
       //Assume the writeback stage will never be unstall memory acces while memory stage is stalled
-      stagePipe(stage0.colisions) | collisionProcess(io.cpu.memory.address(lineRange.high downto wordRange.low), mask)
+      stagePipe(stage0.dataColisions) | collisionProcess(io.cpu.memory.address(lineRange.high downto cpuWordRange.low), mask)
     }
   }
 
@@ -472,35 +786,42 @@ class DataCache(p : DataCacheConfig) extends Component{
     def ramPipe[T <: Data](that : T) = if(mergeExecuteMemory) CombInit(that) else  RegNextWhen(that, !io.cpu.writeBack.isStuck)
     val request = RegNextWhen(stageA.request, !io.cpu.writeBack.isStuck)
     val mmuRspFreeze = False
-    val mmuRsp = RegNextWhen(io.cpu.memory.mmuBus.rsp, !io.cpu.writeBack.isStuck && !mmuRspFreeze)
+    val mmuRsp = RegNextWhen(io.cpu.memory.mmuRsp, !io.cpu.writeBack.isStuck && !mmuRspFreeze)
     val tagsReadRsp = ways.map(w => ramPipe(w.tagsReadRsp))
     val dataReadRsp = !earlyDataMux generate ways.map(w => ramPipe(w.dataReadRsp))
-    val waysHits = if(earlyWaysHits) stagePipe(B(stageA.wayHits)) else B(tagsReadRsp.map(tag => mmuRsp.physicalAddress(tagRange) === tag.address && tag.valid).asBits())
+    val wayInvalidate = stagePipe(stageA. wayInvalidate)
+    val consistancyHazard = if(stageA.consistancyCheck != null) stagePipe(stageA.consistancyCheck.hazard) else False
+    val dataColisions = stagePipe(stageA.dataColisions)
+    val unaligned = if(!catchUnaligned) False else stagePipe((stageA.request.size === 2 && io.cpu.memory.address(1 downto 0) =/= 0) || (stageA.request.size === 1 && io.cpu.memory.address(0 downto 0) =/= 0))
+    val waysHitsBeforeInvalidate = if(earlyWaysHits) stagePipe(B(stageA.wayHits)) else B(tagsReadRsp.map(tag => mmuRsp.physicalAddress(tagRange) === tag.address && tag.valid).asBits())
+    val waysHits = waysHitsBeforeInvalidate & ~wayInvalidate
     val waysHit = waysHits.orR
     val dataMux = if(earlyDataMux) stagePipe(stageA.dataMux) else MuxOH(waysHits, dataReadRsp)
     val mask = stagePipe(stageA.mask)
-    val colisions = stagePipe(stageA.colisions)
 
     //Loader interface
     val loaderValid = False
 
-
+    val ioMemRspMuxed = io.mem.rsp.data.subdivideIn(cpuDataWidth bits).read(io.cpu.writeBack.address(memWordToCpuWordRange))
 
     io.cpu.writeBack.haltIt := io.cpu.writeBack.isValid
 
     //Evict the cache after reset logics
     val flusher = new Area {
       val valid = RegInit(False)
+      val hold = False
       when(valid) {
         tagsWriteCmd.valid := valid
         tagsWriteCmd.address := mmuRsp.physicalAddress(lineRange)
         tagsWriteCmd.way.setAll()
         tagsWriteCmd.data.valid := False
         io.cpu.writeBack.haltIt := True
-        when(mmuRsp.physicalAddress(lineRange) =/= wayLineCount - 1) {
-          mmuRsp.physicalAddress.getDrivingReg(lineRange) := mmuRsp.physicalAddress(lineRange) + 1
-        } otherwise {
-          valid := False
+        when(!hold) {
+          when(mmuRsp.physicalAddress(lineRange) =/= wayLineCount - 1) {
+            mmuRsp.physicalAddress.getDrivingReg(lineRange) := mmuRsp.physicalAddress(lineRange) + 1
+          } otherwise {
+            valid := False
+          }
         }
       }
 
@@ -515,23 +836,23 @@ class DataCache(p : DataCacheConfig) extends Component{
       }
     }
 
-
-    val lrsc = withLrSc generate new Area{
+    val lrSc = withInternalLrSc generate new Area{
       val reserved = RegInit(False)
-      when(io.cpu.writeBack.isValid && !io.cpu.writeBack.isStuck && !io.cpu.redo && request.isLrsc && !request.wr){
-        reserved := True
-      }
-      when(io.cpu.writeBack.clearLrsc){
-        reserved := False
+      when(io.cpu.writeBack.isValid && !io.cpu.writeBack.isStuck && request.isLrsc){
+        reserved := !request.wr
       }
     }
 
-    val requestDataBypass = CombInit(request.data)
     val isAmo = if(withAmo) request.isAmo else False
+    val isAmoCached = if(withInternalAmo) isAmo else False
+    val isExternalLsrc = if(withExternalLrSc) request.isLrsc else False
+    val isExternalAmo  = if(withExternalAmo)  request.isAmo  else False
+
+    val requestDataBypass = CombInit(request.data)
+    import DataCacheExternalAmoStates._
     val amo = withAmo generate new Area{
       def rf = request.data
-      def mem = dataMux
-
+      def mem = if(withInternalAmo) dataMux else ioMemRspMuxed
       val compare = request.amoCtrl.alu.msb
       val unsigned = request.amoCtrl.alu(2 downto 1) === B"11"
       val addSub = (rf.asSInt + Mux(compare, ~mem, mem).asSInt + Mux(compare, S(1), S(0))).asBits
@@ -545,81 +866,124 @@ class DataCache(p : DataCacheConfig) extends Component{
         B"011"  -> (rf & mem),
         default -> (selectRf ? rf | mem)
       )
-      val resultRegValid = RegNext(True) clearWhen(!io.cpu.writeBack.isStuck)
-      val resultReg = RegNext(result)
+      //      val resultRegValid = RegNext(True) clearWhen(!io.cpu.writeBack.isStuck)
+      //      val resultReg = RegNext(result)
+      val resultReg = Reg(Bits(32 bits))
+
+      val internal = withInternalAmo generate new Area{
+        val resultRegValid = RegNext(io.cpu.writeBack.isStuck)
+        resultReg := result
+      }
+      val external = !withInternalAmo generate new Area{
+        val state = RegInit(LR_CMD)
+      }
     }
 
 
-    val memCmdSent = RegInit(False) setWhen (io.mem.cmd.ready) clearWhen (!io.cpu.writeBack.isStuck)
+    val cpuWriteToCache = False
+    when(cpuWriteToCache){
+      dataWriteCmd.valid setWhen(request.wr && waysHit)
+      dataWriteCmd.address := mmuRsp.physicalAddress(lineRange.high downto memWordRange.low)
+      dataWriteCmd.data.subdivideIn(cpuDataWidth bits).foreach(_ := requestDataBypass)
+      dataWriteCmd.mask := 0
+      dataWriteCmd.mask.subdivideIn(cpuDataWidth/8 bits).write(io.cpu.writeBack.address(memWordToCpuWordRange), mask)
+      dataWriteCmd.way := waysHits
+    }
+
     val badPermissions = (!mmuRsp.allowWrite && request.wr) || (!mmuRsp.allowRead && (!request.wr || isAmo))
     val loadStoreFault = io.cpu.writeBack.isValid && (mmuRsp.exception || badPermissions)
-
-    io.cpu.writeBack.accessError := False
-    when(mmuRsp.isIoAccess) {
-      io.cpu.writeBack.data := io.mem.rsp.data
-      if (catchAccessError) io.cpu.writeBack.accessError := io.mem.rsp.valid && io.mem.rsp.error
-    } otherwise {
-      io.cpu.writeBack.data := dataMux
-      if (catchAccessError) io.cpu.writeBack.accessError := (waysHits & B(tagsReadRsp.map(_.error))) =/= 0 || (loadStoreFault && !mmuRsp.isPaging)
-    }
-
+    
     io.cpu.redo := False
-    io.cpu.writeBack.mmuException := loadStoreFault && (if(catchIllegal) mmuRsp.isPaging else False)
-    io.cpu.writeBack.unalignedAccess := io.cpu.writeBack.isValid && (if(catchUnaligned) ((request.size === 2 && mmuRsp.physicalAddress(1 downto 0) =/= 0) || (request.size === 1 && mmuRsp.physicalAddress(0 downto 0) =/= 0)) else False)
+    io.cpu.writeBack.accessError := False
+    io.cpu.writeBack.mmuException :=  loadStoreFault && (if(catchIllegal) mmuRsp.isPaging else False)
+    io.cpu.writeBack.unalignedAccess := io.cpu.writeBack.isValid && unaligned
     io.cpu.writeBack.isWrite := request.wr
 
+
     io.mem.cmd.valid := False
-    io.mem.cmd.address.assignDontCare()
-    io.mem.cmd.length.assignDontCare()
-    io.mem.cmd.last.assignDontCare()
+    io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto cpuWordRange.low) @@ U(0, cpuWordRange.low bits)
+    io.mem.cmd.length := 0
+    io.mem.cmd.last := True
     io.mem.cmd.wr := request.wr
     io.mem.cmd.mask := mask
     io.mem.cmd.data := requestDataBypass
+    io.mem.cmd.uncached := mmuRsp.isIoAccess
+    if(withExternalLrSc) io.mem.cmd.exclusive := request.isLrsc || isAmo
 
+
+    val bypassCache = mmuRsp.isIoAccess || isExternalLsrc || isExternalAmo
+
+    io.cpu.writeBack.keepMemRspData := False
     when(io.cpu.writeBack.isValid) {
-      when(mmuRsp.isIoAccess) {
-        io.cpu.writeBack.haltIt.clearWhen(request.wr ? io.mem.cmd.ready | io.mem.rsp.valid)
+      when(isExternalAmo){
+        if(withExternalAmo) switch(amo.external.state){
+          is(LR_CMD){
+            io.mem.cmd.valid := True
+            io.mem.cmd.wr := False
+            when(io.mem.cmd.ready) {
+              amo.external.state := LR_RSP
+            }
+          }
+          is(LR_RSP){
+            when(io.mem.rsp.valid && pending.last) {
+              amo.external.state := SC_CMD
+              amo.resultReg := amo.result
+            }
+          }
+          is(SC_CMD){
+            io.mem.cmd.valid := True
+            when(io.mem.cmd.ready) {
+              amo.external.state := SC_RSP
+            }
+          }
+          is(SC_RSP){
+            io.cpu.writeBack.keepMemRspData := True
+            when(io.mem.rsp.valid) {
+              amo.external.state := LR_CMD
+              when(io.mem.rsp.exclusive){ //Success
+                cpuWriteToCache := True
+                io.cpu.writeBack.haltIt := False
+              }
+            }
+          }
+        }
+      } elsewhen(mmuRsp.isIoAccess || isExternalLsrc) {
+        val waitResponse = !request.wr
+        if(withExternalLrSc) waitResponse setWhen(request.isLrsc)
+
+        io.cpu.writeBack.haltIt.clearWhen(waitResponse ? (io.mem.rsp.valid && rspSync) | io.mem.cmd.ready)
 
         io.mem.cmd.valid := !memCmdSent
-        io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
-        io.mem.cmd.length := 0
-        io.mem.cmd.last := True
 
-        if(withLrSc) when(request.isLrsc && !lrsc.reserved){
+        if(withInternalLrSc) when(request.isLrsc && !lrSc.reserved){
           io.mem.cmd.valid := False
           io.cpu.writeBack.haltIt := False
         }
       } otherwise {
-        when(waysHit || request.wr && !isAmo) {   //Do not require a cache refill ?
-          //Data cache update
-          dataWriteCmd.valid setWhen(request.wr && waysHit)
-          dataWriteCmd.address := mmuRsp.physicalAddress(lineRange.high downto wordRange.low)
-          dataWriteCmd.data := requestDataBypass
-          dataWriteCmd.mask := mask
-          dataWriteCmd.way := waysHits
+        when(waysHit || request.wr && !isAmoCached) {   //Do not require a cache refill ?
+          cpuWriteToCache := True
 
           //Write through
           io.mem.cmd.valid setWhen(request.wr)
-          io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto wordRange.low) @@ U(0, wordRange.low bit)
+          io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto cpuWordRange.low) @@ U(0, cpuWordRange.low bits)
           io.mem.cmd.length := 0
-          io.mem.cmd.last := True
           io.cpu.writeBack.haltIt clearWhen(!request.wr || io.mem.cmd.ready)
 
-          if(withAmo) when(isAmo){
-            when(!amo.resultRegValid) {
+          if(withInternalAmo) when(isAmo){
+            when(!amo.internal.resultRegValid) {
               io.mem.cmd.valid := False
               dataWriteCmd.valid := False
               io.cpu.writeBack.haltIt := True
             }
           }
 
-          //On write to read colisions
-          when((!request.wr || isAmo) && (colisions & waysHits) =/= 0){
+          //On write to read dataColisions
+          when((!request.wr || isAmoCached) && (dataColisions & waysHits) =/= 0){
             io.cpu.redo := True
             if(withAmo) io.mem.cmd.valid := False
           }
 
-          if(withLrSc) when(request.isLrsc && !lrsc.reserved){
+          if(withInternalLrSc) when(request.isLrsc && !lrSc.reserved){
             io.mem.cmd.valid := False
             dataWriteCmd.valid := False
             io.cpu.writeBack.haltIt := False
@@ -630,35 +994,45 @@ class DataCache(p : DataCacheConfig) extends Component{
           io.mem.cmd.wr := False
           io.mem.cmd.address := mmuRsp.physicalAddress(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
           io.mem.cmd.length := p.burstLength-1
-          io.mem.cmd.last := True
 
           loaderValid setWhen(io.mem.cmd.ready)
         }
       }
     }
 
+    when(bypassCache){
+      io.cpu.writeBack.data := ioMemRspMuxed
+      def isLast = if(pending != null) pending.last else True
+      if(catchAccessError) io.cpu.writeBack.accessError := !request.wr && isLast && io.mem.rsp.valid && io.mem.rsp.error
+    } otherwise {
+      io.cpu.writeBack.data := dataMux
+      if(catchAccessError) io.cpu.writeBack.accessError := (waysHits & B(tagsReadRsp.map(_.error))) =/= 0 || (loadStoreFault && !mmuRsp.isPaging)
+    }
+
+    if(withLrSc) when(request.isLrsc && request.wr){
+      val success = if(withInternalLrSc)lrSc.reserved else io.mem.rsp.exclusive
+      io.cpu.writeBack.data := B(!success).resized
+      if(withExternalLrSc) when(io.cpu.writeBack.isValid && io.mem.rsp.valid && rspSync && success && waysHit){
+        cpuWriteToCache := True
+      }
+    }
+    if(withAmo) when(request.isAmo){
+      requestDataBypass := amo.resultReg
+    }
+
     //remove side effects on exceptions
-    when(mmuRsp.refilling || io.cpu.writeBack.accessError || io.cpu.writeBack.mmuException || io.cpu.writeBack.unalignedAccess){
+    when(consistancyHazard || mmuRsp.refilling || io.cpu.writeBack.accessError || io.cpu.writeBack.mmuException || io.cpu.writeBack.unalignedAccess){
       io.mem.cmd.valid := False
       tagsWriteCmd.valid := False
       dataWriteCmd.valid := False
       loaderValid := False
       io.cpu.writeBack.haltIt := False
+      if(withInternalLrSc) lrSc.reserved := lrSc.reserved
+      if(withExternalAmo) amo.external.state := LR_CMD
     }
-    io.cpu.redo setWhen(io.cpu.writeBack.isValid && mmuRsp.refilling)
+    io.cpu.redo setWhen(io.cpu.writeBack.isValid && (mmuRsp.refilling || consistancyHazard))
 
     assert(!(io.cpu.writeBack.isValid && !io.cpu.writeBack.haltIt && io.cpu.writeBack.isStuck), "writeBack stuck by another plugin is not allowed")
-
-    if(withLrSc){
-      when(request.isLrsc && request.wr){
-        io.cpu.writeBack.data := (!lrsc.reserved).asBits.resized
-      }
-    }
-    if(withAmo){
-      when(request.isAmo){
-        requestDataBypass := amo.resultReg
-      }
-    }
   }
 
   val loader = new Area{
@@ -668,8 +1042,10 @@ class DataCache(p : DataCacheConfig) extends Component{
     val counter = Counter(memTransactionPerLine)
     val waysAllocator = Reg(Bits(wayCount bits)) init(1)
     val error = RegInit(False)
+    val kill = False
+    val killReg = RegInit(False) setWhen(kill)
 
-    when(valid && io.mem.rsp.valid){
+    when(valid && io.mem.rsp.valid && rspLast){
       dataWriteCmd.valid := True
       dataWriteCmd.address := baseAddress(lineRange) @@ counter
       dataWriteCmd.data := io.mem.rsp.data
@@ -679,26 +1055,88 @@ class DataCache(p : DataCacheConfig) extends Component{
       counter.increment()
     }
 
+    val done = CombInit(counter.willOverflow)
+    if(withInvalidate) done setWhen(valid && pending.counter === 0) //Used to solve invalidate write request at the same time
 
-    when(counter.willOverflow){
+    when(done){
       valid := False
 
       //Update tags
       tagsWriteCmd.valid := True
       tagsWriteCmd.address := baseAddress(lineRange)
-      tagsWriteCmd.data.valid := True
+      tagsWriteCmd.data.valid := !(kill || killReg)
       tagsWriteCmd.data.address := baseAddress(tagRange)
-      tagsWriteCmd.data.error := error || io.mem.rsp.error
+      tagsWriteCmd.data.error := error || (io.mem.rsp.valid && io.mem.rsp.error)
       tagsWriteCmd.way := waysAllocator
 
       error := False
+      killReg := False
     }
 
     when(!valid){
       waysAllocator := (waysAllocator ## waysAllocator.msb).resized
     }
 
-    io.cpu.redo setWhen(valid)
+    io.cpu.redo setWhen(valid.rise())
+    io.cpu.execute.refilling := valid
+
     stageB.mmuRspFreeze setWhen(stageB.loaderValid || valid)
+  }
+
+  val invalidate = withInvalidate generate new Area{
+    val s0 = new Area{
+      val input = io.mem.inv
+      tagsInvReadCmd.valid := input.fire
+      tagsInvReadCmd.payload := input.address(lineRange)
+
+      val loaderTagHit = input.address(tagRange) === loader.baseAddress(tagRange)
+      val loaderLineHit =  input.address(lineRange) === loader.baseAddress(lineRange)
+      when(input.valid && input.enable && loader.valid && loaderLineHit && loaderTagHit){
+        loader.kill := True
+      }
+    }
+    val s1 = new Area{
+      val input = s0.input.stage()
+      val loaderValid = RegNextWhen(loader.valid, s0.input.ready)
+      val loaderWay = RegNextWhen(loader.waysAllocator, s0.input.ready)
+      val loaderTagHit = RegNextWhen(s0.loaderTagHit, s0.input.ready)
+      val loaderLineHit = RegNextWhen(s0.loaderLineHit, s0.input.ready)
+      val invalidations = Bits(wayCount bits)
+
+      var wayHits = B(ways.map(way => (input.address(tagRange) === way.tagsInvReadRsp.address && way.tagsInvReadRsp.valid))) & ~invalidations
+
+      //Handle invalider read during loader write hazard
+      when(loaderValid && loaderLineHit && !loaderTagHit){
+        wayHits \= wayHits & ~loaderWay
+      }
+    }
+    val s2 = new Area{
+      val input = s1.input.stage()
+      val wayHits = RegNextWhen(s1.wayHits, s1.input.ready)
+      val wayHit = wayHits.orR
+
+      when(input.valid && input.enable) {
+        //Manage invalidate write during cpu read hazard
+        when(input.address(lineRange) === io.cpu.execute.address(lineRange)) {
+          stage0.wayInvalidate := wayHits
+        }
+
+        //Invalidate cache tag
+        when(wayHit) {
+          tagsWriteCmd.valid := True
+          stageB.flusher.hold := True
+          tagsWriteCmd.address := input.address(lineRange)
+          tagsWriteCmd.data.valid := False
+          tagsWriteCmd.way := wayHits
+          loader.done := False //Hold loader tags write
+        }
+      }
+      io.mem.ack.arbitrationFrom(input)
+      io.mem.ack.hit := wayHit
+      io.mem.ack.last := input.last
+
+      //Manage invalidation read during write hazard
+      s1.invalidations := RegNextWhen((input.valid && input.enable && input.address(lineRange) === s0.input.address(lineRange)) ? wayHits | 0, s0.input.ready)
+    }
   }
 }

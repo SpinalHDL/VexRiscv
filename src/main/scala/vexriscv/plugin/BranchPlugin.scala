@@ -139,7 +139,10 @@ class BranchPlugin(earlyBranch : Boolean,
     }
 
     val pcManagerService = pipeline.service(classOf[JumpService])
-    jumpInterface = pcManagerService.createJumpInterface(branchStage)
+
+    //Priority -1, as DYNAMIC_TARGET misspredicted on non branch instruction should lose against other instructions
+    //legitim branches, as MRET for instance
+    jumpInterface = pcManagerService.createJumpInterface(branchStage, priority = -10)
 
 
     if (catchAddressMisalignedForReal) {

@@ -83,10 +83,7 @@ object DBusSimpleBus{
     lengthWidth = 2,
     sourceWidth = 0,
     contextWidth = 1,
-    canRead = true,
-    canWrite = true,
-    alignment     = BmbParameter.BurstAlignement.LENGTH,
-    maximumPendingTransactionPerId = Int.MaxValue
+    alignment     = BmbParameter.BurstAlignement.LENGTH
   )
 }
 
@@ -294,7 +291,6 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
   object ALIGNEMENT_FAULT extends Stageable(Bool)
   object MMU_FAULT extends Stageable(Bool)
-  object MMU_RSP extends Stageable(MemoryTranslatorRsp())
   object MEMORY_ATOMIC extends Stageable(Bool)
   object ATOMIC_HIT extends Stageable(Bool)
   object MEMORY_STORE extends Stageable(Bool)
@@ -389,6 +385,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     import pipeline._
     import pipeline.config._
 
+    object MMU_RSP extends Stageable(MemoryTranslatorRsp(mmuBus.p))
+
     dBus = master(DBusSimpleBus(bigEndian)).setName("dBus")
 
 
@@ -440,9 +438,10 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       insert(FORMAL_MEM_WDATA) := dBus.cmd.payload.data
 
       val mmu = (mmuBus != null) generate new Area {
-        mmuBus.cmd.isValid := arbitration.isValid && input(MEMORY_ENABLE)
-        mmuBus.cmd.virtualAddress := input(SRC_ADD).asUInt
-        mmuBus.cmd.bypassTranslation := False
+        mmuBus.cmd.last.isValid := arbitration.isValid && input(MEMORY_ENABLE)
+        mmuBus.cmd.last.isStuck := arbitration.isStuck
+        mmuBus.cmd.last.virtualAddress := input(SRC_ADD).asUInt
+        mmuBus.cmd.last.bypassTranslation := False
         mmuBus.end := !arbitration.isStuck || arbitration.isRemoved
         dBus.cmd.address := mmuBus.rsp.physicalAddress
 
@@ -461,13 +460,9 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       val atomic = withLrSc generate new Area{
         val reserved = RegInit(False)
         insert(ATOMIC_HIT) := reserved
-        when(arbitration.isFiring &&  input(MEMORY_ENABLE) && input(MEMORY_ATOMIC) && !input(MEMORY_STORE)){
-          reserved := True
+        when(arbitration.isFiring &&  input(MEMORY_ENABLE) && input(MEMORY_ATOMIC) && (if(mmuBus != null) !input(MMU_FAULT) else True) && !skipCmd){
+          reserved := !input(MEMORY_STORE)
         }
-        when(service(classOf[IContextSwitching]).isContextSwitching){
-          reserved := False
-        }
-
         when(input(MEMORY_STORE) && input(MEMORY_ATOMIC) && !input(ATOMIC_HIT)){
           skipCmd := True
         }

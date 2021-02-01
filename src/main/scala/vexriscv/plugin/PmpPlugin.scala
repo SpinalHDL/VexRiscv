@@ -156,7 +156,7 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
   val portsInfo = ArrayBuffer[ProtectedMemoryTranslatorPort]()
 
   override def newTranslationPort(priority : Int, args : Any): MemoryTranslatorBus = {
-    val port = ProtectedMemoryTranslatorPort(MemoryTranslatorBus())
+    val port = ProtectedMemoryTranslatorPort(MemoryTranslatorBus(new MemoryTranslatorBusParameter(0, 0)))
     portsInfo += port
     port.bus
   }
@@ -213,7 +213,7 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
       // Connect memory ports to PMP logic.
       val ports = for ((port, portId) <- portsInfo.zipWithIndex) yield new Area {
 
-        val address = port.bus.cmd.virtualAddress
+        val address = port.bus.cmd(0).virtualAddress
         port.bus.rsp.physicalAddress := address
 
         // Only the first matching PMP region applies.

@@ -124,7 +124,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
     import pipeline.config._
 
     pipeline plug new FetchArea(pipeline) {
-      val cache = new InstructionCache(IBusCachedPlugin.this.config.copy(bypassGen = tightlyGen))
+      val cache = new InstructionCache(IBusCachedPlugin.this.config.copy(bypassGen = tightlyGen), if(mmuBus != null) mmuBus.p else MemoryTranslatorBusParameter(0,0))
       iBus = master(new InstructionCacheMemBus(IBusCachedPlugin.this.config)).setName("iBus")
       iBus <> cache.io.mem
       iBus.cmd.address.allowOverride := cache.io.mem.cmd.address
@@ -155,8 +155,13 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         cache.io.cpu.prefetch.pc := stages(0).input.payload
         stages(0).halt setWhen (cache.io.cpu.prefetch.haltIt)
 
-
-        cache.io.cpu.fetch.isRemoved := externalFlush
+        if(mmuBus != null && mmuBus.p.latency == 1) {
+          stages(0).halt setWhen(mmuBus.busy)
+          mmuBus.cmd(0).isValid := cache.io.cpu.prefetch.isValid
+          mmuBus.cmd(0).isStuck := !stages(0).input.ready
+          mmuBus.cmd(0).virtualAddress := cache.io.cpu.prefetch.pc
+          mmuBus.cmd(0).bypassTranslation := False
+        }
       }
 
 
@@ -172,8 +177,15 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
         cache.io.cpu.fetch.isStuck := !stages(1).input.ready
         cache.io.cpu.fetch.pc := stages(1).input.payload
 
+        if(mmuBus != null) {
+          mmuBus.cmd.last.isValid := cache.io.cpu.fetch.isValid
+          mmuBus.cmd.last.isStuck := !stages(1).input.ready
+          mmuBus.cmd.last.virtualAddress := cache.io.cpu.fetch.pc
+          mmuBus.cmd.last.bypassTranslation := False
+          mmuBus.end := stages(1).input.ready || externalFlush
+          if (mmuBus.p.latency == 0) stages(1).halt setWhen (mmuBus.busy)
+        }
 
-        stages(1).halt setWhen(cache.io.cpu.fetch.haltIt)
 
         if (!twoCycleCache) {
           cache.io.cpu.fetch.isUser := privilegeService.isUser()
@@ -249,16 +261,15 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
       }
 
       if (mmuBus != null) {
-        cache.io.cpu.fetch.mmuBus <> mmuBus
+        cache.io.cpu.fetch.mmuRsp <> mmuBus.rsp
       } else {
-        cache.io.cpu.fetch.mmuBus.rsp.physicalAddress := cache.io.cpu.fetch.mmuBus.cmd.virtualAddress
-        cache.io.cpu.fetch.mmuBus.rsp.allowExecute := True
-        cache.io.cpu.fetch.mmuBus.rsp.allowRead := True
-        cache.io.cpu.fetch.mmuBus.rsp.allowWrite := True
-        cache.io.cpu.fetch.mmuBus.rsp.isIoAccess := False
-        cache.io.cpu.fetch.mmuBus.rsp.exception := False
-        cache.io.cpu.fetch.mmuBus.rsp.refilling := False
-        cache.io.cpu.fetch.mmuBus.busy := False
+        cache.io.cpu.fetch.mmuRsp.physicalAddress := cache.io.cpu.fetch.pc
+        cache.io.cpu.fetch.mmuRsp.allowExecute := True
+        cache.io.cpu.fetch.mmuRsp.allowRead := True
+        cache.io.cpu.fetch.mmuRsp.allowWrite := True
+        cache.io.cpu.fetch.mmuRsp.isIoAccess := False
+        cache.io.cpu.fetch.mmuRsp.exception := False
+        cache.io.cpu.fetch.mmuRsp.refilling := False
       }
 
       val flushStage = decode

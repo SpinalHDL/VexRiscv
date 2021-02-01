@@ -376,6 +376,7 @@ public:
 
 
 	bool lrscReserved;
+	uint32_t lrscReservedAddress;
 
 	RiscvGolden() {
 		pc = 0x80000000;
@@ -389,7 +390,7 @@ public:
 		mcause.raw = 0;
 		mbadaddr = 0;
 		mepc = 0;
-		misa = 0; //TODO
+		misa = 0x40041101; //TODO
 		status.raw = 0;
 		status.mpp = 3;
 		status.spp = 1;
@@ -400,6 +401,7 @@ public:
 		ipSoft = 0;
 		ipInput = 0;
 		stepCounter = 0;
+		sbadaddr = 42;
 		lrscReserved = false;
 	}
 
@@ -464,7 +466,6 @@ public:
 	        cout << hex <<  " a7=0x" << regs[17] << " a0=0x" << regs[10] << " a1=0x" << regs[11] << " a2=0x" << regs[12] << dec << endl;
 	    }
 #endif
-	    lrscReserved = false;
 		//Check leguality of the interrupt
 		if(interrupt) {
 			bool hit = false;
@@ -513,7 +514,7 @@ public:
 		pcWrite(xtvec.base << 2);
 		if(interrupt) livenessInterrupt = 0;
 
-		if(!interrupt) step(); //As VexRiscv instruction which trap do not reach writeback stage fire
+//		if(!interrupt) step(); //As VexRiscv instruction which trap do not reach writeback stage fire
 	}
 
     uint32_t currentInstruction;
@@ -540,6 +541,7 @@ public:
 		case MISA: *value = misa; break;
 		case MEDELEG: *value = medeleg; break;
 		case MIDELEG: *value = mideleg; break;
+		case MHARTID: *value = 0; break;
 
 		case SSTATUS: *value = status.raw & 0xC0133; break;
 		case SIP: *value = getIp().raw & 0x333; break;
@@ -578,7 +580,7 @@ public:
 		case MEPC: mepc = value; break;
 		case MSCRATCH: mscratch = value; break;
 		case MISA: misa = value; break;
-		case MEDELEG: medeleg = value; break;
+		case MEDELEG: medeleg = value & (~0x8); break;
 		case MIDELEG: mideleg = value; break;
 
 		case SSTATUS: maskedWrite(status.raw, value,0xC0133); break;
@@ -835,7 +837,6 @@ public:
 						status.mpie = 1;
 						status.mpp = 0;
 						pcWrite(mepc);
-						lrscReserved = false;
 					}break;
 					case 0x10200073:{ //SRET
 						if(privilege < 1){ ilegalInstruction(); return;}
@@ -844,7 +845,6 @@ public:
 						status.spie = 1;
 						status.spp = 0;
 						pcWrite(sepc);
-						lrscReserved = false;
 					}break;
 					case 0x00000073:{ //ECALL
 						trap(0, 8+privilege, 0x00000073); //To follow the VexRiscv area saving implementation
@@ -894,6 +894,7 @@ public:
 							    trap(0, 5, address);
 							} else {
 								lrscReserved = true;
+								lrscReservedAddress = pAddr;
 								rfWrite(rd32, data);
 								pcWrite(pc + 4);
 							}
@@ -905,10 +906,15 @@ public:
 							trap(0, 6, address);
 						} else {
 							if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
-							bool hit = lrscReserved;
+							#ifdef DBUS_EXCLUSIVE
+                            bool hit = lrscReserved && lrscReservedAddress == pAddr;
+                            #else
+                            bool hit = lrscReserved;
+                            #endif
 							if(hit){
 								dWrite(pAddr, 4, i32_rs2);
 							}
+							lrscReserved = false;
 							rfWrite(rd32, !hit);
 							pcWrite(pc + 4);
 						}
@@ -921,6 +927,10 @@ public:
                         uint32_t addr = i32_rs1;
                         int32_t  src = i32_rs2;
                         int32_t readValue;
+
+                        #ifdef DBUS_EXCLUSIVE
+                        lrscReserved = false;
+                        #endif
 
                         uint32_t pAddr;
 						if(v2p(addr, &pAddr, READ_WRITE)){ trap(0, 15, addr); return; }
@@ -1098,6 +1108,7 @@ public:
 	#ifdef TRACE
 	VerilatedVcdC* tfp;
 	#endif
+	bool allowInvalidate = true;
 
 	uint32_t seed;
 
@@ -1237,8 +1248,13 @@ public:
     };
 
 	CpuRef riscvRef = CpuRef(this);
-
+    string vcdName;
+    Workspace* setVcdName(string name){
+        vcdName = name;
+        return this;
+    }
 	Workspace(string name){
+	    vcdName = name;
 	    //seed = VL_RANDOM_I(32)^VL_RANDOM_I(32)^0x1093472;
 	    //srand48(seed);
     //    setIStall(false);
@@ -1250,7 +1266,7 @@ public:
 		top = new VVexRiscv;
 		#ifdef TRACE_ACCESS
 			regTraces.open (name + ".regTrace");
-			memTraces.open (name + ".memTrace");hh
+			memTraces.open (name + ".memTrace");
 		#endif
 		logTraces.open (name + ".logTrace");
 		debugLog.open (name + ".debugTrace");
@@ -1297,6 +1313,14 @@ public:
 		return this;
     }
 
+    Workspace* withInvalidation(){
+        allowInvalidate = true;
+        return this;
+    }
+    Workspace* withoutInvalidation(){
+        allowInvalidate = false;
+        return this;
+    }
     virtual bool isPerifRegion(uint32_t addr) { return false; }
     virtual bool isMmuRegion(uint32_t addr) { return true;}
     virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
@@ -1325,7 +1349,7 @@ public:
 				 #endif
 				 ) <<
 				 #endif
-				 " : WRITE mem" << (1 << size) << "[" << addr << "] = " << *data << endl;
+				 " : WRITE mem" << hex << (1 << size) << "[" << addr << "] = " << *data << dec << endl;
 				for(uint32_t b = 0;b < (1 << size);b++){
 					uint32_t offset = (addr+b)&0x3;
 					if((mask >> offset) & 1 == 1)
@@ -1339,6 +1363,7 @@ public:
 					*data &= ~(0xFF << (offset*8));
 					*data |= mem[addr + b] << (offset*8);
 				}
+				/*
 				memTraces <<
 				#ifdef TRACE_WITH_TIME
 				(currentTime
@@ -1347,7 +1372,7 @@ public:
 				 #endif
 				 ) <<
 				 #endif
-				  " : READ  mem" << (1 << size) << "[" << addr << "] = " << *data << endl;
+				  " : READ  mem" << (1 << size) << "[" << addr << "] = " << *data << endl;*/
 
 			}
 		}
@@ -1409,10 +1434,13 @@ public:
 	virtual void pass(){ throw success();}
 	virtual void fail(){ throw std::exception();}
     virtual void fillSimELements();
-	void dump(int i){
+	void dump(uint64_t i){
 		#ifdef TRACE
-		if(i == TRACE_START && i != 0) cout << "START TRACE" << endl;
+		if(i == TRACE_START && i != 0) cout << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "START TRACE" << endl;
 		if(i >= TRACE_START) tfp->dump(i);
+		#ifdef TRACE_SPORADIC
+		else if(i % 1000000 < 100) tfp->dump(i);
+		#endif
 		#endif
 	}
 
@@ -1427,7 +1455,7 @@ public:
 		Verilated::traceEverOn(true);
 		tfp = new VerilatedVcdC;
 		top->trace(tfp, 99);
-		tfp->open((string(name)+ ".vcd").c_str());
+		tfp->open((vcdName + ".vcd").c_str());
 		#endif
 
 		// Reset
@@ -1520,7 +1548,7 @@ public:
 				currentTime = i;
 
                 #ifdef FLOW_INFO
-                    if(i % 2000000 == 0) cout << "PROGRESS TRACE_START=" << i << endl;
+                    if(i % 2000000 == 0) cout << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "PROGRESS TRACE_START=" << i << endl;
                 #endif
 
 
@@ -1607,6 +1635,14 @@ public:
                     }
                 }
 
+                #ifdef CSR
+                    if(top->VexRiscv->CsrPlugin_hadException){
+                        if(riscvRefEnable) {
+                            riscvRef.step();
+                        }
+                    }
+                #endif
+
 				for(SimElement* simElement : simElements) simElement->preCycle();
 
 				dump(i + 1);
@@ -1648,7 +1684,7 @@ public:
 
 
 
-		dump(i);
+		dump(i+2);
 		dump(i+10);
 		#ifdef TRACE
 		tfp->close();
@@ -1719,6 +1755,7 @@ public:
 			#endif
 			case 0xF00FFF48u: mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data;break;
 			case 0xF00FFF4Cu: mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); break;
+			case 0xF00FFF50u: cout << "mTime " << *data << " : " << mTime << endl;
 			}
 			if((addr & 0xFFFFF000) == 0xF5670000){
 			    uint32_t t = 0x900FF000 | (addr & 0xFFF);
@@ -1769,7 +1806,8 @@ public:
 
 
 	uint32_t regFileWriteRefIndex = 0;
-	char *target = "PROJECT EXECUTION SUCCESSFUL", *hit = target;
+	const char *target = "PROJECT EXECUTION SUCCESSFUL";
+	const char *hit = target;
 
 	ZephyrRegression(string name) : WorkspaceRegression(name) {
             cout << endl << endl;
@@ -1778,7 +1816,7 @@ public:
 
     virtual void dutPutChar(char c){
         if(*hit == c) hit++; else hit = target;
-        if(*hit == NULL) {
+        if(*hit == 0) {
             cout  << endl << "T=" << i <<endl;
             cout << endl;
             pass();
@@ -2008,10 +2046,15 @@ public:
                 ws->fail();
             }
             #endif
-			ws->iBusAccess(address,&top->iBus_rsp_payload_data,&error);
+            error = false;
+            for(int idx = 0;idx < IBUS_DATA_WIDTH/32;idx++){
+                bool localError = false;
+			    ws->iBusAccess(address+idx*4,((uint32_t*)&top->iBus_rsp_payload_data)+idx,&localError);
+			    error |= localError;
+            }
 			top->iBus_rsp_payload_error = error;
-			pendingCount--;
-			address = address + 4;
+			pendingCount-=IBUS_DATA_WIDTH/32;
+			address = address + IBUS_DATA_WIDTH/8;
 			top->iBus_rsp_valid = 1;
 		}
 		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100 && pendingCount == 0;
@@ -2316,16 +2359,28 @@ public:
 #ifdef DBUS_CACHED
 
 //#include "VVexRiscv_DataCache.h"
+#include <queue>
+
+struct DBusCachedTask{
+	char data[DBUS_DATA_WIDTH/8];
+	bool error;
+	bool last;
+	bool exclusive;
+};
 
 class DBusCached : public SimElement{
 public:
-	uint32_t address;
-	bool error_next = false;
-	uint32_t pendingCount = 0;
-	bool wr;
+	queue<DBusCachedTask> rsps;
+	queue<uint32_t> invalidationHint;
+
+	bool reservationValid = false;
+	uint32_t reservationAddress;
+	uint32_t pendingSync = 0;
 
 	Workspace *ws;
 	VVexRiscv* top;
+    DBusCachedTask rsp;
+
 	DBusCached(Workspace* ws){
 		this->ws = ws;
 		this->top = ws->top;
@@ -2334,54 +2389,135 @@ public:
 	virtual void onReset(){
 		top->dBus_cmd_ready = 1;
 		top->dBus_rsp_valid = 0;
+		#ifdef DBUS_INVALIDATE
+		top->dBus_inv_valid = 0;
+		top->dBus_ack_ready = 0;
+		top->dBus_sync_valid = 0;
+		#endif
 	}
 
 	virtual void preCycle(){
-	    VL_IN8(io_cpu_execute_isValid,0,0);
-	    VL_IN8(io_cpu_execute_isStuck,0,0);
-	    VL_IN8(io_cpu_execute_args_kind,0,0);
-	    VL_IN8(io_cpu_execute_args_wr,0,0);
-	    VL_IN8(io_cpu_execute_args_size,1,0);
-	    VL_IN8(io_cpu_execute_args_forceUncachedAccess,0,0);
-	    VL_IN8(io_cpu_execute_args_clean,0,0);
-	    VL_IN8(io_cpu_execute_args_invalidate,0,0);
-	    VL_IN8(io_cpu_execute_args_way,0,0);
-
-//		if(top->VexRiscv->dataCache_1->io_cpu_execute_isValid && !top->VexRiscv->dataCache_1->io_cpu_execute_isStuck
-//				&& top->VexRiscv->dataCache_1->io_cpu_execute_args_wr){
-//			if(top->VexRiscv->dataCache_1->io_cpu_execute_args_address == 0x80025978)
-//				cout << "WR 0x80025978 = " << hex << setw(8) << top->VexRiscv->dataCache_1->io_cpu_execute_args_data << endl;
-//			if(top->VexRiscv->dataCache_1->io_cpu_execute_args_address == 0x8002596c)
-//				cout << "WR 0x8002596c = " << hex << setw(8) << top->VexRiscv->dataCache_1->io_cpu_execute_args_data << endl;
-//		}
 		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
-			if(pendingCount == 0){
-				pendingCount = top->dBus_cmd_payload_length+1;
-				address = top->dBus_cmd_payload_address;
-				wr = top->dBus_cmd_payload_wr;
-			}
-			if(top->dBus_cmd_payload_wr){
-				ws->dBusAccess(address,top->dBus_cmd_payload_wr,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&error_next);
-				address += 4;
-				pendingCount--;
-			}
+            if(top->dBus_cmd_payload_wr){
+                #ifdef DBUS_INVALIDATE
+                    pendingSync += 1;
+                #endif
+                #ifndef DBUS_EXCLUSIVE
+                    bool error;
+                    ws->dBusAccess(top->dBus_cmd_payload_address,1,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&error);
+                #else
+                    bool cancel = false, error = false;
+                    if(top->dBus_cmd_payload_exclusive){
+                        bool hit = reservationValid && reservationAddress == top->dBus_cmd_payload_address;
+                        rsp.exclusive = hit;
+                        cancel = !hit;
+                        reservationValid = false;
+                    }
+                    if(!cancel) {
+                        for(int idx = 0;idx < 1;idx++){
+                            bool localError = false;
+                            ws->dBusAccess(top->dBus_cmd_payload_address+idx*4,1,2,top->dBus_cmd_payload_mask >> idx*4,((uint32_t*)&top->dBus_cmd_payload_data)+idx, &localError);
+                            error |= localError;
+
+                             //printf("%d ", (int)localError);
+                        }
+                    }
+
+                   // printf("%x %d\n", top->dBus_cmd_payload_address, (int)error);
+                    rsp.last = true;
+                    rsp.error = error;
+                    rsps.push(rsp);
+                #endif
+            } else {
+                bool error = false;
+                uint32_t beatCount = top->dBus_cmd_payload_length*32/DBUS_DATA_WIDTH;
+                for(int beat = 0;beat <= beatCount;beat++){
+                    if(top->dBus_cmd_payload_length == 0){
+                        uint32_t sel = (top->dBus_cmd_payload_address >> 2) & (DBUS_DATA_WIDTH/32-1);
+                        ws->dBusAccess(top->dBus_cmd_payload_address,0,2,0,((uint32_t*)rsp.data) + sel,&error);
+                    } else {
+                        for(int idx = 0;idx < DBUS_DATA_WIDTH/32;idx++){
+                            bool localError = false;
+                            ws->dBusAccess(top->dBus_cmd_payload_address + beat * DBUS_DATA_WIDTH/8 + idx*4,0,2,0,((uint32_t*)rsp.data)+idx, &localError);
+                            error |= localError;
+                        }
+                    }
+                    rsp.last = beat == beatCount;
+                    #ifdef DBUS_EXCLUSIVE
+                        if(top->dBus_cmd_payload_exclusive){
+                            rsp.exclusive = true;
+                            reservationValid = true;
+                            reservationAddress = top->dBus_cmd_payload_address;
+                        }
+                    #endif
+                    rsp.error = error;
+                    rsps.push(rsp);
+                }
+
+                #ifdef DBUS_INVALIDATE
+                    if(ws->allowInvalidate){
+                        if(VL_RANDOM_I(7) < 10){
+                            invalidationHint.push(top->dBus_cmd_payload_address + VL_RANDOM_I(5));
+                        }
+                    }
+                #endif
+            }
 		}
+		#ifdef DBUS_INVALIDATE
+            if(top->dBus_sync_valid && top->dBus_sync_ready){
+                pendingSync -= 1;
+            }
+        #endif
 	}
 
 	virtual void postCycle(){
-		if(pendingCount != 0 && !wr && (!ws->dStall || VL_RANDOM_I(7) < 100)){
-			ws->dBusAccess(address,0,2,0,&top->dBus_rsp_payload_data,&error_next);
-			top->dBus_rsp_payload_error = error_next;
+
+		if(!rsps.empty() && (!ws->dStall || VL_RANDOM_I(7) < 100)){
+			DBusCachedTask rsp = rsps.front();
+			rsps.pop();
 			top->dBus_rsp_valid = 1;
-			address += 4;
-			pendingCount--;
+			top->dBus_rsp_payload_error = rsp.error;
+            for(int idx = 0;idx < DBUS_DATA_WIDTH/32;idx++){
+                ((uint32_t*)&top->dBus_rsp_payload_data)[idx] = ((uint32_t*)rsp.data)[idx];
+            }
+			top->dBus_rsp_payload_last = rsp.last;
+            #ifdef DBUS_EXCLUSIVE
+            top->dBus_rsp_payload_exclusive = rsp.exclusive;
+            #endif
 		} else{
 			top->dBus_rsp_valid = 0;
-			top->dBus_rsp_payload_data = VL_RANDOM_I(32);
+            for(int idx = 0;idx < DBUS_DATA_WIDTH/32;idx++){
+			    ((uint32_t*)&top->dBus_rsp_payload_data)[idx] = VL_RANDOM_I(32);
+			}
 			top->dBus_rsp_payload_error = VL_RANDOM_I(1);
+			top->dBus_rsp_payload_last = VL_RANDOM_I(1);
+            #ifdef DBUS_EXCLUSIVE
+            top->dBus_rsp_payload_exclusive = VL_RANDOM_I(1);
+            #endif
 		}
+		top->dBus_cmd_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
 
-		top->dBus_cmd_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1) && (pendingCount == 0 || wr);
+        #ifdef DBUS_INVALIDATE
+            if(ws->allowInvalidate){
+                if(top->dBus_inv_ready) top->dBus_inv_valid = 0;
+                if(top->dBus_inv_valid == 0 && VL_RANDOM_I(7) < 5){
+                    top->dBus_inv_valid = 1;
+                    top->dBus_inv_payload_fragment_enable = VL_RANDOM_I(7) < 100;
+                    if(!invalidationHint.empty()){
+                        top->dBus_inv_payload_fragment_address = invalidationHint.front();
+                        invalidationHint.pop();
+                    } else {
+                        top->dBus_inv_payload_fragment_address = VL_RANDOM_I(32);
+                    }
+                }
+            }
+		    top->dBus_ack_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
+		    if(top->dBus_sync_ready) top->dBus_sync_valid = 0;
+		    if(top->dBus_sync_valid == 0 && pendingSync != 0 && (ws->dStall ? VL_RANDOM_I(7) < 80 : 1) ){
+		        top->dBus_sync_valid = 1;
+            }
+        #endif
+
 	}
 };
 #endif
@@ -3335,7 +3471,6 @@ public:
     }
 };
 
-
 class LinuxRegression: public LinuxSoc{
 public:
     string pendingLine = "";
@@ -3363,6 +3498,82 @@ public:
         case PASS: if (pendingLineContain("# ")) { pass(); } break;
         }
         if(c == '\n' || pendingLine.length() > 200) pendingLine = "";
+    }
+};
+
+#endif
+
+#ifdef LINUX_SOC_SMP
+
+class LinuxSocSmp : public Workspace{
+public:
+    queue <char> customCin;
+    void pushCin(string m){
+        for(char& c : m) {
+            customCin.push(c);
+        }
+    }
+
+	LinuxSocSmp(string name) : Workspace(name) {
+	    #ifdef WITH_USER_IO
+		stdinNonBuffered();
+		captureCtrlC();
+	    #endif
+		stdoutNonBuffered();
+	}
+
+	virtual ~LinuxSocSmp(){
+	    #ifdef WITH_USER_IO
+	    stdinRestore();
+	    #endif
+	}
+	virtual bool isDBusCheckedRegion(uint32_t address){ return true;}
+	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xF0000000;}
+    virtual bool isMmuRegion(uint32_t addr) { return true; }
+
+
+
+    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+        if(isPerifRegion(addr)) switch(addr){
+    		//TODO Emulate peripherals here
+    		case 0xF0010000: if(wr && *data != 0) fail(); else *data = 0;  break;
+    		case 0xF001BFF8: if(wr) fail(); else *data = mTime; break;
+    		case 0xF001BFFC: if(wr) fail(); else *data = mTime >> 32; break;
+    		case 0xF0014000: if(wr) mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data; else fail(); break;
+    		case 0xF0014004: if(wr) mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); else fail(); break;
+    		case 0xF0000000:
+    		    if(wr){
+    		        char c = (char)*data;
+                    cout << c;
+                    logTraces << c;
+                    logTraces.flush();
+                    onStdout(c);
+				}
+            case 0xF0000004:
+    		    if(!wr){
+				    #ifdef WITH_USER_IO
+					if(stdinNonEmpty()){
+						char c;
+						read(0, &c, 1);
+						*data = c;
+					} else
+					#endif
+					if(!customCin.empty()){
+					    *data = customCin.front();
+                        customCin.pop();
+					} else {
+						*data = -1;
+					}
+				}
+				break;
+    		default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " mask=0x" << mask << " data=0x" << data << dec << endl; fail(); break;
+    	}
+
+    	Workspace::dBusAccess(addr,wr,size,mask,data,error);
+    }
+
+    virtual void onStdout(char c){
+
     }
 };
 
@@ -3724,6 +3935,27 @@ int main(int argc, char **argv, char **env) {
 #endif
 
 
+#ifdef LINUX_SOC_SMP
+    {
+
+	    LinuxSocSmp soc("linuxSmp");
+	    #ifndef DEBUG_PLUGIN_EXTERNAL
+	    soc.withRiscvRef();
+		soc.loadBin(EMULATOR, 0x80000000);
+		soc.loadBin(VMLINUX,  0xC0000000);
+		soc.loadBin(DTB,      0xC4000000);
+		soc.loadBin(RAMDISK,  0xC2000000);
+		#endif
+		//soc.setIStall(true);
+		//soc.setDStall(true);
+		soc.bootAt(0x80000000);
+		soc.run(0);
+//		soc.run((496300000l + 2000000) / 2);
+//		soc.run(438700000l/2);
+        return -1;
+    }
+#endif
+
 
 
 
@@ -3744,14 +3976,15 @@ int main(int argc, char **argv, char **env) {
 			w.loadHex(RUN_HEX);
 			w.withRiscvRef();
 			#endif
-			//w.setIStall(false);
-			//w.setDStall(false);
+			w.setIStall(false);
+			w.setDStall(false);
 
 			#if defined(TRACE) || defined(TRACE_ACCESS)
 				//w.setCyclesPerSecond(5e3);
 				//printf("Speed reduced 5Khz\n");
 			#endif
 			w.run(0xFFFFFFFFFFFF);
+			exit(0);
 		}
 		#endif
 
@@ -3821,11 +4054,11 @@ int main(int argc, char **argv, char **env) {
 			    #ifndef COMPRESSED
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,0,   14,2,     15,5,16,17,1 };
-				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->run(10e4);)
+				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsr",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->setVcdName("machineCsr")->run(10e4);)
                 #else
 				    uint32_t machineCsrRef[] = {1,11,   2,0x80000003u,   3,0x80000007u,   4,0x8000000bu,   5,6,7,0x80000007u     ,
 				    8,6,9,6,10,4,11,4,    12,13,   14,2,     15,5,16,17,1 };
-				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->run(10e4);)
+				    redo(REDO,TestX28("../../cpp/raw/machineCsr/build/machineCsrCompressed",machineCsrRef, sizeof(machineCsrRef)/4).withRiscvRef()->setVcdName("machineCsrCompressed")->run(10e4);)
                 #endif
 			#endif
 //			#ifdef MMU

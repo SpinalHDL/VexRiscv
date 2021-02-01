@@ -89,7 +89,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false,
     import pipeline.config._
     import pipeline.decode._
 
-    val stageables = (encodings.flatMap(_._2.map(_._1)) ++ defaults.map(_._1)).toSet.toList
+    val stageables = (encodings.flatMap(_._2.map(_._1)) ++ defaults.map(_._1)).toList.distinct
 
     val stupidDecoder = false
     if(stupidDecoder){

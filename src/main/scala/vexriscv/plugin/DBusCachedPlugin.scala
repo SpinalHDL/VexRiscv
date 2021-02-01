@@ -26,7 +26,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
                        relaxedMemoryTranslationRegister : Boolean = false,
                        csrInfo : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService {
   import config._
-
+  assert(!(config.withExternalAmo && !dBusRspSlavePipe))
   assert(isPow2(cacheSize))
   assert(!(memoryTranslatorPortConfig != null && config.cacheSize/config.wayCount > 4096), "When the D$ is used with MMU, each way can't be bigger than a page (4096 bytes)")
 
@@ -49,12 +49,16 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   object MEMORY_ADDRESS_LOW extends Stageable(UInt(2 bits))
   object MEMORY_LRSC extends Stageable(Bool)
   object MEMORY_AMO extends Stageable(Bool)
+  object MEMORY_FENCE extends Stageable(Bool)
+  object MEMORY_FORCE_CONSTISTENCY extends Stageable(Bool)
   object IS_DBUS_SHARING extends Stageable(Bool())
   object MEMORY_VIRTUAL_ADDRESS extends Stageable(UInt(32 bits))
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
     import pipeline.config._
+
+    dBus = master(DataCacheMemBus(this.config)).setName("dBus")
 
     val decoderService = pipeline.service(classOf[DecoderService])
 
@@ -142,7 +146,13 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       MEMORY_MANAGMENT -> True
     ))
 
-    decoderService.add(FENCE, Nil)
+    withWriteResponse match {
+      case false => decoderService.add(FENCE, Nil)
+      case true => {
+        decoderService.addDefault(MEMORY_FENCE, False)
+        decoderService.add(FENCE, List(MEMORY_FENCE -> True))
+      }
+    }
 
     mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA ,memoryTranslatorPortConfig)
     redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(if(pipeline.writeBack != null) pipeline.writeBack else pipeline.memory)
@@ -160,17 +170,42 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     import pipeline._
     import pipeline.config._
 
-    dBus = master(DataCacheMemBus(this.config)).setName("dBus")
+    val twoStageMmu = mmuBus.p.latency match {
+      case 0 => false
+      case 1 => true
+    }
 
-    val cache = new DataCache(this.config.copy(
-      mergeExecuteMemory = writeBack == null
-    ))
+    val cache = new DataCache(
+      this.config.copy(
+        mergeExecuteMemory = writeBack == null
+      ),
+      mmuParameter = mmuBus.p
+    )
 
     //Interconnect the plugin dBus with the cache dBus with some optional pipelining
     def optionPipe[T](cond : Boolean, on : T)(f : T => T) : T = if(cond) f(on) else on
     def cmdBuf = optionPipe(dBusCmdSlavePipe, cache.io.mem.cmd)(_.s2mPipe())
     dBus.cmd << optionPipe(dBusCmdMasterPipe, cmdBuf)(_.m2sPipe())
-    cache.io.mem.rsp << optionPipe(dBusRspSlavePipe,dBus.rsp)(_.m2sPipe())
+    cache.io.mem.rsp << (dBusRspSlavePipe match {
+      case false => dBus.rsp
+      case true if !withExternalAmo => dBus.rsp.m2sPipe()
+      case true if  withExternalAmo => {
+        val rsp = Flow (DataCacheMemRsp(cache.p))
+        rsp.valid := RegNext(dBus.rsp.valid) init(False)
+        rsp.exclusive := RegNext(dBus.rsp.exclusive)
+        rsp.error := RegNext(dBus.rsp.error)
+        rsp.last := RegNext(dBus.rsp.last)
+        rsp.aggregated := RegNext(dBus.rsp.aggregated)
+        rsp.data := RegNextWhen(dBus.rsp.data, dBus.rsp.valid && !cache.io.cpu.writeBack.keepMemRspData)
+        rsp
+      }
+    })
+
+    if(withInvalidate) {
+      cache.io.mem.inv  << dBus.inv
+      cache.io.mem.ack  >> dBus.ack
+      cache.io.mem.sync << dBus.sync
+    }
 
     pipeline plug new Area{
       //Memory bandwidth counter
@@ -185,6 +220,16 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
       when(mmuBus.busy && arbitration.isValid && input(MEMORY_ENABLE)) {
         arbitration.haltItself := True
+      }
+
+
+      //Manage write to read hit ordering (ensure invalidation timings)
+      val fence = new Area {
+        insert(MEMORY_FORCE_CONSTISTENCY) := False
+        when(input(INSTRUCTION)(25)) { //RL
+          if (withLrSc) insert(MEMORY_FORCE_CONSTISTENCY) setWhen (input(MEMORY_LRSC))
+          if (withAmo) insert(MEMORY_FORCE_CONSTISTENCY) setWhen (input(MEMORY_AMO))
+        }
       }
     }
 
@@ -202,9 +247,18 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       )
       cache.io.cpu.execute.args.size := size
 
+      if(twoStageMmu) {
+        mmuBus.cmd(0).isValid := cache.io.cpu.execute.isValid
+        mmuBus.cmd(0).isStuck := arbitration.isStuck
+        mmuBus.cmd(0).virtualAddress := input(SRC_ADD).asUInt
+        mmuBus.cmd(0).bypassTranslation := False
+//        KeepAttribute(mmuBus.cmd(0))
+//        KeepAttribute(mmuBus.cmd(1))
+      }
 
       cache.io.cpu.flush.valid := arbitration.isValid && input(MEMORY_MANAGMENT)
-      arbitration.haltItself setWhen(cache.io.cpu.flush.isStall)
+      cache.io.cpu.execute.args.totalyConsistent := input(MEMORY_FORCE_CONSTISTENCY)
+      arbitration.haltItself setWhen(cache.io.cpu.flush.isStall || cache.io.cpu.execute.haltIt)
 
       if(withLrSc) {
         cache.io.cpu.execute.args.isLrsc := False
@@ -221,8 +275,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
       insert(MEMORY_ADDRESS_LOW) := cache.io.cpu.execute.address(1 downto 0)
 
-      when(cache.io.cpu.redo && arbitration.isValid && input(MEMORY_ENABLE)){
-        arbitration.haltItself := True
+      when(cache.io.cpu.execute.refilling && arbitration.isValid){
+        arbitration.haltByOther := True
       }
 
       if(relaxedMemoryTranslationRegister) {
@@ -240,11 +294,15 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
       cache.io.cpu.memory.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.memory.isStuck := arbitration.isStuck
-      cache.io.cpu.memory.isRemoved := arbitration.removeIt
       cache.io.cpu.memory.address := (if(relaxedMemoryTranslationRegister) input(MEMORY_VIRTUAL_ADDRESS) else if(mmuAndBufferStage == execute) cache.io.cpu.execute.address else U(input(REGFILE_WRITE_DATA)))
 
-      cache.io.cpu.memory.mmuBus <> mmuBus
-      cache.io.cpu.memory.mmuBus.rsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
+      mmuBus.cmd.last.isValid := cache.io.cpu.memory.isValid
+      mmuBus.cmd.last.isStuck := cache.io.cpu.memory.isStuck
+      mmuBus.cmd.last.virtualAddress := cache.io.cpu.memory.address
+      mmuBus.cmd.last.bypassTranslation := False
+      mmuBus.end := !arbitration.isStuck || arbitration.removeIt
+      cache.io.cpu.memory.mmuRsp := mmuBus.rsp
+      cache.io.cpu.memory.mmuRsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
     }
 
     val managementStage = stages.last
@@ -254,7 +312,31 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
       cache.io.cpu.writeBack.address := U(input(REGFILE_WRITE_DATA))
-      if(withLrSc) cache.io.cpu.writeBack.clearLrsc := service(classOf[IContextSwitching]).isContextSwitching
+
+      val fence = if(withInvalidate) new Area {
+        cache.io.cpu.writeBack.fence := input(INSTRUCTION)(31 downto 20).as(FenceFlags())
+        val aquire = False
+        if(withWriteResponse) when(input(MEMORY_ENABLE) && input(INSTRUCTION)(26)) { //AQ
+          if(withLrSc) when(input(MEMORY_LRSC)){
+            aquire := True
+          }
+          if(withAmo) when(input(MEMORY_AMO)){
+            aquire := True
+          }
+        }
+
+        when(aquire){
+          cache.io.cpu.writeBack.fence.forceAll()
+        }
+
+        when(!input(MEMORY_FENCE) || !arbitration.isFiring){
+          cache.io.cpu.writeBack.fence.clearAll()
+        }
+
+        when(arbitration.isValid && (input(MEMORY_FENCE) || aquire)){
+          mmuAndBufferStage.arbitration.haltByOther := True //Ensure that the fence affect the memory stage instruction by stoping it
+        }
+      }
 
       redoBranch.valid := False
       redoBranch.payload := input(PC)
@@ -317,7 +399,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         decode.arbitration.haltByOther := True
         val exceptionService = pipeline.service(classOf[ExceptionService])
         when(!stagesFromExecute.map(s => s.arbitration.isValid || exceptionService.isExceptionPending(s)).orR){
-          when(!cache.io.cpu.redo) {
+          when(!cache.io.cpu.execute.refilling) {
             cache.io.cpu.execute.isValid := True
             dBusAccess.cmd.ready := !execute.arbitration.isStuck
           }
@@ -331,9 +413,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         }
       }
       execute.insert(IS_DBUS_SHARING) := dBusAccess.cmd.fire
+      mmuBus.cmd.last.bypassTranslation setWhen(mmuAndBufferStage.input(IS_DBUS_SHARING))
+      if(twoStageMmu) mmuBus.cmd(0).bypassTranslation setWhen(execute.input(IS_DBUS_SHARING))
 
-
-      mmuBus.cmd.bypassTranslation setWhen(mmuAndBufferStage.input(IS_DBUS_SHARING))
       if(mmuAndBufferStage != execute) (cache.io.cpu.memory.isValid setWhen(mmuAndBufferStage.input(IS_DBUS_SHARING)))
       cache.io.cpu.writeBack.isValid setWhen(managementStage.input(IS_DBUS_SHARING))
       dBusAccess.rsp.valid := managementStage.input(IS_DBUS_SHARING) && !cache.io.cpu.writeBack.isWrite && (cache.io.cpu.redo || !cache.io.cpu.writeBack.haltIt)

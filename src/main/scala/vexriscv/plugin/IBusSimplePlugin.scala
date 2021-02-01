@@ -83,7 +83,7 @@ object IBusSimpleBus{
     canRead = true,
     canWrite = false,
     alignment     = BmbParameter.BurstAlignement.LENGTH,
-    maximumPendingTransactionPerId = if(plugin != null) plugin.pendingMax else Int.MaxValue
+    maximumPendingTransaction = if(plugin != null) plugin.pendingMax else Int.MaxValue
   )
 }
 
@@ -319,9 +319,9 @@ class IBusSimplePlugin(    resetVector : BigInt,
       }
 
       val mmu = (mmuBus != null) generate new Area {
-        mmuBus.cmd.isValid := cmdForkStage.input.valid
-        mmuBus.cmd.virtualAddress := cmdForkStage.input.payload
-        mmuBus.cmd.bypassTranslation := False
+        mmuBus.cmd.last.isValid := cmdForkStage.input.valid
+        mmuBus.cmd.last.virtualAddress := cmdForkStage.input.payload
+        mmuBus.cmd.last.bypassTranslation := False
         mmuBus.end := cmdForkStage.output.fire || externalFlush
 
         cmd.pc := mmuBus.rsp.physicalAddress(31 downto 2) @@ U"00"

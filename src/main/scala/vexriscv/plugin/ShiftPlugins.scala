@@ -178,9 +178,11 @@ class LightShifterPlugin extends Plugin[VexRiscv]{
 
           when(done){
             isActive := False
-          } otherwise{
-            arbitration.haltItself := True
           }
+        }
+
+        when(!done){
+          arbitration.haltItself := True
         }
       }
       when(arbitration.removeIt){

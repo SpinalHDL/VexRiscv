@@ -4,6 +4,8 @@ import spinal.core._
 
 
 object Riscv{
+  def misaToInt(values : String) = values.toLowerCase.map(e => 1 << (e-'a')).reduce(_ | _)
+
   def funct7Range = 31 downto 25
   def rdRange = 11 downto 7
   def funct3Range = 14 downto 12
@@ -157,8 +159,10 @@ object Riscv{
 
 
 
-    def UCYCLE    = 0xC00 // UR Machine ucycle counter.
-    def UCYCLEH   = 0xC80
+    def UCYCLE   = 0xC00 // UR Machine ucycle counter.
+    def UCYCLEH  = 0xC80
+    def UTIME    = 0xC01 // rdtime
+    def UTIMEH   = 0xC81
     def UINSTRET  = 0xC02 // UR Machine instructions-retired counter.
     def UINSTRETH = 0xC82 // UR Upper 32 bits of minstret, RV32I only.
   }

@@ -4,9 +4,11 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.eda.bench._
 import spinal.lib.eda.icestorm.IcestormStdTargets
+import spinal.lib.eda.xilinx.VivadoFlow
 import spinal.lib.io.InOutWrapper
-import vexriscv.VexRiscv
-import vexriscv.plugin.DecoderSimplePlugin
+import vexriscv.plugin.CsrAccess.{READ_ONLY, READ_WRITE, WRITE_ONLY}
+import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
+import vexriscv.plugin.{BranchPlugin, CsrPlugin, CsrPluginConfig, DBusSimplePlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusSimplePlugin, IntAluPlugin, LightShifterPlugin, NONE, RegFilePlugin, SrcPlugin, YamlPlugin}
 
 import scala.collection.mutable.ArrayBuffer
 import scala.util.Random
@@ -48,6 +50,89 @@ object VexRiscvSynthesisBench {
 //      top.service(classOf[DecoderSimplePlugin]).bench(top)
 //      top
 //    }
+
+    val twoStage = new Rtl {
+      override def getName(): String = "VexRiscv two stages"
+      override def getRtlPath(): String = "VexRiscvTwoStages.v"
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
+        withMulDiv = false,
+        bypass = false,
+        barrielShifter = false,
+        withMemoryStage = false
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+    val twoStageBarell = new Rtl {
+      override def getName(): String = "VexRiscv two stages with barriel"
+      override def getRtlPath(): String = "VexRiscvTwoStagesBar.v"
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
+        withMulDiv = false,
+        bypass = true,
+        barrielShifter = true,
+        withMemoryStage = false
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+    val twoStageMulDiv = new Rtl {
+      override def getName(): String = "VexRiscv two stages with Mul Div"
+      override def getRtlPath(): String = "VexRiscvTwoStagesMD.v"
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
+        withMulDiv = true,
+        bypass = false,
+        barrielShifter = false,
+        withMemoryStage = false
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+    val twoStageAll = new Rtl {
+      override def getName(): String = "VexRiscv two stages with Mul Div fast"
+      override def getRtlPath(): String = "VexRiscvTwoStagesMDfast.v"
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
+        withMulDiv = true,
+        bypass = true,
+        barrielShifter = true,
+        withMemoryStage = false
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
+
+    val threeStage = new Rtl {
+      override def getName(): String = "VexRiscv three stages"
+      override def getRtlPath(): String = "VexRiscvThreeStages.v"
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
+        withMulDiv = false,
+        bypass = false,
+        barrielShifter = false,
+        withMemoryStage = true
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+    val threeStageBarell = new Rtl {
+      override def getName(): String = "VexRiscv three stages with barriel"
+      override def getRtlPath(): String = "VexRiscvThreeStagesBar.v"
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
+        withMulDiv = false,
+        bypass = true,
+        barrielShifter = true,
+        withMemoryStage = true
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+    val threeStageMulDiv = new Rtl {
+      override def getName(): String = "VexRiscv three stages with Mul Div"
+      override def getRtlPath(): String = "VexRiscvThreeStagesMD.v"
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
+        withMulDiv = true,
+        bypass = false,
+        barrielShifter = false,
+        withMemoryStage = true
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+    val threeStageAll = new Rtl {
+      override def getName(): String = "VexRiscv three stages with Mul Div fast"
+      override def getRtlPath(): String = "VexRiscvThreeStagesMDfast.v"
+      SpinalVerilog(wrap(GenTwoThreeStage.cpu(
+        withMulDiv = true,
+        bypass = true,
+        barrielShifter = true,
+        withMemoryStage = true
+      )).setDefinitionName(getRtlPath().split("\\.").head))
+    }
 
     val smallestNoCsr = new Rtl {
       override def getName(): String = "VexRiscv smallest no CSR"
@@ -109,13 +194,75 @@ object VexRiscvSynthesisBench {
       SpinalConfig(inlineRom = true).generateVerilog(wrap(new VexRiscv(LinuxGen.configFull(false, true))).setDefinitionName(getRtlPath().split("\\.").head))
     }
 
-    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced)
-//    val rtls = List(smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache)
-    //      val rtls = List(smallAndProductive, smallAndProductiveWithICache, fullNoMmuMaxPerf, fullNoMmu, full)
-//    val rtls = List(smallAndProductive)
+    val linuxBalancedSmp = new Rtl {
+      override def getName(): String = "VexRiscv linux balanced SMP"
+      override def getRtlPath(): String = "VexRiscvLinuxBalancedSmp.v"
+      SpinalConfig(inlineRom = true).generateVerilog(wrap(new VexRiscv(LinuxGen.configFull(false, true, withSmp = true))).setDefinitionName(getRtlPath().split("\\.").head))
+    }
 
-    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
 
+
+    val rtls = List(
+      twoStage, twoStageBarell, twoStageMulDiv, twoStageAll,
+      threeStage, threeStageBarell, threeStageMulDiv, threeStageAll,
+      smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced, linuxBalancedSmp
+    )
+//    val rtls = List(linuxBalanced, linuxBalancedSmp)
+//    val rtls = List(smallest)
+    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)  ++ List(
+      new Target {
+        override def getFamilyName(): String = "Kintex UltraScale"
+        override def synthesise(rtl: Rtl, workspace: String): Report = {
+          VivadoFlow(
+            frequencyTarget = 50 MHz,
+            vivadoPath=sys.env.getOrElse("VIVADO_ARTIX_7_BIN", null),
+            workspacePath=workspace + "_area",
+            toplevelPath=rtl.getRtlPath(),
+            family=getFamilyName(),
+            device="xcku035-fbva900-3-e"
+          )
+        }
+      },
+      new Target {
+        override def getFamilyName(): String = "Kintex UltraScale"
+        override def synthesise(rtl: Rtl, workspace: String): Report = {
+          VivadoFlow(
+            frequencyTarget = 800 MHz,
+            vivadoPath=sys.env.getOrElse("VIVADO_ARTIX_7_BIN", null),
+            workspacePath=workspace + "_fmax",
+            toplevelPath=rtl.getRtlPath(),
+            family=getFamilyName(),
+            device="xcku035-fbva900-3-e"
+          )
+        }
+      },
+      new Target {
+        override def getFamilyName(): String = "Kintex UltraScale+"
+        override def synthesise(rtl: Rtl, workspace: String): Report = {
+          VivadoFlow(
+            frequencyTarget = 50 MHz,
+            vivadoPath=sys.env.getOrElse("VIVADO_ARTIX_7_BIN", null),
+            workspacePath=workspace + "_area",
+            toplevelPath=rtl.getRtlPath(),
+            family=getFamilyName(),
+            device="xcku3p-ffvd900-3-e"
+          )
+        }
+      },
+      new Target {
+        override def getFamilyName(): String = "Kintex UltraScale+"
+        override def synthesise(rtl: Rtl, workspace: String): Report = {
+          VivadoFlow(
+            frequencyTarget = 800 MHz,
+            vivadoPath=sys.env.getOrElse("VIVADO_ARTIX_7_BIN", null),
+            workspacePath=workspace + "_fmax",
+            toplevelPath=rtl.getRtlPath(),
+            family=getFamilyName(),
+            device="xcku3p-ffvd900-3-e"
+          )
+        }
+      }
+    )
     //    val targets = IcestormStdTargets()
     Bench(rtls, targets)
   }
@@ -183,5 +330,101 @@ object AllSynthesisBench {
     BrieySynthesisBench.main(args)
     MuraxSynthesisBench.main(args)
 
+  }
+}
+
+
+
+object VexRiscvCustomSynthesisBench {
+  def main(args: Array[String]) {
+
+
+    def gen(csr : CsrPlugin) = new VexRiscv(
+      config = VexRiscvConfig(
+        plugins = List(
+          new IBusSimplePlugin(
+            resetVector = 0x80000000l,
+            cmdForkOnSecondStage = false,
+            cmdForkPersistence = false,
+            prediction = NONE,
+            catchAccessFault = false,
+            compressedGen = false
+          ),
+          new DBusSimplePlugin(
+            catchAddressMisaligned = false,
+            catchAccessFault = false
+          ),
+          new DecoderSimplePlugin(
+            catchIllegalInstruction = false
+          ),
+          new RegFilePlugin(
+            regFileReadyKind = plugin.SYNC,
+            zeroBoot = false
+          ),
+          new IntAluPlugin,
+          new SrcPlugin(
+            separatedAddSub = false,
+            executeInsertion = true
+          ),
+          csr,
+          new FullBarrelShifterPlugin(),
+          new HazardSimplePlugin(
+            bypassExecute           = true,
+            bypassMemory            = true,
+            bypassWriteBack         = true,
+            bypassWriteBackBuffer   = true,
+            pessimisticUseSrc       = false,
+            pessimisticWriteRegFile = false,
+            pessimisticAddressMatch = false
+          ),
+          new BranchPlugin(
+            earlyBranch = false,
+            catchAddressMisaligned = false
+          ),
+          new YamlPlugin("cpu0.yaml")
+        )
+      )
+    )
+
+
+    val fixedMtvec = new Rtl {
+      override def getName(): String = "Fixed MTVEC"
+      override def getRtlPath(): String = "fixedMtvec.v"
+      SpinalVerilog(gen(new CsrPlugin(CsrPluginConfig.smallest(0x80000000l))).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
+    val writeOnlyMtvec = new Rtl {
+      override def getName(): String = "write only MTVEC"
+      override def getRtlPath(): String = "woMtvec.v"
+      SpinalVerilog(gen(new CsrPlugin(CsrPluginConfig.smallest(null).copy(mtvecAccess = WRITE_ONLY))).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
+    val readWriteMtvec = new Rtl {
+      override def getName(): String = "read write MTVEC"
+      override def getRtlPath(): String = "wrMtvec.v"
+      SpinalVerilog(gen(new CsrPlugin(CsrPluginConfig.smallest(null).copy(mtvecAccess = READ_WRITE))).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
+    val fixedMtvecRoCounter = new Rtl {
+      override def getName(): String = "Fixed MTVEC, read only mcycle/minstret"
+      override def getRtlPath(): String = "fixedMtvecRoCounter.v"
+      SpinalVerilog(gen(new CsrPlugin(CsrPluginConfig.smallest(0x80000000l).copy(mcycleAccess = READ_ONLY, minstretAccess = READ_ONLY))).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
+
+    val rwMtvecRoCounter = new Rtl {
+      override def getName(): String = "read write MTVEC, read only mcycle/minstret"
+      override def getRtlPath(): String = "readWriteMtvecRoCounter.v"
+      SpinalVerilog(gen(new CsrPlugin(CsrPluginConfig.smallest(null).copy(mtvecAccess = READ_WRITE, mcycleAccess = READ_ONLY, minstretAccess = READ_ONLY))).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
+
+    //    val rtls = List(twoStage, twoStageBarell, twoStageMulDiv, twoStageAll, smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced, linuxBalancedSmp)
+    val rtls = List(fixedMtvec, writeOnlyMtvec, readWriteMtvec,fixedMtvecRoCounter, rwMtvecRoCounter)
+    //    val rtls = List(smallest)
+    val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
+
+    //    val targets = IcestormStdTargets()
+    Bench(rtls, targets)
   }
 }

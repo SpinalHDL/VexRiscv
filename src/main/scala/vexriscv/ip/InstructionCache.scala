@@ -5,7 +5,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4ReadOnly}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
-import spinal.lib.bus.bmb.{Bmb, BmbParameter}
+import spinal.lib.bus.bmb.{Bmb, BmbAccessParameter, BmbParameter, BmbSourceParameter}
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 import vexriscv.plugin.{IBusSimpleBus, IBusSimplePlugin}
@@ -22,8 +22,10 @@ case class InstructionCacheConfig( cacheSize : Int,
                                    asyncTagMemory : Boolean,
                                    twoCycleCache : Boolean = true,
                                    twoCycleRam : Boolean = false,
+                                   twoCycleRamInnerMux : Boolean = false,
                                    preResetFlush : Boolean = false,
-                                   bypassGen : Boolean = false ){
+                                   bypassGen : Boolean = false,
+                                   reducedBankWidth : Boolean = false){
 
   assert(!(twoCycleRam && !twoCycleCache))
 
@@ -69,15 +71,16 @@ case class InstructionCacheConfig( cacheSize : Int,
   )
 
   def getBmbParameter() = BmbParameter(
-    addressWidth = 32,
-    dataWidth = 32,
-    lengthWidth = log2Up(this.bytePerLine),
-    sourceWidth = 0,
-    contextWidth = 0,
-    canRead = true,
-    canWrite = false,
-    alignment = BmbParameter.BurstAlignement.LENGTH,
-    maximumPendingTransactionPerId = 1
+    BmbAccessParameter(
+      addressWidth = 32,
+      dataWidth = memDataWidth
+    ).addSources(1, BmbSourceParameter(
+      lengthWidth = log2Up(this.bytePerLine),
+      contextWidth = 0,
+      canWrite = false,
+      alignment = BmbParameter.BurstAlignement.LENGTH,
+      maximumPendingTransaction = 1
+    ))
   )
 }
 
@@ -103,7 +106,7 @@ trait InstructionCacheCommons{
   val cacheMiss, error,  mmuRefilling, mmuException, isUser : Bool
 }
 
-case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle with IMasterSlave with InstructionCacheCommons {
+case class InstructionCacheCpuFetch(p : InstructionCacheConfig, mmuParameter : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave with InstructionCacheCommons {
   val isValid = Bool()
   val isStuck = Bool()
   val isRemoved = Bool()
@@ -111,16 +114,15 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig) extends Bundle w
   val data = Bits(p.cpuDataWidth bits)
   val dataBypassValid = p.bypassGen generate Bool()
   val dataBypass = p.bypassGen generate Bits(p.cpuDataWidth bits)
-  val mmuBus  = MemoryTranslatorBus()
+  val mmuRsp  = MemoryTranslatorRsp(mmuParameter)
   val physicalAddress = UInt(p.addressWidth bits)
   val cacheMiss, error, mmuRefilling, mmuException, isUser  = ifGen(!p.twoCycleCache)(Bool)
-  val haltIt  = Bool() //Used to wait on the MMU rsp busy
 
   override def asMaster(): Unit = {
     out(isValid, isStuck, isRemoved, pc)
-    inWithNull(error,mmuRefilling,mmuException,data, cacheMiss,physicalAddress, haltIt)
+    inWithNull(error,mmuRefilling,mmuException,data, cacheMiss,physicalAddress)
     outWithNull(isUser, dataBypass, dataBypassValid)
-    slaveWithNull(mmuBus)
+    out(mmuRsp)
   }
 }
 
@@ -140,9 +142,9 @@ case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle 
   }
 }
 
-case class InstructionCacheCpuBus(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
+case class InstructionCacheCpuBus(p : InstructionCacheConfig, mmuParameter : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave{
   val prefetch = InstructionCacheCpuPrefetch(p)
-  val fetch = InstructionCacheCpuFetch(p)
+  val fetch = InstructionCacheCpuFetch(p, mmuParameter)
   val decode = InstructionCacheCpuDecode(p)
   val fill = Flow(UInt(p.addressWidth bits))
 
@@ -251,7 +253,7 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
 
   def toBmb() : Bmb = {
     val busParameter = p.getBmbParameter
-    val bus = Bmb(busParameter)
+    val bus = Bmb(busParameter).setCompositeName(this,"toBmb", true)
     bus.cmd.arbitrationFrom(cmd)
     bus.cmd.opcode := Bmb.Cmd.Opcode.READ
     bus.cmd.address := cmd.address.resized
@@ -276,34 +278,23 @@ case class InstructionCacheFlushBus() extends Bundle with IMasterSlave{
   }
 }
 
-class InstructionCache(p : InstructionCacheConfig) extends Component{
+class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslatorBusParameter) extends Component{
   import p._
-  assert(cpuDataWidth == memDataWidth, "Need testing")
   val io = new Bundle{
     val flush = in Bool()
-    val cpu = slave(InstructionCacheCpuBus(p))
+    val cpu = slave(InstructionCacheCpuBus(p, mmuParameter))
     val mem = master(InstructionCacheMemBus(p))
   }
 
   val lineWidth = bytePerLine*8
   val lineCount = cacheSize/bytePerLine
-  val wordWidth = Math.max(memDataWidth,32)
-  val wordWidthLog2 = log2Up(wordWidth)
-  val wordPerLine = lineWidth/wordWidth
+  val cpuWordWidth = cpuDataWidth
   val memWordPerLine = lineWidth/memDataWidth
-  val bytePerWord = wordWidth/8
-  val bytePerMemWord = memDataWidth/8
+  val bytePerCpuWord = cpuWordWidth/8
   val wayLineCount = lineCount/wayCount
-  val wayLineLog2 = log2Up(wayLineCount)
-  val wayWordCount = wayLineCount * wordPerLine
 
   val tagRange = addressWidth-1 downto log2Up(wayLineCount*bytePerLine)
   val lineRange = tagRange.low-1 downto log2Up(bytePerLine)
-  val wordRange = log2Up(bytePerLine)-1 downto log2Up(bytePerWord)
-  val memWordRange = log2Up(bytePerLine)-1 downto log2Up(bytePerMemWord)
-  val memWordToCpuWordRange = log2Up(bytePerMemWord)-1 downto log2Up(bytePerWord)
-  val tagLineRange = tagRange.high downto lineRange.low
-  val lineWordRange = lineRange.high downto wordRange.low
 
   case class LineTag() extends Bundle{
     val valid = Bool
@@ -311,17 +302,23 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     val address = UInt(tagRange.length bit)
   }
 
+  val bankCount = wayCount
+  val bankWidth = if(!reducedBankWidth) memDataWidth else Math.max(cpuDataWidth, memDataWidth/wayCount)
+  val bankByteSize = cacheSize/bankCount
+  val bankWordCount = bankByteSize*8/bankWidth
+  val bankWordToCpuWordRange = log2Up(bankWidth/8)-1 downto log2Up(bytePerCpuWord)
+  val memToBankRatio = bankWidth*bankCount / memDataWidth
+
+  val banks = Seq.fill(bankCount)(Mem(Bits(bankWidth bits), bankWordCount))
 
   val ways = Seq.fill(wayCount)(new Area{
     val tags = Mem(LineTag(),wayLineCount)
-    val datas = Mem(Bits(memDataWidth bits),wayWordCount)
 
     if(preResetFlush){
       tags.initBigInt(List.fill(wayLineCount)(BigInt(0)))
     }
   })
 
-  io.cpu.fetch.haltIt := io.cpu.fetch.mmuBus.busy
 
   val lineLoader = new Area{
     val fire = False
@@ -369,7 +366,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
     val write = new Area{
       val tag = ways.map(_.tags.writePort)
-      val data = ways.map(_.datas.writePort)
+      val data = banks.map(_.writePort)
     }
 
     for(wayId <- 0 until wayCount){
@@ -380,12 +377,23 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       tag.data.valid := flushCounter.msb
       tag.data.error := hadError || io.mem.rsp.error
       tag.data.address := address(tagRange)
-
-      val data = write.data(wayId)
-      data.valid   := io.mem.rsp.valid && wayHit
-      data.address := address(lineRange) @@ wordIndex
-      data.data    := io.mem.rsp.data
     }
+
+    for((writeBank, bankId) <- write.data.zipWithIndex){
+      if(!reducedBankWidth) {
+        writeBank.valid := io.mem.rsp.valid && wayToAllocate === bankId
+        writeBank.address := address(lineRange) @@ wordIndex
+        writeBank.data := io.mem.rsp.data
+      } else {
+        val sel = U(bankId) - wayToAllocate.value
+        val groupSel = wayToAllocate(log2Up(bankCount)-1 downto log2Up(bankCount/memToBankRatio))
+        val subSel = sel(log2Up(bankCount/memToBankRatio) -1 downto 0)
+        writeBank.valid := io.mem.rsp.valid && groupSel === (bankId >> log2Up(bankCount/memToBankRatio))
+        writeBank.address := address(lineRange) @@ wordIndex @@ (subSel)
+        writeBank.data := io.mem.rsp.data.subdivideIn(bankCount/memToBankRatio slices)(subSel)
+      }
+    }
+
 
     when(io.mem.rsp.valid) {
       wordIndex := (wordIndex + 1).resized
@@ -396,27 +404,32 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }
   }
 
-
   val fetchStage = new Area{
     val read = new Area{
-      val waysValues = for(way <- ways) yield new Area{
+      val banksValue = for(bank <- banks) yield new Area{
+        val dataMem = bank.readSync(io.cpu.prefetch.pc(lineRange.high downto log2Up(bankWidth/8)), !io.cpu.fetch.isStuck)
+        val data = if(!twoCycleRamInnerMux) dataMem.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(bankWordToCpuWordRange)) else dataMem
+      }
+
+      val waysValues = for((way, wayId) <- ways.zipWithIndex) yield new Area{
         val tag = if(asyncTagMemory) {
           way.tags.readAsync(io.cpu.fetch.pc(lineRange))
         }else {
           way.tags.readSync(io.cpu.prefetch.pc(lineRange), !io.cpu.fetch.isStuck)
         }
-        val data = way.datas.readSync(io.cpu.prefetch.pc(lineRange.high downto memWordRange.low), !io.cpu.fetch.isStuck)
+//        val data = CombInit(banksValue(wayId).data)
       }
     }
 
 
     val hit = (!twoCycleRam) generate new Area{
-      val hits = read.waysValues.map(way => way.tag.valid && way.tag.address === io.cpu.fetch.mmuBus.rsp.physicalAddress(tagRange))
+      val hits = read.waysValues.map(way => way.tag.valid && way.tag.address === io.cpu.fetch.mmuRsp.physicalAddress(tagRange))
       val valid = Cat(hits).orR
-      val id = OHToUInt(hits)
-      val error = read.waysValues.map(_.tag.error).read(id)
-      val data = read.waysValues.map(_.data).read(id)
-      val word = if(cpuDataWidth == memDataWidth) CombInit(data) else data.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(memWordToCpuWordRange))
+      val wayId = OHToUInt(hits)
+      val bankId = if(!reducedBankWidth) wayId else (wayId >> log2Up(bankCount/memToBankRatio)) @@ ((wayId + (io.cpu.fetch.mmuRsp.physicalAddress(log2Up(bankWidth/8), log2Up(bankCount) bits))).resize(log2Up(bankCount/memToBankRatio)))
+      val error = read.waysValues.map(_.tag.error).read(wayId)
+      val data = read.banksValue.map(_.data).read(bankId)
+      val word = if(cpuDataWidth == memDataWidth || !twoCycleRamInnerMux) CombInit(data) else data.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(bankWordToCpuWordRange))
       io.cpu.fetch.data := (if(p.bypassGen) (io.cpu.fetch.dataBypassValid ? io.cpu.fetch.dataBypass | word) else word)
       if(twoCycleCache){
         io.cpu.decode.data := RegNextWhen(io.cpu.fetch.data,!io.cpu.decode.isStuck)
@@ -424,18 +437,14 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
     }
 
     if(twoCycleRam && wayCount == 1){
-      val cacheData = if(cpuDataWidth == memDataWidth) CombInit(read.waysValues.head.data) else read.waysValues.head.data.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(memWordToCpuWordRange))
+      val cacheData = if(cpuDataWidth == memDataWidth || !twoCycleRamInnerMux) CombInit(read.banksValue.head.data) else read.banksValue.head.data.subdivideIn(cpuDataWidth bits).read(io.cpu.fetch.pc(bankWordToCpuWordRange))
       io.cpu.fetch.data := (if(p.bypassGen) (io.cpu.fetch.dataBypassValid ? io.cpu.fetch.dataBypass | cacheData) else cacheData)
     }
 
-    io.cpu.fetch.mmuBus.cmd.isValid := io.cpu.fetch.isValid
-    io.cpu.fetch.mmuBus.cmd.virtualAddress := io.cpu.fetch.pc
-    io.cpu.fetch.mmuBus.cmd.bypassTranslation := False
-    io.cpu.fetch.mmuBus.end := !io.cpu.fetch.isStuck || io.cpu.fetch.isRemoved
-    io.cpu.fetch.physicalAddress := io.cpu.fetch.mmuBus.rsp.physicalAddress
+    io.cpu.fetch.physicalAddress := io.cpu.fetch.mmuRsp.physicalAddress
 
     val resolution = ifGen(!twoCycleCache)( new Area{
-      val mmuRsp = io.cpu.fetch.mmuBus.rsp
+      val mmuRsp = io.cpu.fetch.mmuRsp
 
       io.cpu.fetch.cacheMiss := !hit.valid
       io.cpu.fetch.error := hit.error || (!mmuRsp.isPaging && (mmuRsp.exception || !mmuRsp.allowExecute))
@@ -448,7 +457,7 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
 
   val decodeStage = ifGen(twoCycleCache) (new Area{
     def stage[T <: Data](that : T) = RegNextWhen(that,!io.cpu.decode.isStuck)
-    val mmuRsp = stage(io.cpu.fetch.mmuBus.rsp)
+    val mmuRsp = stage(io.cpu.fetch.mmuRsp)
 
     val hit = if(!twoCycleRam) new Area{
       val valid = stage(fetchStage.hit.valid)
@@ -457,10 +466,11 @@ class InstructionCache(p : InstructionCacheConfig) extends Component{
       val tags = fetchStage.read.waysValues.map(way => stage(way.tag))
       val hits = tags.map(tag => tag.valid && tag.address === mmuRsp.physicalAddress(tagRange))
       val valid = Cat(hits).orR
-      val id = OHToUInt(hits)
-      val error = tags(id).error
-      val data = fetchStage.read.waysValues.map(way => stage(way.data)).read(id)
-      val word = if(cpuDataWidth == memDataWidth) data else data.subdivideIn(cpuDataWidth bits).read(io.cpu.decode.pc(memWordToCpuWordRange))
+      val wayId = OHToUInt(hits)
+      val bankId = if(!reducedBankWidth) wayId else (wayId >> log2Up(bankCount/memToBankRatio)) @@ ((wayId + (mmuRsp.physicalAddress(log2Up(bankWidth/8), log2Up(bankCount) bits))).resize(log2Up(bankCount/memToBankRatio)))
+      val error = tags(wayId).error
+      val data = fetchStage.read.banksValue.map(bank => stage(bank.data)).read(bankId)
+      val word = if(cpuDataWidth == memDataWidth || !twoCycleRamInnerMux) data else data.subdivideIn(cpuDataWidth bits).read(io.cpu.decode.pc(bankWordToCpuWordRange))
       if(p.bypassGen) when(stage(io.cpu.fetch.dataBypassValid)){
         word := stage(io.cpu.fetch.dataBypass)
       }

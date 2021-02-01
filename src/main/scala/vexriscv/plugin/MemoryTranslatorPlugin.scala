@@ -22,8 +22,8 @@ class MemoryTranslatorPlugin(tlbSize : Int,
   val portsInfo = ArrayBuffer[MemoryTranslatorPort]()
 
   override def newTranslationPort(priority : Int,args : Any): MemoryTranslatorBus = {
-//    val exceptionBus = pipeline.service(classOf[ExceptionService]).newExceptionPort(stage)
-    val port = MemoryTranslatorPort(MemoryTranslatorBus(),priority,args.asInstanceOf[MemoryTranslatorPortConfig]/*,exceptionBus*/)
+    val config = args.asInstanceOf[MemoryTranslatorPortConfig]
+    val port = MemoryTranslatorPort(MemoryTranslatorBus(MemoryTranslatorBusParameter(wayCount = 0)),priority, config/*,exceptionBus*/)
     portsInfo += port
     port.bus
   }
@@ -70,17 +70,17 @@ class MemoryTranslatorPlugin(tlbSize : Int,
 
       val ports = for ((port, portId) <- sortedPortsInfo.zipWithIndex) yield new Area {
         val cache = Vec(Reg(CacheLine()) init, port.args.portTlbSize)
-        val cacheHits = cache.map(line => line.valid && line.virtualAddress === port.bus.cmd.virtualAddress(31 downto 12))
+        val cacheHits = cache.map(line => line.valid && line.virtualAddress === port.bus.cmd.last.virtualAddress(31 downto 12))
         val cacheHit = cacheHits.asBits.orR
         val cacheLine = MuxOH(cacheHits, cache)
-        val isInMmuRange = virtualRange(port.bus.cmd.virtualAddress) && !port.bus.cmd.bypassTranslation
+        val isInMmuRange = virtualRange(port.bus.cmd.last.virtualAddress) && !port.bus.cmd.last.bypassTranslation
 
         val sharedMiss = RegInit(False)
         val sharedIterator = Reg(UInt(log2Up(tlbSize + 1) bits))
         val sharedAccessed = RegInit(B"00")
         val entryToReplace = Counter(port.args.portTlbSize)
 
-        val sharedAccessAsked = RegNext(port.bus.cmd.isValid && !cacheHit && sharedIterator < tlbSize && isInMmuRange)
+        val sharedAccessAsked = RegNext(port.bus.cmd.last.isValid && !cacheHit && sharedIterator < tlbSize && isInMmuRange)
         val sharedAccessGranted = sharedAccessAsked && shared.free
         when(sharedAccessGranted) {
           shared.readAddr := sharedIterator.resized
@@ -92,7 +92,7 @@ class MemoryTranslatorPlugin(tlbSize : Int,
         }
 
         when(sharedAccessed.msb){
-          when(shared.readData.virtualAddress === port.bus.cmd.virtualAddress(31 downto 12)){
+          when(shared.readData.virtualAddress === port.bus.cmd.last.virtualAddress(31 downto 12)){
             cache(entryToReplace) := shared.readData
             entryToReplace.increment()
           }
@@ -108,7 +108,7 @@ class MemoryTranslatorPlugin(tlbSize : Int,
 
 
         when(isInMmuRange) {
-          port.bus.rsp.physicalAddress := cacheLine.physicalAddress @@ port.bus.cmd.virtualAddress(11 downto 0)
+          port.bus.rsp.physicalAddress := cacheLine.physicalAddress @@ port.bus.cmd.last.virtualAddress(11 downto 0)
           port.bus.rsp.allowRead := cacheLine.allowRead
           port.bus.rsp.allowWrite := cacheLine.allowWrite
           port.bus.rsp.allowExecute := cacheLine.allowExecute
@@ -116,7 +116,7 @@ class MemoryTranslatorPlugin(tlbSize : Int,
 //          port.bus.rsp.hit := cacheHit
 //          port.stage.arbitration.haltItself setWhen (port.bus.cmd.isValid && !cacheHit && !sharedMiss)
         } otherwise {
-          port.bus.rsp.physicalAddress := port.bus.cmd.virtualAddress
+          port.bus.rsp.physicalAddress := port.bus.cmd.last.virtualAddress
           port.bus.rsp.allowRead := True
           port.bus.rsp.allowWrite := True
           port.bus.rsp.allowExecute := True

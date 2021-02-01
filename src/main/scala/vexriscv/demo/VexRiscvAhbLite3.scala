@@ -4,7 +4,7 @@ package vexriscv.demo
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.avalon.AvalonMM
-import spinal.lib.com.jtag.Jtag
+import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
 import spinal.lib.eda.altera.{InterruptReceiverTag, QSysify, ResetEmitterTag}
 import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import vexriscv.plugin._
@@ -164,6 +164,11 @@ object VexRiscvAhbLite3{
             plugin.io.bus.setAsDirectionLess()
             val jtag = slave(new Jtag()).setName("jtag")
             jtag <> plugin.io.bus.fromJtag()
+
+//            // On Artix FPGA jtag :
+//            val jtagCtrl = JtagTapInstructionCtrl()
+//            val tap = jtagCtrl.fromXilinxBscane2(userId = 1)
+//            jtagCtrl <> plugin.io.bus.fromJtagInstructionCtrl(ClockDomain(tap.TCK))
           }
           case _ =>
         }

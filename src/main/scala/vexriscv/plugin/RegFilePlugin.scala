@@ -112,14 +112,9 @@ class RegFilePlugin(regFileReadyKind : RegFileReadKind,
       if(x0Init) {
         val boot = RegNext(False) init (True)
         regFileWrite.valid setWhen (boot)
-        if (writeStage != execute) {
-          inputInit[Bits](REGFILE_WRITE_DATA, 0)
-          inputInit[Bits](INSTRUCTION, 0)
-        } else {
-          when(boot) {
-            regFileWrite.address := 0
-            regFileWrite.data := 0
-          }
+        when(boot) {
+          regFileWrite.address := 0
+          regFileWrite.data := 0
         }
       }
     }
