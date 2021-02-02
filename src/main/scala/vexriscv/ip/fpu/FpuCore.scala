@@ -102,8 +102,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val source = Source()
     val lockId = lockIdType()
     val rd = p.rfAddress()
-    val value = p.internalFloating()
-    val round = UInt(2 bits)
+    val value = p.writeFloating()
+    val scrap = Bool()
     val roundMode = FpuRoundMode()
   }
 
@@ -405,8 +405,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
       val i2fSign = fsm.patched
       val (i2fHigh, i2fLow) = input.value.splitAt(widthOf(input.value)-24)
-      val i2fShifted = i2fHigh >> 1
-      val i2fRound = U(i2fHigh.lsb ## (i2fLow =/= 0))
+      val scrap = i2fLow =/= 0
 
       val recoded = p.internalFloating()
       recoded.mantissa := f32Mantissa
@@ -422,14 +421,17 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       output.lockId := input.lockId
       output.roundMode := input.roundMode
       output.rd := input.rd
-      output.value := recoded
-      output.round := 0
+      output.value.sign      := recoded.sign
+      output.value.exponent  := recoded.exponent
+      output.value.mantissa  := recoded.mantissa @@ U"0"
+      output.value.special   := recoded.special
+      output.scrap := False
       when(input.i2f){
         output.value.sign := i2fSign
         output.value.exponent := (U(exponentOne+31) - fsm.manTop).resized
-        output.value.mantissa := U(i2fShifted)
+        output.value.mantissa := U(i2fHigh)
         output.value.setNormal
-        output.round := i2fRound
+        output.scrap := scrap
         when(fsm.i2fZero) { output.value.setZero }
         //TODO ROUND
       }
@@ -579,17 +581,19 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     rfOutput.lockId := input.lockId
     rfOutput.rd := input.rd
     rfOutput.roundMode := input.roundMode
-    rfOutput.round := 0 //TODO
+    rfOutput.scrap := False //TODO
     rfOutput.value.assignDontCare()
     switch(input.opcode){
       is(FpuOpcode.MIN_MAX){
-        rfOutput.value := minMaxResult
+        rfOutput.value.exponent := minMaxResult.exponent
+        rfOutput.value.mantissa := minMaxResult.mantissa @@ U"0"
+        rfOutput.value.special  := minMaxResult.special
       }
       is(FpuOpcode.SGNJ){
         rfOutput.value.sign     := sgnjResult
         rfOutput.value.exponent := input.rs1.exponent
-        rfOutput.value.mantissa := input.rs1.mantissa
-        rfOutput.value.special := False //TODO
+        rfOutput.value.mantissa := input.rs1.mantissa @@ U"0"
+        rfOutput.value.special  := False //TODO
       }
     }
 
@@ -628,13 +632,11 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val forceOverflow = /*exp > exponentOne + exponentOne + 127 || */input.rs1.isInfinity || input.rs2.isInfinity
       val forceNan = input.rs1.isNan || input.rs2.isNan || ((input.rs1.isInfinity || input.rs2.isInfinity) && (input.rs1.isZero || input.rs2.isZero))
 
-      val output = FpuFloat(p.internalExponentSize, p.internalMantissaSize)
+      val output = p.writeFloating()
       output.sign := input.rs1.sign ^ input.rs2.sign
       output.exponent := (exp - exponentOne).resized
-      output.mantissa := man.asUInt >> 1
+      output.mantissa := man.asUInt
       output.setNormal
-
-      val round = man(0) ## (scrap)
 
       when(forceNan) {
         output.setNanQuiet
@@ -660,12 +662,12 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.lockId := input.lockId
     output.rd     := input.rd
     output.roundMode := input.roundMode
-    output.round  := norm.round.asUInt
+    output.scrap  := norm.scrap
     output.value  := norm.output
 
     decode.mulToAdd.valid := input.valid && input.add
     decode.mulToAdd.source := input.source
-    decode.mulToAdd.rs1.mantissa := norm.output.mantissa
+    decode.mulToAdd.rs1.mantissa := norm.output.mantissa >> 1 //FMA Precision lost
     decode.mulToAdd.rs1.exponent := norm.output.exponent
     decode.mulToAdd.rs1.sign := norm.output.sign
     decode.mulToAdd.rs1.special := False //TODO
@@ -924,11 +926,11 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.lockId := input.lockId
     output.rd     := input.rd
     output.value.sign := norm.xySign
-    output.value.mantissa := (norm.mantissa >> 3).resized
+    output.value.mantissa := (norm.mantissa >> 2).resized
     output.value.exponent := norm.exponent.resized
     output.value.special := False
     output.roundMode := input.roundMode
-    output.round := U(norm.mantissa(2)) @@ U(norm.mantissa(1) | norm.mantissa(0) | shifter.roundingScrap)
+    output.scrap := (norm.mantissa(1) | norm.mantissa(0) | shifter.roundingScrap)
 
     when(norm.forceNan) {
       output.value.setNanQuiet
@@ -971,7 +973,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val input = merge.commited.combStage
 
     //TODO do not break NAN payload (seems already fine)
-    val manAggregate = input.value.mantissa @@ input.round
+    val manAggregate = input.value.mantissa @@ input.scrap
     val expDif = (exponentOne-126) - input.value.exponent
     val discardCount = expDif.msb ? U(0) | expDif.resize(log2Up(p.internalMantissaSize) bits)
     val exactMask = (List(True) ++ (0 until p.internalMantissaSize+1).map(_ < discardCount)).asBits.asUInt
@@ -986,7 +988,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     )
 
     val math = p.internalFloating()
-    val adderMantissa = input.value.mantissa & (mantissaIncrement ? ~(exactMask.trim(1) >> 1) | input.value.mantissa.maxValue)
+    val mantissaRange = p.internalMantissaSize downto 1
+    val adderMantissa = input.value.mantissa(mantissaRange) & (mantissaIncrement ? ~(exactMask.trim(1) >> 1) | input.value.mantissa(mantissaRange).maxValue)
     val adderRightOp = (mantissaIncrement ? (exactMask >> 1)| U(0)).resize(p.internalMantissaSize bits)
     val adder = (input.value.exponent @@ adderMantissa) + adderRightOp + U(mantissaIncrement)
     math.special := input.value.special

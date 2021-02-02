@@ -111,6 +111,7 @@ case class FpuParameter( internalMantissaSize : Int,
   val storeLoadType = HardType(Bits(if(withDouble) 64 bits else 32 bits))
   val internalExponentSize = (if(withDouble) 11 else 8) + 1
   val internalFloating = HardType(FpuFloat(exponentSize = internalExponentSize, mantissaSize = internalMantissaSize))
+  val writeFloating = HardType(FpuFloat(exponentSize = internalExponentSize, mantissaSize = internalMantissaSize+1))
 
   val rfAddress = HardType(UInt(5 bits))
 
