@@ -75,6 +75,9 @@ before_install:
   - cd VexRiscv
   - export VERILATOR_ROOT=$HOME/verilator
   - export PATH=$VERILATOR_ROOT/bin:$PATH
+  - echo $PATH
+  - ls $HOME/verilator
+  - ls $HOME/verilator/bin
 
 before_cache:
   - rm -fv $HOME/.ivy2/.sbt.ivy.lock
