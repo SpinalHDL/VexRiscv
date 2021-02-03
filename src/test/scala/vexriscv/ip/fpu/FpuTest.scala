@@ -541,7 +541,6 @@ class FpuTest extends FunSuite{
           storeFloat(rd){v =>
             val aLong = if(signed) a.toLong else a.toLong & 0xFFFFFFFFl
             val ref = b
-//            println(f"i2f($aLong) = $v, $ref")
             assert(f2b(v) == f2b(ref), f"i2f($aLong) = $v, $ref")
           }
         }
@@ -663,28 +662,48 @@ class FpuTest extends FunSuite{
 
         val binaryOps = List[(Int,Int,Int,FpuRoundMode.E) => Unit](add, sub, mul)
 
+        testI2f(24, false)
+        testI2f(17, false)
+
+        testLoadStore(2.5f)
+        testLoadStore(3.67341984632e-40f)
+        testLoadStore(5.5321021294e-40f)
 
 
-        for(_ <- 0 until 10000){
+        for(_ <- 0 until 100000){
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,c,f) = f32.add(rounding).f32_2
+          testBinaryOp(add,a,b,c,f, rounding,"add")
+        }
+
+        for(_ <- 0 until 100000){
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,c,f) = f32.sub(rounding).f32_2
+          testBinaryOp(sub,a,b,c,f, rounding,"sub")
+        }
+
+        println("Add done")
+
+        for(_ <- 0 until 100000){
           val rounding = FpuRoundMode.elements.randomPick()
           val (a,b,f) = f32.i2f(rounding).i32_f32
           testI2fExact(a,b,f, true, rounding)
         }
 
-        for(_ <- 0 until 10000){
+        for(_ <- 0 until 100000){
           val rounding = FpuRoundMode.elements.randomPick()
           val (a,b,f) = f32.ui2f(rounding).i32_f32
           testI2fExact(a,b,f, false, rounding)
         }
         println("i2f done")
 
-        for(_ <- 0 until 10000){
+        for(_ <- 0 until 100000){
           val rounding = FpuRoundMode.elements.randomPick()
           val (a,b,f) = f32.f2ui(rounding).f32_i32
           testF2iExact(a,b, f, false, rounding)
         }
 
-        for(_ <- 0 until 10000){
+        for(_ <- 0 until 100000){
           val rounding = FpuRoundMode.elements.randomPick()
           val (a,b,f) = f32.f2i(rounding).f32_i32
           testF2iExact(a,b, f, true, rounding)
@@ -693,21 +712,8 @@ class FpuTest extends FunSuite{
         println("f2i done")
 
 
-        for(_ <- 0 until 10000){
-          val rounding = FpuRoundMode.elements.randomPick()
-          val (a,b,c,f) = f32.add(rounding).f32_2
-          testBinaryOp(add,a,b,c,f, rounding,"add")
-        }
 
-        for(_ <- 0 until 10000){
-          val rounding = FpuRoundMode.elements.randomPick()
-          val (a,b,c,f) = f32.sub(rounding).f32_2
-          testBinaryOp(sub,a,b,c,f, rounding,"sub")
-        }
-
-        println("Add done")
-
-        for(_ <- 0 until 10000){
+        for(_ <- 0 until 100000){
           val rounding = FpuRoundMode.elements.randomPick()
           val (a,b,c,f) = f32.mul(rounding).f32_2
           testBinaryOp(mul,a,b,c,f, rounding,"mul")
