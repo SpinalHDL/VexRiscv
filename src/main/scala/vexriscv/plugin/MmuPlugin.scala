@@ -151,6 +151,7 @@ class MmuPlugin(ioRange : UInt => Bool,
           port.bus.rsp.allowExecute := cacheLine.allowExecute
           port.bus.rsp.exception := !dirty &&  cacheHit && (cacheLine.exception || cacheLine.allowUser && privilegeService.isSupervisor() && !csr.status.sum || !cacheLine.allowUser && privilegeService.isUser())
           port.bus.rsp.refilling :=  dirty || !cacheHit
+          port.bus.rsp.isPaging := True
         } otherwise {
           port.bus.rsp.physicalAddress := port.bus.cmd.last.virtualAddress
           port.bus.rsp.allowRead := True
@@ -158,6 +159,7 @@ class MmuPlugin(ioRange : UInt => Bool,
           port.bus.rsp.allowExecute := True
           port.bus.rsp.exception := False
           port.bus.rsp.refilling := False
+          port.bus.rsp.isPaging := False
         }
         port.bus.rsp.isIoAccess := ioRange(port.bus.rsp.physicalAddress)
 

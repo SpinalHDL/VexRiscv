@@ -50,6 +50,7 @@ case class CsrPluginConfig(
                             mcycleAccess        : CsrAccess,
                             minstretAccess      : CsrAccess,
                             ucycleAccess        : CsrAccess,
+                            uinstretAccess      : CsrAccess = CsrAccess.NONE,
                             wfiGenAsWait        : Boolean,
                             ecallGen            : Boolean,
                             xtvecModeGen        : Boolean = false,
@@ -144,6 +145,7 @@ object CsrPluginConfig{
     mcycleAccess        = CsrAccess.NONE,
     minstretAccess      = CsrAccess.NONE,
     ucycleAccess        = CsrAccess.NONE,
+    uinstretAccess      = CsrAccess.NONE,
     wfiGenAsWait        = true,
     ecallGen            = true,
     xtvecModeGen        = false,
@@ -184,6 +186,7 @@ object CsrPluginConfig{
     mcycleAccess        = CsrAccess.READ_WRITE,
     minstretAccess      = CsrAccess.READ_WRITE,
     ucycleAccess        = CsrAccess.READ_ONLY,
+    uinstretAccess      = CsrAccess.READ_ONLY,
     wfiGenAsWait        = true,
     ecallGen            = true,
     xtvecModeGen        = false,
@@ -224,7 +227,8 @@ object CsrPluginConfig{
     minstretAccess     = CsrAccess.READ_WRITE,
     ecallGen           = true,
     wfiGenAsWait       = true,
-    ucycleAccess       = CsrAccess.READ_ONLY
+    ucycleAccess       = CsrAccess.READ_ONLY,
+    uinstretAccess     = CsrAccess.READ_ONLY
   )
 
   def all2(mtvecInit : BigInt) : CsrPluginConfig = CsrPluginConfig(
@@ -246,6 +250,7 @@ object CsrPluginConfig{
     ecallGen       = true,
     wfiGenAsWait         = true,
     ucycleAccess   = CsrAccess.READ_ONLY,
+    uinstretAccess = CsrAccess.READ_ONLY,
     supervisorGen  = true,
     sscratchGen    = true,
     stvecAccess    = CsrAccess.READ_WRITE,
@@ -277,7 +282,8 @@ object CsrPluginConfig{
     minstretAccess = CsrAccess.NONE,
     ecallGen       = false,
     wfiGenAsWait         = false,
-    ucycleAccess   = CsrAccess.NONE
+    ucycleAccess   = CsrAccess.NONE,
+    uinstretAccess = CsrAccess.NONE
   )
 
   def smallest(mtvecInit : BigInt)  = CsrPluginConfig(
@@ -298,7 +304,33 @@ object CsrPluginConfig{
     minstretAccess = CsrAccess.NONE,
     ecallGen       = false,
     wfiGenAsWait         = false,
-    ucycleAccess   = CsrAccess.NONE
+    ucycleAccess   = CsrAccess.NONE,
+    uinstretAccess = CsrAccess.NONE
+  )
+
+  def secure(mtvecInit : BigInt) = CsrPluginConfig(
+    catchIllegalAccess = true,
+    mvendorid           = 1,
+    marchid             = 2,
+    mimpid              = 3,
+    mhartid             = 0,
+    misaExtensionsInit  = 0x101064, // RV32GCFMU
+    misaAccess          = CsrAccess.READ_WRITE,
+    mtvecAccess         = CsrAccess.READ_WRITE,
+    mtvecInit           = mtvecInit,
+    mepcAccess          = CsrAccess.READ_WRITE,
+    mscratchGen         = true,
+    mcauseAccess        = CsrAccess.READ_WRITE,
+    mbadaddrAccess      = CsrAccess.READ_WRITE,
+    mcycleAccess        = CsrAccess.READ_WRITE,
+    minstretAccess      = CsrAccess.READ_WRITE,
+    ucycleAccess        = CsrAccess.READ_ONLY,
+    uinstretAccess      = CsrAccess.READ_ONLY,
+    wfiGenAsWait        = true,
+    ecallGen            = true,
+    userGen             = true,
+    medelegAccess       = CsrAccess.READ_WRITE,
+    midelegAccess       = CsrAccess.READ_WRITE
   )
 
 }
@@ -654,6 +686,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       //User CSR
       ucycleAccess(CSR.UCYCLE, mcycle(31 downto 0))
       ucycleAccess(CSR.UCYCLEH, mcycle(63 downto 32))
+      uinstretAccess(CSR.UINSTRET, minstret(31 downto 0))
+      uinstretAccess(CSR.UINSTRETH, minstret(63 downto 32))
 
       if(utimeAccess != CsrAccess.NONE) {
         utimeAccess(CSR.UTIME,  utime(31 downto 0))

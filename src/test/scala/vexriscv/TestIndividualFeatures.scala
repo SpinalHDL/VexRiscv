@@ -46,8 +46,10 @@ abstract class  VexRiscvPosition(name: String) extends ConfigPosition[VexRiscvCo
 class VexRiscvUniverse extends ConfigUniverse
 
 object VexRiscvUniverse{
+  val CACHE_ALL = new VexRiscvUniverse
   val CATCH_ALL = new VexRiscvUniverse
   val MMU = new VexRiscvUniverse
+  val PMP = new VexRiscvUniverse
   val FORCE_MULDIV = new VexRiscvUniverse
   val SUPERVISOR = new VexRiscvUniverse
   val NO_WRITEBACK = new VexRiscvUniverse
@@ -321,12 +323,11 @@ class IBusDimension(rvcRate : Double) extends VexRiscvDimension("IBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
-    val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
-    val noWriteBack = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
+    val cacheAll = universes.contains(VexRiscvUniverse.CACHE_ALL)
 
-
-    if(r.nextDouble() < 0.5){
+    if(r.nextDouble() < 0.5 && !cacheAll){
       val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4) else null
+
       val latency = r.nextInt(5) + 1
       val compressed = r.nextDouble() < rvcRate
       val injectorStage = r.nextBoolean() || latency == 1
@@ -414,11 +415,11 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
+    val cacheAll = universes.contains(VexRiscvUniverse.CACHE_ALL)
     val noMemory = universes.contains(VexRiscvUniverse.NO_MEMORY)
     val noWriteBack = universes.contains(VexRiscvUniverse.NO_WRITEBACK)
 
-
-    if(r.nextDouble() < 0.4 || noMemory){
+    if((r.nextDouble() < 0.4 || noMemory) && !cacheAll){
       val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig( portTlbSize = 4, latency = 0) else null
       val withLrSc = catchAll
       val earlyInjection = r.nextBoolean() && !universes.contains(VexRiscvUniverse.NO_WRITEBACK)
@@ -490,12 +491,12 @@ class DBusDimension extends VexRiscvDimension("DBus") {
 }
 
 
-class MmuDimension extends VexRiscvDimension("DBus") {
+class MmuPmpDimension extends VexRiscvDimension("DBus") {
 
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
     if(universes.contains(VexRiscvUniverse.MMU)) {
       new VexRiscvPosition("WithMmu") {
-        override def testParam = "MMU=yes"
+        override def testParam = "MMU=yes PMP=no"
 
         override def applyOn(config: VexRiscvConfig): Unit = {
           config.plugins += new MmuPlugin(
@@ -503,9 +504,20 @@ class MmuDimension extends VexRiscvDimension("DBus") {
           )
         }
       }
+    } else if (universes.contains(VexRiscvUniverse.PMP)) {
+      new VexRiscvPosition("WithPmp") {
+        override def testParam = "MMU=no PMP=yes"
+
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new PmpPlugin(
+            regions = 16,
+            ioRange = _ (31 downto 28) === 0xF
+          )
+        }
+      }
     } else {
-      new VexRiscvPosition("NoMmu") {
-        override def testParam = "MMU=no"
+      new VexRiscvPosition("NoMemProtect") {
+        override def testParam = "MMU=no PMP=no"
 
         override def applyOn(config: VexRiscvConfig): Unit = {
           config.plugins += new StaticMemoryTranslatorPlugin(
@@ -524,6 +536,7 @@ trait CatchAllPosition
 
 class CsrDimension(freertos : String, zephyr : String, linux : String) extends VexRiscvDimension("Csr") {
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
+    val pmp = universes.contains(VexRiscvUniverse.PMP)
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
     val supervisor = universes.contains(VexRiscvUniverse.SUPERVISOR)
     if(supervisor){
@@ -531,10 +544,15 @@ class CsrDimension(freertos : String, zephyr : String, linux : String) extends V
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.linuxFull(0x80000020l))
         override def testParam = s"FREERTOS=$freertos ZEPHYR=$zephyr LINUX_REGRESSION=$linux SUPERVISOR=yes"
       }
+    } else if(pmp){
+      new VexRiscvPosition("Secure") with CatchAllPosition{
+        override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.secure(0x80000020l))
+        override def testParam = s"CSR=yes CSR_SKIP_TEST=yes FREERTOS=$freertos ZEPHYR=$zephyr"
+      }
     } else if(catchAll){
       new VexRiscvPosition("MachineOs") with CatchAllPosition{
         override def applyOn(config: VexRiscvConfig): Unit = config.plugins += new CsrPlugin(CsrPluginConfig.all(0x80000020l))
-        override def testParam = s"CSR=yes FREERTOS=$freertos ZEPHYR=$zephyr"
+        override def testParam = s"CSR=yes CSR_SKIP_TEST=yes FREERTOS=$freertos ZEPHYR=$zephyr"
       }
     } else if(r.nextDouble() < 0.3){
       new VexRiscvPosition("AllNoException") with CatchAllPosition{
@@ -667,6 +685,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VE
   val rvcRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_RVC_RATE", "0.5").toDouble
   val linuxRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_LINUX_RATE", "0.3").toDouble
   val machineOsRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_MACHINE_OS_RATE", "0.5").toDouble
+  val secureRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_SECURE_RATE", "0.2").toDouble
   val linuxRegression = sys.env.getOrElse("VEXRISCV_REGRESSION_LINUX_REGRESSION", "yes")
   val coremarkRegression = sys.env.getOrElse("VEXRISCV_REGRESSION_COREMARK", "yes")
   val zephyrCount = sys.env.getOrElse("VEXRISCV_REGRESSION_ZEPHYR_COUNT", "4")
@@ -689,7 +708,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VE
     new CsrDimension(/*sys.env.getOrElse("VEXRISCV_REGRESSION_FREERTOS_COUNT", "1")*/ "0", zephyrCount, linuxRegression), //Freertos old port software is broken
     new DecoderDimension,
     new DebugDimension,
-    new MmuDimension
+    new MmuPmpDimension
   )
 
   var clockCounter = 0l
@@ -774,6 +793,13 @@ class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VE
       if(demwRate < rand.nextDouble()){
         universe += VexRiscvUniverse.NO_WRITEBACK
       }
+    } else if (secureRate > rand.nextDouble()) {
+        universe += VexRiscvUniverse.CACHE_ALL
+        universe += VexRiscvUniverse.CATCH_ALL
+        universe += VexRiscvUniverse.PMP
+        if(demwRate < rand.nextDouble()){
+          universe += VexRiscvUniverse.NO_WRITEBACK
+        }
     } else {
       if(machineOsRate > rand.nextDouble()) {
         universe += VexRiscvUniverse.CATCH_ALL

@@ -20,6 +20,7 @@ FENCEI?=no
 MMU?=yes
 DBUS_EXCLUSIVE?=no
 DBUS_INVALIDATE?=no
+PMP?=no
 SEED?=no
 LRSC?=no
 AMO?=no
@@ -254,6 +255,10 @@ ifeq ($(DBUS_EXCLUSIVE),yes)
 endif
 ifeq ($(DBUS_INVALIDATE),yes)
 	ADDCFLAGS += -CFLAGS -DDBUS_INVALIDATE
+endif
+
+ifeq ($(PMP),yes)
+	ADDCFLAGS += -CFLAGS -DPMP
 endif
 
 ifeq ($(MUL),yes)

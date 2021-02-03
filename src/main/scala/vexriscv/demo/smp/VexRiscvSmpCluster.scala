@@ -15,14 +15,14 @@ import spinal.lib.generator.Handle
 import spinal.lib.misc.plic.PlicMapping
 import spinal.lib.system.debugger.SystemDebuggerConfig
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
-import vexriscv.plugin.{BranchPlugin, CsrAccess, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, YamlPlugin}
+import vexriscv.plugin.{BranchPlugin, CsrAccess, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, StaticMemoryTranslatorPlugin, YamlPlugin}
 import vexriscv.{Riscv, VexRiscv, VexRiscvBmbGenerator, VexRiscvConfig, plugin}
 
 import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import spinal.lib.generator._
 
-case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig], withExclusiveAndInvalidation : Boolean)
+case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig], withExclusiveAndInvalidation : Boolean, forcePeripheralWidth : Boolean = true, outOfOrderDecoder : Boolean = true)
 
 class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator{
   val cpuCount = p.cpuConfigs.size
@@ -54,7 +54,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator{
     val invalidationMonitor = BmbInvalidateMonitorGenerator()
     interconnect.addConnection(exclusiveMonitor.output, invalidationMonitor.input)
     interconnect.addConnection(invalidationMonitor.output, dBusNonCoherent.bmb)
-    interconnect.masters(invalidationMonitor.output).withOutOfOrderDecoder()
+    if(p.outOfOrderDecoder) interconnect.masters(invalidationMonitor.output).withOutOfOrderDecoder()
   }
 
   val noSmp = !p.withExclusiveAndInvalidation generate new Area{
@@ -80,7 +80,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator{
 class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends VexRiscvSmpClusterBase(p) {
   val peripheralBridge = BmbToWishboneGenerator(DefaultMapping)
   val peripheral = peripheralBridge.produceIo(peripheralBridge.logic.io.output)
-  interconnect.slaves(peripheralBridge.bmb).forceAccessSourceDataWidth(32)
+  if(p.forcePeripheralWidth) interconnect.slaves(peripheralBridge.bmb).forceAccessSourceDataWidth(32)
 
   val plic = BmbPlicGenerator()(interconnect = null)
   plic.priorityWidth.load(2)
@@ -160,12 +160,17 @@ object VexRiscvSmpClusterGen {
                      dCacheWays : Int = 2,
                      iBusRelax : Boolean = false,
                      earlyBranch : Boolean = false,
-                     dBusCmdMasterPipe : Boolean = false) = {
+                     dBusCmdMasterPipe : Boolean = false,
+                     withMmu : Boolean = true,
+                     withSupervisor : Boolean = true
+                    ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
     val config = VexRiscvConfig(
       plugins = List(
-        new MmuPlugin(
+        if(withMmu)new MmuPlugin(
+          ioRange = ioRange
+        )else new StaticMemoryTranslatorPlugin(
           ioRange = ioRange
         ),
         //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config

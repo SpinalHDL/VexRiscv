@@ -10,10 +10,10 @@ import spinal.lib._
 import spinal.lib.bus.simple._
 import vexriscv.plugin.{DBusSimpleBus, IBusSimpleBus}
 
-class MuraxMasterArbiter(pipelinedMemoryBusConfig : PipelinedMemoryBusConfig) extends Component{
+class MuraxMasterArbiter(pipelinedMemoryBusConfig : PipelinedMemoryBusConfig, bigEndian : Boolean = false) extends Component{
   val io = new Bundle{
     val iBus = slave(IBusSimpleBus(null))
-    val dBus = slave(DBusSimpleBus())
+    val dBus = slave(DBusSimpleBus(bigEndian))
     val masterBus = master(PipelinedMemoryBus(pipelinedMemoryBusConfig))
   }
 
@@ -21,11 +21,7 @@ class MuraxMasterArbiter(pipelinedMemoryBusConfig : PipelinedMemoryBusConfig) ex
   io.masterBus.cmd.write      := io.dBus.cmd.valid && io.dBus.cmd.wr
   io.masterBus.cmd.address := io.dBus.cmd.valid ? io.dBus.cmd.address | io.iBus.cmd.pc
   io.masterBus.cmd.data    := io.dBus.cmd.data
-  io.masterBus.cmd.mask    := io.dBus.cmd.size.mux(
-    0 -> B"0001",
-    1 -> B"0011",
-    default -> B"1111"
-  ) |<< io.dBus.cmd.address(1 downto 0)
+  io.masterBus.cmd.mask    := io.dBus.genMask(io.dBus.cmd)
   io.iBus.cmd.ready := io.masterBus.cmd.ready && !io.dBus.cmd.valid
   io.dBus.cmd.ready := io.masterBus.cmd.ready
 
@@ -53,7 +49,7 @@ class MuraxMasterArbiter(pipelinedMemoryBusConfig : PipelinedMemoryBusConfig) ex
 }
 
 
-case class MuraxPipelinedMemoryBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, pipelinedMemoryBusConfig : PipelinedMemoryBusConfig) extends Component{
+case class MuraxPipelinedMemoryBusRam(onChipRamSize : BigInt, onChipRamHexFile : String, pipelinedMemoryBusConfig : PipelinedMemoryBusConfig, bigEndian : Boolean = false) extends Component{
   val io = new Bundle{
     val bus = slave(PipelinedMemoryBus(pipelinedMemoryBusConfig))
   }
@@ -71,6 +67,14 @@ case class MuraxPipelinedMemoryBusRam(onChipRamSize : BigInt, onChipRamHexFile :
 
   if(onChipRamHexFile != null){
     HexTools.initRam(ram, onChipRamHexFile, 0x80000000l)
+    if(bigEndian)
+      // HexTools.initRam (incorrectly) assumes little endian byte ordering
+      for((word, wordIndex) <- ram.initialContent.zipWithIndex)
+        ram.initialContent(wordIndex) =
+          ((word & 0xffl)       << 24) |
+          ((word & 0xff00l)     << 8)  |
+          ((word & 0xff0000l)   >> 8)  |
+          ((word & 0xff000000l) >> 24)
   }
 }
 
