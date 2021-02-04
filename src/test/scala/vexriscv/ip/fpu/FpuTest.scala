@@ -8,6 +8,7 @@ import org.apache.commons.io.FileUtils
 import org.scalatest.FunSuite
 import spinal.core.SpinalEnumElement
 import spinal.core.sim._
+import spinal.core._
 import spinal.lib.DoCmd
 import spinal.lib.experimental.math.Floating
 import spinal.lib.sim._
@@ -38,7 +39,9 @@ class FpuTest extends FunSuite{
 
     val config = SimConfig
 //    config.withFstWave
-    config.compile(new FpuCore(portCount, p)).doSim(seed = 42){ dut =>
+    config.compile(new FpuCore(portCount, p){
+      for(i <- 0 until portCount) out(Bits(5 bits)).setName(s"flagAcc$i") := io.port(i).completion.flag.asBits
+    }).doSim(seed = 42){ dut =>
       dut.clockDomain.forkStimulus(10)
       dut.clockDomain.forkSimSpeedPrinter(5.0)
 
@@ -92,6 +95,21 @@ class FpuTest extends FunSuite{
         val commitQueue = mutable.Queue[FpuCommit => Unit]()
         val rspQueue = mutable.Queue[FpuRsp => Unit]()
 
+        var pending = 0
+        var flagAccumulator = 0
+        
+        def cmdAdd(body : FpuCmd => Unit): Unit ={
+          pending += 1
+          cmdQueue += body
+        }
+
+        val flagAggregated = dut.reflectBaseType(s"flagAcc$id").asInstanceOf[Bits]
+        dut.clockDomain.onSamplings{
+          val c = dut.io.port(id).completion
+          pending -= c.count.toInt
+          flagAccumulator |= flagAggregated.toInt
+        }
+        
         StreamDriver(dut.io.port(id).cmd ,dut.clockDomain){payload =>
           if(cmdQueue.isEmpty) false else {
             cmdQueue.dequeue().apply(payload)
@@ -114,9 +132,11 @@ class FpuTest extends FunSuite{
           }
         }
 
+        
+        
 
         def loadRaw(rd : Int, value : BigInt): Unit ={
-          cmdQueue += {cmd =>
+          cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.LOAD
             cmd.rs1.randomize()
             cmd.rs2.randomize()
@@ -136,7 +156,7 @@ class FpuTest extends FunSuite{
         }
 
         def storeRaw(rs : Int)(body : FpuRsp => Unit): Unit ={
-          cmdQueue += {cmd =>
+          cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.STORE
             cmd.rs1 #= rs
             cmd.rs2.randomize()
@@ -154,7 +174,7 @@ class FpuTest extends FunSuite{
         }
 
         def fpuF2f(rd : Int, rs1 : Int, rs2 : Int, rs3 : Int, opcode : FpuOpcode.E, arg : Int, rounding : FpuRoundMode.E = FpuRoundMode.RNE): Unit ={
-          cmdQueue += {cmd =>
+          cmdAdd {cmd =>
             cmd.opcode #= opcode
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
@@ -170,7 +190,7 @@ class FpuTest extends FunSuite{
         }
 
         def fpuF2i(rs1 : Int, rs2 : Int, opcode : FpuOpcode.E, arg : Int, rounding : FpuRoundMode.E = FpuRoundMode.RNE)(body : FpuRsp => Unit): Unit ={
-          cmdQueue += {cmd =>
+          cmdAdd {cmd =>
             cmd.opcode #= opcode
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
@@ -217,7 +237,7 @@ class FpuTest extends FunSuite{
         }
 
         def i2f(rd : Int, value : Int, signed : Boolean, rounding : FpuRoundMode.E = FpuRoundMode.RNE): Unit ={
-          cmdQueue += {cmd =>
+          cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.I2F
             cmd.rs1.randomize()
             cmd.rs2.randomize()
@@ -234,7 +254,7 @@ class FpuTest extends FunSuite{
         }
 
         def fmv_x_w(rs1 : Int)(body : FpuRsp => Unit): Unit ={
-          cmdQueue += {cmd =>
+          cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.FMV_X_W
             cmd.rs1 #= rs1
             cmd.rs2.randomize()
@@ -246,7 +266,7 @@ class FpuTest extends FunSuite{
         }
 
         def fmv_w_x(rd : Int, value : Int): Unit ={
-          cmdQueue += {cmd =>
+          cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.FMV_W_X
             cmd.rs1.randomize()
             cmd.rs2.randomize()
@@ -262,7 +282,7 @@ class FpuTest extends FunSuite{
         }
 
         def min(rd : Int, rs1 : Int, rs2 : Int): Unit ={
-          cmdQueue += {cmd =>
+          cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.MIN_MAX
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
@@ -278,7 +298,7 @@ class FpuTest extends FunSuite{
 
 
         def sgnj(rd : Int, rs1 : Int, rs2 : Int): Unit ={
-          cmdQueue += {cmd =>
+          cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.SGNJ
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
