@@ -451,6 +451,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
     val recoded = CombInit(input.rs1)
 
+    val flag = io.port(input.source).completion.flag
 
     val halt = False
     val recodedResult =  Bits(32 bits)//recoded.asBits.resize(32 bits)
@@ -522,6 +523,10 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         }
         is(FpuFloat.NAN){
           recodedResult(23, 8 bits).setAll()
+          when(input.rs1.isCanonical){
+            recodedResult(31) := False
+            recodedResult(0, 22 bits) := 0
+          }
         }
       }
     }
@@ -540,8 +545,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         FpuRoundMode.RMM -> (round(1))
       )
       val result = (Mux(resign, ~unsigned, unsigned) + (resign ^ increment).asUInt)
-      val overflow  = RegNext((input.rs1.exponent > (input.arg(0) ? U(exponentOne+30) | U(exponentOne+31)) || input.rs1.isInfinity) && !input.rs1.sign || input.rs1.isNan)
-      val underflow = RegNext((input.rs1.exponent > U(exponentOne+30) || !input.arg(0) || input.rs1.isInfinity) && input.rs1.sign)
+      val overflow  = (input.rs1.exponent > (input.arg(0) ? U(exponentOne+30) | U(exponentOne+31)) || input.rs1.isInfinity) && !input.rs1.sign || input.rs1.isNan
+      val underflow = (input.rs1.exponent > U(exponentOne+31) || input.arg(0) && unsigned.msb && unsigned(30 downto 0) =/= 0 || !input.arg(0) && (unsigned =/= 0 || increment) || input.rs1.isInfinity) && input.rs1.sign
       val isZero = input.rs1.isZero
       when(isZero){
         result := 0
@@ -549,6 +554,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         val low = overflow
         val high = input.arg(0) ^ overflow
         result := (31 -> high, default -> low)
+        flag.NV := input.valid && input.opcode === FpuOpcode.F2I && fsm.done && !isZero
       }
     }
 
@@ -648,8 +654,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       scrap setWhen(needShift && mulHigh(0))
       val forceZero = input.rs1.isZero || input.rs2.isZero
       val forceUnderflow = exp <  exponentOne + exponentOne - 127 - 24  // 0x6A //TODO
-      val forceOverflow = /*exp > exponentOne + exponentOne + 127 || */input.rs1.isInfinity || input.rs2.isInfinity
-      val forceNan = input.rs1.isNan || input.rs2.isNan || ((input.rs1.isInfinity || input.rs2.isInfinity) && (input.rs1.isZero || input.rs2.isZero))
+      val forceOverflow = input.rs1.isInfinity || input.rs2.isInfinity
+      val infinitynan = ((input.rs1.isInfinity || input.rs2.isInfinity) && (input.rs1.isZero || input.rs2.isZero))
+      val forceNan = input.rs1.isNan || input.rs2.isNan || infinitynan
 
       val output = p.writeFloating()
       output.sign := input.rs1.sign ^ input.rs2.sign
@@ -657,8 +664,10 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       output.mantissa := man.asUInt
       output.setNormal
 
+      val flag = io.port(input.source).completion.flag
       when(forceNan) {
         output.setNanQuiet
+        flag.NV setWhen(input.valid && (infinitynan || input.rs1.isNanSignaling || input.rs2.isNanSignaling))
       } elsewhen(forceOverflow) {
         output.setInfinity
       } elsewhen(forceZero) {
@@ -936,7 +945,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val forceZero = xyMantissa === 0 || (input.rs1.isZero && input.rs2.isZero)
 //      val forceOverflow = exponent === exponentOne + 128  //Handled by writeback rounding
       val forceInfinity = (input.rs1.isInfinity || input.rs2.isInfinity)
-      val forceNan = input.rs1.isNan || input.rs2.isNan || (input.rs1.isInfinity && input.rs2.isInfinity && (input.rs1.sign ^ input.rs2.sign))
+      val infinityNan =  (input.rs1.isInfinity && input.rs2.isInfinity && (input.rs1.sign ^ input.rs2.sign))
+      val forceNan = input.rs1.isNan || input.rs2.isNan || infinityNan
     }
 
 
@@ -951,6 +961,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.roundMode := input.roundMode
     output.scrap := (norm.mantissa(1) | norm.mantissa(0) | shifter.roundingScrap)
 
+
+    val flag = io.port(input.source).completion.flag
+    flag.NV setWhen(input.valid && (norm.infinityNan || input.rs1.isNanSignaling || input.rs2.isNanSignaling))
     when(norm.forceNan) {
       output.value.setNanQuiet
     } elsewhen(norm.forceZero) {
@@ -963,21 +976,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       }
     } elsewhen(norm.forceInfinity) {
       output.value.setInfinity
-    } /*elsewhen(norm.forceOverflow) {
-      val doMax = input.roundMode.mux(
-        FpuRoundMode.RNE -> (False),
-        FpuRoundMode.RTZ -> (True),
-        FpuRoundMode.RDN -> (!output.value.sign),
-        FpuRoundMode.RUP -> (output.value.sign),
-        FpuRoundMode.RMM -> (False)
-      )
-      when(doMax){
-        output.value.exponent := exponentOne + 127
-        output.value.mantissa.setAll()
-      } otherwise {
-        output.value.setInfinity
-      }
-    }*/
+    }
   }
 
 
@@ -993,8 +992,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
     //TODO do not break NAN payload (seems already fine)
     val manAggregate = input.value.mantissa @@ input.scrap
-    val expDif = (exponentOne-126) - input.value.exponent
-    val discardCount = expDif.msb ? U(0) | expDif.resize(log2Up(p.internalMantissaSize) bits)
+    val expDif = (exponentOne-126) -^ input.value.exponent
+    val expSubnormal = !expDif.msb
+    val discardCount = expSubnormal ? expDif.resize(log2Up(p.internalMantissaSize) bits) |  U(0)
     val exactMask = (List(True) ++ (0 until p.internalMantissaSize+1).map(_ < discardCount)).asBits.asUInt
     val roundAdjusted = (True ## (manAggregate>>1))(discardCount) ## ((manAggregate & exactMask) =/= 0)
 
@@ -1017,8 +1017,18 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     math.mantissa := adder(0, p.internalMantissaSize bits)
 
     val patched = CombInit(math)
+    val nx,of,uf = False
+//    val ufPatch = input.roundMode === FpuRoundMode.RUP && !input.value.sign && !input.scrap|| input.roundMode === FpuRoundMode.RDN && input.value.sign && !input.scrap
+//    when(!math.special && (input.value.exponent <= exponentOne-127 && (math.exponent =/= exponentOne-126 || !input.value.mantissa.lsb || ufPatch)) && roundAdjusted.asUInt =/= 0){
+//      uf := True
+//    }
+
+    when(!math.special && math.exponent <= exponentOne-127 && roundAdjusted.asUInt =/= 0){ //Do not catch exact 1.17549435E-38 underflow, but, who realy care ?
+      uf := True
+    }
     when(!math.special && math.exponent >= exponentOne + 128){
-//      patched.setInfinity
+      nx := True
+      of := True
       val doMax = input.roundMode.mux(
         FpuRoundMode.RNE -> (False),
         FpuRoundMode.RTZ -> (True),
@@ -1036,6 +1046,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
 
     when(!math.special && math.exponent <= exponentOne - 127-23){
+      nx := True
+      uf := True
       val doMin = input.roundMode.mux(
         FpuRoundMode.RNE -> (False),
         FpuRoundMode.RTZ -> (False),
@@ -1051,6 +1063,14 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       }
     }
 
+
+    nx setWhen(!input.value.special && (roundAdjusted =/= 0))
+    when(input.valid){
+      val flag = io.port(input.source).completion.flag
+      flag.NX setWhen(nx)
+      flag.OF setWhen(of)
+      flag.UF setWhen(uf)
+    }
     val output = input.swapPayload(RoundOutput())
     output.source := input.source
     output.lockId := input.lockId
@@ -1079,8 +1099,11 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     if(p.sim) when(port.data.isZero || port.data.isInfinity){
       port.data.mantissa.assignDontCare()
     }
-    if(p.sim) when(port.data.special){
-      port.data.exponent(p.internalExponentSize-1 downto 2).assignDontCare()
+    if(p.sim) when(input.value.special){
+      port.data.exponent(p.internalExponentSize-1 downto 3).assignDontCare()
+      when(!input.value.isNan){
+        port.data.exponent(2 downto 2).assignDontCare()
+      }
     }
 
     when(port.valid){

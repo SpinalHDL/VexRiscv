@@ -27,6 +27,7 @@ object FpuFloat{
   val ZERO = 0
   val INFINITY = 1
   val NAN = 2
+  val NAN_CANONICAL_BIT = 2
 }
 
 case class FpuFloat(exponentSize: Int,
@@ -49,12 +50,14 @@ case class FpuFloat(exponentSize: Int,
   def isInfinity  =  special && exponent(1 downto 0) === FpuFloat.INFINITY
   def isNan       =  special && exponent(1 downto 0) === FpuFloat.NAN
   def isQuiet     =  mantissa.msb
+  def isNanSignaling  =  special && exponent(1 downto 0) === FpuFloat.NAN && !isQuiet
+  def isCanonical = exponent(FpuFloat.NAN_CANONICAL_BIT)
 
   def setNormal    =  { special := False }
   def setZero      =  { special := True; exponent(1 downto 0) := FpuFloat.ZERO }
   def setInfinity  =  { special := True; exponent(1 downto 0) := FpuFloat.INFINITY }
-  def setNan       =  { special := True; exponent(1 downto 0) := FpuFloat.NAN }
-  def setNanQuiet  =  { special := True; exponent(1 downto 0) := FpuFloat.NAN ; mantissa.msb := True }
+  def setNan       =  { special := True; exponent(1 downto 0) := FpuFloat.NAN; exponent(FpuFloat.NAN_CANONICAL_BIT) := False}
+  def setNanQuiet  =  { special := True; exponent(1 downto 0) := FpuFloat.NAN; exponent(FpuFloat.NAN_CANONICAL_BIT) := True; mantissa.msb := True; }
 
   def decode() = {
     val ret = FpuFloatDecoded()
