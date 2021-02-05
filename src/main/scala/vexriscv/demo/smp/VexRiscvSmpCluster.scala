@@ -15,7 +15,7 @@ import spinal.lib.generator.Handle
 import spinal.lib.misc.plic.PlicMapping
 import spinal.lib.system.debugger.SystemDebuggerConfig
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
-import vexriscv.plugin.{BranchPlugin, CsrAccess, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, StaticMemoryTranslatorPlugin, YamlPlugin}
+import vexriscv.plugin.{BranchPlugin, CsrAccess, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, RegFileReadKind, STATIC, SrcPlugin, StaticMemoryTranslatorPlugin, YamlPlugin}
 import vexriscv.{Riscv, VexRiscv, VexRiscvBmbGenerator, VexRiscvConfig, plugin}
 
 import scala.collection.mutable
@@ -162,7 +162,8 @@ object VexRiscvSmpClusterGen {
                      earlyBranch : Boolean = false,
                      dBusCmdMasterPipe : Boolean = false,
                      withMmu : Boolean = true,
-                     withSupervisor : Boolean = true
+                     withSupervisor : Boolean = true,
+                     regfileRead : RegFileReadKind = plugin.ASYNC
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -236,7 +237,7 @@ object VexRiscvSmpClusterGen {
           catchIllegalInstruction = true
         ),
         new RegFilePlugin(
-          regFileReadyKind = plugin.ASYNC,
+          regFileReadyKind = regfileRead,
           zeroBoot = false,
           x0Init = true
         ),
