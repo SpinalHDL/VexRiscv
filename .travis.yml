@@ -40,6 +40,7 @@ jobs:
         - echo $PATH
         - ls $HOME/verilator
         - ls $HOME/verilator/bin
+        - ls $HOME/.ivy2/cache
         - cp scripts/regression/verilator.mk ./makefile
         - make verilator_binary
         - ls verilator
