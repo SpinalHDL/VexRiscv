@@ -37,6 +37,9 @@ jobs:
       stage: Test
       name: Dhrystone
       script:
+        - echo $PATH
+        - ls $HOME/verilator
+        - ls $HOME/verilator/bin
         - make regression_dhrystone -C scripts/regression
     - <<: *test
       stage: Test
@@ -75,9 +78,6 @@ before_install:
   - cd VexRiscv
   - export VERILATOR_ROOT=$HOME/verilator
   - export PATH=$VERILATOR_ROOT/bin:$PATH
-  - echo $PATH
-  - ls $HOME/verilator
-  - ls $HOME/verilator/bin
 
 before_cache:
   - rm -fv $HOME/.ivy2/.sbt.ivy.lock
