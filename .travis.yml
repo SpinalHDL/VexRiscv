@@ -40,6 +40,10 @@ jobs:
         - echo $PATH
         - ls $HOME/verilator
         - ls $HOME/verilator/bin
+        - cp scripts/regression/verilator.mk ./makefile
+        - make verilator_binary
+        - ls verilator
+        - ls verilator/bin
         - make regression_dhrystone -C scripts/regression
     - <<: *test
       stage: Test
