@@ -39,7 +39,7 @@ class FpuTest extends FunSuite{
 
     val config = SimConfig
     config.allOptimisation
-    config.withFstWave
+//    config.withFstWave
     config.compile(new FpuCore(portCount, p){
       for(i <- 0 until portCount) out(Bits(5 bits)).setName(s"flagAcc$i") := io.port(i).completion.flag.asBits
       setDefinitionName("FpuCore")
@@ -84,13 +84,21 @@ class FpuTest extends FunSuite{
             val s = new Scanner(next)
             (b2f(s.nextLong(16).toInt), s.nextLong(16).toInt, s.nextInt(16))
           }
+
+          def f32_f32_i32 = {
+            val s = new Scanner(next)
+            val a,b,c = (s.nextLong(16).toInt)
+            (b2f(a), b2f(b), c, s.nextInt(16))
+          }
         }
-        val RNE = build("-rnear_even")
-        val RTZ = build("-rminMag")
-        val RDN = build("-rmin")
-        val RUP = build("-rmax")
-        val RMM = build("-rnear_maxMag")
-        val all = List(RNE, RTZ, RDN, RUP, RMM)
+
+        lazy val RAW = build("")
+        lazy val RNE = build("-rnear_even")
+        lazy val RTZ = build("-rminMag")
+        lazy val RDN = build("-rmin")
+        lazy val RUP = build("-rmax")
+        lazy val RMM = build("-rnear_maxMag")
+        lazy val all = List(RNE, RTZ, RDN, RUP, RMM, RAW)
         def kill = all.foreach(_.kill)
         def apply(rounding : FpuRoundMode.E) = rounding match {
           case FpuRoundMode.RNE => RNE
@@ -109,6 +117,9 @@ class FpuTest extends FunSuite{
         val i2f = new TestCase("i32_to_f32")
         val f2ui = new TestCase("f32_to_ui32")
         val f2i = new TestCase("f32_to_i32")
+        val eq = new TestCase("f32_eq")
+        val lt = new TestCase("f32_lt")
+        val le = new TestCase("f32_le")
       }
 
       val cpus = for(id <- 0 until portCount) yield new {
@@ -126,9 +137,12 @@ class FpuTest extends FunSuite{
 
         def softAssert(cond : Boolean, msg : String) = if(!cond)println(msg)
         def flagMatch(ref : Int, value : Float, report : String): Unit ={
-          waitUntil(pendingMiaou == 0)
           val patch = if(value.abs == 1.17549435E-38f) ref & ~2 else ref
-          assert(flagAccumulator == patch, s"Flag missmatch dut=$flagAccumulator ref=$patch $report")
+          flagMatch(ref, patch, report)
+        }
+        def flagMatch(ref : Int, report : String): Unit ={
+          waitUntil(pendingMiaou == 0)
+          assert(flagAccumulator == ref, s"Flag missmatch dut=$flagAccumulator ref=$ref $report")
           flagAccumulator = 0
         }
 
@@ -257,8 +271,8 @@ class FpuTest extends FunSuite{
         }
 
 
-        def cmp(rs1 : Int, rs2 : Int)(body : FpuRsp => Unit): Unit ={
-          fpuF2i(rs1, rs2, FpuOpcode.CMP, 1, FpuRoundMode.elements.randomPick())(body)
+        def cmp(rs1 : Int, rs2 : Int, arg : Int = 1)(body : FpuRsp => Unit): Unit ={
+          fpuF2i(rs1, rs2, FpuOpcode.CMP, arg, FpuRoundMode.elements.randomPick())(body)
         }
 
         def f2i(rs1 : Int, signed : Boolean, rounding : FpuRoundMode.E = FpuRoundMode.RNE)(body : FpuRsp => Unit): Unit ={
@@ -620,6 +634,23 @@ class FpuTest extends FunSuite{
           }
         }
 
+
+        def testCmpExact(a : Float, b : Float, ref : Int, flag : Int, arg : Int): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+          load(rs2, b)
+          cmp(rs1, rs2, arg){rsp =>
+            val v = rsp.value.toLong
+            assert(v === ref, f"cmp($a, $b, $arg) = $v, $ref")
+          }
+          flagMatch(flag,f"$a < $b $ref $flag ${f2b(a).toHexString} ${f2b(b).toHexString}")
+        }
+        def testLe(a : Float, b : Float, ref : Int, flag : Int) = testCmpExact(a,b,ref,flag, 0)
+        def testEq(a : Float, b : Float, ref : Int, flag : Int) = testCmpExact(a,b,ref,flag, 2)
+        def testLt(a : Float, b : Float, ref : Int, flag : Int) = testCmpExact(a,b,ref,flag, 1)
+
         def testFmv_x_w(a : Float): Unit ={
           val rs = new RegAllocator()
           val rs1, rs2, rs3 = rs.allocate()
@@ -718,6 +749,21 @@ class FpuTest extends FunSuite{
 //        }
 
         val binaryOps = List[(Int,Int,Int,FpuRoundMode.E) => Unit](add, sub, mul)
+
+        for(_ <- 0 until 100000){
+          val (a,b,i,f) = f32.le.RAW.f32_f32_i32
+          testLe(a,b,i, f)
+        }
+        for(_ <- 0 until 100000){
+          val (a,b,i,f) = f32.lt.RAW.f32_f32_i32
+          testLt(a,b,i, f)
+        }
+
+        for(_ <- 0 until 100000){
+          val (a,b,i,f) = f32.eq.RAW.f32_f32_i32
+          testEq(a,b,i, f)
+        }
+        println("Cmp done")
 
 
         testF2iExact(-2.14748365E9f, -2147483648, 0, true, FpuRoundMode.RDN)

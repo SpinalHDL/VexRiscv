@@ -16,6 +16,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val port = Vec(slave(FpuPort(p)), portCount)
   }
 
+//  io.port(0).completion.flag.setAsDirectionLess.allowDirectionLessIo
+
   val portCountWidth = log2Up(portCount)
   val Source = HardType(UInt(portCountWidth bits))
   val exponentOne = (1 << p.internalExponentSize-1) - 1
@@ -621,6 +623,17 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         rfOutput.value.special  := False //TODO
       }
     }
+
+
+//    val useRs1 = List(FpuOpcode.CMP).map(input.opcode === _).orR
+//    val useRs2 = List(FpuOpcode.CMP).map(input.opcode === _).orR
+    val onlySignalingNan = input.arg === 2
+    val rs1Nan = input.rs1.isNan
+    val rs2Nan = input.rs2.isNan
+    val rs1NanNv = input.rs1.isNan && !(onlySignalingNan && input.rs1.isQuiet)
+    val rs2NanNv = input.rs2.isNan && !(onlySignalingNan && input.rs2.isQuiet)
+    val nv = input.opcode === FpuOpcode.CMP && (rs1NanNv || rs2NanNv)
+    flag.NV setWhen(input.valid && nv)
 
     input.ready := !halt && (toFpuRf ? rfOutput.ready | io.port.map(_.rsp.ready).read(input.source))
     for(i <- 0 until portCount){
