@@ -571,11 +571,13 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       0 -> rs1AbsSmaller,
       1 -> False,
       2 -> True,
-      3 -> (!rs1AbsSmaller && !rs1Equal)
+      3 -> !rs1AbsSmaller
     )
 
 
     val minMaxResult = ((rs1Smaller ^ input.arg(0)) && !input.rs1.isNan || input.rs2.isNan) ? input.rs1 | input.rs2
+    when(input.rs1.isNan && input.rs2.isNan) { minMaxResult.setNanQuiet }
+//    when(input.rs1.isZero && input.rs2.isZero && input.rs1.sign =/= input.rs2.sign){ minMaxResult.sign := !input.arg(0) }
     val cmpResult = B(rs1Smaller && !bothZero && !input.arg(1) || (rs1Equal || bothZero) && !input.arg(0))
     when(input.rs1.isNan || input.rs2.isNan) { cmpResult := 0 }
     val sgnjResult = (input.rs1.sign && input.arg(1)) ^ input.rs2.sign ^ input.arg(0)
@@ -612,6 +614,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     rfOutput.value.assignDontCare()
     switch(input.opcode){
       is(FpuOpcode.MIN_MAX){
+        rfOutput.value.sign     := minMaxResult.sign
         rfOutput.value.exponent := minMaxResult.exponent
         rfOutput.value.mantissa := minMaxResult.mantissa @@ U"0"
         rfOutput.value.special  := minMaxResult.special
@@ -624,15 +627,12 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       }
     }
 
-
-//    val useRs1 = List(FpuOpcode.CMP).map(input.opcode === _).orR
-//    val useRs2 = List(FpuOpcode.CMP).map(input.opcode === _).orR
-    val onlySignalingNan = input.arg === 2
+    val signalQuiet = input.opcode === FpuOpcode.CMP && input.arg =/= 2
     val rs1Nan = input.rs1.isNan
     val rs2Nan = input.rs2.isNan
-    val rs1NanNv = input.rs1.isNan && !(onlySignalingNan && input.rs1.isQuiet)
-    val rs2NanNv = input.rs2.isNan && !(onlySignalingNan && input.rs2.isQuiet)
-    val nv = input.opcode === FpuOpcode.CMP && (rs1NanNv || rs2NanNv)
+    val rs1NanNv = input.rs1.isNan && (!input.rs1.isQuiet || signalQuiet)
+    val rs2NanNv = input.rs2.isNan && (!input.rs2.isQuiet || signalQuiet)
+    val nv = (input.opcode === FpuOpcode.CMP || input.opcode === FpuOpcode.MIN_MAX) && (rs1NanNv || rs2NanNv)
     flag.NV setWhen(input.valid && nv)
 
     input.ready := !halt && (toFpuRf ? rfOutput.ready | io.port.map(_.rsp.ready).read(input.source))

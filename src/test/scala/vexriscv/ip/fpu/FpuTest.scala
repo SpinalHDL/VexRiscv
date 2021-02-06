@@ -51,7 +51,7 @@ class FpuTest extends FunSuite{
 
       class TestCase(op : String){
         def build(arg : String) = new ProcessStream(s"testfloat_gen $arg -tininessafter -forever -$op"){
-          def f32_f32 ={
+          def f32_f32_f32 ={
             val s = new Scanner(next)
             val a,b,c = (s.nextLong(16).toInt)
 //            if(b2f(a).isNaN ||  b2f(b).isNaN){
@@ -120,6 +120,8 @@ class FpuTest extends FunSuite{
         val eq = new TestCase("f32_eq")
         val lt = new TestCase("f32_lt")
         val le = new TestCase("f32_le")
+        val min = new TestCase("f32_le")
+        val max = new TestCase("f32_lt")
       }
 
       val cpus = for(id <- 0 until portCount) yield new {
@@ -138,7 +140,7 @@ class FpuTest extends FunSuite{
         def softAssert(cond : Boolean, msg : String) = if(!cond)println(msg)
         def flagMatch(ref : Int, value : Float, report : String): Unit ={
           val patch = if(value.abs == 1.17549435E-38f) ref & ~2 else ref
-          flagMatch(ref, patch, report)
+          flagMatch(patch, report)
         }
         def flagMatch(ref : Int, report : String): Unit ={
           waitUntil(pendingMiaou == 0)
@@ -324,14 +326,14 @@ class FpuTest extends FunSuite{
           }
         }
 
-        def min(rd : Int, rs1 : Int, rs2 : Int): Unit ={
+        def minMax(rd : Int, rs1 : Int, rs2 : Int, arg : Int = 0): Unit ={
           cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.MIN_MAX
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
             cmd.rd #= rd
-            cmd.arg #= 0
+            cmd.arg #= arg
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -678,24 +680,34 @@ class FpuTest extends FunSuite{
 
 
 
-        def testMin(a : Float, b : Float): Unit ={
+        def testMinMaxExact(a : Float, b : Float, arg : Int): Unit ={
           val rs = new RegAllocator()
-          val rs1, rs2, rs3 = rs.allocate()
+          val rs1, rs2 = rs.allocate()
           val rd = Random.nextInt(32)
+          val ref = (a,b) match {
+            case _ if a.isNaN && b.isNaN => b2f(0x7FC00000)
+            case _ if a.isNaN => b
+            case _ if b.isNaN => a
+            case _ => if(arg == 0) Math.min(a,b) else Math.max(a,b)
+          }
+          val flag = (a,b) match {
+            case _ if a.isNaN && ((f2b(a) >> 22 ) & 1) == 0 => 16
+            case _ if b.isNaN && ((f2b(b) >> 22 ) & 1) == 0 => 16
+            case _ => 0
+          }
           load(rs1, a)
           load(rs2, b)
 
-          min(rd,rs1,rs2)
+          minMax(rd,rs1,rs2, arg)
           storeFloat(rd){v =>
-            val ref = (a,b) match {
-              case _ if a.isNaN => b
-              case _ if b.isNaN => a
-              case _ => Math.min(a,b)
-            }
-            println(f"min $a $b = $v, $ref")
-            assert(f2b(ref) ==  f2b(v))
+            assert(f2b(ref) ==  f2b(v), f"minMax($a $b $arg) = $v, $ref")
           }
+          flagMatch(flag, f"minmax($a $b $arg)")
         }
+
+        def testMin(a : Float, b : Float) = testMinMaxExact(a,b,0)
+        def testMax(a : Float, b : Float) = testMinMaxExact(a,b,1)
+
 
         def testSgnj(a : Float, b : Float): Unit ={
           val rs = new RegAllocator()
@@ -749,6 +761,16 @@ class FpuTest extends FunSuite{
 //        }
 
         val binaryOps = List[(Int,Int,Int,FpuRoundMode.E) => Unit](add, sub, mul)
+
+        for(_ <- 0 until 10000){
+          val (a,b,r,f) = f32.min.RAW.f32_f32_f32
+          testMin(a,b)
+        }
+        for(_ <- 0 until 10000){
+          val (a,b,r,f) = f32.max.RAW.f32_f32_f32
+          testMax(a,b)
+        }
+        println("minMax done")
 
         for(_ <- 0 until 100000){
           val (a,b,i,f) = f32.le.RAW.f32_f32_i32
@@ -812,7 +834,7 @@ class FpuTest extends FunSuite{
 
         for(_ <- 0 until 10000){
           val rounding = FpuRoundMode.elements.randomPick()
-          val (a,b,c,f) = f32.mul(rounding).f32_f32
+          val (a,b,c,f) = f32.mul(rounding).f32_f32_f32
           testBinaryOp(mul,a,b,c,f, rounding,"mul")
         }
 
@@ -821,13 +843,13 @@ class FpuTest extends FunSuite{
 
         for(_ <- 0 until 10000){
           val rounding = FpuRoundMode.elements.randomPick()
-          val (a,b,c,f) = f32.add(rounding).f32_f32
+          val (a,b,c,f) = f32.add(rounding).f32_f32_f32
           testBinaryOp(add,a,b,c,f, rounding,"add")
         }
 
         for(_ <- 0 until 10000){
           val rounding = FpuRoundMode.elements.randomPick()
-          val (a,b,c,f) = f32.sub(rounding).f32_f32
+          val (a,b,c,f) = f32.sub(rounding).f32_f32_f32
           testBinaryOp(sub,a,b,c,f, rounding,"sub")
         }
 
@@ -936,14 +958,7 @@ class FpuTest extends FunSuite{
         for(a <- fAll; b <- fAll) testCmp(a, b)
         for(_ <- 0 until 1000) testCmp(randomFloat(), randomFloat())
 
-        testMin(0.0f, 1.2f )
-        testMin(1.2f, 0.0f )
-        testMin(0.0f, -0.0f )
-        testMin(-0.0f, 0.0f )
-        for(a <- fAll; _ <- 0 until 50) testMin(a, randomFloat())
-        for(b <- fAll; _ <- 0 until 50) testMin(randomFloat(), b)
-        for(a <- fAll; b <- fAll) testMin(a, b)
-        for(_ <- 0 until 1000) testMin(randomFloat(), randomFloat())
+
 
         testSqrt(1.2f)
         testSqrt(0.0f)
@@ -972,15 +987,6 @@ class FpuTest extends FunSuite{
 
         testFmv_x_w(1.246f)
         testFmv_w_x(f2b(7.234f))
-
-        testMin(1.0f, 2.0f)
-        testMin(1.5f, 2.0f)
-        testMin(1.5f, 3.5f)
-        testMin(1.5f, 1.5f)
-        testMin(1.5f, -1.5f)
-        testMin(-1.5f, 1.5f)
-        testMin(-1.5f, -1.5f)
-        testMin(1.5f, -3.5f)
 
         testSgnj(1.0f, 2.0f)
         testSgnj(1.5f, 2.0f)
@@ -1087,7 +1093,7 @@ class FpuTest extends FunSuite{
           tests += (() =>{testCmp(randomFloat(), randomFloat())})
           tests += (() =>{testFmv_x_w(randomFloat())})
           tests += (() =>{testFmv_w_x(f2b(randomFloat()))})
-          tests += (() =>{testMin(randomFloat(), randomFloat())})
+//          tests += (() =>{testMin(randomFloat(), randomFloat())})
           tests += (() =>{testSgnj(randomFloat(), randomFloat())})
 
 
