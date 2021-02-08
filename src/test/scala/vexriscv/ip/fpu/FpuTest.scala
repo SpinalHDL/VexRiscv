@@ -122,6 +122,11 @@ class FpuTest extends FunSuite{
         val le = new TestCase("f32_le")
         val min = new TestCase("f32_le")
         val max = new TestCase("f32_lt")
+        val transfer = new TestCase("f32_eq")
+        val fclass = new TestCase("f32_eq")
+        val sgnj = new TestCase("f32_eq")
+        val sgnjn = new TestCase("f32_eq")
+        val sgnjx = new TestCase("f32_eq")
       }
 
       val cpus = for(id <- 0 until portCount) yield new {
@@ -272,6 +277,19 @@ class FpuTest extends FunSuite{
           fpuF2f(rd, rs1, rs2, rs3, FpuOpcode.FMA, 0, rounding)
         }
 
+        def sgnjRaw(rd : Int, rs1 : Int, rs2 : Int, arg : Int): Unit ={
+          fpuF2f(rd, rs1, rs2, Random.nextInt(32), FpuOpcode.SGNJ, arg, FpuRoundMode.elements.randomPick())
+        }
+
+        def sgnj(rd : Int, rs1 : Int, rs2 : Int, rounding : FpuRoundMode.E = null): Unit ={
+          sgnjRaw(rd, rs1, rs2, 0)
+        }
+        def sgnjn(rd : Int, rs1 : Int, rs2 : Int, rounding : FpuRoundMode.E = null): Unit ={
+          sgnjRaw(rd, rs1, rs2, 1)
+        }
+        def sgnjx(rd : Int, rs1 : Int, rs2 : Int, rounding : FpuRoundMode.E = null): Unit ={
+          sgnjRaw(rd, rs1, rs2, 2)
+        }
 
         def cmp(rs1 : Int, rs2 : Int, arg : Int = 1)(body : FpuRsp => Unit): Unit ={
           fpuF2i(rs1, rs2, FpuOpcode.CMP, arg, FpuRoundMode.elements.randomPick())(body)
@@ -298,7 +316,7 @@ class FpuTest extends FunSuite{
           }
         }
 
-        def fmv_x_w(rs1 : Int)(body : FpuRsp => Unit): Unit ={
+        def fmv_x_w(rs1 : Int)(body : Float => Unit): Unit ={
           cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.FMV_X_W
             cmd.rs1 #= rs1
@@ -307,7 +325,7 @@ class FpuTest extends FunSuite{
             cmd.rd.randomize()
             cmd.arg #= 0
           }
-          rspQueue += body
+          rspQueue += {rsp => body(b2f(rsp.value.toLong.toInt))}
         }
 
         def fmv_w_x(rd : Int, value : Int): Unit ={
@@ -342,19 +360,17 @@ class FpuTest extends FunSuite{
         }
 
 
-        def sgnj(rd : Int, rs1 : Int, rs2 : Int): Unit ={
+
+        def fclass(rs1 : Int)(body : Int => Unit) : Unit = {
           cmdAdd {cmd =>
-            cmd.opcode #= cmd.opcode.spinalEnum.SGNJ
+            cmd.opcode #= FpuOpcode.FCLASS
             cmd.rs1 #= rs1
-            cmd.rs2 #= rs2
+            cmd.rs2.randomize()
             cmd.rs3.randomize()
-            cmd.rd #= rd
-            cmd.arg #= 0
+            cmd.rd.randomize()
+            cmd.arg.randomize()
           }
-          commitQueue += {cmd =>
-            cmd.write #= true
-            cmd.sync #= false
-          }
+          rspQueue += {rsp => body(rsp.value.toLong.toInt)}
         }
       }
 
@@ -460,16 +476,43 @@ class FpuTest extends FunSuite{
           }
         }
 
-        def testLoadStore(a : Float): Unit ={
+        def testTransfer(a : Float, iSrc : Boolean, iDst : Boolean): Unit ={
           val rd = Random.nextInt(32)
-          load(rd, a)
-          storeFloat(rd){v =>
+
+          def handle(v : Float): Unit ={
             val refUnclamped = a
             val ref = a
-            println(f"$a = $v, $ref")
-            assert(f2b(v) == f2b(ref))
+            assert(f2b(v) == f2b(ref), f"$a = $v, $ref")
+          }
+
+          if(iSrc) fmv_w_x(rd, f2b(a)) else load(rd, a)
+          if(iDst) fmv_x_w(rd)(handle) else storeFloat(rd)(handle)
+
+          flagMatch(0, f"$a")
+        }
+
+        def testClass(a : Float) : Unit = {
+          val rd = Random.nextInt(32)
+
+
+          load(rd, a)
+          fclass(rd){v =>
+            val mantissa = f2b(a) & 0x7FFFFF
+            val exp = (f2b(a) >> 23) & 0xFF
+            val sign = (f2b(a) >> 31) & 0x1
+
+            val refBit = if(a.isInfinite) (if(sign == 0) 7 else 0)
+            else if(a.isNaN) (if((mantissa >> 22) != 0) 9 else 8)
+            else if(exp == 0 && mantissa != 0) (if(sign == 0) 5 else 2)
+            else if(exp == 0 && mantissa == 0) (if(sign == 0) 4 else 3)
+            else if(sign == 0) 6 else 1
+
+            val ref = 1 << refBit
+
+            assert(v == ref, f"fclass $a")
           }
         }
+
         def testMul(a : Float, b : Float): Unit ={
           val rs = new RegAllocator()
           val rs1, rs2, rs3 = rs.allocate()
@@ -653,30 +696,30 @@ class FpuTest extends FunSuite{
         def testEq(a : Float, b : Float, ref : Int, flag : Int) = testCmpExact(a,b,ref,flag, 2)
         def testLt(a : Float, b : Float, ref : Int, flag : Int) = testCmpExact(a,b,ref,flag, 1)
 
-        def testFmv_x_w(a : Float): Unit ={
-          val rs = new RegAllocator()
-          val rs1, rs2, rs3 = rs.allocate()
-          val rd = Random.nextInt(32)
-          load(rs1, a)
-          fmv_x_w(rs1){rsp =>
-            val ref = f2b(a).toLong & 0xFFFFFFFFl
-            val v = rsp.value.toBigInt
-            println(f"fmv_x_w $a = $v, $ref")
-            assert(v === ref)
-          }
-        }
+//        def testFmv_x_w(a : Float): Unit ={
+//          val rs = new RegAllocator()
+//          val rs1, rs2, rs3 = rs.allocate()
+//          val rd = Random.nextInt(32)
+//          load(rs1, a)
+//          fmv_x_w(rs1){rsp =>
+//            val ref = f2b(a).toLong & 0xFFFFFFFFl
+//            val v = rsp.value.toBigInt
+//            println(f"fmv_x_w $a = $v, $ref")
+//            assert(v === ref)
+//          }
+//        }
 
-        def testFmv_w_x(a : Int): Unit ={
-          val rs = new RegAllocator()
-          val rs1, rs2, rs3 = rs.allocate()
-          val rd = Random.nextInt(32)
-          fmv_w_x(rd, a)
-          storeFloat(rd){v =>
-            val ref = b2f(a)
-            println(f"fmv_w_x $a = $v, $ref")
-            assert(v === ref)
-          }
-        }
+//        def testFmv_w_x(a : Int): Unit ={
+//          val rs = new RegAllocator()
+//          val rs1, rs2, rs3 = rs.allocate()
+//          val rd = Random.nextInt(32)
+//          fmv_w_x(rd, a)
+//          storeFloat(rd){v =>
+//            val ref = b2f(a)
+//            println(f"fmv_w_x $a = $v, $ref")
+//            assert(v === ref)
+//          }
+//        }
 
 
 
@@ -710,18 +753,16 @@ class FpuTest extends FunSuite{
 
 
         def testSgnj(a : Float, b : Float): Unit ={
-          val rs = new RegAllocator()
-          val rs1, rs2, rs3 = rs.allocate()
-          val rd = Random.nextInt(32)
-          load(rs1, a)
-          load(rs2, b)
-
-          sgnj(rd,rs1,rs2)
-          storeFloat(rd){v =>
-            val ref = a * a.signum * b.signum
-            println(f"sgnf $a $b = $v, $ref")
-            assert(ref ==  v)
-          }
+          val ref = b2f((f2b(a) & ~0x80000000) | f2b(b) & 0x80000000)
+          testBinaryOp(sgnj,a,b,ref,0, null,"sgnj")
+        }
+        def testSgnjn(a : Float, b : Float): Unit ={
+          val ref = b2f((f2b(a) & ~0x80000000) | ((f2b(b) & 0x80000000) ^ 0x80000000))
+          testBinaryOp(sgnjn,a,b,ref,0, null,"sgnjn")
+        }
+        def testSgnjx(a : Float, b : Float): Unit ={
+          val ref = b2f(f2b(a) ^ (f2b(b) & 0x80000000))
+          testBinaryOp(sgnjx,a,b,ref,0, null,"sgnjx")
         }
 
 
@@ -761,6 +802,41 @@ class FpuTest extends FunSuite{
 //        }
 
         val binaryOps = List[(Int,Int,Int,FpuRoundMode.E) => Unit](add, sub, mul)
+
+
+
+        for(_ <- 0 until 10000){
+          testSgnj(b2f(Random.nextInt()), b2f(Random.nextInt()))
+          testSgnjn(b2f(Random.nextInt()), b2f(Random.nextInt()))
+          testSgnjx(b2f(Random.nextInt()), b2f(Random.nextInt()))
+          val (a,b,r,f) = f32.sgnj.RAW.f32_f32_i32
+          testSgnj(a, b)
+          testSgnjn(a, b)
+          testSgnjx(a, b)
+        }
+        println("f32 sgnj done")
+
+        for(_ <- 0 until 10000){
+          testTransfer(b2f(Random.nextInt()), Random.nextBoolean(), Random.nextBoolean())
+        }
+        for(_ <- 0 until 10000){
+          val (a,b,r,f) = f32.transfer.RAW.f32_f32_i32
+          testTransfer(a, Random.nextBoolean(), Random.nextBoolean())
+        }
+
+        println("f32 load/store/rf transfer done")
+
+
+        for(_ <- 0 until 10000){
+          testClass(b2f(Random.nextInt()))
+        }
+        for(_ <- 0 until 10000){
+          val (a,b,r,f) = f32.fclass.RAW.f32_f32_i32
+          testClass(a)
+        }
+
+        println("f32 class done")
+
 
         for(_ <- 0 until 10000){
           val (a,b,r,f) = f32.min.RAW.f32_f32_f32
@@ -890,9 +966,9 @@ class FpuTest extends FunSuite{
         for(_ <- 0 until 1000) testAdd(randomFloat(), randomFloat())
 
 
-        testLoadStore(1.17549435082e-38f)
-        testLoadStore(1.4E-45f)
-        testLoadStore(3.44383110592e-41f)
+//        testTransfer(1.17549435082e-38f)
+//        testTransfer(1.4E-45f)
+//        testTransfer(3.44383110592e-41f)
 
 //TODO bring back those tests and test overflow / underflow (F2I)
 //        testF2i(16.0f  , false)
@@ -918,7 +994,7 @@ class FpuTest extends FunSuite{
 
 
 
-        testLoadStore(1.2f)
+//        testTransfer(1.2f)
         testMul(1.2f, 2.5f)
         testMul(b2f(0x00400000), 16.0f)
         testMul(b2f(0x00100000), 16.0f)
@@ -941,8 +1017,8 @@ class FpuTest extends FunSuite{
 
 
 
-        testLoadStore(1.765f)
-        testFmv_w_x(f2b(7.234f))
+//        testTransfer(1.765f)
+//        testFmv_w_x(f2b(7.234f))
         testI2f(64, false)
         for(i <- iUnsigned) testI2f(i, false)
         for(i <- iSigned) testI2f(i, true)
@@ -985,8 +1061,8 @@ class FpuTest extends FunSuite{
         //        dut.clockDomain.waitSampling(10000000)
 
 
-        testFmv_x_w(1.246f)
-        testFmv_w_x(f2b(7.234f))
+//        testFmv_x_w(1.246f)
+//        testFmv_w_x(f2b(7.234f))
 
         testSgnj(1.0f, 2.0f)
         testSgnj(1.5f, 2.0f)
@@ -1091,8 +1167,8 @@ class FpuTest extends FunSuite{
           tests += (() =>{testDiv(randomFloat(), randomFloat())})
           tests += (() =>{testSqrt(randomFloat().abs)})
           tests += (() =>{testCmp(randomFloat(), randomFloat())})
-          tests += (() =>{testFmv_x_w(randomFloat())})
-          tests += (() =>{testFmv_w_x(f2b(randomFloat()))})
+//          tests += (() =>{testFmv_x_w(randomFloat())})
+//          tests += (() =>{testFmv_w_x(f2b(randomFloat()))})
 //          tests += (() =>{testMin(randomFloat(), randomFloat())})
           tests += (() =>{testSgnj(randomFloat(), randomFloat())})
 

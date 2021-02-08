@@ -105,6 +105,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val value = p.writeFloating()
     val scrap = Bool()
     val roundMode = FpuRoundMode()
+    val allowException = Bool()
   }
 
   case class RoundOutput() extends Bundle{
@@ -463,7 +464,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
     recodedResult := recoded.sign ## f32.exp ## f32.man
 
-    val isSubnormal = !recoded.special && recoded.exponent <= exponentOne - 127
+    val expInSubnormalRange = recoded.exponent <= exponentOne - 127
+    val isSubnormal = !recoded.special && expInSubnormalRange
+    val isNormal = !recoded.special && !expInSubnormalRange
     val fsm = new Area{
       val f2iShift = input.rs1.exponent - U(exponentOne)
       val isF2i = input.opcode === FpuOpcode.F2I
@@ -584,12 +587,12 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val fclassResult = B(0, 32 bits)
     val decoded = input.rs1.decode()
     fclassResult(0) :=  input.rs1.sign &&  decoded.isInfinity
-    fclassResult(1) :=  input.rs1.sign &&  decoded.isNormal
+    fclassResult(1) :=  input.rs1.sign &&  isNormal
     fclassResult(2) :=  input.rs1.sign &&  isSubnormal //TODO
     fclassResult(3) :=  input.rs1.sign &&  decoded.isZero
     fclassResult(4) := !input.rs1.sign &&  decoded.isZero
     fclassResult(5) := !input.rs1.sign &&  isSubnormal //TODO
-    fclassResult(6) := !input.rs1.sign &&  decoded.isNormal
+    fclassResult(6) := !input.rs1.sign &&  isNormal
     fclassResult(7) := !input.rs1.sign &&  decoded.isInfinity
     fclassResult(8) :=   decoded.isNan && !decoded.isQuiet
     fclassResult(9) :=   decoded.isNan &&  decoded.isQuiet
@@ -623,7 +626,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         rfOutput.value.sign     := sgnjResult
         rfOutput.value.exponent := input.rs1.exponent
         rfOutput.value.mantissa := input.rs1.mantissa @@ U"0"
-        rfOutput.value.special  := False //TODO
+        rfOutput.value.special  := input.rs1.special
       }
     }
 
