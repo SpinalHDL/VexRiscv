@@ -265,6 +265,10 @@ ifeq ($(MUL),yes)
 	ADDCFLAGS += -CFLAGS -DMUL
 endif
 
+ifeq ($(RVF),yes)
+	ADDCFLAGS += -CFLAGS -DRVF
+endif
+
 ifeq ($(DIV),yes)
 	ADDCFLAGS += -CFLAGS -DDIV
 endif

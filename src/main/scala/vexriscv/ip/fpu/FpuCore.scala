@@ -105,7 +105,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val value = p.writeFloating()
     val scrap = Bool()
     val roundMode = FpuRoundMode()
-    val allowException = Bool()
   }
 
   case class RoundOutput() extends Bundle{
@@ -560,6 +559,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         val high = input.arg(0) ^ overflow
         result := (31 -> high, default -> low)
         flag.NV := input.valid && input.opcode === FpuOpcode.F2I && fsm.done && !isZero
+      } otherwise {
+        flag.NX := input.valid && input.opcode === FpuOpcode.F2I && fsm.done && round =/= 0
       }
     }
 
@@ -570,11 +571,12 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     rs1AbsSmaller.setWhen(input.rs1.isZero)
     rs1AbsSmaller.clearWhen(input.rs2.isZero)
     rs1AbsSmaller.clearWhen(input.rs1.isInfinity)
+    rs1Equal setWhen(input.rs1.sign === input.rs2.sign && input.rs1.isInfinity && input.rs2.isInfinity)
     val rs1Smaller = (input.rs1.sign ## input.rs2.sign).mux(
       0 -> rs1AbsSmaller,
       1 -> False,
       2 -> True,
-      3 -> !rs1AbsSmaller
+      3 -> (!rs1AbsSmaller && !rs1Equal)
     )
 
 
@@ -679,6 +681,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       output.exponent := (exp - exponentOne).resized
       output.mantissa := man.asUInt
       output.setNormal
+
+      when(exp(exp.getWidth-3, 3 bits) >= 5) { output.exponent(p.internalExponentSize-2, 2 bits) := 3 }
 
       val flag = io.port(input.source).completion.flag
       when(forceNan) {
@@ -1112,13 +1116,14 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     port.address := input.source @@ input.rd
     port.data := input.value
 
+    val randomSim = p.sim generate (in UInt(p.internalMantissaSize bits))
     if(p.sim) when(port.data.isZero || port.data.isInfinity){
-      port.data.mantissa.assignDontCare()
+      port.data.mantissa := randomSim
     }
     if(p.sim) when(input.value.special){
-      port.data.exponent(p.internalExponentSize-1 downto 3).assignDontCare()
+      port.data.exponent(p.internalExponentSize-1 downto 3) := randomSim.resized
       when(!input.value.isNan){
-        port.data.exponent(2 downto 2).assignDontCare()
+        port.data.exponent(2 downto 2) := randomSim.resized
       }
     }
 

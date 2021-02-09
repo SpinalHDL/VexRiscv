@@ -1323,6 +1323,12 @@ public:
         allowInvalidate = false;
         return this;
     }
+    Workspace* writeWord(uint32_t address, uint32_t data){
+        mem.write(address, 4, (uint8_t*)&data);
+        riscvRef.mem.write(address, 4, (uint8_t*)&data);
+        return this;
+    }
+
     virtual bool isPerifRegion(uint32_t addr) { return false; }
     virtual bool isMmuRegion(uint32_t addr) { return true;}
     virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
@@ -3016,7 +3022,7 @@ public:
 				if(code == 1 || code2 == 1){
 					pass();
 				}else{
-					cout << "Error code " << code/2 << endl;
+					cout << "Error code " << code2/2 << endl;
 					fail();
 				}
 			}
@@ -3624,6 +3630,21 @@ string riscvTestMemory[] = {
 };
 
 
+string riscvTestFloat[] = {
+    "rv32uf-p-fadd",
+    "rv32uf-p-fcmp",
+    "rv32uf-p-fcvt_w",
+    "rv32uf-p-fmadd",
+    "rv32uf-p-ldst",
+    "rv32uf-p-recoding",
+    "rv32uf-p-fclass",
+    "rv32uf-p-fcvt",
+    "rv32uf-p-fdiv",
+    "rv32uf-p-fmin",
+    "rv32uf-p-move"
+};
+
+
 
 
 string riscvTestMul[] = {
@@ -3793,6 +3814,8 @@ string complianceTestC[] = {
 
 
 
+
+
 struct timespec timer_start(){
     struct timespec start_time;
     clock_gettime(CLOCK_REALTIME, &start_time); //CLOCK_PROCESS_CPUTIME_ID
@@ -3863,6 +3886,12 @@ int main(int argc, char **argv, char **env) {
 	printf("BOOT\n");
 	timespec startedAt = timer_start();
 
+    #ifdef RVF
+    for(const string &name : riscvTestFloat){
+        redo(REDO,RiscvTest(name).bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
+    }
+    #endif
+    return 0;
 
 //#ifdef LITEX
 //	LitexSoC("linux")
@@ -4034,6 +4063,12 @@ int main(int argc, char **argv, char **env) {
 			for(const string &name : riscvTestMemory){
 				redo(REDO,RiscvTest(name).run();)
 			}
+
+            #ifdef RVF
+			for(const string &name : riscvTestFloat){
+				redo(REDO,RiscvTest(name).run();)
+			}
+			#endif
 
 			#ifdef MUL
 			for(const string &name : riscvTestMul){

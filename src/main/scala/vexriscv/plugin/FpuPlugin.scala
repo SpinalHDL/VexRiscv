@@ -78,8 +78,8 @@ class FpuPlugin(externalFpu : Boolean = false,
       FSUB_S    -> (addSub :+ arg(1)),
       FMADD_S   -> (fma :+ arg(0)),
       FMSUB_S   -> (fma :+ arg(2)),
-      FNMADD_S  -> (fma :+ arg(1)),
-      FNMSUB_S  -> (fma :+ arg(3)),
+      FNMADD_S  -> (fma :+ arg(3)),
+      FNMSUB_S  -> (fma :+ arg(1)),
       FMUL_S    -> (mul :+ arg(0)),
       FDIV_S    -> (div),
       FSQRT_S   -> (sqrt),
@@ -138,11 +138,11 @@ class FpuPlugin(externalFpu : Boolean = false,
       flags.NX init(False) setWhen(port.completion.flag.NX)
 
       val service = pipeline.service(classOf[CsrInterface])
-      val rm = Reg(Bits(3 bits))
+      val rm = Reg(Bits(3 bits)) init(0)
 
       service.rw(CSR.FCSR,   5, rm)
       service.rw(CSR.FCSR,   0, flags)
-      service.rw(CSR.FRM,    5, rm)
+      service.rw(CSR.FRM,    0, rm)
       service.rw(CSR.FFLAGS, 0, flags)
 
       val csrActive = service.duringAny()
@@ -195,21 +195,22 @@ class FpuPlugin(externalFpu : Boolean = false,
       //Manage $store and port.rsp
       port.rsp.ready := False
       when(isRsp){
-        port.rsp.ready := True
         when(arbitration.isValid) {
           dBusEncoding.bypassStore(port.rsp.value)
           output(REGFILE_WRITE_DATA) := port.rsp.value
         }
         when(!port.rsp.valid){
           arbitration.haltByOther := True
+        } elsewhen(!arbitration.haltItself){
+          port.rsp.ready := True
         }
       }
 
       // Manage $load
       val commit = Stream(FpuCommit(p))
-      commit.valid := isCommit && arbitration.isMoving
+      commit.valid := isCommit && !arbitration.isStuck
       commit.value := (input(FPU_COMMIT_LOAD) ? output(DBUS_DATA) | input(RS1))
-      commit.write := arbitration.isValid
+      commit.write := arbitration.isValid && !arbitration.removeIt
       commit.sync := input(FPU_COMMIT_SYNC)
 
       when(arbitration.isValid && !commit.ready){
@@ -218,6 +219,8 @@ class FpuPlugin(externalFpu : Boolean = false,
 
       port.commit <-/< commit
     }
+
+    pipeline.stages.dropRight(1).foreach(s => s.output(FPU_FORKED) clearWhen(s.arbitration.isStuck))
 
     Component.current.afterElaboration{
       pipeline.stages.tail.foreach(_.input(FPU_FORKED).init(False))

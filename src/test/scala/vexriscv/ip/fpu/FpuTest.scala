@@ -90,8 +90,14 @@ class FpuTest extends FunSuite{
             val a,b,c = (s.nextLong(16).toInt)
             (b2f(a), b2f(b), c, s.nextInt(16))
           }
+
+          def f32_f32 = {
+            val s = new Scanner(next)
+            val a,b = (s.nextLong(16).toInt)
+            (b2f(a), b2f(b), s.nextInt(16))
         }
 
+        }
         lazy val RAW = build("")
         lazy val RNE = build("-rnear_even")
         lazy val RTZ = build("-rminMag")
@@ -115,8 +121,8 @@ class FpuTest extends FunSuite{
         val mul = new TestCase("f32_mul")
         val ui2f = new TestCase("ui32_to_f32")
         val i2f = new TestCase("i32_to_f32")
-        val f2ui = new TestCase("f32_to_ui32")
-        val f2i = new TestCase("f32_to_i32")
+        val f2ui = new TestCase("f32_to_ui32 -exact")
+        val f2i = new TestCase("f32_to_i32 -exact")
         val eq = new TestCase("f32_eq")
         val lt = new TestCase("f32_lt")
         val le = new TestCase("f32_le")
@@ -127,6 +133,8 @@ class FpuTest extends FunSuite{
         val sgnj = new TestCase("f32_eq")
         val sgnjn = new TestCase("f32_eq")
         val sgnjx = new TestCase("f32_eq")
+        val sqrt = new TestCase("f32_sqrt")
+        val div = new TestCase("f32_div")
       }
 
       val cpus = for(id <- 0 until portCount) yield new {
@@ -152,12 +160,17 @@ class FpuTest extends FunSuite{
           assert(flagAccumulator == ref, s"Flag missmatch dut=$flagAccumulator ref=$ref $report")
           flagAccumulator = 0
         }
+        def flagClear(): Unit ={
+          waitUntil(pendingMiaou == 0)
+          flagAccumulator = 0
+        }
 
         val flagAggregated = dut.reflectBaseType(s"flagAcc$id").asInstanceOf[Bits]
         dut.clockDomain.onSamplings{
           val c = dut.io.port(id).completion
           pendingMiaou -= c.count.toInt
           flagAccumulator |= flagAggregated.toInt
+          dut.writeback.randomSim.randomize()
         }
 
         StreamDriver(dut.io.port(id).cmd ,dut.clockDomain){payload =>
@@ -228,7 +241,7 @@ class FpuTest extends FunSuite{
             cmd.opcode #= opcode
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
-            cmd.rs3.randomize()
+            cmd.rs3 #= rs3
             cmd.rd #= rd
             cmd.arg #= arg
             cmd.roundMode #= rounding
@@ -447,7 +460,6 @@ class FpuTest extends FunSuite{
             assert(f2b(v) == f2b(ref), f"## ${a}  ${opName}  $b = $v, $ref $rounding")
           }
 
-
           flagMatch(flag, ref, f"## ${opName} ${a} $b $ref $rounding")
         }
 
@@ -581,6 +593,37 @@ class FpuTest extends FunSuite{
             val ref = Math.sqrt(a).toFloat
             val error = Math.abs(ref-v)/ref
             println(f"sqrt($a) = $v, $ref $error")
+            assert(checkFloat(ref, v))
+          }
+        }
+
+
+
+        def testSqrtExact(a : Float, ref : Float, flag : Int, rounding : FpuRoundMode.E): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+
+          sqrt(rd,rs1)
+          storeFloat(rd){v =>
+            val error = Math.abs(ref-v)/ref
+            println(f"sqrt($a) = $v, $ref $error $rounding")
+            assert(checkFloat(ref, v))
+          }
+        }
+
+        def testDivExact(a : Float, b : Float, ref : Float, flag : Int, rounding : FpuRoundMode.E): Unit ={
+          val rs = new RegAllocator()
+          val rs1, rs2, rs3 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+          load(rs2, b)
+
+          div(rd,rs1, rs2)
+          storeFloat(rd){v =>
+            val error = Math.abs(ref-v)/ref
+            println(f"div($a, $b) = $v, $ref $error $rounding")
             assert(checkFloat(ref, v))
           }
         }
@@ -803,7 +846,69 @@ class FpuTest extends FunSuite{
 
         val binaryOps = List[(Int,Int,Int,FpuRoundMode.E) => Unit](add, sub, mul)
 
+//        testSqrt(0.0f)
+        //        testSqrt(1.2f)
+        //        for(a <- fAll) testSqrt(a)
+//        for(_ <- 0 until 1000) testSqrt(randomFloat())
 
+
+
+        for(i <- 0 until 1000){
+          testFma(randomFloat(), randomFloat(), randomFloat())
+        }
+        flagClear()
+        println("fma done") //TODO
+
+
+        testF2iExact(-2.14748365E9f, -2147483648, 0, true, FpuRoundMode.RDN)
+
+        testEq(Float.PositiveInfinity,Float.PositiveInfinity,1, 0)
+        testEq(0f, 0f,1, 0)
+
+        for(_ <- 0 until 10000){
+          val (a,b,i,f) = f32.le.RAW.f32_f32_i32
+          testLe(a,b,i, f)
+        }
+        for(_ <- 0 until 10000){
+          val (a,b,i,f) = f32.lt.RAW.f32_f32_i32
+          testLt(a,b,i, f)
+        }
+
+        for(r <- 0 until 10000){
+          val (a,b,i,f) = f32.eq.RAW.f32_f32_i32
+          testEq(a,b,i, f)
+          if(r % 100000 == 0) println(r)
+        }
+        println("Cmp done")
+
+        for(_ <- 0 until 1000000){
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,f) = f32.f2ui(rounding).f32_i32
+          testF2iExact(a,b, f, false, rounding)
+        }
+
+        for(_ <- 0 until 1000000){
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,f) = f32.f2i(rounding).f32_i32
+          testF2iExact(a,b, f, true, rounding)
+        }
+
+        println("f2i done")
+
+        for(_ <- 0 until 10000){
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,r,f) = f32.div(rounding).f32_f32_f32
+          testDivExact(a, b, r, f, rounding)
+        }
+        println("f32 div done")
+
+        for(_ <- 0 until 10000){
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,r,f) = f32.sqrt(rounding).f32_f32
+          testSqrtExact(a, r, f, rounding)
+        }
+        println("f32 sqrt done")
+        flagClear()
 
         for(_ <- 0 until 10000){
           testSgnj(b2f(Random.nextInt()), b2f(Random.nextInt()))
@@ -848,37 +953,10 @@ class FpuTest extends FunSuite{
         }
         println("minMax done")
 
-        for(_ <- 0 until 100000){
-          val (a,b,i,f) = f32.le.RAW.f32_f32_i32
-          testLe(a,b,i, f)
-        }
-        for(_ <- 0 until 100000){
-          val (a,b,i,f) = f32.lt.RAW.f32_f32_i32
-          testLt(a,b,i, f)
-        }
-
-        for(_ <- 0 until 100000){
-          val (a,b,i,f) = f32.eq.RAW.f32_f32_i32
-          testEq(a,b,i, f)
-        }
-        println("Cmp done")
 
 
-        testF2iExact(-2.14748365E9f, -2147483648, 0, true, FpuRoundMode.RDN)
 
-        for(_ <- 0 until 10000){
-          val rounding = FpuRoundMode.elements.randomPick()
-          val (a,b,f) = f32.f2ui(rounding).f32_i32
-          testF2iExact(a,b, f, false, rounding)
-        }
 
-        for(_ <- 0 until 10000){
-          val rounding = FpuRoundMode.elements.randomPick()
-          val (a,b,f) = f32.f2i(rounding).f32_i32
-          testF2iExact(a,b, f, true, rounding)
-        }
-
-        println("f2i done")
 
         for(_ <- 0 until 10000){
           val rounding = FpuRoundMode.elements.randomPick()

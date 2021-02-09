@@ -213,7 +213,7 @@ object TestsWorkspace {
 //    }
 
     SpinalConfig().generateVerilog {
-
+// make clean run REDO=10 CSR=no MMU=no  COREMARK=no RVF=yes REDO=1 TRACE=yes
       val config = GenFull.config
       config.plugins += new FpuPlugin(
         externalFpu = false,
