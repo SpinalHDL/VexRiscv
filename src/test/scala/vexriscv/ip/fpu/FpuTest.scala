@@ -25,27 +25,34 @@ class FpuTest extends FunSuite{
   val b2f = lang.Float.intBitsToFloat(_)
   val f2b = lang.Float.floatToRawIntBits(_)
 
-  def clamp(f : Float) = {
-   f // if(f.abs < b2f(0x00800000)) b2f(f2b(f) & 0x80000000) else f
-  }
 
-  test("directed"){
-    val portCount = 1
+  test("f32f64") {
     val p = FpuParameter(
-      withDouble = false,
+      withDouble = true,
 //      withAdd = false,
 //      withMul = false,
 //      withDivSqrt = false,
-//      withShortPipMisc = true
       sim = true
     )
+    testP(p)
+  }
+  test("f32") {
+    val p = FpuParameter(
+      withDouble = false,
+      sim = true
+    )
+    testP(p)
+  }
+
+  def testP(p : FpuParameter){
+    val portCount = 1
 
     val config = SimConfig
     config.allOptimisation
-//    config.withFstWave
+    if(p.withDouble) config.withFstWave
     config.compile(new FpuCore(portCount, p){
       for(i <- 0 until portCount) out(Bits(5 bits)).setName(s"flagAcc$i") := io.port(i).completion.flag.asBits
-      setDefinitionName("FpuCore")
+      setDefinitionName("FpuCore"+ (if(p.withDouble) "Double" else  ""))
     }).doSim(seed = 42){ dut =>
       dut.clockDomain.forkStimulus(10)
       dut.clockDomain.forkSimSpeedPrinter(5.0)
@@ -201,7 +208,7 @@ class FpuTest extends FunSuite{
 
 
 
-        def loadRaw(rd : Int, value : BigInt): Unit ={
+        def loadRaw(rd : Int, value : BigInt, format : FpuFormat.E): Unit ={
           cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.LOAD
             cmd.rs1.randomize()
@@ -209,6 +216,8 @@ class FpuTest extends FunSuite{
             cmd.rs3.randomize()
             cmd.rd #= rd
             cmd.arg.randomize()
+            cmd.roundMode.randomize()
+            cmd.format #= format
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -217,11 +226,12 @@ class FpuTest extends FunSuite{
           }
         }
 
+
         def load(rd : Int, value : Float): Unit ={
-          loadRaw(rd, f2b(value).toLong & 0xFFFFFFFFl)
+          loadRaw(rd, f2b(value).toLong & 0xFFFFFFFFl, FpuFormat.FLOAT)
         }
 
-        def storeRaw(rs : Int)(body : FpuRsp => Unit): Unit ={
+        def storeRaw(rs : Int, format : FpuFormat.E)(body : FpuRsp => Unit): Unit ={
           cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.STORE
             cmd.rs1 #= rs
@@ -229,6 +239,8 @@ class FpuTest extends FunSuite{
             cmd.rs3.randomize()
             cmd.rd.randomize()
             cmd.arg.randomize()
+            cmd.roundMode.randomize()
+            cmd.format #= format
           }
 
           rspQueue += body
@@ -236,7 +248,7 @@ class FpuTest extends FunSuite{
         }
 
         def storeFloat(rs : Int)(body : Float => Unit): Unit ={
-          storeRaw(rs){rsp => body(b2f(rsp.value.toLong.toInt))}
+          storeRaw(rs, FpuFormat.FLOAT){rsp => body(b2f(rsp.value.toBigInt.toInt))}
         }
 
         def fpuF2f(rd : Int, rs1 : Int, rs2 : Int, rs3 : Int, opcode : FpuOpcode.E, arg : Int, rounding : FpuRoundMode.E = FpuRoundMode.RNE): Unit ={
@@ -315,7 +327,7 @@ class FpuTest extends FunSuite{
           fpuF2i(rs1, Random.nextInt(32), FpuOpcode.F2I, if(signed) 1 else 0, rounding)(body)
         }
 
-        def i2f(rd : Int, value : Int, signed : Boolean, rounding : FpuRoundMode.E = FpuRoundMode.RNE): Unit ={
+        def i2f(rd : Int, value : Int, signed : Boolean, rounding : FpuRoundMode.E): Unit ={
           cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.I2F
             cmd.rs1.randomize()
@@ -340,8 +352,10 @@ class FpuTest extends FunSuite{
             cmd.rs3.randomize()
             cmd.rd.randomize()
             cmd.arg #= 0
+            cmd.roundMode.randomize()
+            cmd.format #= FpuFormat.FLOAT
           }
-          rspQueue += {rsp => body(b2f(rsp.value.toLong.toInt))}
+          rspQueue += {rsp => body(b2f(rsp.value.toBigInt.toInt))}
         }
 
         def fmv_w_x(rd : Int, value : Int): Unit ={
@@ -352,6 +366,8 @@ class FpuTest extends FunSuite{
             cmd.rs3.randomize()
             cmd.rd #= rd
             cmd.arg #= 0
+            cmd.roundMode.randomize()
+            cmd.format #= FpuFormat.FLOAT
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -517,7 +533,7 @@ class FpuTest extends FunSuite{
           div(rd,rs1,rs2)
           storeFloat(rd){v =>
             val refUnclamped = a/b
-            val refClamped = clamp(clamp(a)/clamp(b))
+            val refClamped = ((a)/(b))
             val ref = refClamped
             val error = Math.abs(ref-v)/ref
             println(f"$a / $b = $v, $ref $error")
@@ -863,7 +879,12 @@ class FpuTest extends FunSuite{
 
 
 
-
+        testTransferRaw(1.0f, false, false)
+        testTransferRaw(2.0f, false, false)
+        testTransferRaw(2.5f, false, false)
+        testTransferRaw(6.97949770801e-39f, false, false)
+        testTransferRaw(8.72437213501e-40f, false, false)
+        testTransferRaw(5.6E-45f, false, false)
 
 
 
