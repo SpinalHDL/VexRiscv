@@ -16,8 +16,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val port = Vec(slave(FpuPort(p)), portCount)
   }
 
-//  io.port(0).completion.flag.setAsDirectionLess.allowDirectionLessIo
-
   val portCountWidth = log2Up(portCount)
   val Source = HardType(UInt(portCountWidth bits))
   val exponentOne = (1 << p.internalExponentSize-1) - 1
@@ -30,7 +28,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val opcode = p.Opcode()
     val rs1, rs2, rs3 = p.rfAddress()
     val rd = p.rfAddress()
-    val value = Bits(32 bits)
     val arg = p.Arg()
     val roundMode = FpuRoundMode()
   }
@@ -41,7 +38,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val lockId = lockIdType()
     val rs1, rs2, rs3 = p.internalFloating()
     val rd = p.rfAddress()
-    val value = Bits(32 bits)
     val arg = p.Arg()
     val roundMode = FpuRoundMode()
   }
@@ -138,16 +134,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
     val increments = ArrayBuffer[Bool]()
 
-//    def increment(): Unit ={
-//      //This is a SpinalHDL trick which allow to go back in time
-//      val swapContext =  dslBody.swap()
-//      val cond = False
-//      swapContext.appendBack()
-//
-//      cond := True
-//      incs += cond
-//    }
-
     afterElaboration{
       port.completion.count := increments.map(_.asUInt.resize(log2Up(increments.size + 1))).reduceBalancedTree(_ + _)
     }
@@ -236,7 +222,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.source := s1.source
     output.opcode := s1.opcode
     output.lockId := s1LockId
-    output.value := s1.value
     output.arg := s1.arg
     output.roundMode := s1.roundMode
     output.rd := s1.rd
@@ -384,11 +369,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
               i2fZero := input.value(31 downto 0) === 0
             }
           } otherwise {
-//            when(input.i2f){
-//              input.value.getDrivingReg(0, 32 bits) := input.value(0, 32 bits) |<< 1
-//            } otherwise {
-//              input.value.getDrivingReg(0, 23 bits) := input.value(0, 23 bits) |<< 1
-//            }
             done := True
           }
         }
