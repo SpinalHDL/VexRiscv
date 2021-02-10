@@ -218,7 +218,6 @@ object TestsWorkspace {
       config.plugins += new FpuPlugin(
         externalFpu = false,
         p = FpuParameter(
-          internalMantissaSize = 23,
           withDouble = false
         )
       )

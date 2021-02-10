@@ -108,10 +108,14 @@ object FpuRoundModeInstr extends SpinalEnum(){
 }
 
 
-case class FpuParameter( internalMantissaSize : Int,
-                         withDouble : Boolean,
-                         sim : Boolean = false){
+case class FpuParameter( withDouble : Boolean,
+                         sim : Boolean = false,
+                         withAdd : Boolean = true,
+                         withMul : Boolean = true,
+                         withDivSqrt : Boolean = true,
+                         withShortPipMisc : Boolean = true){
 
+  val internalMantissaSize = if(withDouble) 52 else 23
   val storeLoadType = HardType(Bits(if(withDouble) 64 bits else 32 bits))
   val internalExponentSize = (if(withDouble) 11 else 8) + 1
   val internalFloating = HardType(FpuFloat(exponentSize = internalExponentSize, mantissaSize = internalMantissaSize))

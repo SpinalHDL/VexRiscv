@@ -32,8 +32,11 @@ class FpuTest extends FunSuite{
   test("directed"){
     val portCount = 1
     val p = FpuParameter(
-      internalMantissaSize = 23,
       withDouble = false,
+//      withAdd = false,
+//      withMul = false,
+//      withDivSqrt = false,
+//      withShortPipMisc = true
       sim = true
     )
 
@@ -866,9 +869,21 @@ class FpuTest extends FunSuite{
 
 
 
+        for(_ <- 0 until 10000) testTransfer()
+        println("f32 load/store/rf transfer done")
+
+        for(_ <- 0 until 10000) testF2ui()
+        for(_ <- 0 until 10000) testF2i()
+        println("f2i done")
+
+        for(_ <- 0 until 10000) testUI2f()
+        for(_ <- 0 until 10000) testI2f()
+        println("i2f done")
 
 
-
+//        waitUntil(cmdQueue.isEmpty)
+//        dut.clockDomain.waitSampling(1000)
+//        simSuccess()
 
 
         for(i <- 0 until 1000) testFma()
@@ -886,10 +901,6 @@ class FpuTest extends FunSuite{
         for(_ <- 0 until 10000) testEq()
         println("Cmp done")
 
-        for(_ <- 0 until 10000) testF2ui()
-        for(_ <- 0 until 10000) testF2i()
-
-        println("f2i done")
 
         for(_ <- 0 until 10000) testDiv()
         println("f32 div done")
@@ -899,9 +910,6 @@ class FpuTest extends FunSuite{
 
         for(_ <- 0 until 10000) testSgnj()
         println("f32 sgnj done")
-
-        for(_ <- 0 until 10000) testTransfer()
-        println("f32 load/store/rf transfer done")
 
 
         for(_ <- 0 until 10000) testClass()
@@ -913,9 +921,6 @@ class FpuTest extends FunSuite{
         println("minMax done")
 
 
-        for(_ <- 0 until 10000) testUI2f()
-        for(_ <- 0 until 10000) testI2f()
-        println("i2f done")
 
         testBinaryOp(mul,1.469368E-39f, 7.9999995f, 1.17549435E-38f,3, FpuRoundMode.RUP,"mul")
         testBinaryOp(mul,1.1753509E-38f, 1.0001221f, 1.17549435E-38f ,1, FpuRoundMode.RUP,"mul")
