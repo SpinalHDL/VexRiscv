@@ -21,6 +21,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   val exponentOne = (1 << p.internalExponentSize-1) - 1
   val exponentF32Subnormal = exponentOne-127
   val exponentF64Subnormal = exponentOne-1023
+  val exponentF32Infinity = exponentOne+127+1
+  val exponentF64Infinity = exponentOne+1023+1
 
   val rfLockCount = 5
   val lockIdType = HardType(UInt(log2Up(rfLockCount) bits))
@@ -28,6 +30,11 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   def whenDouble(format : FpuFormat.C)(yes : => Unit)(no : => Unit): Unit ={
     if(p.withDouble) when(format === FpuFormat.DOUBLE) { yes } otherwise{ no }
     if(!p.withDouble) no
+  }
+
+  def muxDouble[T <: Data](format : FpuFormat.C)(yes : => T)(no : => T): T ={
+    if(p.withDouble) ((format === FpuFormat.DOUBLE) ? { yes } | { no })
+    else no
   }
 
   case class RfReadInput() extends Bundle{
@@ -254,11 +261,16 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.rs3 := rs3Entry.value
     if(p.withDouble){
       output.format := s1.format
-      when(s1.format === FpuFormat.FLOAT =/= rs1Entry.boxed){
+      val store = s1.opcode === FpuOpcode.STORE ||s1.opcode === FpuOpcode.FMV_X_W
+      when(store){ //Pass through
+        output.format := rs1Entry.boxed ? FpuFormat.FLOAT | FpuFormat.DOUBLE
+      } elsewhen(s1.format === FpuFormat.FLOAT =/= rs1Entry.boxed){
         output.rs1.setNanQuiet
+        output.rs1.sign := False
       }
       when(s1.format === FpuFormat.FLOAT =/= rs2Entry.boxed){
         output.rs2.setNanQuiet
+        output.rs2.sign := False
       }
       when(s1.format === FpuFormat.FLOAT =/= rs3Entry.boxed){
         output.rs3.setNanQuiet
@@ -364,7 +376,13 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       output.i2f := input.i2f
       output.arg := input.arg
       output.roundMode := input.roundMode
-      if(p.withDouble) output.format := input.format
+      if(p.withDouble) {
+        output.format := input.format
+        when(!input.i2f && input.format === FpuFormat.DOUBLE && output.value(63 downto 32).andR){ //Detect boxing
+          output.format := FpuFormat.FLOAT
+        }
+      }
+
     }
 
     val s1 = new Area{
@@ -378,25 +396,34 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       }
       val f64 = p.withDouble generate new Area{
         val mantissa = input.value(0, 52 bits).asUInt
-        val exponent = input.value(11, 52 bits).asUInt
+        val exponent = input.value(52, 11 bits).asUInt
         val sign     = input.value(63)
       }
 
+      val recodedExpOffset = UInt(p.internalExponentSize bits)
       val passThroughFloat = p.internalFloating()
       passThroughFloat.special := False
-      passThroughFloat.sign := f32.sign
-      passThroughFloat.exponent := f32.exponent.resized
-      passThroughFloat.mantissa := f32.mantissa << (if(p.withDouble) 29 else 0)
-      if(p.withDouble) when(input.format === FpuFormat.DOUBLE){
+
+      whenDouble(input.format){
         passThroughFloat.sign := f64.sign
         passThroughFloat.exponent := f64.exponent.resized
         passThroughFloat.mantissa := f64.mantissa
+        recodedExpOffset := exponentF64Subnormal
+      } {
+        passThroughFloat.sign := f32.sign
+        passThroughFloat.exponent := f32.exponent.resized
+        passThroughFloat.mantissa := f32.mantissa << (if (p.withDouble) 29 else 0)
+        recodedExpOffset := exponentF32Subnormal
       }
+
 
       val manZero = passThroughFloat.mantissa === 0
       val expZero = passThroughFloat.exponent === 0
       val expOne =  passThroughFloat.exponent(7 downto 0).andR
-      if(p.withDouble) expOne.clearWhen(input.format === FpuFormat.DOUBLE && !passThroughFloat.exponent(11 downto 8).andR)
+      if(p.withDouble) {
+        expZero.clearWhen(input.format === FpuFormat.DOUBLE && input.value(62 downto 60) =/= 0)
+        expOne.clearWhen(input.format === FpuFormat.DOUBLE && input.value(62 downto 60) =/= 7)
+      }
 
       val isZero      =  expZero &&  manZero
       val isSubnormal =  expZero && !manZero
@@ -409,9 +436,10 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         val ohInputWidth = 32 max p.internalMantissaSize
         val ohInput = Bits(ohInputWidth bits).assignDontCare()
         when(!input.i2f) {
-          if(!p.withDouble) ohInput(ohInputWidth-23, 23 bits) := input.value(0, 23 bits)
+          if(!p.withDouble) ohInput := input.value(0, 23 bits) << 9
           if( p.withDouble) ohInput := passThroughFloat.mantissa.asBits
         } otherwise {
+          ohInput(ohInputWidth-32-1 downto 0) := 0
           ohInput(ohInputWidth-32, 32 bits) := input.value(31 downto 0)
         }
 
@@ -426,15 +454,15 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
           }
           val output = RegNextWhen(logic, !done)
         }
-        shift.input := (input.value.asUInt |<< 1).resized
+        shift.input := (ohInput.asUInt |<< 1).resized
 
-        val subnormalShiftOffset = if(!p.withDouble) U(9) else ((input.format === FpuFormat.DOUBLE) ? U(0) | U(0))
-        val subnormalExpOffset = if(!p.withDouble) U(9) else ((input.format === FpuFormat.DOUBLE)   ? U(0) | U(0))
+        val subnormalShiftOffset = if(!p.withDouble) U(0) else ((input.format === FpuFormat.DOUBLE) ? U(0) | U(0)) //TODO remove ?
+        val subnormalExpOffset = if(!p.withDouble) U(0) else ((input.format === FpuFormat.DOUBLE)   ? U(0) | U(0))
 
         when(input.valid && (input.i2f || isSubnormal) && !done){
           busy := True
           when(boot){
-            when(input.i2f && !patched && input.value.msb && input.arg(0)){
+            when(input.i2f && !patched && input.value(31) && input.arg(0)){
               input.value.getDrivingReg(0, 32 bits) := B(input.value.asUInt.twoComplement(True).resize(32 bits))
               patched := True
             } otherwise {
@@ -467,7 +495,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
       val recoded = p.internalFloating()
       recoded.mantissa := passThroughFloat.mantissa
-      recoded.exponent := (passThroughFloat.exponent -^ fsm.expOffset + exponentF32Subnormal).resized
+      recoded.exponent := (passThroughFloat.exponent -^ fsm.expOffset + recodedExpOffset).resized
       recoded.sign     := passThroughFloat.sign
       recoded.setNormal
       when(isZero){recoded.setZero}
@@ -480,9 +508,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       output.roundMode := input.roundMode
       if(p.withDouble) {
         output.format := input.format
-        when(!input.i2f && input.format === FpuFormat.DOUBLE && input.value(63 downto 23).andR){ //Detect boxing
-          output.format := FpuFormat.FLOAT
-        }
       }
       output.rd := input.rd
       output.value.sign      := recoded.sign
@@ -523,9 +548,15 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val exp = (input.rs1.exponent - (exponentOne-1023)).resize(11 bits)
       val man = CombInit(input.rs1.mantissa)
     }
-    recodedResult := (if(p.withDouble) B"xFFFFFFFF" else B"") ## input.rs1.sign ## f32.exp ## f32.man
 
-    val expInSubnormalRange = input.rs1.exponent <= exponentOne - 127
+    whenDouble(input.format){
+      recodedResult := input.rs1.sign ## f64.exp ## f64.man
+    } {
+      recodedResult := (if(p.withDouble) B"xFFFFFFFF" else B"") ## input.rs1.sign ## f32.exp ## f32.man
+    }
+
+    val expSubnormalThreshold = muxDouble[UInt](input.format)(exponentF64Subnormal)(exponentF32Subnormal)
+    val expInSubnormalRange = input.rs1.exponent <= expSubnormalThreshold
     val isSubnormal = !input.rs1.special && expInSubnormalRange
     val isNormal = !input.rs1.special && !expInSubnormalRange
     val fsm = new Area{
@@ -552,14 +583,14 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
       shift.input := (U(!isZero) @@ input.rs1.mantissa) << (if(p.withDouble) 0 else 9)
 
-
+      val formatShiftOffset = muxDouble[UInt](input.format)(exponentOne-1023+1)(exponentOne - (if(p.withDouble) (127+34) else (127-10)))
       when(input.valid && (needRecoding || isF2i) && !done){
         halt := True
         when(boot){
           when(isF2i){
-            shift.by := (U(exponentOne + 31) - input.rs1.exponent).min(U(33)).resized //TODO merge
+            shift.by := ((U(exponentOne + 31) - input.rs1.exponent).min(U(33)) + (if(p.withDouble) 20 else 0)).resized //TODO merge
           } otherwise {
-            shift.by := (U(exponentOne - 127+10) - input.rs1.exponent).resized
+            shift.by := (formatShiftOffset - input.rs1.exponent).resized
           }
           boot := False
         } otherwise {
@@ -619,7 +650,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     when(mantissaForced){
       recodedResult(0,23 bits) := (default -> mantissaForcedValue)
       whenDouble(input.format){
-        recodedResult(52-23, 52-23 bits) := (default -> exponentForcedValue)
+        recodedResult(23, 52-23 bits) := (default -> mantissaForcedValue)
       }{}
     }
     when(exponentForced){
@@ -764,10 +795,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
 
     val norm = new Area{
-//      val needShift = math.mulC.msb
-//      val exp = math.exp + U(needShift)
-//      val man = needShift ? math.mulC(p.internalMantissaSize + 1, p.internalMantissaSize bits) | math.mulC(p.internalMantissaSize, p.internalMantissaSize bits)
-
       val (mulHigh, mulLow) = math.mulC.splitAt(p.internalMantissaSize-1)
       val scrap = mulLow =/= 0
       val needShift = mulHigh.msb
@@ -775,7 +802,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val man = needShift ? mulHigh(1, p.internalMantissaSize+1 bits) | mulHigh(0, p.internalMantissaSize+1 bits)
       scrap setWhen(needShift && mulHigh(0))
       val forceZero = input.rs1.isZero || input.rs2.isZero
-      val forceUnderflow = exp <  exponentOne + exponentOne - 127 - 24  // 0x6A //TODO
+      val underflowThreshold = muxDouble[UInt](input.format)(exponentOne + exponentOne - 1023 - 53) (exponentOne + exponentOne - 127 - 24)
+      val underflowExp = muxDouble[UInt](input.format)(exponentOne - 1023 - 54) (exponentOne - 127 - 25)
+      val forceUnderflow = exp <  underflowThreshold
       val forceOverflow = input.rs1.isInfinity || input.rs2.isInfinity
       val infinitynan = ((input.rs1.isInfinity || input.rs2.isInfinity) && (input.rs1.isZero || input.rs2.isZero))
       val forceNan = input.rs1.isNan || input.rs2.isNan || infinitynan
@@ -797,7 +826,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       } elsewhen(forceZero) {
         output.setZero
       } elsewhen(forceUnderflow) {
-        output.exponent := exponentOne - 127 - 25
+        output.exponent := underflowExp.resized
       }
 
     }
@@ -1123,11 +1152,14 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   val round = new Area{
     val input = merge.commited.combStage
 
-    //TODO do not break NAN payload (seems already fine)
     val manAggregate = input.value.mantissa @@ input.scrap
-    val expDif = (exponentOne-126) -^ input.value.exponent
+    val expBase = muxDouble[UInt](input.format)(exponentF64Subnormal+1)(exponentF32Subnormal+1)
+    val expDif = expBase -^ input.value.exponent
     val expSubnormal = !expDif.msb
-    val discardCount = expSubnormal ? expDif.resize(log2Up(p.internalMantissaSize) bits) |  U(0)
+    var discardCount = (expSubnormal ? expDif.resize(log2Up(p.internalMantissaSize) bits) |  U(0))
+    if(p.withDouble) when(input.format === FpuFormat.FLOAT){
+      discardCount \= discardCount + 29
+    }
     val exactMask = (List(True) ++ (0 until p.internalMantissaSize+1).map(_ < discardCount)).asBits.asUInt
     val roundAdjusted = (True ## (manAggregate>>1))(discardCount) ## ((manAggregate & exactMask) =/= 0)
 
@@ -1156,10 +1188,16 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 //      uf := True
 //    }
 
-    when(!math.special && math.exponent <= exponentOne-127 && roundAdjusted.asUInt =/= 0){ //Do not catch exact 1.17549435E-38 underflow, but, who realy care ?
+
+
+    val ufSubnormalThreshold = muxDouble[UInt](input.format)(exponentF64Subnormal)(exponentF32Subnormal)
+    val ufThreshold = muxDouble[UInt](input.format)(exponentF64Subnormal-52+1)(exponentF32Subnormal-23+1)
+    val ofThreshold = muxDouble[UInt](input.format)(exponentF64Infinity-1)(exponentF32Infinity-1)
+
+    when(!math.special && math.exponent <= ufSubnormalThreshold && roundAdjusted.asUInt =/= 0){ //Do not catch exact 1.17549435E-38 underflow, but, who realy care ?
       uf := True
     }
-    when(!math.special && math.exponent >= exponentOne + 128){
+    when(!math.special && math.exponent > ofThreshold){
       nx := True
       of := True
       val doMax = input.roundMode.mux(
@@ -1170,7 +1208,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         FpuRoundMode.RMM -> (False)
       )
       when(doMax){
-        patched.exponent := exponentOne + 127
+        patched.exponent := ofThreshold
         patched.mantissa.setAll()
       } otherwise {
         patched.setInfinity
@@ -1178,7 +1216,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
 
 
-    when(!math.special && math.exponent <= exponentOne - 127-23){
+    when(!math.special && math.exponent < ufThreshold){
       nx := True
       uf := True
       val doMin = input.roundMode.mux(
@@ -1189,7 +1227,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         FpuRoundMode.RMM -> (False)
       )
       when(doMin){
-        patched.exponent := exponentOne - 127-23+1
+        patched.exponent := ufThreshold.resized
         patched.mantissa := 0
       } otherwise {
         patched.setZero
