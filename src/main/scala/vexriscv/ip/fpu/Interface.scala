@@ -85,7 +85,7 @@ case class FpuFloat(exponentSize: Int,
 }
 
 object FpuOpcode extends SpinalEnum{
-  val LOAD, STORE, MUL, ADD, FMA, I2F, F2I, CMP, DIV, SQRT, MIN_MAX, SGNJ, FMV_X_W, FMV_W_X, FCLASS = newElement()
+  val LOAD, STORE, MUL, ADD, FMA, I2F, F2I, CMP, DIV, SQRT, MIN_MAX, SGNJ, FMV_X_W, FMV_W_X, FCLASS, FCVT_X_X = newElement()
 }
 
 object FpuFormat extends SpinalEnum{

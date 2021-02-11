@@ -102,6 +102,8 @@ class FpuPlugin(externalFpu : Boolean = false,
       FMV_W_X   -> (fmvWx)
     ))
 
+    //TODO FMV_X_X + doubles
+
     port = FpuPort(p)
     if(externalFpu) master(port)
 

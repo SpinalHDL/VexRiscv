@@ -130,6 +130,18 @@ class FpuTest extends FunSuite{
             val a,b = (s.nextLong(16))
             (b2d(a), b2d(b), s.nextInt(16))
           }
+
+
+          def f32_f64_i32 = {
+            val s = new Scanner(next)
+            val a,b = nextLong(s)
+            (b2f(a.toInt), b2d(b),  s.nextInt(16))
+          }
+          def f64_f32_i32 = {
+            val s = new Scanner(next)
+            val a,b = nextLong(s)
+            (b2d(a), b2f(b.toInt), s.nextInt(16))
+          }
         }
         lazy val RAW = build("")
         lazy val RNE = build("-rnear_even")
@@ -168,12 +180,16 @@ class FpuTest extends FunSuite{
         val sgnjx = new TestCase(s"${f}_eq")
         val sqrt = new TestCase(s"${f}_sqrt")
         val div = new TestCase(s"${f}_div")
-        val f32 = new TestCase(s"${f}_eq")
-        val f64 = new TestCase(s"${f}_eq")
       }
 
-      val f32 = new TestVector("f32")
-      val f64 = new TestVector("f64")
+      val f32 = new TestVector("f32"){
+        val f64 = new TestCase(s"f32_eq")
+        val cvt64 = new TestCase(s"f32_to_f64")
+      }
+      val f64 = new TestVector("f64"){
+        val f32 = new TestCase(s"f64_eq")
+        val cvt32 = new TestCase(s"f64_to_f32")
+      }
 
       val cpus = for(id <- 0 until portCount) yield new {
         val cmdQueue = mutable.Queue[FpuCmd => Unit]()
@@ -201,7 +217,7 @@ class FpuTest extends FunSuite{
 
         def flagMatch(ref : Int, report : String): Unit ={
           waitUntil(pendingMiaou == 0)
-          softAssert(flagAccumulator == ref, s"Flag missmatch dut=$flagAccumulator ref=$ref $report")
+          assert(flagAccumulator == ref, s"Flag missmatch dut=$flagAccumulator ref=$ref $report")
           flagAccumulator = 0
         }
         def flagClear(): Unit ={
@@ -586,6 +602,27 @@ class FpuTest extends FunSuite{
         }
 
 
+        def testCvtF32F64Raw(a : Float, ref : Double, flag : Int, rounding : FpuRoundMode.E): Unit ={
+          val rs, rd = Random.nextInt(32)
+          load(rs, a)
+          fpuF2f(rd, rs, Random.nextInt(32), Random.nextInt(32), FpuOpcode.FCVT_X_X, Random.nextInt(3), rounding, FpuFormat.FLOAT)
+          store(rd){v =>
+            assert(d2b(v) == d2b(ref), f"testCvtF32F64Raw $a $ref $rounding")
+          }
+          flagMatch(flag, f"testCvtF32F64Raw $a $ref $rounding")
+        }
+
+        def testCvtF64F32Raw(a : Double, ref : Float, flag : Int, rounding : FpuRoundMode.E): Unit ={
+          val rs, rd = Random.nextInt(32)
+          load(rs, a)
+          fpuF2f(rd, rs, Random.nextInt(32), Random.nextInt(32), FpuOpcode.FCVT_X_X, Random.nextInt(3), rounding, FpuFormat.DOUBLE)
+          storeFloat(rd){v =>
+            assert(d2b(v) == d2b(ref), f"testCvtF64F32Raw $a $ref $rounding")
+          }
+          flagMatch(flag, f"testCvtF64F32Raw $a $ref $rounding")
+        }
+
+
         def testClassRaw(a : Float) : Unit = {
           val rd = Random.nextInt(32)
 
@@ -620,46 +657,10 @@ class FpuTest extends FunSuite{
           fma(rd,rs1,rs2,rs3, FpuRoundMode.RNE, FpuFormat.FLOAT)
           storeFloat(rd){v =>
             val ref = a.toDouble * b.toDouble + c.toDouble
-            println(f"$a%.20f * $b%.20f + $c%.20f = $v%.20f, $ref%.20f")
             val mul = a.toDouble * b.toDouble
-            if((mul.abs-c.abs)/mul.abs > 0.1)  assert(checkFloat(ref.toFloat, v))
+            if((mul.abs-c.abs)/mul.abs > 0.1)  assert(checkFloat(ref.toFloat, v), f"$a%.20f * $b%.20f + $c%.20f = $v%.20f, $ref%.20f")
           }
         }
-
-
-        def testDivRaw(a : Float, b : Float): Unit ={
-          val rs = new RegAllocator()
-          val rs1, rs2, rs3 = rs.allocate()
-          val rd = Random.nextInt(32)
-          load(rs1, a)
-          load(rs2, b)
-
-          div(rd,rs1,rs2, FpuRoundMode.RNE, FpuFormat.FLOAT)
-          storeFloat(rd){v =>
-            val refUnclamped = a/b
-            val refClamped = ((a)/(b))
-            val ref = refClamped
-            val error = Math.abs(ref-v)/ref
-            println(f"$a / $b = $v, $ref $error")
-            assert(checkFloat(ref, v))
-          }
-        }
-
-        def testSqrtRaw(a : Float): Unit ={
-          val rs = new RegAllocator()
-          val rs1, rs2, rs3 = rs.allocate()
-          val rd = Random.nextInt(32)
-          load(rs1, a)
-
-          sqrt(rd,rs1, FpuRoundMode.RNE, FpuFormat.FLOAT)
-          storeFloat(rd){v =>
-            val ref = Math.sqrt(a).toFloat
-            val error = Math.abs(ref-v)/ref
-            println(f"sqrt($a) = $v, $ref $error")
-            assert(checkFloat(ref, v))
-          }
-        }
-
 
 
         def testSqrtExact(a : Float, ref : Float, flag : Int, rounding : FpuRoundMode.E): Unit ={
@@ -671,8 +672,7 @@ class FpuTest extends FunSuite{
           sqrt(rd,rs1,  FpuRoundMode.RNE, FpuFormat.FLOAT)
           storeFloat(rd){v =>
             val error = Math.abs(ref-v)/ref
-            println(f"sqrt($a) = $v, $ref $error $rounding")
-            assert(checkFloat(ref, v))
+            assert(checkFloat(ref, v), f"sqrt($a) = $v, $ref $error $rounding")
           }
         }
 
@@ -686,8 +686,7 @@ class FpuTest extends FunSuite{
           div(rd,rs1, rs2, FpuRoundMode.RNE, FpuFormat.FLOAT)
           storeFloat(rd){v =>
             val error = Math.abs(ref-v)/ref
-            println(f"div($a, $b) = $v, $ref $error $rounding")
-            assert(checkFloat(ref, v))
+            assert(checkFloat(ref, v), f"div($a, $b) = $v, $ref $error $rounding")
           }
         }
 
@@ -975,6 +974,16 @@ class FpuTest extends FunSuite{
           testTransferF32F64Raw(a, Random.nextBoolean())
         }
 
+        def testCvtF32F64() : Unit = {
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,r,f) = f32.cvt64(rounding).f32_f64_i32
+          testCvtF32F64Raw(a, r, f, rounding)
+        }
+        def testCvtF64F32() : Unit = {
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,r,f) = f64.cvt32(rounding).f64_f32_i32
+          testCvtF64F32Raw(a, r, f, rounding)
+        }
 
         def testClass() : Unit = {
           val (a,b,r,f) = f32.fclass.RAW.f32_f32_i32
@@ -1057,6 +1066,12 @@ class FpuTest extends FunSuite{
         //TODO test boxing
         //TODO double <-> simple convertions
         if(p.withDouble) {
+          for(_ <- 0 until 10000) testCvtF32F64()
+          println("FCVT_S_D done")
+          for(_ <- 0 until 10000) testCvtF64F32()
+          println("FCVT_D_S done")
+
+
 
           for(_ <- 0 until 10000) testAddF64()
           for(_ <- 0 until 10000) testSubF64()
