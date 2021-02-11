@@ -59,7 +59,7 @@ class FpuTest extends FunSuite{
 
     val config = SimConfig
     config.allOptimisation
-    if(p.withDouble) config.withFstWave
+//    if(p.withDouble) config.withFstWave
     config.compile(new FpuCore(portCount, p){
       for(i <- 0 until portCount) out(Bits(5 bits)).setName(s"flagAcc$i") := io.port(i).completion.flag.asBits
       setDefinitionName("FpuCore"+ (if(p.withDouble) "Double" else  ""))
@@ -420,7 +420,7 @@ class FpuTest extends FunSuite{
           }
         }
 
-        def minMax(rd : Int, rs1 : Int, rs2 : Int, arg : Int = 0): Unit ={
+        def minMax(rd : Int, rs1 : Int, rs2 : Int, arg : Int, format : FpuFormat.E): Unit ={
           cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.MIN_MAX
             cmd.rs1 #= rs1
@@ -428,6 +428,8 @@ class FpuTest extends FunSuite{
             cmd.rs3.randomize()
             cmd.rd #= rd
             cmd.arg #= arg
+            cmd.roundMode.randomize()
+            cmd.format #= format
           }
           commitQueue += {cmd =>
             cmd.write #= true
@@ -437,7 +439,7 @@ class FpuTest extends FunSuite{
 
 
 
-        def fclass(rs1 : Int)(body : Int => Unit) : Unit = {
+        def fclass(rs1 : Int, format : FpuFormat.E)(body : Int => Unit) : Unit = {
           cmdAdd {cmd =>
             cmd.opcode #= FpuOpcode.FCLASS
             cmd.rs1 #= rs1
@@ -445,8 +447,10 @@ class FpuTest extends FunSuite{
             cmd.rs3.randomize()
             cmd.rd.randomize()
             cmd.arg.randomize()
+            cmd.roundMode.randomize()
+            cmd.format #= format
           }
-          rspQueue += {rsp => body(rsp.value.toLong.toInt)}
+          rspQueue += {rsp => body(rsp.value.toBigInt.toInt)}
         }
       }
 
@@ -587,7 +591,7 @@ class FpuTest extends FunSuite{
 
 
           load(rd, a)
-          fclass(rd){v =>
+          fclass(rd, FpuFormat.FLOAT){v =>
             val mantissa = f2b(a) & 0x7FFFFF
             val exp = (f2b(a) >> 23) & 0xFF
             val sign = (f2b(a) >> 31) & 0x1
@@ -717,21 +721,61 @@ class FpuTest extends FunSuite{
 
 
 
+        def testF642iExact(a : Double, ref : Int, flag : Int, signed : Boolean, rounding : FpuRoundMode.E): Unit ={
+          val rs = new RegAllocator()
+          val rs1 = rs.allocate()
+          val rd = Random.nextInt(32)
+          load(rs1, a)
+          f2i(rs1, signed, rounding, FpuFormat.DOUBLE){rsp =>
+            if(signed) {
+              val v = rsp.value.toBigInt.toInt
+              var ref2 = ref
+              if(a >= Int.MaxValue) ref2 = Int.MaxValue
+              if(a <= Int.MinValue) ref2 = Int.MinValue
+              if(a.isNaN) ref2 = Int.MaxValue
+              assert(v == (ref2), f" <= f2i($a) = $v, $ref2, $rounding, $flag")
+            } else {
+              val v = rsp.value.toBigInt.toLong & 0xFFFFFFFFl
+              var ref2 = ref.toLong & 0xFFFFFFFFl
+              if(a < 0) ref2 = 0
+              if(a >= 0xFFFFFFFFl) ref2 = 0xFFFFFFFFl
+              if(a.isNaN) ref2 = 0xFFFFFFFFl
+              assert(v == ref2, f" <= f2ui($a) = $v, $ref2, $rounding $flag")
+            }
+          }
 
-        def testI2fExact(a : Int, b : Float, f : Int, signed : Boolean, rounding : FpuRoundMode.E): Unit ={
+          flagMatch(flag, ref, f" f2${if(signed) "" else "u"}i($a) $ref $flag $rounding")
+        }
+
+
+
+        def testI2fExact(a : Int, ref : Float, f : Int, signed : Boolean, rounding : FpuRoundMode.E): Unit ={
           val rs = new RegAllocator()
           val rd = Random.nextInt(32)
           i2f(rd, a, signed, rounding, FpuFormat.FLOAT)
           storeFloat(rd){v =>
             val aLong = if(signed) a.toLong else a.toLong & 0xFFFFFFFFl
-            val ref = b
             assert(f2b(v) == f2b(ref), f"i2f($aLong) = $v, $ref $rounding")
           }
 
 
-          flagMatch(f, b, f"i2f($a) = $b")
+          flagMatch(f, ref, f"i2f($a) = $ref")
         }
 
+
+
+        def testI2f64Exact(a : Int, ref : Double, f : Int, signed : Boolean, rounding : FpuRoundMode.E): Unit ={
+          val rs = new RegAllocator()
+          val rd = Random.nextInt(32)
+          i2f(rd, a, signed, rounding, FpuFormat.DOUBLE)
+          store(rd){v =>
+            val aLong = if(signed) a.toLong else a.toLong & 0xFFFFFFFFl
+            assert(d2b(v) == d2b(ref), f"i2f($aLong) = $v, $ref $rounding")
+          }
+
+
+          flagMatch(f, ref, f"i2f($a) = $ref")
+        }
 
 
         def testCmpExact(a : Float, b : Float, ref : Int, flag : Int, arg : Int): Unit ={
@@ -741,7 +785,7 @@ class FpuTest extends FunSuite{
           load(rs1, a)
           load(rs2, b)
           cmp(rs1, rs2, arg, FpuFormat.FLOAT){rsp =>
-            val v = rsp.value.toLong
+            val v = rsp.value.toBigInt.toInt
             assert(v === ref, f"cmp($a, $b, $arg) = $v, $ref")
           }
           flagMatch(flag,f"$a < $b $ref $flag ${f2b(a).toHexString} ${f2b(b).toHexString}")
@@ -795,7 +839,7 @@ class FpuTest extends FunSuite{
           load(rs1, a)
           load(rs2, b)
 
-          minMax(rd,rs1,rs2, arg)
+          minMax(rd,rs1,rs2, arg, FpuFormat.FLOAT)
           storeFloat(rd){v =>
             assert(f2b(ref) ==  f2b(v), f"minMax($a $b $arg) = $v, $ref")
           }
@@ -875,6 +919,18 @@ class FpuTest extends FunSuite{
           testF2iExact(a,b, f, true, rounding)
         }
 
+        def testF2uiF64() : Unit = {
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,f) = f64.f2ui(rounding).f64_i32
+          testF642iExact(a,b, f, false, rounding)
+        }
+
+        def testF2iF64() : Unit = {
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,f) = f64.f2i(rounding).f64_i32
+          testF642iExact(a,b, f, true, rounding)
+        }
+
 
         def testDiv() : Unit = {
           val rounding = FpuRoundMode.elements.randomPick()
@@ -934,16 +990,28 @@ class FpuTest extends FunSuite{
           testMaxExact(a,b)
         }
 
-        def testUI2f() : Unit = {
+        def testUI2f32() : Unit = {
           val rounding = FpuRoundMode.elements.randomPick()
           val (a,b,f) = f32.i2f(rounding).i32_f32
           testI2fExact(a,b,f, true, rounding)
         }
 
-        def testI2f() : Unit = {
+        def testI2f32() : Unit = {
           val rounding = FpuRoundMode.elements.randomPick()
           val (a,b,f) = f32.ui2f(rounding).i32_f32
           testI2fExact(a,b,f, false, rounding)
+        }
+
+        def testUI2f64() : Unit = {
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,f) = f64.i2f(rounding).i32_f64
+          testI2f64Exact(a,b,f, true, rounding)
+        }
+
+        def testI2f64() : Unit = {
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,f) = f64.ui2f(rounding).i32_f64
+          testI2f64Exact(a,b,f, false, rounding)
         }
 
         def testMulF32() : Unit = {
@@ -964,24 +1032,45 @@ class FpuTest extends FunSuite{
           testBinaryOp(sub,a,b,c,f, rounding,"sub")
         }
 
+
         def testMulF64() : Unit = {
           val rounding = FpuRoundMode.elements.randomPick()
           val (a,b,c,f) = f64.mul(rounding).f64_f64_f64
           testBinaryOpF64(mul,a,b,c,f, rounding,"mul")
         }
 
+        def testAddF64() : Unit = {
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,c,f) = f64.add(rounding).f64_f64_f64
+          testBinaryOpF64(add,a,b,c,f, rounding,"add")
+        }
 
-        val f32Tests = List[() => Unit](testSubF32, testAddF32, testMulF32, testI2f, testUI2f, testMin, testMax, testSgnj, testTransferF32, testDiv, testSqrt, testF2iF32, testF2uiF32, testLe, testEq, testLt, testClass, testFma)
+        def testSubF64() : Unit = {
+          val rounding = FpuRoundMode.elements.randomPick()
+          val (a,b,c,f) = f64.sub(rounding).f64_f64_f64
+          testBinaryOpF64(sub,a,b,c,f, rounding,"sub")
+        }
+
+
+        val f32Tests = List[() => Unit](testSubF32, testAddF32, testMulF32, testI2f32, testUI2f32, testMin, testMax, testSgnj, testTransferF32, testDiv, testSqrt, testF2iF32, testF2uiF32, testLe, testEq, testLt, testClass, testFma)
 
         //TODO test boxing
+        //TODO double <-> simple convertions
         if(p.withDouble) {
-//          for(_ <- 0 until 10000) testUI2f64()
-//          for(_ <- 0 until 10000) testI2f64()
-//          println("f64 i2f done")
-//
-//          for(_ <- 0 until 10000) testF2uiF64()
-//          for(_ <- 0 until 10000) testF2iF64()
-//          println("f64 f2i done")
+
+          for(_ <- 0 until 10000) testAddF64()
+          for(_ <- 0 until 10000) testSubF64()
+          println("Add done")
+
+
+          //          testI2f64Exact(0x7FFFFFF5, 0x7FFFFFF5, 0, true, FpuRoundMode.RNE)
+          for(_ <- 0 until 10000) testUI2f64()
+          for(_ <- 0 until 10000) testI2f64()
+          println("f64 i2f done")
+
+          for(_ <- 0 until 10000) testF2uiF64()
+          for(_ <- 0 until 10000) testF2iF64()
+          println("f64 f2i done")
 
 //          testF2iExact(1.0f,1, 0, false, FpuRoundMode.RTZ)
 //          testF2iExact(2.0f,2, 0, false, FpuRoundMode.RTZ)
@@ -1027,8 +1116,8 @@ class FpuTest extends FunSuite{
         println("Mul done")
 
 
-        for(_ <- 0 until 10000) testUI2f()
-        for(_ <- 0 until 10000) testI2f()
+        for(_ <- 0 until 10000) testUI2f32()
+        for(_ <- 0 until 10000) testI2f32()
         println("i2f done")
 
 
