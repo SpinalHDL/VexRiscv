@@ -56,6 +56,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val arg = p.Arg()
     val roundMode = FpuRoundMode()
     val format = p.withDouble generate FpuFormat()
+    val rs1Boxed, rs2Boxed = p.withDouble generate Bool()
   }
 
 
@@ -79,6 +80,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val arg = Bits(2 bits)
     val roundMode = FpuRoundMode()
     val format = p.withDouble generate FpuFormat()
+    val rs1Boxed, rs2Boxed = p.withDouble generate Bool()
   }
 
   case class MulInput() extends Bundle{
@@ -198,7 +200,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
   //TODO nan boxing decoding
   val read = new Area{
-    val arbiter = StreamArbiterFactory.noLock.lowerFirst.build(FpuCmd(p), portCount)
+    val arbiter = StreamArbiterFactory.noLock.roundRobin.build(FpuCmd(p), portCount)
     arbiter.io.inputs <> Vec(io.port.map(_.cmd))
 
     val s0 = Stream(RfReadInput())
@@ -208,7 +210,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
     val useRs1, useRs2, useRs3, useRd = False
     switch(s0.opcode){
-      is(p.Opcode.LOAD)    {  useRd := True }
+      is(p.Opcode.LOAD)    { useRd := True }
       is(p.Opcode.STORE)   { useRs1 := True }
       is(p.Opcode.ADD)     { useRd  := True; useRs1 := True; useRs2 := True }
       is(p.Opcode.MUL)     { useRd  := True; useRs1 := True; useRs2 := True }
@@ -261,20 +263,25 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.rs2 := rs2Entry.value
     output.rs3 := rs3Entry.value
     if(p.withDouble){
+      output.rs1Boxed := rs1Entry.boxed
+      output.rs2Boxed := rs2Entry.boxed
       output.format := s1.format
       val store = s1.opcode === FpuOpcode.STORE ||s1.opcode === FpuOpcode.FMV_X_W
-      when(store){ //Pass through
-        output.format := rs1Entry.boxed ? FpuFormat.FLOAT | FpuFormat.DOUBLE
-      } elsewhen(s1.format === FpuFormat.FLOAT =/= rs1Entry.boxed){
-        output.rs1.setNanQuiet
-        output.rs1.sign := False
-      }
-      when(s1.format === FpuFormat.FLOAT =/= rs2Entry.boxed){
-        output.rs2.setNanQuiet
-        output.rs2.sign := False
-      }
-      when(s1.format === FpuFormat.FLOAT =/= rs3Entry.boxed){
-        output.rs3.setNanQuiet
+      val sgnjBypass = s1.opcode === FpuOpcode.SGNJ && s1.format === FpuFormat.DOUBLE
+      when(!sgnjBypass) {
+        when(store) { //Pass through
+          output.format := rs1Entry.boxed ? FpuFormat.FLOAT | FpuFormat.DOUBLE
+        } elsewhen (s1.format === FpuFormat.FLOAT =/= rs1Entry.boxed) {
+          output.rs1.setNanQuiet
+          output.rs1.sign := False
+        }
+        when(s1.format === FpuFormat.FLOAT =/= rs2Entry.boxed) {
+          output.rs2.setNanQuiet
+          output.rs2.sign := False
+        }
+        when(s1.format === FpuFormat.FLOAT =/= rs3Entry.boxed) {
+          output.rs3.setNanQuiet
+        }
       }
     }
   }
@@ -686,8 +693,11 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       )
       val result = (Mux(resign, ~unsigned, unsigned) + (resign ^ increment).asUInt)
       val overflow  = (input.rs1.exponent > (input.arg(0) ? U(exponentOne+30) | U(exponentOne+31)) || input.rs1.isInfinity) && !input.rs1.sign || input.rs1.isNan
-      val underflow = (input.rs1.exponent > U(exponentOne+31) || input.arg(0) && unsigned.msb && unsigned(30 downto 0) =/= 0 || !input.arg(0) && (unsigned =/= 0 || increment) || input.rs1.isInfinity) && input.rs1.sign
+      val underflow = (input.rs1.exponent > U(exponentOne+31) || input.arg(0) && unsigned.msb && (unsigned(30 downto 0) =/= 0 || increment) || !input.arg(0) && (unsigned =/= 0 || increment) || input.rs1.isInfinity) && input.rs1.sign
       val isZero = input.rs1.isZero
+      if(p.withDouble){
+        overflow setWhen(!input.rs1.sign && increment && unsigned(30 downto 0).andR && (input.arg(0) || unsigned(31)))
+      }
       when(isZero){
         result := 0
       } elsewhen(underflow || overflow) {
@@ -720,7 +730,13 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val minMaxSelectNanQuiet = input.rs1.isNan && input.rs2.isNan
     val cmpResult = B(rs1Smaller && !bothZero && !input.arg(1) || (rs1Equal || bothZero) && !input.arg(0))
     when(input.rs1.isNan || input.rs2.isNan) { cmpResult := 0 }
-    val sgnjResult = (input.rs1.sign && input.arg(1)) ^ input.rs2.sign ^ input.arg(0)
+    val sgnjRs1Sign = CombInit(input.rs1.sign)
+    val sgnjRs2Sign = CombInit(input.rs2.sign)
+    if(p.withDouble){
+      sgnjRs1Sign setWhen(input.rs1Boxed && input.format === FpuFormat.DOUBLE)
+      sgnjRs2Sign setWhen(input.rs2Boxed && input.format === FpuFormat.DOUBLE)
+    }
+    val sgnjResult = (sgnjRs1Sign && input.arg(1)) ^ sgnjRs2Sign ^ input.arg(0)
     val fclassResult = B(0, 32 bits)
     val decoded = input.rs1.decode()
     fclassResult(0) :=  input.rs1.sign &&  decoded.isInfinity
@@ -771,6 +787,22 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       }
       is(FpuOpcode.SGNJ){
         rfOutput.value.sign := sgnjResult
+        if(p.withDouble) when(input.format === FpuFormat.DOUBLE){
+          when(input.rs1Boxed){
+            rfOutput.value.sign := input.rs1.sign
+            rfOutput.format := FpuFormat.FLOAT
+          }
+//          //kill boxing => F32 -> F64 NAN
+//          when(input.rs1Boxed && !sgnjResult){
+//            rfOutput.value.setNan
+//            rfOutput.value.mantissa.setAll()
+//            rfOutput.value.mantissa(31 downto 0) := input.rs1.sign ## input.rs1.exponent
+//          }
+//          //Spawn boxing => F64 NAN -> F32
+//          when(!input.rs1Boxed && input.rs1.exponent === exponentOne + 1024 && input.rs1.mantissa(32, 52-32 bits).andR && sgnjResult){
+//
+//          }
+        }
       }
       if(p.withDouble) is(FpuOpcode.FCVT_X_X){
         rfOutput.format := ((input.format === FpuFormat.FLOAT) ? FpuFormat.DOUBLE | FpuFormat.FLOAT)

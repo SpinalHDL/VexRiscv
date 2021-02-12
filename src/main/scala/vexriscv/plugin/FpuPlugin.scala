@@ -17,6 +17,7 @@ class FpuPlugin(externalFpu : Boolean = false,
   object FPU_FORKED extends Stageable(Bool())
   object FPU_OPCODE extends Stageable(FpuOpcode())
   object FPU_ARG extends Stageable(Bits(2 bits))
+  object FPU_FORMAT extends Stageable(FpuFormat())
 
   var port : FpuPort = null
 
@@ -49,6 +50,7 @@ class FpuPlugin(externalFpu : Boolean = false,
     val fminMax = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.MIN_MAX
     val fmvWx   = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.FMV_W_X :+ RS1_USE -> True
     val fcvtI2f = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.I2F     :+ RS1_USE -> True
+    val fcvtxx  = floatRfWrite :+ FPU_OPCODE -> FpuOpcode.FCVT_X_X
 
     val fcmp    = intRfWrite   :+ FPU_OPCODE -> FpuOpcode.CMP
     val fclass  = intRfWrite   :+ FPU_OPCODE -> FpuOpcode.FCLASS
@@ -73,35 +75,69 @@ class FpuPlugin(externalFpu : Boolean = false,
     def arg(v : Int) = FPU_ARG -> U(v, 2 bits)
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(FPU_ENABLE, False)
+
+    val f32 = FPU_FORMAT -> FpuFormat.FLOAT
+    val f64 = FPU_FORMAT -> FpuFormat.DOUBLE
+
     decoderService.add(List(
-      FADD_S    -> (addSub :+ arg(0)),
-      FSUB_S    -> (addSub :+ arg(1)),
-      FMADD_S   -> (fma :+ arg(0)),
-      FMSUB_S   -> (fma :+ arg(2)),
-      FNMADD_S  -> (fma :+ arg(3)),
-      FNMSUB_S  -> (fma :+ arg(1)),
-      FMUL_S    -> (mul :+ arg(0)),
-      FDIV_S    -> (div),
-      FSQRT_S   -> (sqrt),
-      FLW       -> (fl),
-      FSW       -> (fs),
-      FCVT_S_WU -> (fcvtI2f :+ arg(0)),
-      FCVT_S_W  -> (fcvtI2f :+ arg(1)),
-      FCVT_WU_S -> (fcvtF2i :+ arg(0)),
-      FCVT_W_S ->  (fcvtF2i :+ arg(1)),
-      FCLASS_S  -> (fclass),
-      FLE_S     -> (fcmp :+ arg(0)),
-      FEQ_S     -> (fcmp :+ arg(2)),
-      FLT_S     -> (fcmp :+ arg(1)),
-      FSGNJ_S   -> (fsgnj :+ arg(0)),
-      FSGNJN_S  -> (fsgnj :+ arg(1)),
-      FSGNJX_S  -> (fsgnj :+ arg(2)),
-      FMIN_S    -> (fminMax :+ arg(0)),
-      FMAX_S    -> (fminMax :+ arg(1)),
-      FMV_X_W   -> (fmvXw),
-      FMV_W_X   -> (fmvWx)
+      FADD_S    -> (addSub  :+ f32 :+ arg(0)),
+      FSUB_S    -> (addSub  :+ f32 :+ arg(1)),
+      FMADD_S   -> (fma     :+ f32 :+ arg(0)),
+      FMSUB_S   -> (fma     :+ f32 :+ arg(2)),
+      FNMADD_S  -> (fma     :+ f32 :+ arg(3)),
+      FNMSUB_S  -> (fma     :+ f32 :+ arg(1)),
+      FMUL_S    -> (mul     :+ f32 :+ arg(0)),
+      FDIV_S    -> (div     :+ f32 ),
+      FSQRT_S   -> (sqrt    :+ f32 ),
+      FLW       -> (fl      :+ f32 ),
+      FSW       -> (fs      :+ f32 ),
+      FCVT_S_WU -> (fcvtI2f :+ f32 :+ arg(0)),
+      FCVT_S_W  -> (fcvtI2f :+ f32 :+ arg(1)),
+      FCVT_WU_S -> (fcvtF2i :+ f32 :+ arg(0)),
+      FCVT_W_S ->  (fcvtF2i :+ f32 :+ arg(1)),
+      FCLASS_S  -> (fclass  :+ f32 ),
+      FLE_S     -> (fcmp    :+ f32 :+ arg(0)),
+      FEQ_S     -> (fcmp    :+ f32 :+ arg(2)),
+      FLT_S     -> (fcmp    :+ f32 :+ arg(1)),
+      FSGNJ_S   -> (fsgnj   :+ f32 :+ arg(0)),
+      FSGNJN_S  -> (fsgnj   :+ f32 :+ arg(1)),
+      FSGNJX_S  -> (fsgnj   :+ f32 :+ arg(2)),
+      FMIN_S    -> (fminMax :+ f32 :+ arg(0)),
+      FMAX_S    -> (fminMax :+ f32 :+ arg(1)),
+      FMV_X_W   -> (fmvXw   :+ f32 ),
+      FMV_W_X   -> (fmvWx   :+ f32 )
     ))
 
+    if(p.withDouble){
+      decoderService.add(List(
+        FADD_D    -> (addSub  :+ f64 :+ arg(0)),
+        FSUB_D    -> (addSub  :+ f64 :+ arg(1)),
+        FMADD_D   -> (fma     :+ f64 :+ arg(0)),
+        FMSUB_D   -> (fma     :+ f64 :+ arg(2)),
+        FNMADD_D  -> (fma     :+ f64 :+ arg(3)),
+        FNMSUB_D  -> (fma     :+ f64 :+ arg(1)),
+        FMUL_D    -> (mul     :+ f64 :+ arg(0)),
+        FDIV_D    -> (div     :+ f64 ),
+        FSQRT_D   -> (sqrt    :+ f64 ),
+        FLW       -> (fl      :+ f64 ),
+        FSW       -> (fs      :+ f64 ),
+        FCVT_S_WU -> (fcvtI2f :+ f64 :+ arg(0)),
+        FCVT_S_W  -> (fcvtI2f :+ f64 :+ arg(1)),
+        FCVT_WU_D -> (fcvtF2i :+ f64 :+ arg(0)),
+        FCVT_W_D  -> (fcvtF2i :+ f64 :+ arg(1)),
+        FCLASS_D  -> (fclass  :+ f64 ),
+        FLE_D     -> (fcmp    :+ f64 :+ arg(0)),
+        FEQ_D     -> (fcmp    :+ f64 :+ arg(2)),
+        FLT_D     -> (fcmp    :+ f64 :+ arg(1)),
+        FSGNJ_D   -> (fsgnj   :+ f64 :+ arg(0)),
+        FSGNJN_D  -> (fsgnj   :+ f64 :+ arg(1)),
+        FSGNJX_D  -> (fsgnj   :+ f64 :+ arg(2)),
+        FMIN_D    -> (fminMax :+ f64 :+ arg(0)),
+        FMAX_D    -> (fminMax :+ f64 :+ arg(1)),
+        FCVT_D_S  -> (fcvtxx :+ f32),
+        FCVT_S_D  -> (fcvtxx :+ f64)
+      ))
+    }
     //TODO FMV_X_X + doubles
 
     port = FpuPort(p)
@@ -178,7 +214,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       port.cmd.rs2       := input(INSTRUCTION)(rs2Range).asUInt
       port.cmd.rs3       := input(INSTRUCTION)(rs3Range).asUInt
       port.cmd.rd        := input(INSTRUCTION)(rdRange).asUInt
-      port.cmd.format    := FpuFormat.FLOAT
+      port.cmd.format    := (if(p.withDouble) input(FPU_FORMAT) else FpuFormat.FLOAT())
       port.cmd.roundMode := roundMode.as(FpuRoundMode())
 
       insert(FPU_FORKED) := forked || port.cmd.fire
