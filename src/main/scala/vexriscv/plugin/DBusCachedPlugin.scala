@@ -6,6 +6,8 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.Axi4
 
+import scala.collection.mutable.ArrayBuffer
+
 
 class DAxiCachedPlugin(config : DataCacheConfig, memoryTranslatorPortConfig : Any = null) extends DBusCachedPlugin(config, memoryTranslatorPortConfig) {
   var dAxi  : Axi4 = null
@@ -22,6 +24,7 @@ trait DBusEncodingService {
   def addLoadWordEncoding(key: MaskedLiteral): Unit
   def addStoreWordEncoding(key: MaskedLiteral): Unit
   def bypassStore(data : Bits) : Unit
+  def loadData() : Bits
 }
 
 class DBusCachedPlugin(val config : DataCacheConfig,
@@ -90,9 +93,14 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     )
   }
 
+  val bypassStoreList = ArrayBuffer[(Bool, Bits)]()
+
   override def bypassStore(data: Bits): Unit = {
-    pipeline.stages.last.input(MEMORY_STORE_DATA) := data
+    bypassStoreList += ConditionalContext.isTrue() -> data
   }
+
+
+  override def loadData(): Bits = pipeline.stages.last.output(MEMORY_LOAD_DATA)
 
   object MEMORY_ENABLE extends Stageable(Bool)
   object MEMORY_MANAGMENT extends Stageable(Bool)
@@ -104,7 +112,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   object MEMORY_FORCE_CONSTISTENCY extends Stageable(Bool)
   object IS_DBUS_SHARING extends Stageable(Bool())
   object MEMORY_VIRTUAL_ADDRESS extends Stageable(UInt(32 bits))
-  object MEMORY_STORE_DATA extends Stageable(Bits(32 bits))
+  object MEMORY_STORE_DATA_RF extends Stageable(Bits(config.rfDataWidth bits))
+//  object MEMORY_STORE_DATA_CPU extends Stageable(Bits(config.cpuDataWidth bits))
+  object MEMORY_LOAD_DATA extends Stageable(Bits(config.cpuDataWidth bits))
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -292,12 +302,12 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       cache.io.cpu.execute.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.execute.address := input(SRC_ADD).asUInt
       cache.io.cpu.execute.args.wr := input(MEMORY_WR)
-      insert(MEMORY_STORE_DATA) := size.mux(
+      insert(MEMORY_STORE_DATA_RF) := size.mux(
         U(0)    -> input(RS2)( 7 downto 0) ## input(RS2)( 7 downto 0) ## input(RS2)(7 downto 0) ## input(RS2)(7 downto 0),
         U(1)    -> input(RS2)(15 downto 0) ## input(RS2)(15 downto 0),
         default -> input(RS2)(31 downto 0)
       )
-      cache.io.cpu.execute.args.size := size
+      cache.io.cpu.execute.args.size := size.resized
 
       if(twoStageMmu) {
         mmuBus.cmd(0).isValid := cache.io.cpu.execute.isValid
@@ -358,13 +368,16 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     }
 
     val managementStage = stages.last
-    managementStage plug new Area{
+    val mgs = managementStage plug new Area{
       import managementStage._
       cache.io.cpu.writeBack.isValid := arbitration.isValid && input(MEMORY_ENABLE)
       cache.io.cpu.writeBack.isStuck := arbitration.isStuck
       cache.io.cpu.writeBack.isUser  := (if(privilegeService != null) privilegeService.isUser() else False)
       cache.io.cpu.writeBack.address := U(input(REGFILE_WRITE_DATA))
-      cache.io.cpu.writeBack.storeData := input(MEMORY_STORE_DATA)
+      cache.io.cpu.writeBack.storeData.subdivideIn(32 bits).foreach(_ := input(MEMORY_STORE_DATA_RF))
+      for((cond, value) <- bypassStoreList) when(cond){
+        cache.io.cpu.writeBack.storeData := value
+      }
 
       val fence = if(withInvalidate) new Area {
         cache.io.cpu.writeBack.fence := input(INSTRUCTION)(31 downto 20).as(FenceFlags())
@@ -425,12 +438,15 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
       arbitration.haltItself.setWhen(cache.io.cpu.writeBack.isValid && cache.io.cpu.writeBack.haltIt)
 
-      val rspShifted = Bits(32 bits)
-      rspShifted := cache.io.cpu.writeBack.data
+      val rspRf = cache.io.cpu.writeBack.data.subdivideIn(32 bits).read(cache.io.cpu.writeBack.address(cache.cpuWordToRfWordRange))
+      val rspShifted = CombInit(rspRf)
       switch(input(MEMORY_ADDRESS_LOW)){
-        is(1){rspShifted(7 downto 0) := cache.io.cpu.writeBack.data(15 downto 8)}
-        is(2){rspShifted(15 downto 0) := cache.io.cpu.writeBack.data(31 downto 16)}
-        is(3){rspShifted(7 downto 0) := cache.io.cpu.writeBack.data(31 downto 24)}
+        is(1){rspShifted(7 downto 0) := rspRf(15 downto 8)}
+        is(2){rspShifted(15 downto 0) := rspRf(31 downto 16)}
+        is(3){rspShifted(7 downto 0) := rspRf(31 downto 24)}
+      }
+      if(withLrSc) when(input(MEMORY_LRSC) && input(MEMORY_WR)){
+        rspShifted := B(!cache.io.cpu.writeBack.exclusiveOk).resized
       }
 
       val rspFormated = input(INSTRUCTION)(13 downto 12).mux(
@@ -443,7 +459,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         output(REGFILE_WRITE_DATA) := rspFormated
       }
 
-      insert(DBUS_DATA) := cache.io.cpu.writeBack.data
+      insert(MEMORY_LOAD_DATA) := cache.io.cpu.writeBack.data
     }
 
     //Share access to the dBus (used by self refilled MMU)
@@ -458,11 +474,11 @@ class DBusCachedPlugin(val config : DataCacheConfig,
             cache.io.cpu.execute.isValid := True
             dBusAccess.cmd.ready := !execute.arbitration.isStuck
           }
-          cache.io.cpu.execute.args.wr := dBusAccess.cmd.write
-          execute.insert(MEMORY_STORE_DATA) := dBusAccess.cmd.data
-          cache.io.cpu.execute.args.size := dBusAccess.cmd.size
-          if(withLrSc) cache.io.cpu.execute.args.isLrsc := False
-          if(withAmo) cache.io.cpu.execute.args.isAmo := False
+          cache.io.cpu.execute.args.wr := False                         //dBusAccess.cmd.write
+//          execute.insert(MEMORY_STORE_DATA_RF) := dBusAccess.cmd.data //Not implemented
+          cache.io.cpu.execute.args.size := dBusAccess.cmd.size.resized
+          if(withLrSc) execute.input(MEMORY_LRSC) := False
+          if(withAmo)  execute.input(MEMORY_AMO) := False
           cache.io.cpu.execute.address := dBusAccess.cmd.address  //Will only be 12 muxes
           forceDatapath := True
         }
@@ -474,7 +490,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       if(mmuAndBufferStage != execute) (cache.io.cpu.memory.isValid setWhen(mmuAndBufferStage.input(IS_DBUS_SHARING)))
       cache.io.cpu.writeBack.isValid setWhen(managementStage.input(IS_DBUS_SHARING))
       dBusAccess.rsp.valid := managementStage.input(IS_DBUS_SHARING) && !cache.io.cpu.writeBack.isWrite && (cache.io.cpu.redo || !cache.io.cpu.writeBack.haltIt)
-      dBusAccess.rsp.data := cache.io.cpu.writeBack.data
+      dBusAccess.rsp.data := mgs.rspRf
       dBusAccess.rsp.error := cache.io.cpu.writeBack.unalignedAccess || cache.io.cpu.writeBack.accessError
       dBusAccess.rsp.redo := cache.io.cpu.redo
       component.addPrePopTask{() =>

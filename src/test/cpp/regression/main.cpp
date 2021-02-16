@@ -4,7 +4,7 @@
 #include "VVexRiscv_RiscvCore.h"
 #endif
 #include "verilated.h"
-#include "verilated_vcd_c.h"
+#include "verilated_fst_c.h"
 #include <stdio.h>
 #include <iostream>
 #include <stdlib.h>
@@ -175,8 +175,12 @@ void loadBinImpl(string path,Memory* mem, uint32_t offset) {
 
 #define TEXTIFY(A) #A
 
+void breakMe(){
+    int a = 0;
+}
 #define assertEq(x,ref) if(x != ref) {\
 	printf("\n*** %s is %d but should be %d ***\n\n",TEXTIFY(x),x,ref);\
+	breakMe();\
 	throw std::exception();\
 }
 
@@ -1106,7 +1110,7 @@ public:
 	uint32_t bootPc = -1;
 	uint32_t iStall = STALL,dStall = STALL;
 	#ifdef TRACE
-	VerilatedVcdC* tfp;
+	VerilatedFstC* tfp;
 	#endif
 	bool allowInvalidate = true;
 
@@ -1129,13 +1133,13 @@ public:
     	class MemWrite {
     	public:
     		int32_t address, size;
-    		uint32_t data;
+    		uint8_t data42[64];
     	};
 
     	class MemRead {
     	public:
     		int32_t address, size;
-    		uint32_t data;
+    		uint8_t data42[64];
     		bool error;
     	};
 
@@ -1186,7 +1190,10 @@ public:
 					cout << " DUT : address=" << t.address  << " size=" << t.size << endl;
 					fail();
 				}
-				*data = t.data;
+
+                for(int i = 0; i < size; i++){
+                    ((uint8_t*)data)[i] = t.data42[i];
+                }
 				periphRead.pop();
 				return t.error;
     		}else {
@@ -1205,10 +1212,8 @@ public:
 				MemWrite w;
 				w.address = address;
 				w.size = size;
-				switch(size){
-				case 1: w.data = data & 0xFF; break;
-				case 2: w.data = data & 0xFFFF; break;
-				case 4: w.data = data; break;
+                for(int i = 0; i < size; i++){
+				    w.data42[i] = ((uint8_t*)&data)[i];
 				}
 				periphWritesGolden.push(w);
 				if(periphWritesGolden.size() > 10){
@@ -1231,10 +1236,12 @@ public:
         	case 0:
     			MemWrite t = periphWrites.front();
     			MemWrite t2 = periphWritesGolden.front();
-    			if(t.address != t2.address || t.size != t2.size || t.data != t2.data){
+    			bool dataMatch = true;
+    			for(int i = 0;i < min(t.size, t2.size);i++) dataMatch &= t.data42[i] == t2.data42[i];
+    			if(t.address != t2.address || t.size != t2.size || !dataMatch){
     				cout << hex << "periphWrite missmatch" << endl;
-    				cout << " DUT address=" << t.address << " size=" << t.size  << " data=" << t.data << endl;
-    				cout << " REF address=" << t2.address << " size=" << t2.size  << " data=" << t2.data << endl;
+    				cout << " DUT address=" << t.address << " size=" << t.size  << " data=" << *((uint32_t*)t.data42) << endl;
+    				cout << " REF address=" << t2.address << " size=" << t2.size  << " data=" << *((uint32_t*)t2.data42) << endl;
     				fail();
     			}
     			periphWrites.pop();
@@ -1345,43 +1352,19 @@ public:
 
 
     virtual bool isDBusCheckedRegion(uint32_t address){ return isPerifRegion(address);}
-	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
-		assertEq(addr % (1 << size), 0);
+	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size, uint8_t *data, bool *error) {
+		assertEq(addr % size, 0);
 		if(!isPerifRegion(addr)) {
 			if(wr){
-				memTraces <<
-				#ifdef TRACE_WITH_TIME
-				(currentTime
-				#ifdef REF
-				-2
-				 #endif
-				 ) <<
-				 #endif
-				 " : WRITE mem" << hex << (1 << size) << "[" << addr << "] = " << *data << dec << endl;
-				for(uint32_t b = 0;b < (1 << size);b++){
-					uint32_t offset = (addr+b)&0x3;
-					if((mask >> offset) & 1 == 1)
-						*mem.get(addr + b) = *data >> (offset*8);
+				for(uint32_t b = 0;b < size;b++){
+                    *mem.get(addr + b) = ((uint8_t*)data)[b];
 				}
 
 			}else{
-				*data = VL_RANDOM_I(32);
-				for(uint32_t b = 0;b < (1 << size);b++){
-					uint32_t offset = (addr+b)&0x3;
-					*data &= ~(0xFF << (offset*8));
-					*data |= mem[addr + b] << (offset*8);
+                uint32_t innerOffset = addr & (DBUS_LOAD_DATA_WIDTH/8-1);
+				for(uint32_t b = 0;b < size;b++){
+					((uint8_t*)data)[b] = mem[addr + b];
 				}
-				/*
-				memTraces <<
-				#ifdef TRACE_WITH_TIME
-				(currentTime
-				#ifdef REF
-				-2
-				 #endif
-				 ) <<
-				 #endif
-				  " : READ  mem" << (1 << size) << "[" << addr << "] = " << *data << endl;*/
-
 			}
 		}
 
@@ -1390,21 +1373,9 @@ public:
 			if(isDBusCheckedRegion(addr)){
 				CpuRef::MemWrite w;
 				w.address = addr;
-				while((mask & 1) == 0){
-				    mask >>= 1;
-				    w.address++;
-				    w.data >>= 8;
-				}
-				switch(mask){
-				case 1: size = 0; break;
-				case 3: size = min(1u, size); break;
-				case 15: size = min(2u, size); break;
-				}
-				w.size = 1 << size;
-				switch(size){
-				case 0: w.data = *data & 0xFF; break;
-				case 1: w.data = *data & 0xFFFF; break;
-				case 2: w.data = *data ; break;
+				w.size = size;
+				for(uint32_t b = 0;b < size;b++){
+				    w.data42[b] = data[b];
 				}
 				riscvRef.periphWrites.push(w);
 			}
@@ -1412,8 +1383,10 @@ public:
 			if(isPerifRegion(addr)){
 				CpuRef::MemRead r;
 				r.address = addr;
-				r.size = 1 << size;
-				r.data = *data;
+				r.size = size;
+				for(uint32_t b = 0;b < size;b++){
+				    r.data42[b] = data[b];
+				}
 				r.error = *error;
 				riscvRef.periphRead.push(r);
 			}
@@ -1461,9 +1434,9 @@ public:
 		// init trace dump
 		#ifdef TRACE
 		Verilated::traceEverOn(true);
-		tfp = new VerilatedVcdC;
+		tfp = new VerilatedFstC;
 		top->trace(tfp, 99);
-		tfp->open((vcdName + ".vcd").c_str());
+		tfp->open((vcdName + ".fst").c_str());
 		#endif
 
 		// Reset
@@ -1725,7 +1698,8 @@ public:
 
 	virtual void dutPutChar(char c){}
 
-	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size, uint8_t *dataBytes, bool *error) {
+        uint32_t *data = ((uint32_t*)dataBytes);
 		if(wr){
 			switch(addr){
 			case 0xF0010000u: {
@@ -1788,19 +1762,10 @@ public:
 			case 0xF00FFF4Cu: *data = mTimeCmp >> 32; break;
 			case 0xF0010004u: *data = ~0;		      break;
 			}
-			memTraces <<
-			#ifdef TRACE_WITH_TIME
-			(currentTime
-			#ifdef REF
-			-2
-			 #endif
-			 ) <<
-			 #endif
-			  " : READ  mem" << (1 << size) << "[" << addr << "] = " << *data << endl;
 		}
 
 		*error = addr == 0xF00FFF60u;
-		Workspace::dBusAccess(addr,wr,size,mask,data,error);
+		Workspace::dBusAccess(addr,wr,size,dataBytes,error);
 	}
 
 
@@ -2195,7 +2160,7 @@ public:
 		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
 			pending = true;
 			data_next = top->dBus_cmd_payload_data;
-			ws->dBusAccess(top->dBus_cmd_payload_address,top->dBus_cmd_payload_wr,top->dBus_cmd_payload_size,0xF,&data_next,&error_next);
+			ws->dBusAccess(top->dBus_cmd_payload_address,top->dBus_cmd_payload_wr,1 << top->dBus_cmd_payload_size,((uint8_t*)&data_next) + (top->dBus_cmd_payload_address & 3),&error_next);
 		}
 	}
 
@@ -2370,7 +2335,7 @@ public:
 #include <queue>
 
 struct DBusCachedTask{
-	char data[DBUS_DATA_WIDTH/8];
+	char data[DBUS_LOAD_DATA_WIDTH/8];
 	bool error;
 	bool last;
 	bool exclusive;
@@ -2407,12 +2372,14 @@ public:
 	virtual void preCycle(){
 		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
             if(top->dBus_cmd_payload_wr){
+                int size = 1 << top->dBus_cmd_payload_size;
                 #ifdef DBUS_INVALIDATE
                     pendingSync += 1;
                 #endif
                 #ifndef DBUS_EXCLUSIVE
                     bool error;
-                    ws->dBusAccess(top->dBus_cmd_payload_address,1,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&error);
+                    int shift = top->dBus_cmd_payload_address & (DBUS_STORE_DATA_WIDTH/8-1);
+                    ws->dBusAccess(top->dBus_cmd_payload_address,1,size,((uint8_t*)&top->dBus_cmd_payload_data) + shift,&error);
                 #else
                     bool cancel = false, error = false;
                     if(top->dBus_cmd_payload_exclusive){
@@ -2424,31 +2391,28 @@ public:
                     if(!cancel) {
                         for(int idx = 0;idx < 1;idx++){
                             bool localError = false;
-                            ws->dBusAccess(top->dBus_cmd_payload_address+idx*4,1,2,top->dBus_cmd_payload_mask >> idx*4,((uint32_t*)&top->dBus_cmd_payload_data)+idx, &localError);
+                            int shift = top->dBus_cmd_payload_address & (DBUS_STORE_DATA_WIDTH/8-1);
+                            ws->dBusAccess(top->dBus_cmd_payload_address,1,size,((uint8_t*)&top->dBus_cmd_payload_data) + shift,&localError);
                             error |= localError;
-
-                             //printf("%d ", (int)localError);
                         }
                     }
 
-                   // printf("%x %d\n", top->dBus_cmd_payload_address, (int)error);
                     rsp.last = true;
                     rsp.error = error;
                     rsps.push(rsp);
                 #endif
             } else {
                 bool error = false;
-                uint32_t beatCount = top->dBus_cmd_payload_length*32/DBUS_DATA_WIDTH;
+                uint32_t beatCount = (((1 << top->dBus_cmd_payload_size)*8+DBUS_LOAD_DATA_WIDTH-1) / DBUS_LOAD_DATA_WIDTH)-1;
+                uint32_t startAt = top->dBus_cmd_payload_address;
+                uint32_t endAt = top->dBus_cmd_payload_address + (1 << top->dBus_cmd_payload_size);
+                uint32_t address = top->dBus_cmd_payload_address & ~(DBUS_LOAD_DATA_WIDTH/8-1);
+                uint8_t buffer[64];
+                ws->dBusAccess(top->dBus_cmd_payload_address,0,1 << top->dBus_cmd_payload_size,buffer, &error);
                 for(int beat = 0;beat <= beatCount;beat++){
-                    if(top->dBus_cmd_payload_length == 0){
-                        uint32_t sel = (top->dBus_cmd_payload_address >> 2) & (DBUS_DATA_WIDTH/32-1);
-                        ws->dBusAccess(top->dBus_cmd_payload_address,0,2,0,((uint32_t*)rsp.data) + sel,&error);
-                    } else {
-                        for(int idx = 0;idx < DBUS_DATA_WIDTH/32;idx++){
-                            bool localError = false;
-                            ws->dBusAccess(top->dBus_cmd_payload_address + beat * DBUS_DATA_WIDTH/8 + idx*4,0,2,0,((uint32_t*)rsp.data)+idx, &localError);
-                            error |= localError;
-                        }
+                    for(int i = 0;i < DBUS_LOAD_DATA_WIDTH/8;i++){
+                        rsp.data[i] = (address >= startAt && address < endAt) ? buffer[address-top->dBus_cmd_payload_address] : VL_RANDOM_I(8);
+                        address += 1;
                     }
                     rsp.last = beat == beatCount;
                     #ifdef DBUS_EXCLUSIVE
@@ -2485,7 +2449,7 @@ public:
 			rsps.pop();
 			top->dBus_rsp_valid = 1;
 			top->dBus_rsp_payload_error = rsp.error;
-            for(int idx = 0;idx < DBUS_DATA_WIDTH/32;idx++){
+            for(int idx = 0;idx < DBUS_LOAD_DATA_WIDTH/32;idx++){
                 ((uint32_t*)&top->dBus_rsp_payload_data)[idx] = ((uint32_t*)rsp.data)[idx];
             }
 			top->dBus_rsp_payload_last = rsp.last;
@@ -2494,7 +2458,7 @@ public:
             #endif
 		} else{
 			top->dBus_rsp_valid = 0;
-            for(int idx = 0;idx < DBUS_DATA_WIDTH/32;idx++){
+            for(int idx = 0;idx < DBUS_LOAD_DATA_WIDTH/32;idx++){
 			    ((uint32_t*)&top->dBus_rsp_payload_data)[idx] = VL_RANDOM_I(32);
 			}
 			top->dBus_rsp_payload_error = VL_RANDOM_I(1);
@@ -3092,12 +3056,13 @@ public:
 	}
 
 
-    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size, uint8_t *dataBytes, bool *error) {
         if(wr && addr == 0xF00FFF2C){
+            uint32_t *data = (uint32_t*)dataBytes;
             out32 << hex << setw(8) << std::setfill('0') << *data << dec;
             if(++out32Counter % 4 == 0) out32 << "\n";
         }
-    	WorkspaceRegression::dBusAccess(addr,wr,size,mask,data,error);
+    	WorkspaceRegression::dBusAccess(addr,wr,size,dataBytes,error);
     }
 
 	virtual void checks(){
@@ -3437,41 +3402,43 @@ public:
 
 
 
-    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
-        if(isPerifRegion(addr)) switch(addr){
-    		//TODO Emulate peripherals here
-    		case 0xFFFFFFE0: if(wr) fail(); else *data = mTime; break;
-    		case 0xFFFFFFE4: if(wr) fail(); else *data = mTime >> 32; break;
-    		case 0xFFFFFFE8: if(wr) mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data; else *data = mTimeCmp; break;
-    		case 0xFFFFFFEC: if(wr) mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); else *data = mTimeCmp >> 32; break;
-    		case 0xFFFFFFF8:
-    		    if(wr){
-    		        char c = (char)*data;
-                    cout << c;
-                    logTraces << c;
-                    logTraces.flush();
-                    onStdout(c);
-				} else {
-				    #ifdef WITH_USER_IO
-					if(stdinNonEmpty()){
-						char c;
-						read(0, &c, 1);
-						*data = c;
-					} else
-					#endif
-					if(!customCin.empty()){
-					    *data = customCin.front();
-                        customCin.pop();
-					} else {
-						*data = -1;
-					}
-				}
-				break;
-    		case 0xFFFFFFFC: fail(); break; //Simulation end
-    		default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " mask=0x" << mask << " data=0x" << data << dec << endl; fail(); break;
-    	}
+    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint8_t *dataBytes, bool *error) {
+        uint32_t *data = (uint32_t*)dataBytes;
 
-    	Workspace::dBusAccess(addr,wr,size,mask,data,error);
+        if(isPerifRegion(addr)) {
+            switch(addr){
+                case 0xFFFFFFE0: if(wr) fail(); else *data = mTime; break;
+                case 0xFFFFFFE4: if(wr) fail(); else *data = mTime >> 32; break;
+                case 0xFFFFFFE8: if(wr) mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data; else *data = mTimeCmp; break;
+                case 0xFFFFFFEC: if(wr) mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); else *data = mTimeCmp >> 32; break;
+                case 0xFFFFFFF8:
+                    if(wr){
+                        char c = (char)*data;
+                        cout << c;
+                        logTraces << c;
+                        logTraces.flush();
+                        onStdout(c);
+                    } else {
+                        #ifdef WITH_USER_IO
+                        if(stdinNonEmpty()){
+                            char c;
+                            read(0, &c, 1);
+                            *data = c;
+                        } else
+                        #endif
+                        if(!customCin.empty()){
+                            *data = customCin.front();
+                            customCin.pop();
+                        } else {
+                            *data = -1;
+                        }
+                    }
+                    break;
+                case 0xFFFFFFFC: fail(); break; //Simulation end
+                default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " mask=0x"  << " data=0x" << data << dec << endl; fail(); break;
+    		}
+    	}
+        Workspace::dBusAccess(addr,wr,size,dataBytes,error);
     }
 
     virtual void onStdout(char c){
@@ -3541,9 +3508,9 @@ public:
 
 
 
-    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint64_t mask, uint8_t *dataBytes, bool *error) {
+        uint32_t *data = (uint32_t*)dataBytes;
         if(isPerifRegion(addr)) switch(addr){
-    		//TODO Emulate peripherals here
     		case 0xF0010000: if(wr && *data != 0) fail(); else *data = 0;  break;
     		case 0xF001BFF8: if(wr) fail(); else *data = mTime; break;
     		case 0xF001BFFC: if(wr) fail(); else *data = mTime >> 32; break;
@@ -3576,8 +3543,7 @@ public:
 				break;
     		default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " mask=0x" << mask << " data=0x" << data << dec << endl; fail(); break;
     	}
-
-    	Workspace::dBusAccess(addr,wr,size,mask,data,error);
+        Workspace::dBusAccess(addr,wr,size,mask,data,error);
     }
 
     virtual void onStdout(char c){
@@ -3891,7 +3857,7 @@ int main(int argc, char **argv, char **env) {
         redo(REDO,RiscvTest(name).bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
     }
     #endif
-    return 0;
+    //return 0;
 
 //#ifdef LITEX
 //	LitexSoC("linux")
@@ -4064,11 +4030,6 @@ int main(int argc, char **argv, char **env) {
 				redo(REDO,RiscvTest(name).run();)
 			}
 
-            #ifdef RVF
-			for(const string &name : riscvTestFloat){
-				redo(REDO,RiscvTest(name).run();)
-			}
-			#endif
 
 			#ifdef MUL
 			for(const string &name : riscvTestMul){

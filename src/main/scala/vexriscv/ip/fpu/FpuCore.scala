@@ -275,13 +275,13 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
           output.rs1.setNanQuiet
           output.rs1.sign := False
         }
-        when(s1.format === FpuFormat.FLOAT =/= rs2Entry.boxed) {
-          output.rs2.setNanQuiet
-          output.rs2.sign := False
-        }
-        when(s1.format === FpuFormat.FLOAT =/= rs3Entry.boxed) {
-          output.rs3.setNanQuiet
-        }
+      }
+      when(s1.format === FpuFormat.FLOAT =/= rs2Entry.boxed) {
+        output.rs2.setNanQuiet
+        output.rs2.sign := False
+      }
+      when(s1.format === FpuFormat.FLOAT =/= rs3Entry.boxed) {
+        output.rs3.setNanQuiet
       }
     }
   }
@@ -733,7 +733,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val sgnjRs1Sign = CombInit(input.rs1.sign)
     val sgnjRs2Sign = CombInit(input.rs2.sign)
     if(p.withDouble){
-      sgnjRs1Sign setWhen(input.rs1Boxed && input.format === FpuFormat.DOUBLE)
       sgnjRs2Sign setWhen(input.rs2Boxed && input.format === FpuFormat.DOUBLE)
     }
     val sgnjResult = (sgnjRs1Sign && input.arg(1)) ^ sgnjRs2Sign ^ input.arg(0)
@@ -786,22 +785,12 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         }
       }
       is(FpuOpcode.SGNJ){
-        rfOutput.value.sign := sgnjResult
-        if(p.withDouble) when(input.format === FpuFormat.DOUBLE){
-          when(input.rs1Boxed){
-            rfOutput.value.sign := input.rs1.sign
-            rfOutput.format := FpuFormat.FLOAT
-          }
-//          //kill boxing => F32 -> F64 NAN
-//          when(input.rs1Boxed && !sgnjResult){
-//            rfOutput.value.setNan
-//            rfOutput.value.mantissa.setAll()
-//            rfOutput.value.mantissa(31 downto 0) := input.rs1.sign ## input.rs1.exponent
-//          }
-//          //Spawn boxing => F64 NAN -> F32
-//          when(!input.rs1Boxed && input.rs1.exponent === exponentOne + 1024 && input.rs1.mantissa(32, 52-32 bits).andR && sgnjResult){
-//
-//          }
+        when(!input.rs1.isNan) {
+          rfOutput.value.sign := sgnjResult
+        }
+        if(p.withDouble) when(input.rs1Boxed && input.format === FpuFormat.DOUBLE){
+          rfOutput.value.sign := input.rs1.sign
+          rfOutput.format := FpuFormat.FLOAT
         }
       }
       if(p.withDouble) is(FpuOpcode.FCVT_X_X){

@@ -19,7 +19,7 @@ import scala.collection.mutable.ArrayBuffer
 import scala.sys.process.ProcessLogger
 import scala.util.Random
 
-
+//TODO Warning DataCache write aggregation will disable itself
 class FpuTest extends FunSuite{
 
   val b2f = lang.Float.intBitsToFloat(_)
@@ -55,7 +55,7 @@ class FpuTest extends FunSuite{
   }
 
   def testP(p : FpuParameter){
-    val portCount = 4
+    val portCount = 1
 
     val config = SimConfig
     config.allOptimisation
@@ -978,32 +978,35 @@ class FpuTest extends FunSuite{
 
 
         def testSgnjRaw(a : Float, b : Float): Unit ={
-          val ref = b2f((f2b(a) & ~0x80000000) | f2b(b) & 0x80000000)
+          var ref = b2f((f2b(a) & ~0x80000000) | f2b(b) & 0x80000000)
+          if(a.isNaN) ref = a
           testBinaryOp(sgnj,a,b,ref,0, null,"sgnj")
         }
         def testSgnjnRaw(a : Float, b : Float): Unit ={
-          val ref = b2f((f2b(a) & ~0x80000000) | ((f2b(b) & 0x80000000) ^ 0x80000000))
+          var ref = b2f((f2b(a) & ~0x80000000) | ((f2b(b) & 0x80000000) ^ 0x80000000))
+          if(a.isNaN) ref = a
           testBinaryOp(sgnjn,a,b,ref,0, null,"sgnjn")
         }
         def testSgnjxRaw(a : Float, b : Float): Unit ={
-          val ref = b2f(f2b(a) ^ (f2b(b) & 0x80000000))
+          var ref = b2f(f2b(a) ^ (f2b(b) & 0x80000000))
+          if(a.isNaN) ref = a
           testBinaryOp(sgnjx,a,b,ref,0, null,"sgnjx")
         }
 
         val f64SignMask = 1l << 63
         def testSgnjF64Raw(a : Double, b : Double): Unit ={
           var ref = b2d((d2b(a).toLong & ~f64SignMask) | d2b(b).toLong & f64SignMask)
-          if(d2b(a).toLong >> 32 == -1) ref = a
+          if(a.isNaN) ref = a
           testBinaryOpF64(sgnj,a,b,ref,0, null,"sgnj")
         }
         def testSgnjnF64Raw(a : Double, b : Double): Unit ={
           var ref = b2d((d2b(a).toLong & ~f64SignMask) | ((d2b(b).toLong & f64SignMask) ^ f64SignMask))
-          if(d2b(a).toLong >> 32 == -1) ref = a
+          if(a.isNaN) ref = a
           testBinaryOpF64(sgnjn,a,b,ref,0, null,"sgnjn")
         }
         def testSgnjxF64Raw(a : Double, b : Double): Unit ={
           var ref = b2d(d2b(a).toLong ^ (d2b(b).toLong & f64SignMask))
-          if(d2b(a).toLong >> 32 == -1) ref = a
+          if(a.isNaN) ref = a
           testBinaryOpF64(sgnjx,a,b,ref,0, null,"sgnjx")
         }
 
@@ -1277,6 +1280,17 @@ class FpuTest extends FunSuite{
         //TODO test boxing
         //TODO double <-> simple convertions
         if(p.withDouble) {
+
+          for(_ <- 0 until 10000) testSgnjF64()
+          println("f64 sgnj done")
+
+          for(_ <- 0 until 10000) testSgnjF32()
+          println("f32 sgnj done")
+
+          //380000000001ffef 5fffffffffff9ff 8000000000100000
+//          testBinaryOpF64(mul,-5.877471754282472E-39, 8.814425663400984E-280, -5.180654E-318 ,1, FpuRoundMode.RMM,"mul")
+//          5.877471754282472E-39 8.814425663400984E-280 -5.180654E-318 RMM
+
           for(_ <- 0 until 10000) testCvtF64F32() // 1 did not equal 3 Flag missmatch dut=1 ref=3 testCvtF64F32Raw 1.1754942807573643E-38 1.17549435E-38 RMM
           println("FCVT_D_S done")
           for(_ <- 0 until 10000) testCvtF32F64()
@@ -1288,8 +1302,6 @@ class FpuTest extends FunSuite{
           println("f64 f2ui done")
 
 
-          for(_ <- 0 until 10000) testSgnjF64()
-          println("f64 sgnj done")
 
 
 
@@ -1481,7 +1493,7 @@ class FpuTest extends FunSuite{
 //        dut.clockDomain.waitSampling(1000)
 //        simSuccess()
 
-        for(i <- 0 until 10000) fxxTests.randomPick()()
+        for(i <- 0 until 100000) fxxTests.randomPick()()
         waitUntil(cpu.rspQueue.isEmpty)
       }
 

@@ -146,6 +146,10 @@ class FpuPlugin(externalFpu : Boolean = false,
     val dBusEncoding =  pipeline.service(classOf[DBusEncodingService])
     dBusEncoding.addLoadWordEncoding(FLW)
     dBusEncoding.addStoreWordEncoding(FSW)
+    if(p.withDouble) {
+      dBusEncoding.addLoadWordEncoding(FLD)
+      dBusEncoding.addStoreWordEncoding(FSD)
+    }
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -235,7 +239,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       when(isRsp){
         when(arbitration.isValid) {
           dBusEncoding.bypassStore(port.rsp.value)
-          output(REGFILE_WRITE_DATA) := port.rsp.value
+          output(REGFILE_WRITE_DATA) := port.rsp.value(31 downto 0)
         }
         when(!port.rsp.valid){
           arbitration.haltByOther := True
@@ -247,7 +251,8 @@ class FpuPlugin(externalFpu : Boolean = false,
       // Manage $load
       val commit = Stream(FpuCommit(p))
       commit.valid := isCommit && !arbitration.isStuck
-      commit.value := (input(FPU_COMMIT_LOAD) ? output(DBUS_DATA) | input(RS1))
+      commit.value(31 downto 0) := (input(FPU_COMMIT_LOAD) ? dBusEncoding.loadData()(31 downto 0)  | input(RS1))
+      if(p.withDouble) commit.value(63 downto 32) :=  dBusEncoding.loadData()(63 downto 32)
       commit.write := arbitration.isValid && !arbitration.removeIt
       commit.sync := input(FPU_COMMIT_SYNC)
 

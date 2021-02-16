@@ -32,189 +32,83 @@ import vexriscv.ip.fpu.FpuParameter
 //make clean all SEED=42 MMU=no STOP_ON_ERROR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes SUPERVISOR=yes REDO=1 DHRYSTONE=yes LRSC=yes AMO=yes  TRACE=yes TRACE_START=1000000000 FLOW_INFO=ye IBUS_DATA_WIDTH=128  DBUS_DATA_WIDTH=128 LINUX_SOC_SMP=yes VMLINUX=../../../../../buildroot/output/images/Image RAMDISK=../../../../../buildroot/output/images/rootfs.cpio  DTB=../../../../../buildroot/output/images/dtb EMULATOR=../../../../../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin
 object TestsWorkspace {
   def main(args: Array[String]) {
-//    def configFull = {
-//      val config = VexRiscvConfig(
-//        plugins = List(
-//          new MmuPlugin(
-//            ioRange = x => x(31 downto 28) === 0xF
-//          ),
-//          //Uncomment the whole IBusSimplePlugin and comment IBusCachedPlugin if you want uncached iBus config
-//          //        new IBusSimplePlugin(
-//          //          resetVector = 0x80000000l,
-//          //          cmdForkOnSecondStage = false,
-//          //          cmdForkPersistence = false,
-//          //          prediction = DYNAMIC_TARGET,
-//          //          historyRamSizeLog2 = 10,
-//          //          catchAccessFault = true,
-//          //          compressedGen = true,
-//          //          busLatencyMin = 1,
-//          //          injectorStage = true,
-//          //          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
-//          //            portTlbSize = 4
-//          //          )
-//          //        ),
-//
-//          //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
-//          new IBusCachedPlugin(
-//            resetVector = 0x80000000l,
-//            compressedGen = false,
-//            prediction = STATIC,
-//            injectorStage = false,
-//            config = InstructionCacheConfig(
-//              cacheSize = 4096*2,
-//              bytePerLine = 64,
-//              wayCount = 2,
-//              addressWidth = 32,
-//              cpuDataWidth = 32,
-//              memDataWidth = 128,
-//              catchIllegalAccess = true,
-//              catchAccessFault = true,
-//              asyncTagMemory = false,
-//              twoCycleRam = true,
-//              twoCycleCache = true,
-//              reducedBankWidth = true
-//              //          )
-//            ),
-//            memoryTranslatorPortConfig = MmuPortConfig(
-//              portTlbSize = 4,
-//              latency = 1,
-//              earlyRequireMmuLockup = true,
-//              earlyCacheHits = true
-//            )
-//          ),
-//          //          ).newTightlyCoupledPort(TightlyCoupledPortParameter("iBusTc", a => a(30 downto 28) === 0x0 && a(5))),
-//          //        new DBusSimplePlugin(
-//          //          catchAddressMisaligned = true,
-//          //          catchAccessFault = true,
-//          //          earlyInjection = false,
-//          //          withLrSc = true,
-//          //          memoryTranslatorPortConfig = withMmu generate MmuPortConfig(
-//          //            portTlbSize = 4
-//          //          )
-//          //        ),
-//          new DBusCachedPlugin(
-//            dBusCmdMasterPipe = true,
-//            dBusCmdSlavePipe = true,
-//            dBusRspSlavePipe = true,
-//            config = new DataCacheConfig(
-//              cacheSize         = 4096*1,
-//              bytePerLine       = 64,
-//              wayCount          = 1,
-//              addressWidth      = 32,
-//              cpuDataWidth      = 32,
-//              memDataWidth      = 128,
-//              catchAccessError  = true,
-//              catchIllegal      = true,
-//              catchUnaligned    = true,
-//              withLrSc = true,
-//              withAmo = true,
-//              withExclusive = true,
-//              withInvalidate = true,
-//              pendingMax = 32
-//              //          )
-//            ),
-//            memoryTranslatorPortConfig = MmuPortConfig(
-//              portTlbSize = 4,
-//              latency = 1,
-//              earlyRequireMmuLockup = true,
-//              earlyCacheHits = true
-//            )
-//          ),
-//
-//          //          new MemoryTranslatorPlugin(
-//          //            tlbSize = 32,
-//          //            virtualRange = _(31 downto 28) === 0xC,
-//          //            ioRange      = _(31 downto 28) === 0xF
-//          //          ),
-//
-//          new DecoderSimplePlugin(
-//            catchIllegalInstruction = true
-//          ),
-//          new RegFilePlugin(
-//            regFileReadyKind = plugin.ASYNC,
-//            zeroBoot = true
-//          ),
-//          new IntAluPlugin,
-//          new SrcPlugin(
-//            separatedAddSub = false
-//          ),
-//          new FullBarrelShifterPlugin(earlyInjection = false),
-//          //        new LightShifterPlugin,
-//          new HazardSimplePlugin(
-//            bypassExecute           = true,
-//            bypassMemory            = true,
-//            bypassWriteBack         = true,
-//            bypassWriteBackBuffer   = true,
-//            pessimisticUseSrc       = false,
-//            pessimisticWriteRegFile = false,
-//            pessimisticAddressMatch = false
-//          ),
-//          //        new HazardSimplePlugin(false, true, false, true),
-//          //        new HazardSimplePlugin(false, false, false, false),
-//          new MulPlugin,
-//          new MulDivIterativePlugin(
-//            genMul = false,
-//            genDiv = true,
-//            mulUnrollFactor = 32,
-//            divUnrollFactor = 1
-//          ),
-//          //          new DivPlugin,
-//          new CsrPlugin(CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = false, misaExtensionsInit = Riscv.misaToInt("imas"))),
-//          //          new CsrPlugin(//CsrPluginConfig.all2(0x80000020l).copy(ebreakGen = true)/*
-//          //             CsrPluginConfig(
-//          //            catchIllegalAccess = false,
-//          //            mvendorid      = null,
-//          //            marchid        = null,
-//          //            mimpid         = null,
-//          //            mhartid        = null,
-//          //            misaExtensionsInit = 0,
-//          //            misaAccess     = CsrAccess.READ_ONLY,
-//          //            mtvecAccess    = CsrAccess.WRITE_ONLY,
-//          //            mtvecInit      = 0x80000020l,
-//          //            mepcAccess     = CsrAccess.READ_WRITE,
-//          //            mscratchGen    = true,
-//          //            mcauseAccess   = CsrAccess.READ_ONLY,
-//          //            mbadaddrAccess = CsrAccess.READ_ONLY,
-//          //            mcycleAccess   = CsrAccess.NONE,
-//          //            minstretAccess = CsrAccess.NONE,
-//          //            ecallGen       = true,
-//          //            ebreakGen      = true,
-//          //            wfiGenAsWait   = false,
-//          //            wfiGenAsNop    = true,
-//          //            ucycleAccess   = CsrAccess.NONE
-//          //          )),
-//          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
-//          new BranchPlugin(
-//            earlyBranch = false,
-//            catchAddressMisaligned = true,
-//            fenceiGenAsAJump = false
-//          ),
-//          new YamlPlugin("cpu0.yaml")
-//        )
-//      )
-//      config
-//    }
-
-
-//    import spinal.core.sim._
-//    SimConfig.withConfig(SpinalConfig(mergeAsyncProcess = false, anonymSignalPrefix = "zz_")).allOptimisation.compile(new VexRiscv(configFull)).doSimUntilVoid{ dut =>
-//      dut.clockDomain.forkStimulus(10)
-//      dut.clockDomain.forkSimSpeedPrinter(4)
-//      var iBus : InstructionCacheMemBus = null
-//
-//      dut.plugins.foreach{
-//        case plugin: IBusCachedPlugin => iBus = plugin.iBus
-//        case _ =>
-//      }
-//      dut.clockDomain.onSamplings{
-////        iBus.cmd.ready.randomize()
-//        iBus.rsp.data #= 0x13
-//      }
-//    }
-
     SpinalConfig().generateVerilog {
-// make clean run REDO=10 CSR=no MMU=no  COREMARK=no RVF=yes REDO=1 TRACE=yes
-      val config = GenFull.config
+// make clean all REDO=10 CSR=no MMU=no  COREMARK=no RVF=no REDO=1 DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 DEBUG=ye TRACE=ye
+      val config = VexRiscvConfig(
+        plugins = List(
+          new IBusCachedPlugin(
+            prediction = DYNAMIC,
+            config = InstructionCacheConfig(
+              cacheSize = 4096,
+              bytePerLine =32,
+              wayCount = 1,
+              addressWidth = 32,
+              cpuDataWidth = 32,
+              memDataWidth = 32,
+              catchIllegalAccess = true,
+              catchAccessFault = true,
+              asyncTagMemory = false,
+              twoCycleRam = true,
+              twoCycleCache = true
+            ),
+            memoryTranslatorPortConfig = MmuPortConfig(
+              portTlbSize = 4
+            )
+          ),
+          new DBusCachedPlugin(
+            config = new DataCacheConfig(
+              cacheSize         = 4096,
+              bytePerLine       = 32,
+              wayCount          = 1,
+              addressWidth      = 32,
+              rfDataWidth       = 32,
+              cpuDataWidth      = 64,
+              memDataWidth      = 64,
+              catchAccessError  = true,
+              catchIllegal      = true,
+              catchUnaligned    = true
+            ),
+            memoryTranslatorPortConfig = MmuPortConfig(
+              portTlbSize = 6
+            )
+          ),
+          new MmuPlugin(
+            virtualRange = _(31 downto 28) === 0xC,
+            ioRange      = _(31 downto 28) === 0xF
+          ),
+          new DecoderSimplePlugin(
+            catchIllegalInstruction = true
+          ),
+          new RegFilePlugin(
+            regFileReadyKind = plugin.SYNC,
+            zeroBoot = false
+          ),
+          new IntAluPlugin,
+          new SrcPlugin(
+            separatedAddSub = false,
+            executeInsertion = true
+          ),
+          new FullBarrelShifterPlugin,
+          new HazardSimplePlugin(
+            bypassExecute           = true,
+            bypassMemory            = true,
+            bypassWriteBack         = true,
+            bypassWriteBackBuffer   = true,
+            pessimisticUseSrc       = false,
+            pessimisticWriteRegFile = false,
+            pessimisticAddressMatch = false
+          ),
+          new MulPlugin,
+          new DivPlugin,
+          new CsrPlugin(CsrPluginConfig.small(0x80000020l)),
+          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
+          new BranchPlugin(
+            earlyBranch = false,
+            catchAddressMisaligned = true
+          ),
+          new YamlPlugin("cpu0.yaml")
+        )
+      )
       config.plugins += new FpuPlugin(
         externalFpu = false,
         p = FpuParameter(
