@@ -159,6 +159,7 @@ object VexRiscvSmpClusterGen {
                      iCacheWays : Int = 2,
                      dCacheWays : Int = 2,
                      iBusRelax : Boolean = false,
+                     injectorStage : Boolean = false,
                      earlyBranch : Boolean = false,
                      dBusCmdMasterPipe : Boolean = false,
                      withMmu : Boolean = true,
@@ -181,7 +182,7 @@ object VexRiscvSmpClusterGen {
           prediction = vexriscv.plugin.NONE,
           historyRamSizeLog2 = 9,
           relaxPredictorAddress = true,
-          injectorStage = false,
+          injectorStage = injectorStage,
           relaxedPcCalculation = iBusRelax,
           config = InstructionCacheConfig(
             cacheSize = iCacheSize,
