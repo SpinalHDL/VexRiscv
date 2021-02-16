@@ -489,7 +489,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
         cmdCtx.payload := aggregationCounter
         halt setWhen(!cmdCtx.ready)
 
-        val syncCtx = cmdCtx.queue(syncPendingMax)
+        val syncCtx = cmdCtx.queue(syncPendingMax).s2mPipe().m2sPipe() //Assume latency of sync is at least 3 cycles
         syncCtx.ready := bus.sync.fire
 
         sync.arbitrationFrom(bus.sync)
