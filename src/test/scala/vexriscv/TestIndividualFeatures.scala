@@ -173,19 +173,26 @@ class MulDivDimension extends VexRiscvDimension("MulDiv") {
     } :: l
 
 
-    if(!noMemory && !noWriteBack) l =
-      new VexRiscvPosition("MulDivFpga") {
-        override def testParam = "MUL=yes DIV=yes"
-        override def applyOn(config: VexRiscvConfig): Unit = {
-          config.plugins += new MulPlugin
-          config.plugins += new MulDivIterativePlugin(
-            genMul = false,
-            genDiv = true,
-            mulUnrollFactor = 32,
-            divUnrollFactor = 1
-          )
-        }
-      } :: l
+    if(!noMemory && !noWriteBack) {
+      val inputBuffer = r.nextBoolean()
+      val outputBuffer = r.nextBoolean()
+      l = new VexRiscvPosition(s"MulDivFpga$inputBuffer$outputBuffer") {
+          override def testParam = "MUL=yes DIV=yes"
+
+          override def applyOn(config: VexRiscvConfig): Unit = {
+            config.plugins += new MulPlugin(
+              inputBuffer = inputBuffer,
+              outputBuffer = outputBuffer
+            )
+            config.plugins += new MulDivIterativePlugin(
+              genMul = false,
+              genDiv = true,
+              mulUnrollFactor = 32,
+              divUnrollFactor = 1
+            )
+          }
+        } :: l
+    }
 
     random(r, l)
   }
