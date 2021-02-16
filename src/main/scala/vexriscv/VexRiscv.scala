@@ -29,6 +29,11 @@ case class VexRiscvConfig(){
       case None => None
     }
   }
+  def get[T](clazz: Class[T]): T = {
+    plugins.find(_.getClass == clazz) match {
+      case Some(x) => x.asInstanceOf[T]
+    }
+  }
 
   //Default Stageables
   object IS_RVC extends Stageable(Bool)
