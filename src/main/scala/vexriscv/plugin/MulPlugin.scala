@@ -61,10 +61,9 @@ class MulPlugin(var inputBuffer : Boolean = false,
         when(arbitration.isValid && input(IS_MUL) && counter =/= delay){
           arbitration.haltItself := True
         }
-        when(!arbitration.isStuckByOthers){
-          counter := counter + 1
-        }
-        when(!arbitration.isStuck){
+
+        counter := counter + 1
+        when(!arbitration.isStuck || arbitration.isStuckByOthers){
           counter := 0
         }
       }
