@@ -467,7 +467,6 @@ class DBusDimension extends VexRiscvDimension("DBus") {
               bytePerLine = bytePerLine,
               wayCount = wayCount,
               addressWidth = 32,
-              rfDataWidth = 32,
               cpuDataWidth = cpuDataWidth, //Not tested
               memDataWidth = memDataWidth,
               catchAccessError = catchAll,

@@ -3611,6 +3611,20 @@ string riscvTestFloat[] = {
 };
 
 
+string riscvTestDouble[] = {
+    "rv32ud-p-fadd",
+    "rv32ud-p-fcvt",
+    "rv32ud-p-fmadd",
+    "rv32ud-p-recoding",
+    "rv32ud-p-fclass",
+    "rv32ud-p-fcvt_w",
+    "rv32ud-p-fmin",
+    "rv32ud-p-fcmp",
+    "rv32ud-p-fdiv",
+    "rv32ud-p-ldst"
+};
+
+
 
 
 string riscvTestMul[] = {
@@ -3854,6 +3868,11 @@ int main(int argc, char **argv, char **env) {
 
     #ifdef RVF
     for(const string &name : riscvTestFloat){
+        redo(REDO,RiscvTest(name).bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
+    }
+    #endif
+    #ifdef RVD
+    for(const string &name : riscvTestDouble){
         redo(REDO,RiscvTest(name).bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
     }
     #endif

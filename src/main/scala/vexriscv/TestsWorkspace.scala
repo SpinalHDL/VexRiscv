@@ -61,7 +61,6 @@ object TestsWorkspace {
               bytePerLine       = 32,
               wayCount          = 1,
               addressWidth      = 32,
-              rfDataWidth       = 32,
               cpuDataWidth      = 64,
               memDataWidth      = 64,
               catchAccessError  = true,
@@ -112,7 +111,7 @@ object TestsWorkspace {
       config.plugins += new FpuPlugin(
         externalFpu = false,
         p = FpuParameter(
-          withDouble = false
+          withDouble = true
         )
       )
       val toplevel = new VexRiscv(config)

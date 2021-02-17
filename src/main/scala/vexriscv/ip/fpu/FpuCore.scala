@@ -1393,6 +1393,12 @@ object FpuSynthesisBench extends App{
     })
   }
 
+//Fpu_32 ->
+//Artix 7 -> 46 Mhz 1786 LUT 628 FF
+//Artix 7 -> 47 Mhz 1901 LUT 628 FF
+//Fpu_64 ->
+//Artix 7 -> 37 Mhz 3407 LUT 1006 FF
+//Artix 7 -> 36 Mhz 3564 LUT 1006 FF
 
   val rtls = ArrayBuffer[Rtl]()
   rtls += new Fpu(

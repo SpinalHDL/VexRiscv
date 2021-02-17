@@ -119,10 +119,10 @@ class FpuPlugin(externalFpu : Boolean = false,
         FMUL_D    -> (mul     :+ f64 :+ arg(0)),
         FDIV_D    -> (div     :+ f64 ),
         FSQRT_D   -> (sqrt    :+ f64 ),
-        FLW       -> (fl      :+ f64 ),
-        FSW       -> (fs      :+ f64 ),
-        FCVT_S_WU -> (fcvtI2f :+ f64 :+ arg(0)),
-        FCVT_S_W  -> (fcvtI2f :+ f64 :+ arg(1)),
+        FLD       -> (fl      :+ f64 ),
+        FSD       -> (fs      :+ f64 ),
+        FCVT_D_WU -> (fcvtI2f :+ f64 :+ arg(0)),
+        FCVT_D_W  -> (fcvtI2f :+ f64 :+ arg(1)),
         FCVT_WU_D -> (fcvtF2i :+ f64 :+ arg(0)),
         FCVT_W_D  -> (fcvtF2i :+ f64 :+ arg(1)),
         FCLASS_D  -> (fclass  :+ f64 ),
@@ -233,12 +233,15 @@ class FpuPlugin(externalFpu : Boolean = false,
       val dBusEncoding =  pipeline.service(classOf[DBusEncodingService])
       val isRsp = input(FPU_FORKED) && input(FPU_RSP)
       val isCommit = input(FPU_FORKED) && input(FPU_COMMIT)
-
+      val storeFormated = CombInit(port.rsp.value)
+      if(p.withDouble) when(!input(INSTRUCTION)(12)){
+        storeFormated(32, 32 bits) := port.rsp.value(0, 32 bits)
+      }
       //Manage $store and port.rsp
       port.rsp.ready := False
       when(isRsp){
         when(arbitration.isValid) {
-          dBusEncoding.bypassStore(port.rsp.value)
+          dBusEncoding.bypassStore(storeFormated)
           output(REGFILE_WRITE_DATA) := port.rsp.value(31 downto 0)
         }
         when(!port.rsp.valid){

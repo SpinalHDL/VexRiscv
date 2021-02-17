@@ -1507,55 +1507,55 @@ class FpuTest extends FunSuite{
 }
 
 
-object Clib {
-  val java_home = System.getProperty("java.home")
-  assert(java_home != "" && java_home != null, "JAVA_HOME need to be set")
-  val jdk = java_home.replace("/jre","").replace("\\jre","")
-  val jdkIncludes = jdk + "/include"
-  val flags   = List("-fPIC", "-m64", "-shared", "-Wno-attributes") //-Wl,--whole-archive
-  val os = new File("/media/data/open/SaxonSoc/berkeley-softfloat-3/build/Linux-x86_64-GCC").listFiles().map(_.getAbsolutePath).filter(_.toString.endsWith(".o"))
-  val cmd = s"gcc -I/media/data/open/SaxonSoc/berkeley-softfloat-3/source/include -I$jdkIncludes  -I$jdkIncludes/linux ${flags.mkString(" ")} -o src/test/cpp/fpu/math/fpu_math.so src/test/cpp/fpu/math/fpu_math.c src/test/cpp/fpu/math/softfloat.a" // src/test/cpp/fpu/math/softfloat.a
-  DoCmd.doCmd(cmd)
-  val math = new FpuMath
-}
-// cd /media/data/open/SaxonSoc/testFloatBuild/berkeley-softfloat-3/build/Linux-x86_64-GCC
-// make clean && SPECIALIZE_TYPE=RISCV make -j$(nproc) && cp softfloat.a /media/data/open/SaxonSoc/artyA7SmpUpdate/SaxonSoc/ext/VexRiscv/src/test/cpp/fpu/math
-object FpuCompileSo extends App{
-
-//  val b2f = lang.Float.intBitsToFloat(_)
-//  for(e <- FpuRoundMode.elements) {
-//    println(e)
-//    for (i <- -2 until 50) println(i + " => " + Clib.math.addF32(b2f(0x7f000000), b2f(0x7f000000 + i), e.position))
-//    println("")
-//  }
-  //1 did not equal 3 Flag missmatch dut=1 ref=3 ## mul 0.9994812 -1.1754988E-38 -1.174889E-38 RMM
-  //  println(Clib.math.mulF32(0.9994812f, -1.1754988E-38f, FpuRoundMode.RMM.position))
-//  miaou ffffffff 7fffffe0 7f
-//  miaou 0 3ffffff0 70 = 0
-
-
-    println(Clib.math.mulF32( 1.1753509E-38f, 1.0001221f, FpuRoundMode.RUP.position))
-    println(Clib.math.mulF32( 1.1754945E-38f, 0.9999998f, FpuRoundMode.RUP.position))
-//  testBinaryOp(mul, 1.1753509E-38f, 1.0001221f, 1.17549435E-38f ,1, FpuRoundMode.RUP,"mul")
-//  testBinaryOp(mul, 1.1754945E-38f, 0.9999998f, 1.17549435E-38f, 3, FpuRoundMode.RUP, "mul")
-//  miaou ffffffff 7fffffe0 7f
-//  miaou 0 3ffffff0 70 = 0
-//  miaou ffffffff 7fffff7e 7f
-//  miaou 1 3fffffbf 3f = 1
-
-//  println(Clib.math.mulF32( 1.1753509E-38f, 1.0001221f, FpuRoundMode.RUP.position))
-//  println(Clib.math.mulF32( 1.469368E-39f, 7.9999995f, FpuRoundMode.RUP.position))
-//  println(Clib.math.mulF32( 1.40129846432e-45f, 7.9999995f, FpuRoundMode.RUP.position))
-//  println(Clib.math.mulF32( 2.93873587706e-39f, 7.9999995f, FpuRoundMode.RUP.position))
-//  println(Clib.math.mulF32( 1f, 7.9999995f, FpuRoundMode.RUP.position))
-
-
-//  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RNE.position))
-//  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RTZ.position))
-//  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RDN.position))
-//  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RUP.position))
-}
-
+//object Clib {
+//  val java_home = System.getProperty("java.home")
+//  assert(java_home != "" && java_home != null, "JAVA_HOME need to be set")
+//  val jdk = java_home.replace("/jre","").replace("\\jre","")
+//  val jdkIncludes = jdk + "/include"
+//  val flags   = List("-fPIC", "-m64", "-shared", "-Wno-attributes") //-Wl,--whole-archive
+//  val os = new File("/media/data/open/SaxonSoc/berkeley-softfloat-3/build/Linux-x86_64-GCC").listFiles().map(_.getAbsolutePath).filter(_.toString.endsWith(".o"))
+//  val cmd = s"gcc -I/media/data/open/SaxonSoc/berkeley-softfloat-3/source/include -I$jdkIncludes  -I$jdkIncludes/linux ${flags.mkString(" ")} -o src/test/cpp/fpu/math/fpu_math.so src/test/cpp/fpu/math/fpu_math.c src/test/cpp/fpu/math/softfloat.a" // src/test/cpp/fpu/math/softfloat.a
+//  DoCmd.doCmd(cmd)
+//  val math = new FpuMath
+//}
+//// cd /media/data/open/SaxonSoc/testFloatBuild/berkeley-softfloat-3/build/Linux-x86_64-GCC
+//// make clean && SPECIALIZE_TYPE=RISCV make -j$(nproc) && cp softfloat.a /media/data/open/SaxonSoc/artyA7SmpUpdate/SaxonSoc/ext/VexRiscv/src/test/cpp/fpu/math
+//object FpuCompileSo extends App{
+//
+////  val b2f = lang.Float.intBitsToFloat(_)
+////  for(e <- FpuRoundMode.elements) {
+////    println(e)
+////    for (i <- -2 until 50) println(i + " => " + Clib.math.addF32(b2f(0x7f000000), b2f(0x7f000000 + i), e.position))
+////    println("")
+////  }
+//  //1 did not equal 3 Flag missmatch dut=1 ref=3 ## mul 0.9994812 -1.1754988E-38 -1.174889E-38 RMM
+//  //  println(Clib.math.mulF32(0.9994812f, -1.1754988E-38f, FpuRoundMode.RMM.position))
+////  miaou ffffffff 7fffffe0 7f
+////  miaou 0 3ffffff0 70 = 0
+//
+//
+//    println(Clib.math.mulF32( 1.1753509E-38f, 1.0001221f, FpuRoundMode.RUP.position))
+//    println(Clib.math.mulF32( 1.1754945E-38f, 0.9999998f, FpuRoundMode.RUP.position))
+////  testBinaryOp(mul, 1.1753509E-38f, 1.0001221f, 1.17549435E-38f ,1, FpuRoundMode.RUP,"mul")
+////  testBinaryOp(mul, 1.1754945E-38f, 0.9999998f, 1.17549435E-38f, 3, FpuRoundMode.RUP, "mul")
+////  miaou ffffffff 7fffffe0 7f
+////  miaou 0 3ffffff0 70 = 0
+////  miaou ffffffff 7fffff7e 7f
+////  miaou 1 3fffffbf 3f = 1
+//
+////  println(Clib.math.mulF32( 1.1753509E-38f, 1.0001221f, FpuRoundMode.RUP.position))
+////  println(Clib.math.mulF32( 1.469368E-39f, 7.9999995f, FpuRoundMode.RUP.position))
+////  println(Clib.math.mulF32( 1.40129846432e-45f, 7.9999995f, FpuRoundMode.RUP.position))
+////  println(Clib.math.mulF32( 2.93873587706e-39f, 7.9999995f, FpuRoundMode.RUP.position))
+////  println(Clib.math.mulF32( 1f, 7.9999995f, FpuRoundMode.RUP.position))
+//
+//
+////  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RNE.position))
+////  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RTZ.position))
+////  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RDN.position))
+////  println(Clib.math.addF32(1.00000011921f, 4.0f, FpuRoundMode.RUP.position))
+//}
+//
 class ProcessStream(cmd : String){
   import sys.process._
 
@@ -1575,19 +1575,19 @@ class ProcessStream(cmd : String){
     buf.dequeue()()
   }
 }
-
-object TestSoftFloat extends App{
-  val p = new ProcessStream("testfloat_gen -forever f32_add")
-  Thread.sleep(1000)
-  println(p.next)
-  println(p.next)
-  println(p.next)
-  println(p.next)
-  println(p.next)
-  Thread.sleep(1000)
-  println(p.next)
-  while(true) {
-    Thread.sleep(10)
-    println(p.next)
-  }
-}
+//
+//object TestSoftFloat extends App{
+//  val p = new ProcessStream("testfloat_gen -forever f32_add")
+//  Thread.sleep(1000)
+//  println(p.next)
+//  println(p.next)
+//  println(p.next)
+//  println(p.next)
+//  println(p.next)
+//  Thread.sleep(1000)
+//  println(p.next)
+//  while(true) {
+//    Thread.sleep(10)
+//    println(p.next)
+//  }
+//}

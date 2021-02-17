@@ -322,12 +322,10 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     rsp.data  := mm.readData
     rsp.error := mm.response =/= AvalonMM.Response.OKAY
 
-    assert(p.cpuDataWidth == p.rfDataWidth)
     mm
   }
 
   def toWishbone(): Wishbone = {
-    assert(p.cpuDataWidth == p.rfDataWidth)
     val wishboneConfig = p.getWishboneConfig()
     val bus = Wishbone(wishboneConfig)
     val counter = Reg(UInt(log2Up(p.burstSize) bits)) init(0)
@@ -373,7 +371,6 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
   def toPipelinedMemoryBus(): PipelinedMemoryBus = {
     val bus = PipelinedMemoryBus(32,32)
-    assert(p.cpuDataWidth == p.rfDataWidth)
 
     val counter = Reg(UInt(log2Up(p.burstSize) bits)) init(0)
     when(bus.cmd.fire){ counter := counter + 1 }

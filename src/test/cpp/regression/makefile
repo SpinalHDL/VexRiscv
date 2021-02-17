@@ -14,6 +14,8 @@ TRACE_SPORADIC?=no
 ISA_TEST?=yes
 MUL?=yes
 DIV?=yes
+RVF?=no
+RVD?=no
 CSR?=yes
 CSR_SKIP_TEST?=no
 EBREAK?=no
@@ -268,6 +270,10 @@ endif
 
 ifeq ($(RVF),yes)
 	ADDCFLAGS += -CFLAGS -DRVF
+endif
+
+ifeq ($(RVD),yes)
+	ADDCFLAGS += -CFLAGS -DRVD
 endif
 
 ifeq ($(DIV),yes)

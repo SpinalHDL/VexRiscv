@@ -153,6 +153,7 @@ object VexRiscvSmpClusterGen {
                      resetVector : Long = 0x80000000l,
                      iBusWidth : Int = 128,
                      dBusWidth : Int = 64,
+                     loadStoreWidth : Int = 32,
                      coherency : Boolean = true,
                      iCacheSize : Int = 8192,
                      dCacheSize : Int = 8192,
@@ -213,7 +214,7 @@ object VexRiscvSmpClusterGen {
             bytePerLine       = 64,
             wayCount          = dCacheWays,
             addressWidth      = 32,
-            cpuDataWidth      = 32,
+            cpuDataWidth      = loadStoreWidth,
             memDataWidth      = dBusWidth,
             catchAccessError  = true,
             catchIllegal      = true,
@@ -222,8 +223,7 @@ object VexRiscvSmpClusterGen {
             withAmo = true,
             withExclusive = coherency,
             withInvalidate = coherency,
-            aggregationWidth = if(dBusWidth == 32) 0 else log2Up(dBusWidth/8)
-            //          )
+            withWriteAggregation = dBusWidth > 32
           ),
           memoryTranslatorPortConfig = MmuPortConfig(
             portTlbSize = 4,
