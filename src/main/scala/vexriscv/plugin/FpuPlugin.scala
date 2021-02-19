@@ -1,10 +1,13 @@
 package vexriscv.plugin
 
 import spinal.core._
+import spinal.core.internals.{BoolLiteral, Literal}
 import spinal.lib._
 import vexriscv._
 import vexriscv.Riscv._
 import vexriscv.ip.fpu._
+
+import scala.collection.mutable.ArrayBuffer
 
 class FpuPlugin(externalFpu : Boolean = false,
                 p : FpuParameter) extends Plugin[VexRiscv]{
@@ -150,6 +153,68 @@ class FpuPlugin(externalFpu : Boolean = false,
       dBusEncoding.addLoadWordEncoding(FLD)
       dBusEncoding.addStoreWordEncoding(FSD)
     }
+
+    exposeEncoding()
+  }
+
+  def exposeEncoding(): Unit ={
+    val d = pipeline.service(classOf[DecoderSimplePlugin])
+    val commits, rsps, rs1, commitsN, rspsN, rs1N = ArrayBuffer[MaskedLiteral]()
+    def filter(encoding : Int, list : ArrayBuffer[MaskedLiteral]) = list.filter(e => (e.value & 0x7F) == encoding)
+    def filterNotLs(list : ArrayBuffer[MaskedLiteral]) = list.filter(e => !List(0x7, 0x27).contains(e.value & 0x7F))
+
+    for((key, t) <- d.encodings; if(t.map(_._1).contains(FPU_ENABLE));
+        (s, v) <- t){
+      def isSet =  v.head.source.asInstanceOf[Literal].getValue == 1
+      if(s == FPU_COMMIT) (if(isSet)commits += key else  commitsN += key)
+      if(s == FPU_RSP) (if(isSet)rsps += key else rspsN += key)
+      if(s == pipeline.config.RS1_USE) (if(isSet)rs1 += key else rs1N += key)
+    }
+
+//    println("COMMIT => ")
+//    filter(0x53, commits).foreach(println)
+//    println("COMMITN => ")
+//    filter(0x53, commitsN).foreach(println)
+//    println("RSP => ")
+//    filter(0x53, rsps).foreach(println)
+//    println("RSPN => ")
+//    filter(0x53, rspsN).foreach(println)
+
+    val commitLut, rspLut, rs1Lut = Array.fill(32)(false)
+    filter(0x53,commits).foreach{m =>
+      val idx = (m.value >> 27).toInt
+      commitLut(idx) = true
+    }
+    filter(0x53,commitsN).foreach{m =>
+      val idx = (m.value >> 27).toInt
+      assert(!commitLut(idx))
+    }
+    println("COMMIT => ")
+    println(commitLut.mkString(","))
+
+
+    filter(0x53,rsps).foreach{m =>
+      val idx = (m.value >> 27).toInt
+      rspLut(idx) = true
+    }
+    filter(0x53,rspsN).foreach{m =>
+      val idx = (m.value >> 27).toInt
+      assert(!rspLut(idx))
+    }
+    println("RSP => ")
+    println(rspLut.mkString(","))
+
+    filter(0x53,rs1).foreach{m =>
+      val idx = (m.value >> 27).toInt
+      rs1Lut(idx) = true
+    }
+    filter(0x53,rs1N).foreach{m =>
+      val idx = (m.value >> 27).toInt
+      assert(!rs1Lut(idx))
+    }
+    println("rs1 => ")
+    println(rs1Lut.mkString(","))
+
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -228,7 +293,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       insert(FPU_COMMIT_LOAD) := input(FPU_OPCODE) === FpuOpcode.LOAD
     }
 
-    writeBack plug new Area{
+    writeBack plug new Area{ //WARNING IF STAGE CHANGE, update the regression rsp capture filter for the golden model (top->VexRiscv->lastStageIsFiring)
       import writeBack._
 
       val dBusEncoding =  pipeline.service(classOf[DBusEncodingService])
@@ -257,7 +322,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       }
 
       // Manage $load
-      val commit = Stream(FpuCommit(p))
+      val commit = Stream(FpuCommit(p)).addTag(Verilator.public)
       commit.valid := isCommit && !arbitration.isStuck
       commit.value(31 downto 0) := (input(FPU_COMMIT_LOAD) ? dBusEncoding.loadData()(31 downto 0)  | input(RS1))
       if(p.withDouble) commit.value(63 downto 32) :=  dBusEncoding.loadData()(63 downto 32)

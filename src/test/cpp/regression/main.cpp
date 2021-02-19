@@ -236,13 +236,42 @@ class success : public std::exception { };
 #ifdef SUPERVISOR
 #define MSTATUS_READ_MASK 0xFFFFFFFF
 #else
-#define MSTATUS_READ_MASK 0x1888
+#define MSTATUS_READ_MASK 0x7888
 #endif
 
+#ifdef RVF
+#define STATUS_FS_MASK 0x6000
+#else
+#define STATUS_FS_MASK 0x0000
+#endif
+
+#define FFLAGS 0x1
+#define FRM    0x2
+#define FCSR   0x3
+
 #define u32 uint32_t
-#define u32 uint64_t
+#define u64 uint64_t
+
+class FpuRsp{
+public:
+	u32 flags;
+	u64 value;
+};
+
+class FpuCommit{
+public:
+	u64 value;
+};
+
+class FpuCompletion{
+public:
+	u32 flags;
+};
 
 
+bool fpuCommitLut[32] = {true,true,true,true,true,true,false,false,true,false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,false,false,true,false,false,false,true,false};
+bool fpuRspLut[32] = {false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,true,false,false,false,true,false,false,false,true,false,false,false};
+bool fpuRs1Lut[32] = {false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,true,false,false,false,true,false};
 class RiscvGolden {
 public:
 	int32_t pc, lastPc;
@@ -257,6 +286,9 @@ public:
     uint32_t medeleg;
 	uint32_t mideleg;
 
+    queue<FpuRsp> fpuRsp;
+    queue<FpuCommit> fpuCommit;
+    queue<FpuCompletion> fpuCompletion;
 
 	union status {
 		uint32_t raw;
@@ -272,7 +304,8 @@ public:
 			uint32_t spp : 1;
 			uint32_t _3 : 2;
 			uint32_t mpp : 2;
-			uint32_t _4 : 4;
+			uint32_t fs : 2;
+			uint32_t _4 : 2;
 			uint32_t mprv : 1;
 			uint32_t sum : 1;
 			uint32_t mxr : 1;
@@ -381,9 +414,18 @@ public:
 		};
 	};
 
+	union fcsr {
+		uint32_t raw;
+		struct __attribute__((packed)){
+			uint32_t flags : 5;
+			uint32_t frm : 3;
+		};
+	}fcsr;
+
 
 	bool lrscReserved;
 	uint32_t lrscReservedAddress;
+    u32 fpuCompletionTockens;
 
 	RiscvGolden() {
 		pc = 0x80000000;
@@ -391,7 +433,6 @@ public:
 		for (int i = 0; i < 32; i++)
 			regs[i] = 0;
 
-		status.raw = 0;
 		ie.raw = 0;
 		mtvec.raw = 0x80000020;
 		mcause.raw = 0;
@@ -401,6 +442,11 @@ public:
 		status.raw = 0;
 		status.mpp = 3;
 		status.spp = 1;
+		#ifdef RVF
+		status.fs = 1;
+		#endif
+		fcsr.flags = 0;
+		fcsr.frm = 0;
 		privilege = 3;
 		medeleg = 0;
 		mideleg = 0;
@@ -410,6 +456,7 @@ public:
 		stepCounter = 0;
 		sbadaddr = 42;
 		lrscReserved = false;
+		fpuCompletionTockens = 0;
 	}
 
 	virtual void rfWrite(int32_t address, int32_t data) {
@@ -429,8 +476,8 @@ public:
 	uint32_t mepc, sepc;
 
 	virtual bool iRead(int32_t address, uint32_t *data) = 0;
-	virtual bool dRead(int32_t address, int32_t size, uint32_t *data) = 0;
-	virtual void dWrite(int32_t address, int32_t size, uint32_t data) = 0;
+	virtual bool dRead(int32_t address, int32_t size, uint8_t *data) = 0;
+	virtual void dWrite(int32_t address, int32_t size, uint8_t *data) = 0;
 
 	enum AccessKind {READ,WRITE,EXECUTE,READ_WRITE};
 	virtual bool isMmuRegion(uint32_t v) = 0;
@@ -440,11 +487,11 @@ public:
 			*p = v;
 		} else {
 			Tlb tlb;
-			dRead((satp.ppn << 12) | ((v >> 22) << 2), 4, &tlb.raw);
+			dRead((satp.ppn << 12) | ((v >> 22) << 2), 4, (uint8_t*)&tlb.raw);
 			if(!tlb.v) return true;
 			bool superPage = true;
 			if(!tlb.x && !tlb.r && !tlb.w){
-				dRead((tlb.ppn << 12) | (((v >> 12) & 0x3FF) << 2), 4, &tlb.raw);
+				dRead((tlb.ppn << 12) | (((v >> 12) & 0x3FF) << 2), 4, (uint8_t*)&tlb.raw);
 				if(!tlb.v) return true;
 				superPage = false;
 			}
@@ -559,6 +606,13 @@ public:
 		case SEPC: *value = sepc; break;
 		case SSCRATCH: *value = sscratch; break;
 		case SATP: *value = satp.raw; break;
+
+		#ifdef RVF
+		case FCSR: *value = fcsr.raw; break;
+		case FRM: *value = fcsr.frm; break;
+		case FFLAGS: *value = fcsr.flags; break;
+		#endif
+
 		default: return true; break;
 		}
 		return false;
@@ -590,7 +644,7 @@ public:
 		case MEDELEG: medeleg = value & (~0x8); break;
 		case MIDELEG: mideleg = value; break;
 
-		case SSTATUS: maskedWrite(status.raw, value,0xC0133); break;
+		case SSTATUS: maskedWrite(status.raw, value,0xC0133 | STATUS_FS_MASK); break;
 		case SIP: maskedWrite(ipSoft, value,0x333); break;
 		case SIE: maskedWrite(ie.raw, value,0x333); break;
 		case STVEC: stvec.raw = value; break;
@@ -599,6 +653,13 @@ public:
 		case SEPC: sepc = value; break;
 		case SSCRATCH: sscratch = value; break;
 		case SATP: satp.raw = value; break;
+
+
+		#ifdef RVF
+		case FCSR: fcsr.raw = value & 0x7F; break;
+		case FRM: fcsr.frm = value; break;
+		case FFLAGS: fcsr.flags = value; break;
+		#endif
 
 		default: ilegalInstruction(); return true; break;
 		}
@@ -671,6 +732,13 @@ public:
 	virtual void step() {
 	    stepCounter++;
 	    livenessStep = 0;
+
+	    while(fpuCompletionTockens != 0 && !fpuCompletion.empty()){
+            FpuCompletion completion = fpuCompletion.front(); fpuCompletion.pop();
+            fcsr.flags |= completion.flags;
+            fpuCompletionTockens -= 1;
+        }
+
 		#define rd32 ((i >> 7) & 0x1F)
 		#define iBits(lo,  len) ((i >> lo) & ((1 << len)-1))
 		#define iBitsSigned(lo, len) int32_t(i) << (32-lo-len) >> (32-len)
@@ -683,6 +751,7 @@ public:
 		#define i32_sb_imm ((iBits(8, 4) << 1) + (iBits(25,6) << 5) + (iBits(7,1) << 11) + (iSign() << 12))
 		#define i32_csr iBits(20, 12)
 		#define i32_func3 iBits(12, 3)
+		#define i32_func7 iBits(25, 7)
 		#define i16_addi4spn_imm ((iBits(6, 1) << 2) + (iBits(5, 1) << 3) + (iBits(11, 2) << 4) + (iBits(7, 4) << 6))
 		#define i16_lw_imm ((iBits(6, 1) << 2) + (iBits(10, 3) << 3) + (iBits(5, 1) << 6))
 		#define i16_addr2 (iBits(2,3) + 8)
@@ -728,6 +797,95 @@ public:
 		if ((i & 0x3) == 0x3) {
 			//32 bit
 			switch (i & 0x7F) {
+			#ifdef RVF
+			case 0x43:// RVFD
+			case 0x47:
+			case 0x4B:
+			case 0x4F:
+			case 0x53: {
+			    u32 format = iBits(25,2);
+			    u32 opcode = iBits(27,5);
+			    bool withCommit = fpuCommitLut[opcode];
+			    bool withRsp = fpuRspLut[opcode];
+			    bool withRs1 = fpuRs1Lut[opcode];
+			    if((i & 0x7F) != 0x53) { // FMADD
+			        withCommit = true;
+			        withRsp = false;
+			    }
+			    #ifdef RVD
+			    if(format > 1) ilegalInstruction();
+			    #else
+			    if(format > 0) ilegalInstruction();
+			    #endif
+
+			    if(withCommit){
+			        FpuCommit commit = fpuCommit.front(); fpuCommit.pop();
+			        fpuCompletionTockens += 1;
+//			        cout << "withRs1 " << withRs1 << " " << opcode << endl;
+                    if(withRs1 && memcmp(&i32_rs1, &commit.value, 4)){
+                        cout << "FPU commit missmatch DUT=" << hex << commit.value << " REF=" << i32_rs1 << dec << endl;
+                        fail();
+                        return;
+                    }
+			    }
+			    if(withRsp){
+			        auto rsp = fpuRsp.front(); fpuRsp.pop();
+			        fcsr.flags |= rsp.flags;
+			        rfWrite(rd32, (u32)rsp.value);
+			    }
+                pcWrite(pc + 4);
+			} break;
+			case 0x07: { //Fpu load
+                uint32_t size = 1 << ((i >> 12) & 0x3);
+                if(size < 4) ilegalInstruction();
+                #ifdef RVD
+                if(size > 8) ilegalInstruction();
+                #else
+                if(format > 4) ilegalInstruction();
+                #endif
+                auto commit = fpuCommit.front();  fpuCommit.pop();
+                fpuCompletionTockens += 1;
+
+
+                uint64_t data = 0;
+                uint32_t address = i32_rs1 + i32_i_imm;
+                if(address & (size-1)){
+                    trap(0, 4, address);
+                } else {
+                    if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
+                    if(dRead(pAddr, size, (uint8_t*)&data)){
+                        trap(0, 5, address);
+                    } else {
+                        if(memcmp(&data, &commit.value, size)){
+                            cout << "FPU load missmatch DUT=" << hex << commit.value << " REF=" << data << dec << endl;
+                            fail();
+                        } else {
+                            pcWrite(pc + 4);
+                        }
+                    }
+                }
+			} break;
+			case 0x27: { //Fpu store
+                uint32_t size = 1 << ((i >> 12) & 0x3);
+                if(size < 4) ilegalInstruction();
+                #ifdef RVD
+                if(size > 8) ilegalInstruction();
+                #else
+                if(format > 4) ilegalInstruction();
+                #endif
+
+                auto rsp = fpuRsp.front(); fpuRsp.pop();
+                fcsr.flags |= rsp.flags;
+                uint32_t address = i32_rs1 + i32_s_imm;
+                if(address & (size-1)){
+                    trap(0, 6, address);
+                } else {
+                    if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
+                    dWrite(pAddr, size, (uint8_t*) &rsp.value);
+                    pcWrite(pc + 4);
+                }
+			} break;
+			#endif
 			case 0x37:rfWrite(rd32, i & 0xFFFFF000);pcWrite(pc + 4);break; // LUI
 			case 0x17:rfWrite(rd32, (i & 0xFFFFF000) + pc);pcWrite(pc + 4);break; //AUIPC
 			case 0x6F:rfWrite(rd32, pc + 4);pcWrite(pc + (iBits(21, 10) << 1) + (iBits(20, 1) << 11) + (iBits(12, 8) << 12) + (iSign() << 20));break; //JAL
@@ -754,7 +912,7 @@ public:
 					trap(0, 4, address);
 				} else {
 					if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
-					if(dRead(pAddr, size, &data)){
+					if(dRead(pAddr, size, (uint8_t*)&data)){
 					    trap(0, 5, address);
 					} else {
                         switch ((i >> 12) & 0x7) {
@@ -774,7 +932,7 @@ public:
 					trap(0, 6, address);
 				} else {
 					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
-					dWrite(pAddr, size, i32_rs2);
+					dWrite(pAddr, size, (uint8_t*)&i32_rs2);
 					pcWrite(pc + 4);
 				}
 			}break;
@@ -897,7 +1055,7 @@ public:
 							trap(0, 4, address);
 						} else {
 							if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
-							if(dRead(pAddr, 4, &data)){
+							if(dRead(pAddr, 4, (uint8_t*)&data)){
 							    trap(0, 5, address);
 							} else {
 								lrscReserved = true;
@@ -919,7 +1077,7 @@ public:
                             bool hit = lrscReserved;
                             #endif
 							if(hit){
-								dWrite(pAddr, 4, i32_rs2);
+								dWrite(pAddr, 4, (uint8_t*)&i32_rs2);
 							}
 							lrscReserved = false;
 							rfWrite(rd32, !hit);
@@ -941,7 +1099,7 @@ public:
 
                         uint32_t pAddr;
 						if(v2p(addr, &pAddr, READ_WRITE)){ trap(0, 15, addr); return; }
-                        if(dRead(pAddr, 4, (uint32_t*)&readValue)){
+                        if(dRead(pAddr, 4, (uint8_t*)&readValue)){
                         	trap(0, 15, addr); return;
                             return;
                         }
@@ -958,7 +1116,7 @@ public:
                         case 0x1C: writeValue = max((unsigned int)src, (unsigned int)readValue); break;
                         default: ilegalInstruction(); return; break;
                         }
-                        dWrite(pAddr, 4, writeValue);
+                        dWrite(pAddr, 4, (uint8_t*)&writeValue);
 						rfWrite(rd32, readValue);
 						pcWrite(pc + 4);
                         #endif
@@ -991,7 +1149,7 @@ public:
 					trap(0, 4, address);
 				} else {
 					if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
-					if(dRead(pAddr, 4, &data)) {
+					if(dRead(pAddr, 4, (uint8_t*)&data)) {
 					    trap(0, 5, address);
 					} else {
 					    rfWrite(i16_addr2, data); pcWrite(pc + 2);
@@ -1004,7 +1162,7 @@ public:
 					trap(0, 6, address);
 				} else {
 					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
-					dWrite(pAddr, 4, i16_rf2);
+					dWrite(pAddr, 4, (uint8_t*)&i16_rf2);
                     pcWrite(pc + 2);
 				}
 			}break;
@@ -1040,7 +1198,7 @@ public:
 					trap(0, 4, address);
 				} else {
 					if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
-				    if(dRead(pAddr, 4, &data)){
+				    if(dRead(pAddr, 4,(uint8_t*) &data)){
 					    trap(0, 5, address);
                     } else {
 					    rfWrite(rd32, data); pcWrite(pc + 2);
@@ -1070,7 +1228,7 @@ public:
 					trap(0,6, address);
 				} else {
 					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
-					dWrite(pAddr, 4, regs[iBits(2,5)]); pcWrite(pc + 2);
+					dWrite(pAddr, 4, (uint8_t*)&regs[iBits(2,5)]); pcWrite(pc + 2);
 				}
 			}break;
 			}
@@ -1178,8 +1336,8 @@ public:
     		return error;
         }
 
-        virtual bool dRead(int32_t address, int32_t size, uint32_t *data){
-            if(size < 1 || size > 4){
+        virtual bool dRead(int32_t address, int32_t size, uint8_t *data){
+            if(size < 1 || size > 8){
                 cout << "dRead size=" << size << endl;
                 fail();
             }
@@ -1195,28 +1353,28 @@ public:
 				}
 
                 for(int i = 0; i < size; i++){
-                    ((uint8_t*)data)[i] = t.data42[i];
+                    data[i] = t.data42[i];
                 }
 				periphRead.pop();
 				return t.error;
     		}else {
-            	mem.read(address, size, (uint8_t*)data);
+            	mem.read(address, size, data);
     		}
     		return false;
         }
-        virtual void dWrite(int32_t address, int32_t size, uint32_t data){
+        virtual void dWrite(int32_t address, int32_t size, uint8_t *data){
             if(address & (size-1) != 0)
             	cout << "Ref did a unaligned write" << endl;
 
     		if(!ws->isPerifRegion(address)){
-    			mem.write(address, size, (uint8_t*)&data);
+    			mem.write(address, size, data);
     		}
     		if(ws->isDBusCheckedRegion(address)){
 				MemWrite w;
 				w.address = address;
 				w.size = size;
                 for(int i = 0; i < size; i++){
-				    w.data42[i] = ((uint8_t*)&data)[i];
+				    w.data42[i] = data[i];
 				}
 				periphWritesGolden.push(w);
 				if(periphWritesGolden.size() > 10){
@@ -1566,6 +1724,37 @@ public:
                         }
                     }
 				#endif
+
+                #ifdef RVF
+                if(riscvRefEnable) {
+                    if(top->VexRiscv->writeBack_FpuPlugin_commit_valid && top->VexRiscv->writeBack_FpuPlugin_commit_ready && top->VexRiscv->writeBack_FpuPlugin_commit_payload_write){
+                        FpuCommit c;
+                        c.value = top->VexRiscv->writeBack_FpuPlugin_commit_payload_value;
+                        riscvRef.fpuCommit.push(c);
+                    }
+
+                    if(top->VexRiscv->FpuPlugin_port_rsp_valid && top->VexRiscv->FpuPlugin_port_rsp_ready && top->VexRiscv->lastStageIsFiring){
+                        FpuRsp c;
+                        c.value = top->VexRiscv->FpuPlugin_port_rsp_payload_value;
+                        c.flags = (top->VexRiscv->FpuPlugin_port_rsp_payload_NX << 0) |
+                                  (top->VexRiscv->FpuPlugin_port_rsp_payload_NV << 4);
+                        riscvRef.fpuRsp.push(c);
+                    }
+
+                    if(top->VexRiscv->FpuPlugin_port_completion_valid && top->VexRiscv->FpuPlugin_port_completion_payload_written){
+                        FpuCompletion c;
+                        c.flags = (top->VexRiscv->FpuPlugin_port_completion_payload_flags_NX << 0) |
+                                  (top->VexRiscv->FpuPlugin_port_completion_payload_flags_UF << 1) |
+                                  (top->VexRiscv->FpuPlugin_port_completion_payload_flags_OF << 2) |
+                                  (top->VexRiscv->FpuPlugin_port_completion_payload_flags_DZ << 3) |
+                                  (top->VexRiscv->FpuPlugin_port_completion_payload_flags_NV << 4);
+                        riscvRef.fpuCompletion.push(c);
+                    }
+                }
+                #endif
+
+
+
                 if(top->VexRiscv->lastStageIsFiring){
                    	if(riscvRefEnable) {
 //                        privilegeCounters[riscvRef.privilege]++;
@@ -3871,12 +4060,12 @@ int main(int argc, char **argv, char **env) {
 
     #ifdef RVF
     for(const string &name : riscvTestFloat){
-        redo(REDO,RiscvTest(name).bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
+        redo(REDO,RiscvTest(name).withRiscvRef()->bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
     }
     #endif
     #ifdef RVD
     for(const string &name : riscvTestDouble){
-        redo(REDO,RiscvTest(name).bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
+        redo(REDO,RiscvTest(name).withRiscvRef()->bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
     }
     #endif
     //return 0;
