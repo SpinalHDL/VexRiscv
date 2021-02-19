@@ -136,14 +136,8 @@ case class FpuFlags() extends Bundle{
 }
 
 case class FpuCompletion() extends Bundle{
-  val flag = FpuFlags()
-  val count = UInt(2 bits)
-
-  def stage() = {
-    val ret = FpuCompletion().setCompositeName(this, "stage", true)
-    ret := this
-    ret
-  }
+  val flags = FpuFlags()
+  val written = Bool() //Used for verification purposes
 }
 
 case class FpuCmd(p : FpuParameter) extends Bundle{
@@ -163,13 +157,14 @@ case class FpuCommit(p : FpuParameter) extends Bundle{
 
 case class FpuRsp(p : FpuParameter) extends Bundle{
   val value = p.storeLoadType() // IEEE754 store || Integer
+  val NV, NX = Bool()
 }
 
 case class FpuPort(p : FpuParameter) extends Bundle with IMasterSlave {
   val cmd = Stream(FpuCmd(p))
   val commit = Stream(FpuCommit(p))
   val rsp = Stream(FpuRsp(p))
-  val completion = FpuCompletion()
+  val completion = Flow(FpuCompletion())
 
   override def asMaster(): Unit = {
     master(cmd, commit)

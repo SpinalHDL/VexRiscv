@@ -140,7 +140,7 @@ class FpuPlugin(externalFpu : Boolean = false,
     }
     //TODO FMV_X_X + doubles
 
-    port = FpuPort(p)
+    port = FpuPort(p).addTag(Verilator.public)
     if(externalFpu) master(port)
 
     val dBusEncoding =  pipeline.service(classOf[DBusEncodingService])
@@ -168,16 +168,16 @@ class FpuPlugin(externalFpu : Boolean = false,
 
     val csr = pipeline plug new Area{
       val pendings = Reg(UInt(5 bits)) init(0)
-      pendings := pendings + U(port.cmd.fire) - port.completion.count
+      pendings := pendings + U(port.cmd.fire) - U(port.completion.fire) - U(port.rsp.fire)
 
       val hasPending = pendings =/= 0
 
       val flags = Reg(FpuFlags())
-      flags.NV init(False) setWhen(port.completion.flag.NV)
-      flags.DZ init(False) setWhen(port.completion.flag.DZ)
-      flags.OF init(False) setWhen(port.completion.flag.OF)
-      flags.UF init(False) setWhen(port.completion.flag.UF)
-      flags.NX init(False) setWhen(port.completion.flag.NX)
+      flags.NV init(False) setWhen(port.completion.fire && port.completion.flags.NV)
+      flags.DZ init(False) setWhen(port.completion.fire && port.completion.flags.DZ)
+      flags.OF init(False) setWhen(port.completion.fire && port.completion.flags.OF)
+      flags.UF init(False) setWhen(port.completion.fire && port.completion.flags.UF)
+      flags.NX init(False) setWhen(port.completion.fire && port.completion.flags.NX)
 
       val service = pipeline.service(classOf[CsrInterface])
       val rm = Reg(Bits(3 bits)) init(0)
@@ -244,6 +244,10 @@ class FpuPlugin(externalFpu : Boolean = false,
         when(arbitration.isValid) {
           dBusEncoding.bypassStore(storeFormated)
           output(REGFILE_WRITE_DATA) := port.rsp.value(31 downto 0)
+          when(!arbitration.isStuck && !arbitration.isRemoved){
+            csr.flags.NV setWhen(port.rsp.NV)
+            csr.flags.NX setWhen(port.rsp.NX)
+          }
         }
         when(!port.rsp.valid){
           arbitration.haltByOther := True

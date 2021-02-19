@@ -239,6 +239,9 @@ class success : public std::exception { };
 #define MSTATUS_READ_MASK 0x1888
 #endif
 
+#define u32 uint32_t
+#define u32 uint64_t
+
 
 class RiscvGolden {
 public:
@@ -4043,26 +4046,26 @@ int main(int argc, char **argv, char **env) {
 			#endif
 
 			for(const string &name : riscvTestMain){
-				redo(REDO,RiscvTest(name).run();)
+				redo(REDO,RiscvTest(name).withRiscvRef()->run();)
 			}
 			for(const string &name : riscvTestMemory){
-				redo(REDO,RiscvTest(name).run();)
+				redo(REDO,RiscvTest(name).withRiscvRef()->run();)
 			}
 
 
 			#ifdef MUL
 			for(const string &name : riscvTestMul){
-				redo(REDO,RiscvTest(name).run();)
+				redo(REDO,RiscvTest(name).withRiscvRef()->run();)
 			}
 			#endif
 			#ifdef DIV
 			for(const string &name : riscvTestDiv){
-				redo(REDO,RiscvTest(name).run();)
+				redo(REDO,RiscvTest(name).withRiscvRef()->run();)
 			}
 			#endif
 
             #ifdef COMPRESSED
-            redo(REDO,RiscvTest("rv32uc-p-rvc").bootAt(0x800000FCu)->run());
+            redo(REDO,RiscvTest("rv32uc-p-rvc").withRiscvRef()->bootAt(0x800000FCu)->run());
             #endif
 
 			#if defined(CSR) && !defined(CSR_SKIP_TEST)

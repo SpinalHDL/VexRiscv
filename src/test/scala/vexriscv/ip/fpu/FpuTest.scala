@@ -55,13 +55,13 @@ class FpuTest extends FunSuite{
   }
 
   def testP(p : FpuParameter){
-    val portCount = 1
+    val portCount = 4
 
     val config = SimConfig
     config.allOptimisation
 //    if(p.withDouble) config.withFstWave
     config.compile(new FpuCore(portCount, p){
-      for(i <- 0 until portCount) out(Bits(5 bits)).setName(s"flagAcc$i") := io.port(i).completion.flag.asBits
+      for(i <- 0 until portCount) out(Bits(5 bits)).setName(s"flagAcc$i") := io.port(i).completion.flags.asBits
       setDefinitionName("FpuCore"+ (if(p.withDouble) "Double" else  ""))
     }).doSim(seed = 42){ dut =>
       dut.clockDomain.forkStimulus(10)
@@ -228,8 +228,10 @@ class FpuTest extends FunSuite{
         val flagAggregated = dut.reflectBaseType(s"flagAcc$id").asInstanceOf[Bits]
         dut.clockDomain.onSamplings{
           val c = dut.io.port(id).completion
-          pendingMiaou -= c.count.toInt
-          flagAccumulator |= flagAggregated.toInt
+          if(c.valid.toBoolean) {
+            pendingMiaou -= 1
+            flagAccumulator |= flagAggregated.toInt
+          }
           dut.writeback.randomSim.randomize()
         }
 
@@ -242,6 +244,9 @@ class FpuTest extends FunSuite{
 
 
         StreamMonitor(dut.io.port(id)rsp, dut.clockDomain){payload =>
+          pendingMiaou -= 1
+          if(payload.NV.toBoolean) flagAccumulator |= 1 << 4
+          if(payload.NX.toBoolean) flagAccumulator |= 1 << 0
           rspQueue.dequeue().apply(payload)
         }
 
