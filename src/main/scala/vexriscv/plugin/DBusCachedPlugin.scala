@@ -72,6 +72,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         MEMORY_WR -> False
       ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
     )
+
+    if(withLrSc) decoderService.add(key, Seq(MEMORY_LRSC -> False))
+    if(withAmo)  decoderService.add(key, Seq(MEMORY_AMO -> False))
   }
   override def addStoreWordEncoding(key : MaskedLiteral): Unit = {
     val decoderService = pipeline.service(classOf[DecoderService])
@@ -91,6 +94,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         MEMORY_WR -> True
       ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
     )
+
+    if(withLrSc) decoderService.add(key, Seq(MEMORY_LRSC -> False))
+    if(withAmo)  decoderService.add(key, Seq(MEMORY_AMO -> False))
   }
 
   val bypassStoreList = ArrayBuffer[(Bool, Bits)]()
@@ -501,6 +507,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       dBusAccess.rsp.error := cache.io.cpu.writeBack.unalignedAccess || cache.io.cpu.writeBack.accessError
       dBusAccess.rsp.redo := cache.io.cpu.redo
       component.addPrePopTask{() =>
+        managementStage.input(IS_DBUS_SHARING).getDrivingReg clearWhen(dBusAccess.rsp.fire)
         when(forceDatapath){
           execute.output(REGFILE_WRITE_DATA) := dBusAccess.cmd.address.asBits
         }

@@ -157,13 +157,13 @@ class FpuPlugin(externalFpu : Boolean = false,
     import pipeline.config._
     import Riscv._
 
-    val internal = !externalFpu generate pipeline plug new Area{
+    val internal = (!externalFpu).generate (pipeline plug new Area{
       val fpu = FpuCore(1, p)
       fpu.io.port(0).cmd << port.cmd
       fpu.io.port(0).commit << port.commit
       fpu.io.port(0).rsp >> port.rsp
       fpu.io.port(0).completion <> port.completion
-    }
+    })
 
 
     val csr = pipeline plug new Area{
@@ -195,6 +195,7 @@ class FpuPlugin(externalFpu : Boolean = false,
         fs := 3 //DIRTY
       }
       service.rw(CSR.SSTATUS, 13, fs)
+      service.rw(CSR.MSTATUS, 13, fs)
     }
 
     decode plug new Area{
@@ -259,7 +260,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       commit.write := arbitration.isValid && !arbitration.removeIt
       commit.sync := input(FPU_COMMIT_SYNC)
 
-      when(arbitration.isValid && !commit.ready){
+      when(isCommit && !commit.ready){
         arbitration.haltByOther := True
       }
 

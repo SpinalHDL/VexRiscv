@@ -675,7 +675,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
 
   val rspSync = True
   val rspLast = True
-  val memCmdSent = RegInit(False) setWhen (io.mem.cmd.ready) clearWhen (!io.cpu.writeBack.isStuck)
+  val memCmdSent = RegInit(False) setWhen (io.mem.cmd.fire) clearWhen (!io.cpu.writeBack.isStuck)
   val pending = withExclusive generate new Area{
     val counter = Reg(UInt(log2Up(pendingMax) + 1 bits)) init(0)
     val counterNext = counter + U(io.mem.cmd.fire && io.mem.cmd.last) - ((io.mem.rsp.valid  && io.mem.rsp.last) ? (io.mem.rsp.aggregated +^ 1) | 0)

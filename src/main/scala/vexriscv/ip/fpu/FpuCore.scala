@@ -207,7 +207,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     arbiterOutput.source := arbiter.io.chosen
     arbiterOutput.payload.assignSomeByName(arbiter.io.output.payload)
 
-    val s0 = arbiterOutput.pipelined(m2s = true, s2m = true)
+    val s0 = arbiterOutput.pipelined(m2s = true, s2m = true) //TODO may need to remove m2s for store latency
     val useRs1, useRs2, useRs3, useRd = False
     switch(s0.opcode){
       is(p.Opcode.LOAD)    { useRd := True }
@@ -287,28 +287,28 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   }
 
   val decode = new Area{
-    val input = read.output.combStage()
+    val input = read.output/*.s2mPipe()*/.combStage()
     input.ready := False
 
     val loadHit = List(FpuOpcode.LOAD, FpuOpcode.FMV_W_X, FpuOpcode.I2F).map(input.opcode === _).orR
     val load = Stream(LoadInput())
     load.valid := input.valid && loadHit
     input.ready setWhen(loadHit && load.ready)
-    load.payload.assignSomeByName(read.output.payload)
+    load.payload.assignSomeByName(input.payload)
     load.i2f := input.opcode === FpuOpcode.I2F
 
     val shortPipHit = List(FpuOpcode.STORE, FpuOpcode.F2I, FpuOpcode.CMP, FpuOpcode.MIN_MAX, FpuOpcode.SGNJ, FpuOpcode.FMV_X_W, FpuOpcode.FCLASS, FpuOpcode.FCVT_X_X).map(input.opcode === _).orR
     val shortPip = Stream(ShortPipInput())
     input.ready setWhen(shortPipHit && shortPip.ready)
     shortPip.valid := input.valid && shortPipHit
-    shortPip.payload.assignSomeByName(read.output.payload)
+    shortPip.payload.assignSomeByName(input.payload)
 
     val divSqrtHit = input.opcode === p.Opcode.DIV ||  input.opcode === p.Opcode.SQRT
     val divSqrt = Stream(DivSqrtInput())
     if(p.withDivSqrt) {
       input.ready setWhen (divSqrtHit && divSqrt.ready)
       divSqrt.valid := input.valid && divSqrtHit
-      divSqrt.payload.assignSomeByName(read.output.payload)
+      divSqrt.payload.assignSomeByName(input.payload)
       divSqrt.div := input.opcode === p.Opcode.DIV
     }
 
@@ -324,15 +324,15 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       divSqrtToMul.ready := mul.ready
       mul.payload := divSqrtToMul.payload
       when(!divSqrtToMul.valid) {
-        mul.payload.assignSomeByName(read.output.payload)
+        mul.payload.assignSomeByName(input.payload)
         mul.add := fmaHit
         mul.divSqrt := False
         mul.msb1 := True
         mul.msb2 := True
         mul.rs2.sign.allowOverride();
-        mul.rs2.sign := read.output.rs2.sign ^ input.arg(0)
+        mul.rs2.sign := input.rs2.sign ^ input.arg(0)
         mul.rs3.sign.allowOverride();
-        mul.rs3.sign := read.output.rs3.sign ^ input.arg(1)
+        mul.rs3.sign := input.rs3.sign ^ input.arg(1)
       }
     }
 
@@ -348,9 +348,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       mulToAdd.ready := add.ready
       add.payload := mulToAdd.payload
       when(!mulToAdd.valid) {
-        add.payload.assignSomeByName(read.output.payload)
+        add.payload.assignSomeByName(input.payload)
         add.rs2.sign.allowOverride;
-        add.rs2.sign := read.output.rs2.sign ^ input.arg(0)
+        add.rs2.sign := input.rs2.sign ^ input.arg(0)
       }
     }
   }
@@ -578,7 +578,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         val input = UInt(p.internalMantissaSize+1 max 33 bits).assignDontCare()
         var logic = input
         val scrap = Reg(Bool)
-        for(i <- by.range){
+        for(i <- by.range.reverse){
           scrap setWhen(by(i) && logic(0, 1 << i bits) =/= 0)
           logic \= by(i) ? (logic |>> (BigInt(1) << i)) | logic
         }
@@ -809,11 +809,13 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
              List(FpuOpcode.CMP, FpuOpcode.MIN_MAX).map(input.opcode === _).orR && rs2NanNv
     flag.NV setWhen(input.valid && nv)
 
-    input.ready := !halt && (toFpuRf ? rfOutput.ready | io.port.map(_.rsp.ready).read(input.source))
+    val rspStreams = Vec(Stream(FpuRsp(p)), portCount)
+    input.ready := !halt && (toFpuRf ? rfOutput.ready | rspStreams.map(_.ready).read(input.source))
     for(i <- 0 until portCount){
-      def rsp = io.port(i).rsp
+      def rsp = rspStreams(i)
       rsp.valid := input.valid && input.source === i && !toFpuRf && !halt
       rsp.value := result
+      io.port(i).rsp << rsp.stage()
       completion(i).increments += (RegNext(rsp.fire) init(False))
     }
   }
@@ -940,7 +942,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   }
 
   val divSqrt = p.withDivSqrt generate new Area {
-    val input = decode.divSqrt.stage()
+    val input = decode.divSqrt.halfPipe()
 
     val aproxWidth = 8
     val aproxDepth = 64
@@ -1142,7 +1144,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val rs1ExponentEqual = input.rs1.exponent === input.rs2.exponent
       val rs1MantissaBigger = input.rs1.mantissa > input.rs2.mantissa
       val absRs1Bigger = ((rs1ExponentBigger || rs1ExponentEqual && rs1MantissaBigger) && !input.rs1.isZero || input.rs1.isInfinity) && !input.rs2.isInfinity
-      val shiftBy = rs1ExponentBigger ? (0-exp21) | exp21
+      val shiftBy = exp21.asSInt.abs//rs1ExponentBigger ? (0-exp21) | exp21
       val shiftOverflow = (shiftBy >= p.internalMantissaSize+3)
       val passThrough = shiftOverflow || (input.rs1.isZero) || (input.rs2.isZero)
 
@@ -1153,8 +1155,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val xMantissa = U"1" @@ (rs1ExponentBigger ? input.rs1.mantissa | input.rs2.mantissa) @@ U"00"
       val yMantissaUnshifted = U"1" @@ (rs1ExponentBigger ? input.rs2.mantissa | input.rs1.mantissa) @@ U"00"
       var yMantissa = CombInit(yMantissaUnshifted)
-      val roundingScrap = CombInit(shiftOverflow)
-      for(i <- 0 until log2Up(p.internalMantissaSize)){
+      val roundingScrap = False
+      for(i <- log2Up(p.internalMantissaSize) - 1 downto 0){
         roundingScrap setWhen(shiftBy(i) && yMantissa(0, 1 << i bits) =/= 0)
         yMantissa \= shiftBy(i) ? (yMantissa |>> (BigInt(1) << i)) | yMantissa
       }
@@ -1181,6 +1183,25 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val xSigned = xMantissa.twoComplement(xSign) //TODO Is that necessary ?
       val ySigned = ((ySign ## Mux(ySign, ~yMantissa, yMantissa)).asUInt + (ySign && !roundingScrap).asUInt).asSInt //rounding here
       output.xyMantissa := U(xSigned +^ ySigned).trim(1 bits)
+
+    }
+
+    class OhOutput extends MathOutput{
+//      val shiftOh = Vec(Bool, p.internalMantissaSize+4)
+      val shift = UInt(log2Up(p.internalMantissaSize+4) bits)
+    }
+
+    val oh = new Area {
+      val input = math.output.stage()
+      val output = input.swapPayload(new OhOutput)
+      output.payload.assignSomeByName(input.payload)
+      import input.payload._
+
+      val shiftOh = OHMasking.first(output.xyMantissa.asBools.reverse) //The OhMasking.first can be processed in parallel to the xyMantissa carry chaine
+//      output.shiftOh := shiftOh
+
+      val shift = OHToUInt(shiftOh)
+      output.shift := shift
     }
 
 
@@ -1193,13 +1214,11 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
 
     val norm = new Area{
-      val input = math.output.stage()
+      val input = oh.output.stage()
       val output = input.swapPayload(new NormOutput)
       output.payload.assignSomeByName(input.payload)
       import input.payload._
 
-      val shiftOh = OHMasking.first(xyMantissa.asBools.reverse)
-      val shift = OHToUInt(shiftOh)
       output.mantissa := (xyMantissa |<< shift)
       output.exponent := xyExponent -^ shift + 1
       output.forceInfinity := (input.rs1.isInfinity || input.rs2.isInfinity)
@@ -1210,7 +1229,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
 
     val result = new Area {
-      val input = norm.output.stage()
+      val input = norm.output.pipelined()
       val output = input.swapPayload(new MergeInput())
       import input.payload._
 
@@ -1251,7 +1270,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     inputs += load.s1.output.stage()
     if(p.withAdd) (inputs += add.result.output)
     if(p.withMul) (inputs += mul.result.output)
-    if(p.withShortPipMisc) (inputs += shortPip.rfOutput)
+    if(p.withShortPipMisc) (inputs += shortPip.rfOutput.pipelined(m2s = true))
     val arbitrated = StreamArbiterFactory.lowerFirst.noLock.on(inputs)
     val isCommited = rf.lock.map(_.commited).read(arbitrated.lockId)
     val commited = arbitrated.haltWhen(!isCommited).toFlow
@@ -1301,7 +1320,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val mantissaRange = p.internalMantissaSize downto 1
     val adderMantissa = input.value.mantissa(mantissaRange) & (mantissaIncrement ? ~(exactMask.trim(1) >> 1) | input.value.mantissa(mantissaRange).maxValue)
     val adderRightOp = (mantissaIncrement ? (exactMask >> 1)| U(0)).resize(p.internalMantissaSize bits)
-    val adder = (input.value.exponent @@ adderMantissa) + adderRightOp + U(mantissaIncrement)
+    val adder = KeepAttribute(KeepAttribute(input.value.exponent @@ adderMantissa) + KeepAttribute(adderRightOp) + KeepAttribute(U(mantissaIncrement)))
     math.special := input.value.special
     math.sign := input.value.sign
     math.exponent := adder(p.internalMantissaSize, p.internalExponentSize bits)

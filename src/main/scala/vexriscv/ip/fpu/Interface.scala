@@ -138,6 +138,12 @@ case class FpuFlags() extends Bundle{
 case class FpuCompletion() extends Bundle{
   val flag = FpuFlags()
   val count = UInt(2 bits)
+
+  def stage() = {
+    val ret = FpuCompletion().setCompositeName(this, "stage", true)
+    ret := this
+    ret
+  }
 }
 
 case class FpuCmd(p : FpuParameter) extends Bundle{

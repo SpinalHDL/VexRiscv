@@ -33,7 +33,7 @@ import vexriscv.ip.fpu.FpuParameter
 object TestsWorkspace {
   def main(args: Array[String]) {
     SpinalConfig().generateVerilog {
-// make clean all REDO=10 CSR=no MMU=no  COREMARK=no RVF=no REDO=1 DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 DEBUG=ye TRACE=ye
+      // make clean all REDO=10 CSR=no MMU=no  COREMARK=no RVF=yes RVD=yes REDO=1 DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 DEBUG=ye TRACE=ye
       val config = VexRiscvConfig(
         plugins = List(
           new IBusCachedPlugin(
