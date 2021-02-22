@@ -16,7 +16,9 @@ object VexRiscvConfig{
 
   def apply(plugins : Seq[Plugin[VexRiscv]] = ArrayBuffer()) : VexRiscvConfig = apply(true,true,plugins)
 }
-
+trait VexRiscvRegressionArg{
+  def getVexRiscvRegressionArgs() : Seq[String]
+}
 case class VexRiscvConfig(){
   var withMemoryStage = true
   var withWriteBackStage = true
@@ -83,6 +85,15 @@ case class VexRiscvConfig(){
   }
   object SRC1_CTRL  extends Stageable(Src1CtrlEnum())
   object SRC2_CTRL  extends Stageable(Src2CtrlEnum())
+
+  def getRegressionArgs() : Seq[String] = {
+    val str = ArrayBuffer[String]()
+    plugins.foreach{
+      case e : VexRiscvRegressionArg => str ++= e.getVexRiscvRegressionArgs()
+      case _ =>
+    }
+    str
+  }
 }
 
 

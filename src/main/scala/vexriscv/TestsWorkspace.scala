@@ -25,95 +25,128 @@ import spinal.lib._
 import vexriscv.ip._
 import spinal.lib.bus.avalon.AvalonMM
 import spinal.lib.eda.altera.{InterruptReceiverTag, ResetEmitterTag}
+import vexriscv.demo.smp.VexRiscvSmpClusterGen
 import vexriscv.ip.fpu.FpuParameter
 
 
 // make clean all SEED=42 MMU=no STOP_ON_ERROR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes SUPERVISOR=yes REDO=1 DHRYSTONE=yes LRSC=yes AMO=yes LINUX_REGRESSION=yes TRACE=yes TRACE_START=1000000000 FLOW_INFO=ye IBUS_DATA_WIDTH=128  DBUS_DATA_WIDTH=128
-//make clean all SEED=42 MMU=no STOP_ON_ERROR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes SUPERVISOR=yes REDO=1 DHRYSTONE=yes LRSC=yes AMO=yes  TRACE=yes TRACE_START=1000000000 FLOW_INFO=ye IBUS_DATA_WIDTH=128  DBUS_DATA_WIDTH=128 LINUX_SOC_SMP=yes VMLINUX=../../../../../buildroot/output/images/Image RAMDISK=../../../../../buildroot/output/images/rootfs.cpio  DTB=../../../../../buildroot/output/images/dtb EMULATOR=../../../../../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin
+// make clean all IBUS=CACHED IBUS_DATA_WIDTH=64 COMPRESSED=no DBUS=CACHED DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 LRSC=yes AMO=yes SUPERVISOR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes MUL=yes DIV=yes RVF=yes RVD=yes DEBUG_PLUGIN=no LINUX_SOC_SMP=yes EMULATOR=$IMAGES/fw_jump.bin VMLINUX=$IMAGES/Image DTB=$IMAGES/linux.dtb RAMDISK=$IMAGES/rootfs.cpio  TRACE=ye REDO=1 DEBUG=ye WITH_USER_IO=yes SEED=42
 object TestsWorkspace {
   def main(args: Array[String]) {
     SpinalConfig().generateVerilog {
+
       // make clean all REDO=10 CSR=no MMU=no  COREMARK=no RVF=yes RVD=yes REDO=1 DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 DEBUG=ye TRACE=ye
-      val config = VexRiscvConfig(
-        plugins = List(
-          new IBusCachedPlugin(
-            prediction = DYNAMIC,
-            config = InstructionCacheConfig(
-              cacheSize = 4096,
-              bytePerLine =32,
-              wayCount = 1,
-              addressWidth = 32,
-              cpuDataWidth = 32,
-              memDataWidth = 32,
-              catchIllegalAccess = true,
-              catchAccessFault = true,
-              asyncTagMemory = false,
-              twoCycleRam = true,
-              twoCycleCache = true
-            ),
-            memoryTranslatorPortConfig = MmuPortConfig(
-              portTlbSize = 4
-            )
-          ),
-          new DBusCachedPlugin(
-            config = new DataCacheConfig(
-              cacheSize         = 4096,
-              bytePerLine       = 32,
-              wayCount          = 1,
-              addressWidth      = 32,
-              cpuDataWidth      = 64,
-              memDataWidth      = 64,
-              catchAccessError  = true,
-              catchIllegal      = true,
-              catchUnaligned    = true
-            ),
-            memoryTranslatorPortConfig = MmuPortConfig(
-              portTlbSize = 6
-            )
-          ),
-          new MmuPlugin(
-            virtualRange = _(31 downto 28) === 0xC,
-            ioRange      = _(31 downto 28) === 0xF
-          ),
-          new DecoderSimplePlugin(
-            catchIllegalInstruction = true
-          ),
-          new RegFilePlugin(
-            regFileReadyKind = plugin.SYNC,
-            zeroBoot = false
-          ),
-          new IntAluPlugin,
-          new SrcPlugin(
-            separatedAddSub = false,
-            executeInsertion = true
-          ),
-          new FullBarrelShifterPlugin,
-          new HazardSimplePlugin(
-            bypassExecute           = true,
-            bypassMemory            = true,
-            bypassWriteBack         = true,
-            bypassWriteBackBuffer   = true,
-            pessimisticUseSrc       = false,
-            pessimisticWriteRegFile = false,
-            pessimisticAddressMatch = false
-          ),
-          new MulPlugin,
-          new DivPlugin,
-          new CsrPlugin(CsrPluginConfig.small(0x80000020l)),
-          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
-          new BranchPlugin(
-            earlyBranch = false,
-            catchAddressMisaligned = true
-          ),
-          new YamlPlugin("cpu0.yaml")
-        )
+//      val config = VexRiscvConfig(
+//        plugins = List(
+//          new IBusCachedPlugin(
+//            prediction = DYNAMIC,
+//            config = InstructionCacheConfig(
+//              cacheSize = 4096,
+//              bytePerLine =32,
+//              wayCount = 1,
+//              addressWidth = 32,
+//              cpuDataWidth = 32,
+//              memDataWidth = 32,
+//              catchIllegalAccess = true,
+//              catchAccessFault = true,
+//              asyncTagMemory = false,
+//              twoCycleRam = true,
+//              twoCycleCache = true
+//            ),
+//            memoryTranslatorPortConfig = MmuPortConfig(
+//              portTlbSize = 4
+//            )
+//          ),
+//          new DBusCachedPlugin(
+//            config = new DataCacheConfig(
+//              cacheSize         = 4096,
+//              bytePerLine       = 32,
+//              wayCount          = 1,
+//              addressWidth      = 32,
+//              cpuDataWidth      = 64,
+//              memDataWidth      = 64,
+//              catchAccessError  = true,
+//              catchIllegal      = true,
+//              catchUnaligned    = true
+//            ),
+//            memoryTranslatorPortConfig = MmuPortConfig(
+//              portTlbSize = 6
+//            )
+//          ),
+//          new MmuPlugin(
+//            virtualRange = _(31 downto 28) === 0xC,
+//            ioRange      = _(31 downto 28) === 0xF
+//          ),
+//          new DecoderSimplePlugin(
+//            catchIllegalInstruction = true
+//          ),
+//          new RegFilePlugin(
+//            regFileReadyKind = plugin.SYNC,
+//            zeroBoot = false
+//          ),
+//          new IntAluPlugin,
+//          new SrcPlugin(
+//            separatedAddSub = false,
+//            executeInsertion = true
+//          ),
+//          new FullBarrelShifterPlugin,
+//          new HazardSimplePlugin(
+//            bypassExecute           = true,
+//            bypassMemory            = true,
+//            bypassWriteBack         = true,
+//            bypassWriteBackBuffer   = true,
+//            pessimisticUseSrc       = false,
+//            pessimisticWriteRegFile = false,
+//            pessimisticAddressMatch = false
+//          ),
+//          new MulPlugin,
+//          new DivPlugin,
+//          new CsrPlugin(CsrPluginConfig.small(0x80000020l)),
+//          new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset"))),
+//          new BranchPlugin(
+//            earlyBranch = false,
+//            catchAddressMisaligned = true
+//          ),
+//          new YamlPlugin("cpu0.yaml")
+//        )
+//      )
+//      config.plugins += new FpuPlugin(
+//        externalFpu = false,
+//        p = FpuParameter(
+//          withDouble = true
+//        )
+//      )
+
+//       mkdir buildroot-build
+//       cd buildroot-build/
+//       make O=$PWD  BR2_EXTERNAL=../buildroot-spinal-saxon  -C ../buildroot saxon_regression_defconfig
+
+      // export IMAGES=/media/data/open/SaxonSoc/artyA7SmpUpdate/buildroot-regression/buildroot-build/images
+      // make clean all IBUS=CACHED IBUS_DATA_WIDTH=64 COMPRESSED=no DBUS=CACHED DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 LRSC=yes AMO=yes SUPERVISOR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes MUL=yes DIV=yes RVF=yes RVD=yes DEBUG_PLUGIN=no LINUX_SOC_SMP=yes EMULATOR=$IMAGES/fw_jump.bin VMLINUX=$IMAGES/Image DTB=$IMAGES/linux.dtb RAMDISK=$IMAGES/rootfs.cpio  TRACE=ye REDO=1 DEBUG=ye WITH_USER_IO=no
+      // make clean all IBUS=CACHED IBUS_DATA_WIDTH=64 COMPRESSED=no DBUS=CACHED DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 LRSC=yes AMO=yes SUPERVISOR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes MUL=yes DIV=yes RVF=yes RVD=yes DEBUG_PLUGIN=no LINUX_SOC_SMP=yes EMULATOR=$IMAGES/fw_jump.bin VMLINUX=$IMAGES/Image DTB=$IMAGES/linux.dtb RAMDISK=$IMAGES/rootfs.cpio  TRACE=yes REDO=1 DEBUG=ye WITH_USER_IO=no  FLOW_INFO=yes TRACE_START=47000000000ll SEED=43
+      // make clean all IBUS=CACHED IBUS_DATA_WIDTH=64 COMPRESSED=no DBUS=CACHED DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 LRSC=yes AMO=yes SUPERVISOR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes MUL=yes DIV=yes RVF=yes RVD=yes DEBUG_PLUGIN=no LINUX_SOC_SMP=yes EMULATOR=$IMAGES/fw_jump.bin VMLINUX=$IMAGES/Image DTB=$IMAGES/linux.dtb RAMDISK=$IMAGES/rootfs.cpio  TRACE=yes REDO=1 DEBUG=ye WITH_USER_IO=no  FLOW_INFO=yes TRACE_START=47000000000ll SEED=45
+      //make clean all IBUS=CACHED IBUS_DATA_WIDTH=64 COMPRESSED=no DBUS=CACHED DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 LRSC=yes AMO=yes SUPERVISOR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes MUL=yes DIV=yes RVF=yes RVD=yes DEBUG_PLUGIN=no LINUX_SOC_SMP=yes EMULATOR=$IMAGES/fw_jump.bin VMLINUX=$IMAGES/Image DTB=$IMAGES/linux.dtb RAMDISK=$IMAGES/rootfs.cpio  TRACE=yes REDO=1 DEBUG=ye WITH_USER_IO=no  FLOW_INFO=yes TRACE_START=565000000ll SEED=45
+      val config = VexRiscvSmpClusterGen.vexRiscvConfig(
+        hartId = 0,
+        ioRange = _ (31 downto 28) === 0xF,
+        resetVector = 0x80000000l,
+        iBusWidth = 64,
+        dBusWidth = 64,
+        loadStoreWidth = 64,
+        iCacheSize = 4096*2,
+        dCacheSize = 4096*2,
+        iCacheWays = 2,
+        dCacheWays = 2,
+        withFloat = true,
+        withDouble = true,
+        externalFpu = false
       )
-      config.plugins += new FpuPlugin(
-        externalFpu = false,
-        p = FpuParameter(
-          withDouble = true
-        )
-      )
+
+
+      println("Args :")
+      println(config.getRegressionArgs().mkString(" "))
+
+
       val toplevel = new VexRiscv(config)
 //      val toplevel = new VexRiscv(configLight)
 //      val toplevel = new VexRiscv(configTest)

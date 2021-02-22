@@ -184,7 +184,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
   val commitLogic = for(source <- 0 until portCount) yield new Area{
     val fire = False
-    val target, hit = Reg(UInt(log2Up(rfLockCount) bits)) init(0)
+    val target, hit = Reg(UInt(log2Up(rfLockCount+1) bits)) init(0)
+    val full = target + 1 === hit
     when(fire){
       hit := hit + 1
     }
@@ -192,7 +193,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     commitFork.commit(source).ready := False
     when(commitFork.commit(source).valid) {
       for (lock <- rf.lock) {
-        when(lock.valid && lock.source === source && lock.id === hit) {
+        when(lock.valid && lock.source === source && lock.id === hit && !lock.commited) {
           fire := True
           lock.commited := True
           lock.write := commitFork.commit(source).write
@@ -233,7 +234,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
 
     val hits = List((useRs1, s0.rs1), (useRs2, s0.rs2), (useRs3, s0.rs3), (useRd, s0.rd)).map{case (use, reg) => use && rf.lock.map(l => l.valid && l.source === s0.source && l.address === reg).orR}
-    val hazard = hits.orR
+    val hazard = hits.orR || commitLogic.map(_.full).read(s0.source)
     when(s0.fire && useRd){
       for(i <- 0 until portCount){
         when(s0.source === i){
@@ -938,7 +939,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       output.roundMode := input.roundMode
       output.scrap := norm.scrap
       output.value := norm.output
-      output.NV := NV
+      output.NV := NV //TODO isn't propagated in FMA
       output.DZ := False
 
       decode.mulToAdd.valid := input.valid && input.add
@@ -946,7 +947,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       decode.mulToAdd.rs1.mantissa := norm.output.mantissa >> 1 //FMA Precision lost
       decode.mulToAdd.rs1.exponent := norm.output.exponent
       decode.mulToAdd.rs1.sign := norm.output.sign
-      decode.mulToAdd.rs1.special := False //TODO
+      decode.mulToAdd.rs1.special := norm.output.special
       decode.mulToAdd.rs2 := input.rs3
       decode.mulToAdd.rd := input.rd
       decode.mulToAdd.lockId := input.lockId
@@ -1289,6 +1290,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     if(p.withMul) (inputs += mul.result.output)
     if(p.withShortPipMisc) (inputs += shortPip.rfOutput.pipelined(m2s = true))
     val arbitrated = StreamArbiterFactory.lowerFirst.noLock.on(inputs)
+    val isCommited = rf.lock.map(_.commited).read(arbitrated.lockId)
+    val commited = arbitrated.haltWhen(!isCommited).toFlow
   }
 
   class RoundFront extends MergeInput{
@@ -1298,7 +1301,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   }
 
   val roundFront = new Area {
-    val input = merge.arbitrated.stage()
+    val input = merge.commited.stage()
     val output = input.swapPayload(new RoundFront())
     output.payload.assignSomeByName(input.payload)
 
@@ -1328,8 +1331,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
   val roundBack = new Area{
     val input = roundFront.output.stage()
-    val isCommited = rf.lock.map(_.commited).read(input.lockId)
-    val output = input.haltWhen(!isCommited).toFlow.swapPayload(RoundOutput())
+    val output = input.swapPayload(RoundOutput())
     import input.payload._
 
     val math = p.internalFloating()

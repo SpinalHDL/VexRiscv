@@ -150,6 +150,15 @@ ifneq ($(EXTERNAL_INTERRUPT),no)
 endif
 endif
 
+ifneq ($(shell grep utime ${VEXRISCV_FILE} -w),)
+    ADDCFLAGS += -CFLAGS -DUTIME_INPUT
+endif
+
+ifneq ($(shell grep dBus_rsp_payload_aggregated ${VEXRISCV_FILE} -w),)
+    ADDCFLAGS += -CFLAGS -DDBUS_AGGREGATION
+endif
+
+
 ifneq ($(RUN_HEX),no)
 	ADDCFLAGS += -CFLAGS -DRUN_HEX='\"$(RUN_HEX)\"'
 endif

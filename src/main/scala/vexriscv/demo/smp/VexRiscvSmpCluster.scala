@@ -279,7 +279,7 @@ object VexRiscvSmpClusterGen {
     )
 
     if(withFloat) config.plugins += new FpuPlugin(
-      externalFpu = true,
+      externalFpu = externalFpu,
       p = FpuParameter(withDouble = withDouble)
     )
     config

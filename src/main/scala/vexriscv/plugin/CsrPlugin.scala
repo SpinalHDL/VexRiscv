@@ -544,7 +544,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
 
     if(supervisorGen) {
-      redoInterface = pcManagerService.createJumpInterface(pipeline.execute, -1)
+      redoInterface = pcManagerService.createJumpInterface(pipeline.execute, 10)
     }
 
     exceptionPendings = Vec(Bool, pipeline.stages.length)
@@ -749,12 +749,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         satpAccess(CSR.SATP, 31 -> satp.MODE, 22 -> satp.ASID, 0 -> satp.PPN)
 
 
-        if(supervisorGen) {
+        val satpLogic = supervisorGen generate new Area {
           redoInterface.valid := False
           redoInterface.payload := decode.input(PC)
-          duringWrite(CSR.SATP){
-            execute.arbitration.flushNext := True
+          duringWrite(CSR.SATP) {
             redoInterface.valid := True
+            execute.arbitration.flushNext := True
+            decode.arbitration.haltByOther := True
           }
         }
       }

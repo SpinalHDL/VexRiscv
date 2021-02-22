@@ -33,7 +33,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
                        dBusCmdSlavePipe : Boolean = false,
                        dBusRspSlavePipe : Boolean = false,
                        relaxedMemoryTranslationRegister : Boolean = false,
-                       csrInfo : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService with DBusEncodingService {
+                       csrInfo : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService with DBusEncodingService with VexRiscvRegressionArg {
   import config._
   assert(!(config.withExternalAmo && !dBusRspSlavePipe))
   assert(isPow2(cacheSize))
@@ -51,6 +51,18 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     dBusAccess = DBusAccess()
     dBusAccess
   }
+
+  override def getVexRiscvRegressionArgs(): Seq[String] = {
+    var args = List[String]()
+    args :+= "DBUS=CACHED"
+    args :+= s"DBUS_LOAD_DATA_WIDTH=$memDataWidth"
+    args :+= s"DBUS_STORE_DATA_WIDTH=$cpuDataWidth"
+    if(withLrSc) args :+= "LRSC=yes"
+    if(withAmo)  args :+= "AMO=yes"
+    if(config.withExclusive && config.withInvalidate)  args ++= List("DBUS_EXCLUSIVE=yes", "DBUS_INVALIDATE=yes")
+    args
+  }
+
 
   override def addLoadWordEncoding(key : MaskedLiteral): Unit = {
     val decoderService = pipeline.service(classOf[DecoderService])

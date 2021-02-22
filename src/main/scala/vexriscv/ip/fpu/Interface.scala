@@ -92,8 +92,15 @@ object FpuFormat extends SpinalEnum{
   val FLOAT, DOUBLE = newElement()
 }
 
-object FpuRoundMode extends SpinalEnum(defaultEncoding = binarySequential){
+object FpuRoundMode extends SpinalEnum(){
   val RNE, RTZ, RDN, RUP, RMM = newElement()
+  defaultEncoding = SpinalEnumEncoding("opt")(
+    RNE -> 0,
+    RTZ -> 1,
+    RDN -> 2,
+    RUP -> 3,
+    RMM -> 4
+  )
 }
 object FpuRoundModeInstr extends SpinalEnum(){
   val RNE, RTZ, RDN, RUP, RMM, DYN = newElement()

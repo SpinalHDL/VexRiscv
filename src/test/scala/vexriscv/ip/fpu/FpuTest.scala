@@ -55,11 +55,11 @@ class FpuTest extends FunSuite{
   }
 
   def testP(p : FpuParameter){
-    val portCount = 4
+    val portCount = 1
 
     val config = SimConfig
     config.allOptimisation
-//    if(p.withDouble) config.withFstWave
+    if(p.withDouble) config.withFstWave
     config.compile(new FpuCore(portCount, p){
       for(i <- 0 until portCount) out(Bits(5 bits)).setName(s"flagAcc$i") := io.port(i).completion.flags.asBits
       setDefinitionName("FpuCore"+ (if(p.withDouble) "Double" else  ""))
@@ -1285,6 +1285,17 @@ class FpuTest extends FunSuite{
         //TODO test boxing
         //TODO double <-> simple convertions
         if(p.withDouble) {
+
+          load(0, 1.0)
+          load(0, 2.0)
+          load(0, 2.5)
+          load(0, 0.75)
+          load(0, -5)
+          load(0, 0)
+          load(0, Double.PositiveInfinity)
+          load(0, Double.NaN)
+          dut.clockDomain.waitSampling(200)
+          simSuccess()
 
           for(_ <- 0 until 10000) testSgnjF64()
           println("f64 sgnj done")

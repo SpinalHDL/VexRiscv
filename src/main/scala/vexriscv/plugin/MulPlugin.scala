@@ -5,7 +5,7 @@ import spinal.core._
 import spinal.lib.KeepAttribute
 
 //Input buffer generaly avoid the FPGA synthesis to duplicate reg inside the DSP cell, which could stress timings quite much.
-class MulPlugin(inputBuffer : Boolean = false) extends Plugin[VexRiscv]{
+class MulPlugin(inputBuffer : Boolean = false) extends Plugin[VexRiscv] with VexRiscvRegressionArg {
   object MUL_LL extends Stageable(UInt(32 bits))
   object MUL_LH extends Stageable(SInt(34 bits))
   object MUL_HL extends Stageable(SInt(34 bits))
@@ -14,6 +14,11 @@ class MulPlugin(inputBuffer : Boolean = false) extends Plugin[VexRiscv]{
   object MUL_LOW extends Stageable(SInt(34+16+2 bits))
 
   object IS_MUL extends Stageable(Bool)
+
+  override def getVexRiscvRegressionArgs(): Seq[String] = {
+    List("MUL=yes")
+  }
+
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._

@@ -10,7 +10,7 @@ import vexriscv.ip.fpu._
 import scala.collection.mutable.ArrayBuffer
 
 class FpuPlugin(externalFpu : Boolean = false,
-                p : FpuParameter) extends Plugin[VexRiscv]{
+                p : FpuParameter) extends Plugin[VexRiscv] with VexRiscvRegressionArg {
 
   object FPU_ENABLE extends Stageable(Bool())
   object FPU_COMMIT extends Stageable(Bool())
@@ -23,6 +23,13 @@ class FpuPlugin(externalFpu : Boolean = false,
   object FPU_FORMAT extends Stageable(FpuFormat())
 
   var port : FpuPort = null
+
+  override def getVexRiscvRegressionArgs(): Seq[String] = {
+    var args = List[String]()
+    args :+= "RVF=yes"
+    if(p.withDouble) args :+= "RVD=yes"
+    args
+  }
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -154,7 +161,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       dBusEncoding.addStoreWordEncoding(FSD)
     }
 
-    exposeEncoding()
+//    exposeEncoding()
   }
 
   def exposeEncoding(): Unit ={
@@ -170,15 +177,6 @@ class FpuPlugin(externalFpu : Boolean = false,
       if(s == FPU_RSP) (if(isSet)rsps += key else rspsN += key)
       if(s == pipeline.config.RS1_USE) (if(isSet)rs1 += key else rs1N += key)
     }
-
-//    println("COMMIT => ")
-//    filter(0x53, commits).foreach(println)
-//    println("COMMITN => ")
-//    filter(0x53, commitsN).foreach(println)
-//    println("RSP => ")
-//    filter(0x53, rsps).foreach(println)
-//    println("RSPN => ")
-//    filter(0x53, rspsN).foreach(println)
 
     val commitLut, rspLut, rs1Lut = Array.fill(32)(false)
     filter(0x53,commits).foreach{m =>
@@ -256,11 +254,17 @@ class FpuPlugin(externalFpu : Boolean = false,
       execute.arbitration.haltByOther setWhen(csrActive && hasPending) // pessimistic
 
       val fs = Reg(Bits(2 bits)) init(1)
-      when(hasPending){
+      val sd = fs === 3
+
+      when(stages.last.arbitration.isFiring && stages.last.input(FPU_ENABLE)){
         fs := 3 //DIRTY
       }
+
       service.rw(CSR.SSTATUS, 13, fs)
       service.rw(CSR.MSTATUS, 13, fs)
+
+      service.r(CSR.SSTATUS, 31, sd)
+      service.r(CSR.MSTATUS, 31, sd)
     }
 
     decode plug new Area{

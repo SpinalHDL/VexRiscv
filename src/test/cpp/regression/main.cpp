@@ -227,7 +227,8 @@ class success : public std::exception { };
 #define SIP 0x144
 #define SATP 0x180
 
-
+#define UTIME    0xC01 // rdtime
+#define UTIMEH   0xC81
 
 #define SSTATUS_SIE         0x00000002
 #define SSTATUS_SPIE        0x00000020
@@ -426,6 +427,7 @@ public:
 	bool lrscReserved;
 	uint32_t lrscReservedAddress;
     u32 fpuCompletionTockens;
+    u32 dutRfWriteValue;
 
 	RiscvGolden() {
 		pc = 0x80000000;
@@ -444,6 +446,10 @@ public:
 		status.spp = 1;
 		#ifdef RVF
 		status.fs = 1;
+		misa |= 1 << 5;
+		#endif
+		#ifdef RVD
+		misa |= 1 << 3;
 		#endif
 		fcsr.flags = 0;
 		fcsr.frm = 0;
@@ -515,10 +521,10 @@ public:
     }
 	void trap(bool interrupt,int32_t cause, bool valueWrite, uint32_t value) {
 #ifdef FLOW_INFO
-	    cout << "TRAP " << (interrupt ? "interrupt" : "exception") << " cause=" << cause << " PC=0x" << hex << pc << " val=0x" << hex << value << dec << endl;
-	    if(cause == 9){
-	        cout << hex <<  " a7=0x" << regs[17] << " a0=0x" << regs[10] << " a1=0x" << regs[11] << " a2=0x" << regs[12] << dec << endl;
-	    }
+//	    cout << "TRAP " << (interrupt ? "interrupt" : "exception") << " cause=" << cause << " PC=0x" << hex << pc << " val=0x" << hex << value << dec << endl;
+//	    if(cause == 9){
+//	        cout << hex <<  " a7=0x" << regs[17] << " a0=0x" << regs[10] << " a1=0x" << regs[11] << " a2=0x" << regs[12] << dec << endl;
+//	    }
 #endif
 		//Check leguality of the interrupt
 		if(interrupt) {
@@ -584,7 +590,7 @@ public:
 	virtual bool csrRead(int32_t csr, uint32_t *value){
 		if(((csr >> 8) & 0x3) > privilege) return true;
 		switch(csr){
-		case MSTATUS: *value = status.raw & MSTATUS_READ_MASK; break;
+		case MSTATUS: *value = (status.raw | (((status.raw & 0x6000) == 0x6000) ? 0x80000000 : 0)) & MSTATUS_READ_MASK;  break;
 		case MIP: *value = getIp().raw; break;
 		case MIE: *value = ie.raw; break;
 		case MTVEC: *value = mtvec.raw; break;
@@ -597,7 +603,7 @@ public:
 		case MIDELEG: *value = mideleg; break;
 		case MHARTID: *value = 0; break;
 
-		case SSTATUS: *value = status.raw & 0xC0133; break;
+		case SSTATUS: *value = (status.raw | (((status.raw & 0x6000) == 0x6000) ? 0x80000000 : 0)) & (0x800C0133 | STATUS_FS_MASK); break;
 		case SIP: *value = getIp().raw & 0x333; break;
 		case SIE: *value = ie.raw & 0x333; break;
 		case STVEC: *value = stvec.raw; break;
@@ -611,6 +617,11 @@ public:
 		case FCSR: *value = fcsr.raw; break;
 		case FRM: *value = fcsr.frm; break;
 		case FFLAGS: *value = fcsr.flags; break;
+		#endif
+
+        #ifdef UTIME_INPUT
+		case UTIME: *value  = dutRfWriteValue; break;
+		case UTIMEH: *value  = dutRfWriteValue; break;
 		#endif
 
 		default: return true; break;
@@ -627,12 +638,12 @@ public:
 		return value;
 	}
 
-	#define maskedWrite(dst, src, mask) dst=(dst & ~mask)|(src & mask);
+	#define maskedWrite(dst, src, mask) dst=((dst) & ~(mask))|((src) & (mask));
 
 	virtual bool csrWrite(int32_t csr, uint32_t value){
 		if(((csr >> 8) & 0x3) > privilege) return true;
 		switch(csr){
-		case MSTATUS: status.raw = value; break;
+		case MSTATUS: status.raw = value & 0x7FFFFFFF; break;
 		case MIP: ipSoft = value; break;
 		case MIE: ie.raw = value; break;
 		case MTVEC: mtvec.raw = value; break;
@@ -644,7 +655,7 @@ public:
 		case MEDELEG: medeleg = value & (~0x8); break;
 		case MIDELEG: mideleg = value; break;
 
-		case SSTATUS: maskedWrite(status.raw, value,0xC0133 | STATUS_FS_MASK); break;
+		case SSTATUS: maskedWrite(status.raw, value, 0xC0133 | STATUS_FS_MASK);  break;
 		case SIP: maskedWrite(ipSoft, value,0x333); break;
 		case SIE: maskedWrite(ie.raw, value,0x333); break;
 		case STVEC: stvec.raw = value; break;
@@ -652,8 +663,7 @@ public:
 		case STVAL: sbadaddr = value; break;
 		case SEPC: sepc = value; break;
 		case SSCRATCH: sscratch = value; break;
-		case SATP: satp.raw = value; break;
-
+		case SATP: satp.raw = value;  break;
 
 		#ifdef RVF
 		case FCSR: fcsr.raw = value & 0x7F; break;
@@ -738,6 +748,7 @@ public:
             fcsr.flags |= completion.flags;
             fpuCompletionTockens -= 1;
         }
+
 
 		#define rd32 ((i >> 7) & 0x1F)
 		#define iBits(lo,  len) ((i >> lo) & ((1 << len)-1))
@@ -833,6 +844,7 @@ public:
 			        fcsr.flags |= rsp.flags;
 			        rfWrite(rd32, (u32)rsp.value);
 			    }
+                status.fs = 3;
                 pcWrite(pc + 4);
 			} break;
 			case 0x07: { //Fpu load
@@ -860,6 +872,7 @@ public:
                             cout << "FPU load missmatch DUT=" << hex << commit.value << " REF=" << data << dec << endl;
                             fail();
                         } else {
+                            status.fs = 3;
                             pcWrite(pc + 4);
                         }
                     }
@@ -882,6 +895,7 @@ public:
                 } else {
                     if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
                     dWrite(pAddr, size, (uint8_t*) &rsp.value);
+                    status.fs = 3;
                     pcWrite(pc + 4);
                 }
 			} break;
@@ -1687,10 +1701,15 @@ public:
 				//if(mTime == mTimeCmp) printf("SIM timer tick\n");
 				#endif
 
+
+				#ifdef UTIME_INPUT
+				top->utime = mTime;
+				#endif
+
 				currentTime = i;
 
                 #ifdef FLOW_INFO
-                    if(i % 2000000 == 0) cout << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "PROGRESS TRACE_START=" << i << endl;
+                    if(i % 5000000 == 0) cout << endl << "**" << endl << "**"  << endl << "PROGRESS TRACE_START=" << i << endl;
                 #endif
 
 
@@ -1764,6 +1783,7 @@ public:
 //                            cout << "- S " << privilegeCounters[1] << endl;
 //                            cout << "- M " << privilegeCounters[3] << endl;
 //                        }
+                        riscvRef.dutRfWriteValue = top->VexRiscv->lastStageRegFileWrite_payload_data;
                    	    riscvRef.step();
                    	    bool mIntTimer = false;
                    	    bool mIntExt = false;
@@ -2554,10 +2574,16 @@ public:
 	virtual void onReset(){
 		top->dBus_cmd_ready = 1;
 		top->dBus_rsp_valid = 0;
+		#ifdef DBUS_AGGREGATION
+		top->dBus_rsp_payload_aggregated = 0;
+		#endif
 		#ifdef DBUS_INVALIDATE
 		top->dBus_inv_valid = 0;
 		top->dBus_ack_ready = 0;
 		top->dBus_sync_valid = 0;
+		#ifdef DBUS_AGGREGATION
+		top->dBus_sync_payload_aggregated = 0;
+		#endif
 		#endif
 	}
 
@@ -3700,7 +3726,7 @@ public:
 
 
 
-    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint64_t mask, uint8_t *dataBytes, bool *error) {
+    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size, uint8_t *dataBytes, bool *error) {
         uint32_t *data = (uint32_t*)dataBytes;
         if(isPerifRegion(addr)) switch(addr){
     		case 0xF0010000: if(wr && *data != 0) fail(); else *data = 0;  break;
@@ -3733,9 +3759,9 @@ public:
 					}
 				}
 				break;
-    		default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " mask=0x" << mask << " data=0x" << data << dec << endl; fail(); break;
+    		default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " data=0x" << data << dec << endl; fail(); break;
     	}
-        Workspace::dBusAccess(addr,wr,size,mask,data,error);
+        Workspace::dBusAccess(addr,wr,size,dataBytes,error);
     }
 
     virtual void onStdout(char c){
@@ -4058,6 +4084,30 @@ int main(int argc, char **argv, char **env) {
 	printf("BOOT\n");
 	timespec startedAt = timer_start();
 
+
+#ifdef LINUX_SOC_SMP
+    {
+
+	    LinuxSocSmp soc("linuxSmp");
+	    #ifndef DEBUG_PLUGIN_EXTERNAL
+	    soc.withRiscvRef();
+		soc.loadBin(EMULATOR, 0x80000000);
+		soc.loadBin(VMLINUX,  0x80400000);
+		soc.loadBin(DTB,      0x80FF0000);
+		soc.loadBin(RAMDISK,  0x81000000);
+		#endif
+		//soc.setIStall(true);
+		//soc.setDStall(true);
+		soc.bootAt(0x80000000);
+		soc.run(0);
+//		soc.run((496300000l + 2000000) / 2);
+//		soc.run(438700000l/2);
+        return -1;
+    }
+#endif
+
+
+
     #ifdef RVF
     for(const string &name : riscvTestFloat){
         redo(REDO,RiscvTest(name).withRiscvRef()->bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
@@ -4140,27 +4190,6 @@ int main(int argc, char **argv, char **env) {
     }
 #endif
 
-
-#ifdef LINUX_SOC_SMP
-    {
-
-	    LinuxSocSmp soc("linuxSmp");
-	    #ifndef DEBUG_PLUGIN_EXTERNAL
-	    soc.withRiscvRef();
-		soc.loadBin(EMULATOR, 0x80000000);
-		soc.loadBin(VMLINUX,  0xC0000000);
-		soc.loadBin(DTB,      0xC4000000);
-		soc.loadBin(RAMDISK,  0xC2000000);
-		#endif
-		//soc.setIStall(true);
-		//soc.setDStall(true);
-		soc.bootAt(0x80000000);
-		soc.run(0);
-//		soc.run((496300000l + 2000000) / 2);
-//		soc.run(438700000l/2);
-        return -1;
-    }
-#endif
 
 
 
