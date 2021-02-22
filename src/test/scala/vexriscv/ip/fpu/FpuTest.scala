@@ -55,11 +55,11 @@ class FpuTest extends FunSuite{
   }
 
   def testP(p : FpuParameter){
-    val portCount = 1
+    val portCount = 4
 
     val config = SimConfig
     config.allOptimisation
-    if(p.withDouble) config.withFstWave
+//    if(p.withDouble) config.withFstWave
     config.compile(new FpuCore(portCount, p){
       for(i <- 0 until portCount) out(Bits(5 bits)).setName(s"flagAcc$i") := io.port(i).completion.flags.asBits
       setDefinitionName("FpuCore"+ (if(p.withDouble) "Double" else  ""))
