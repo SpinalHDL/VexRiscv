@@ -555,7 +555,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       when(isInfinity){recoded.setInfinity}
       when(isNan){recoded.setNan}
 
-      val output = input.haltWhen(busy).swapPayload(new MergeInput())
+      val isCommited = rf.lock.map(_.commited).read(input.lockId)
+      val output = input.haltWhen(busy || !isCommited).swapPayload(new MergeInput())
       output.source := input.source
       output.lockId := input.lockId
       output.roundMode := input.roundMode
@@ -589,6 +590,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val input = decode.shortPip.stage()
 
     val rfOutput = Stream(new MergeInput())
+
+    val isCommited = rf.lock.map(_.commited).read(input.lockId)
+    val output = rfOutput.haltWhen(!isCommited)
 
     val result = p.storeLoadType().assignDontCare()
 
@@ -880,6 +884,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
     case class MulSplit(offsetA : Int, offsetB : Int, widthA : Int, widthB : Int, id : Int){
       val offsetC = offsetA+offsetB
+      val widthC = widthA + widthB
+      val endC = offsetC+widthC
     }
     val splitsUnordered = for(offsetA <- 0 until inWidthA by p.mulWidthA;
                      offsetB <- 0 until inWidthB by p.mulWidthB;
@@ -887,7 +893,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
                      widthB = (inWidthB - offsetB) min p.mulWidthB) yield {
      MulSplit(offsetA, offsetB, widthA, widthB, -1)
     }
-    val splits = splitsUnordered.sortWith(_.offsetC < _.offsetC).zipWithIndex.map(e => e._1.copy(id=e._2))
+    val splits = splitsUnordered.sortWith(_.endC < _.endC).zipWithIndex.map(e => e._1.copy(id=e._2))
 
     class MathWithExp extends MulInput{
       val exp  = UInt(p.internalExponentSize+1 bits)
@@ -910,21 +916,39 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       splits.foreach(e => output.muls(e.id) := mulA(e.offsetA, e.widthA bits) * mulB(e.offsetB, e.widthB bits))
     }
 
-    class MathOutput extends MathWithExp{
+    val sumSplitAt = splits.size/2//splits.filter(e => e.endC <= p.internalMantissaSize).size
+
+    class Sum1Output extends MathWithExp{
+      val muls2  = Vec(splits.drop(sumSplitAt).map(e => UInt(e.widthA + e.widthB bits)))
+      val mulC2 = UInt(p.internalMantissaSize*2+2 bits)
+    }
+    class Sum2Output extends MathWithExp{
       val mulC = UInt(p.internalMantissaSize*2+2 bits)
     }
 
-    val math = new Area {
+    val sum1 = new Area {
       val input = mul.output.stage()
-      val sum = splits.map(e => (input.muls(e.id) << e.offsetC).resize(outWidth)).reduceBalancedTree(_ + _)
+      val sum = splits.take(sumSplitAt).map(e => (input.muls(e.id) << e.offsetC).resize(outWidth)).reduceBalancedTree(_ + _)
 
-      val output = input.swapPayload(new MathOutput())
+      val isCommited = rf.lock.map(_.commited).read(input.lockId)
+      val output = input.haltWhen(!isCommited).swapPayload(new Sum1Output())
+      output.payload.assignSomeByName(input.payload)
+      output.mulC2 := sum.resized
+      output.muls2 := Vec(input.muls.drop(sumSplitAt))
+    }
+
+    val sum2 = new Area {
+      val input = sum1.output.stage()
+      val sum = input.mulC2 + splits.drop(sumSplitAt).map(e => (input.muls2(e.id-sumSplitAt) << e.offsetC).resize(outWidth)).reduceBalancedTree(_ + _)
+
+      val isCommited = rf.lock.map(_.commited).read(input.lockId)
+      val output = input.haltWhen(!isCommited).swapPayload(new Sum2Output())
       output.payload.assignSomeByName(input.payload)
       output.mulC := sum
     }
 
     val norm = new Area{
-      val input = math.output.stage()
+      val input = sum2.output.stage()
       val (mulHigh, mulLow) = input.mulC.splitAt(p.internalMantissaSize-1)
       val scrap = mulLow =/= 0
       val needShift = mulHigh.msb
@@ -1003,7 +1027,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   val div = p.withDiv generate new Area{
     val input = decode.div.halfPipe()
     val haltIt = True
-    val output = input.haltWhen(haltIt).swapPayload(new MergeInput())
+    val isCommited = RegNext(rf.lock.map(_.commited).read(input.lockId))
+    val output = input.haltWhen(haltIt || !isCommited).swapPayload(new MergeInput())
 
     val dividerShift = if(p.withDouble) 0 else 1
     val divider = FpuDiv(p.internalMantissaSize + dividerShift)
@@ -1020,7 +1045,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val needShift = !dividerResult.msb
     val mantissa = needShift ? dividerResult(0, p.internalMantissaSize + 1 bits) |  dividerResult(1, p.internalMantissaSize + 1 bits)
     val scrap = dividerScrap || !needShift && dividerResult(0)
-    val exponentOffset = 1 << (p.internalExponentSize + (if(p.withDouble) 0 else 1))
+    val exponentOffset = 1 << (p.internalExponentSize + 1)
     val exponent = input.rs1.exponent + U(exponentOffset | exponentOne) - input.rs2.exponent - U(needShift)
 
     output.value.setNormal
@@ -1028,7 +1053,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     output.value.exponent := exponent.resized
     output.value.mantissa := mantissa
     output.scrap := scrap
-    if(!p.withDouble) when(exponent.takeHigh(2) === 3){ output.value.exponent(p.internalExponentSize-3, 3 bits) := 7} //Handle overflow
+    when(exponent.takeHigh(2) === 3){ output.value.exponent(p.internalExponentSize-3, 3 bits) := 7} //Handle overflow
 
 
 
@@ -1036,14 +1061,14 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val underflowExp = muxDouble[UInt](input.format)(exponentOne + exponentOffset - 1023 - 54) (exponentOne + exponentOffset - 127 - 25)
     val forceUnderflow = exponent <  underflowThreshold
     val forceOverflow = input.rs1.isInfinity || input.rs2.isZero
-    val infinitynan = input.rs1.isZero && input.rs2.isZero
+    val infinitynan = input.rs1.isZero && input.rs2.isZero || input.rs1.isInfinity && input.rs2.isInfinity
     val forceNan = input.rs1.isNan || input.rs2.isNan || infinitynan
-    val forceZero = input.rs1.isZero
+    val forceZero = input.rs1.isZero || input.rs2.isInfinity
 
 
 
     output.NV := False
-    output.DZ := !forceNan && input.rs2.isZero
+    output.DZ := !forceNan && !input.rs1.isInfinity && input.rs2.isZero
 
     when(exponent(exponent.getWidth-3, 3 bits) === 7) { output.value.exponent(p.internalExponentSize-2, 2 bits) := 3 }
 
@@ -1067,7 +1092,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   val sqrt = p.withSqrt generate new Area{
     val input = decode.sqrt.halfPipe()
     val haltIt = True
-    val output = input.haltWhen(haltIt).swapPayload(new MergeInput())
+    val isCommited = RegNext(rf.lock.map(_.commited).read(input.lockId))
+    val output = input.haltWhen(haltIt || !isCommited).swapPayload(new MergeInput())
 
     val needShift = !input.rs1.exponent.lsb
     val sqrt = FpuSqrt(p.internalMantissaSize)
@@ -1390,7 +1416,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
     val oh = new Area {
       val input = math.output.stage()
-      val output = input.swapPayload(new OhOutput)
+      val isCommited = rf.lock.map(_.commited).read(input.lockId)
+      val output = input.haltWhen(!isCommited).swapPayload(new OhOutput)
       output.payload.assignSomeByName(input.payload)
       import input.payload._
 
@@ -1447,6 +1474,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       output.DZ := False
       when(forceNan) {
         output.value.setNanQuiet
+      } elsewhen (forceInfinity) {
+        output.value.setInfinity
       } elsewhen (forceZero) {
         output.value.setZero
         when(xyMantissaZero || input.rs1.isZero && input.rs2.isZero) {
@@ -1455,8 +1484,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         when((input.rs1.sign || input.rs2.sign) && input.roundMode === FpuRoundMode.RDN) {
           output.value.sign := True
         }
-      } elsewhen (forceInfinity) {
-        output.value.setInfinity
       }
     }
   }
@@ -1470,10 +1497,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     if(p.withDiv) (inputs += div.output)
     if(p.withAdd) (inputs += add.result.output)
     if(p.withMul) (inputs += mul.result.output)
-    if(p.withShortPipMisc) (inputs += shortPip.rfOutput.pipelined(m2s = true))
-    val arbitrated = StreamArbiterFactory.lowerFirst.noLock.on(inputs)
-    val isCommited = rf.lock.map(_.commited).read(arbitrated.lockId)
-    val commited = arbitrated.haltWhen(!isCommited).toFlow
+    if(p.withShortPipMisc) (inputs += shortPip.output.pipelined(m2s = true))
+    val arbitrated = StreamArbiterFactory.lowerFirst.noLock.on(inputs).toFlow
   }
 
   class RoundFront extends MergeInput{
@@ -1483,7 +1508,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   }
 
   val roundFront = new Area {
-    val input = merge.commited.stage()
+    val input = merge.arbitrated.stage()
     val output = input.swapPayload(new RoundFront())
     output.payload.assignSomeByName(input.payload)
 
@@ -1792,3 +1817,59 @@ object FpuSynthesisBench extends App{
 //Fpu_64 ->
 //Artix 7 -> 100 Mhz 3294 LUT 2763 FF
 //Artix 7 -> 151 Mhz 3708 LUT 2904 FF
+
+//Fpu_32 ->
+//Artix 7 -> 139 Mhz 1879 LUT 1713 FF
+//Artix 7 -> 206 Mhz 2135 LUT 1723 FF
+//Fpu_64 ->
+//Artix 7 -> 106 Mhz 3502 LUT 2811 FF
+//Artix 7 -> 163 Mhz 3905 LUT 2951 FF
+
+//Fpu_32 ->
+//Artix 7 -> 130 Mhz 1889 LUT 1835 FF
+//Artix 7 -> 210 Mhz 2131 LUT 1845 FF
+//Fpu_64 ->
+//Artix 7 -> 106 Mhz 3322 LUT 3023 FF
+//Artix 7 -> 161 Mhz 3675 LUT 3163 FF
+
+
+/*
+testfloat  -tininessafter -all1 > all1.txt
+cat all1.txt | grep "Errors found in"
+
+testfloat  -tininessafter -all2 > all2.txt
+cat all2.txt | grep "Errors found in"
+
+
+all1 =>
+Errors found in f32_to_ui64_rx_minMag:
+Errors found in f32_to_i64_rx_minMag:
+Errors found in f64_to_ui64_rx_minMag:
+Errors found in f64_to_i64_rx_minMag:
+
+all2 =>
+Errors found in f32_add, rounding near_even:
+Errors found in f32_add, rounding minMag:
+Errors found in f32_add, rounding min:
+Errors found in f32_add, rounding max:
+Errors found in f32_sub, rounding near_even:
+Errors found in f32_sub, rounding minMag:
+Errors found in f32_sub, rounding min:
+Errors found in f32_sub, rounding max:
+Errors found in f32_mul, rounding near_even:
+Errors found in f32_mul, rounding min:
+Errors found in f32_mul, rounding max:
+Errors found in f32_div, rounding near_even:
+Errors found in f32_div, rounding minMag:
+Errors found in f32_div, rounding min:
+Errors found in f32_div, rounding max:
+Errors found in f64_mul, rounding near_even:
+Errors found in f64_mul, rounding min:
+Errors found in f64_mul, rounding max:
+Errors found in f64_div, rounding near_even:
+Errors found in f64_div, rounding minMag:
+Errors found in f64_div, rounding min:
+Errors found in f64_div, rounding max:
+
+
+ */

@@ -59,7 +59,7 @@ class FpuTest extends FunSuite{
 
     val config = SimConfig
     config.allOptimisation
-//    config.withFstWave
+    config.withFstWave
     config.compile(new FpuCore(portCount, p){
       for(i <- 0 until portCount) out(Bits(5 bits)).setName(s"flagAcc$i") := io.port(i).completion.flags.asBits
       setDefinitionName("FpuCore"+ (if(p.withDouble) "Double" else  ""))
@@ -1257,11 +1257,28 @@ class FpuTest extends FunSuite{
         var fxxTests = f32Tests
         if(p.withDouble) fxxTests ++= f64Tests
 
+//        testBinaryOpF64(div, -2.2250738564511294E-308, 4.294967296003891E9,  -5.180654E-318, 1, FpuRoundMode.RDN,"div") // ??? wtf
+
+//        testBinaryOp(add,b2f(0x7F800000),b2f(0x1FD << 23),b2f(0x7F800000),0, FpuRoundMode.RNE,"add")
+
+
+        for(_ <- 0 until 1000000) testDivF64()
+        println("f64 div done")
+
+
         for(_ <- 0 until 10000) testDiv()
         println("f32 div done")
 
+        for(_ <- 0 until 10000) testAddF32()
+        for(_ <- 0 until 10000) testSubF32()
+
+        println("Add done")
+
+
         for(_ <- 0 until 10000) testSqrt()
         println("f32 sqrt done")
+
+
 
 
 

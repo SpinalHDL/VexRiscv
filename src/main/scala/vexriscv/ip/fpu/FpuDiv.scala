@@ -126,3 +126,15 @@ object FpuDivTester extends App{
     }
   }
 }
+
+object FpuDivTester2 extends App{
+  val mantissaWidth = 52
+  val a = BigInt(0xfffffff810000l)
+  val b = BigInt(0x0000000000FF0l)
+  val x = (a | (1l << mantissaWidth))
+  val y = (b | (1l << mantissaWidth))
+  val result = (x << mantissaWidth+2) / y
+  val remain = (x << mantissaWidth+2) % y
+  println("done")
+
+}
