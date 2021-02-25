@@ -55,11 +55,11 @@ class FpuTest extends FunSuite{
   }
 
   def testP(p : FpuParameter){
-    val portCount = 4
+    val portCount = 1
 
     val config = SimConfig
     config.allOptimisation
-//    if(p.withDouble) config.withFstWave
+//    config.withFstWave
     config.compile(new FpuCore(portCount, p){
       for(i <- 0 until portCount) out(Bits(5 bits)).setName(s"flagAcc$i") := io.port(i).completion.flags.asBits
       setDefinitionName("FpuCore"+ (if(p.withDouble) "Double" else  ""))
@@ -724,58 +724,34 @@ class FpuTest extends FunSuite{
           }
         }
 
-        def testSqrtExact(a : Float, ref : Float, flag : Int, rounding : FpuRoundMode.E): Unit ={
-          val rs = new RegAllocator()
-          val rs1, rs2, rs3 = rs.allocate()
-          val rd = Random.nextInt(32)
-          load(rs1, a)
-
-          sqrt(rd,rs1,  FpuRoundMode.RNE, FpuFormat.FLOAT)
-          storeFloat(rd){v =>
-            val error = Math.abs(ref-v)/ref
-            assert(checkFloat(ref, v), f"sqrt($a) = $v, $ref $error $rounding")
-          }
-        }
-
-        def testDivExact(a : Float, b : Float, ref : Float, flag : Int, rounding : FpuRoundMode.E): Unit ={
-          val rs = new RegAllocator()
-          val rs1, rs2, rs3 = rs.allocate()
-          val rd = Random.nextInt(32)
-          load(rs1, a)
-          load(rs2, b)
-
-          div(rd,rs1, rs2, FpuRoundMode.RNE, FpuFormat.FLOAT)
-          storeFloat(rd){v =>
-            val error = Math.abs(ref-v)/ref
-            assert(checkFloat(ref, v), f"div($a, $b) = $v, $ref $error $rounding")
-          }
-        }
-
         def testSqrtF64Exact(a : Double, ref : Double, flag : Int, rounding : FpuRoundMode.E): Unit ={
           val rs = new RegAllocator()
           val rs1, rs2, rs3 = rs.allocate()
           val rd = Random.nextInt(32)
           load(rs1, a)
 
-          sqrt(rd,rs1,  FpuRoundMode.RNE, FpuFormat.DOUBLE)
+          sqrt(rd,rs1,  rounding, FpuFormat.DOUBLE)
+
           store(rd){v =>
-            val error = Math.abs(ref-v)/ref
-            assert(checkDouble(ref, v), f"sqrt($a) = $v, $ref $error $rounding")
+            assert(d2b(v) == d2b(ref), f"## sqrt${a}   = $v, $ref $rounding, ${d2b(a).toString(16)} ${d2b(ref).toString(16)}")
           }
+
+          flagMatch(flag, ref, f"## sqrt${a} $ref $rounding")
         }
 
-        def testDivF64Exact(a : Double, b : Double, ref : Double, flag : Int, rounding : FpuRoundMode.E): Unit ={
+        def testSqrtExact(a : Float, ref : Float, flag : Int, rounding : FpuRoundMode.E): Unit ={
           val rs = new RegAllocator()
           val rs1, rs2, rs3 = rs.allocate()
           val rd = Random.nextInt(32)
           load(rs1, a)
-          load(rs2, b)
 
-          div(rd,rs1, rs2, FpuRoundMode.RNE, FpuFormat.DOUBLE)
-          store(rd){v =>
-            val error = Math.abs(ref-v)/ref
-            assert(checkDouble(ref, v), f"div($a, $b) = $v, $ref $error $rounding")
+          sqrt(rd,rs1,  rounding, FpuFormat.FLOAT)
+
+          storeFloat(rd){v =>
+            assert(d2b(v) == d2b(ref), f"## sqrt${a}   = $v, $ref $rounding, ${f2b(a).toString()} ${f2b(ref).toString()}")
           }
+
+          flagMatch(flag, ref, f"## sqrt${a} $ref $rounding")
         }
 
 
@@ -1108,8 +1084,7 @@ class FpuTest extends FunSuite{
         def testDiv() : Unit = {
           val rounding = FpuRoundMode.elements.randomPick()
           val (a,b,r,f) = f32.div(rounding).f32_f32_f32
-          testDivExact(a, b, r, f, rounding)
-          flagClear()
+          testBinaryOp(div, a, b, r, f, rounding, "div")
         }
 
         def testSqrt() : Unit = {
@@ -1132,7 +1107,8 @@ class FpuTest extends FunSuite{
         def testDivF64() : Unit = {
           val rounding = FpuRoundMode.elements.randomPick()
           val (a,b,r,f) = f64.div(rounding).f64_f64_f64
-          testDivF64Exact(a, b, r, f, rounding)
+         // testDivF64Exact(a, b, r, f, rounding)
+          testBinaryOpF64(div, a, b, r, f,rounding, "div")
           flagClear()
         }
 
@@ -1280,22 +1256,34 @@ class FpuTest extends FunSuite{
 
         var fxxTests = f32Tests
         if(p.withDouble) fxxTests ++= f64Tests
-        
-        
+
+        for(_ <- 0 until 10000) testDiv()
+        println("f32 div done")
+
+        for(_ <- 0 until 10000) testSqrt()
+        println("f32 sqrt done")
+
+
+
+
         //TODO test boxing
         //TODO double <-> simple convertions
         if(p.withDouble) {
 
-          load(0, 1.0)
-          load(0, 2.0)
-          load(0, 2.5)
-          load(0, 0.75)
-          load(0, -5)
-          load(0, 0)
-          load(0, Double.PositiveInfinity)
-          load(0, Double.NaN)
-          dut.clockDomain.waitSampling(200)
-          simSuccess()
+          testSqrtF64Exact(1.25*1.25, 1.25, 0, FpuRoundMode.RNE)
+          testSqrtF64Exact(1.5*1.5, 1.5, 0, FpuRoundMode.RNE)
+
+          for(_ <- 0 until 10000) testSqrtF64()
+          println("f64 sqrt done")
+
+//          testDivF64Exact(1.0, 8.0, 0.125, 0, FpuRoundMode.RNE)
+//          testDivF64Exact(4.0, 8.0, 0.5, 0, FpuRoundMode.RNE)
+//          testDivF64Exact(8.0, 8.0, 1.0, 0, FpuRoundMode.RNE)
+//          testDivF64Exact(1.5, 2.0, 0.75, 0, FpuRoundMode.RNE)
+//          testDivF64Exact(1.875, 1.5, 1.25, 0, FpuRoundMode.RNE)
+
+          for(_ <- 0 until 10000) testDivF64()
+          println("f64 div done")
 
           for(_ <- 0 until 10000) testSgnjF64()
           println("f64 sgnj done")
@@ -1337,12 +1325,6 @@ class FpuTest extends FunSuite{
           for(_ <- 0 until 10000) testEqF64()
           println("f64 Cmp done")
 
-
-          for(_ <- 0 until 10000) testDivF64()
-          println("f64 div done")
-
-          for(_ <- 0 until 10000) testSqrtF64()
-          println("f64 sqrt done")
 
           for(_ <- 0 until 10000) testClassF64()
           println("f64 class done")

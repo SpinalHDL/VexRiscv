@@ -3,6 +3,7 @@ package vexriscv.ip.fpu
 import spinal.core._
 import spinal.lib._
 import spinal.lib.eda.bench.{Bench, Rtl, XilinxStdTargets}
+import spinal.lib.math.UnsignedDivider
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -24,8 +25,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   val exponentF32Infinity = exponentOne+127+1
   val exponentF64Infinity = exponentOne+1023+1
 
-  val rfLockCount = 5
-  val lockIdType = HardType(UInt(log2Up(rfLockCount) bits))
+
+  val lockIdType = HardType(UInt(log2Up(p.rfLockCount) bits))
 
   def whenDouble(format : FpuFormat.C)(yes : => Unit)(no : => Unit): Unit ={
     if(p.withDouble) when(format === FpuFormat.DOUBLE) { yes } otherwise{ no }
@@ -106,6 +107,25 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val format = p.withDouble generate FpuFormat()
   }
 
+  case class DivInput() extends Bundle{
+    val source = Source()
+    val rs1, rs2 = p.internalFloating()
+    val rd = p.rfAddress()
+    val lockId = lockIdType()
+    val roundMode = FpuRoundMode()
+    val format = p.withDouble generate FpuFormat()
+  }
+
+
+  case class SqrtInput() extends Bundle{
+    val source = Source()
+    val rs1 = p.internalFloating()
+    val rd = p.rfAddress()
+    val lockId = lockIdType()
+    val roundMode = FpuRoundMode()
+    val format = p.withDouble generate FpuFormat()
+  }
+
 
   case class AddInput() extends Bundle{
     val source = Source()
@@ -145,11 +165,11 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val boxed = p.withDouble generate Bool()
     }
     val ram = Mem(Entry(), 32*portCount)
-    val lock = for(i <- 0 until rfLockCount) yield new Area{
+    val lock = for(i <- 0 until p.rfLockCount) yield new Area{
       val valid = RegInit(False)
       val source = Reg(Source())
       val address = Reg(p.rfAddress)
-      val id = Reg(UInt(log2Up(rfLockCount) bits))
+      val id = Reg(UInt(log2Up(p.rfLockCount+1) bits))
       val commited = Reg(Bool)
       val write = Reg(Bool)
     }
@@ -184,7 +204,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
   val commitLogic = for(source <- 0 until portCount) yield new Area{
     val fire = False
-    val target, hit = Reg(UInt(log2Up(rfLockCount+1) bits)) init(0)
+    val target, hit = Reg(UInt(log2Up(p.rfLockCount+1) bits)) init(0)
     val full = target + 1 === hit
     when(fire){
       hit := hit + 1
@@ -241,7 +261,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
           commitLogic(i).target := commitLogic(i).target + 1
         }
       }
-      for(i <- 0 until rfLockCount){
+      for(i <- 0 until p.rfLockCount){
         when(rf.lockFreeId(i)){
           rf.lock(i).valid := True
           rf.lock(i).source := s0.source
@@ -317,10 +337,31 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       divSqrt.div := input.opcode === p.Opcode.DIV
     }
 
+    val divHit = input.opcode === p.Opcode.DIV
+    val div = Stream(DivInput())
+    if(p.withDiv) {
+      input.ready setWhen (divHit && div.ready)
+      div.valid := input.valid && divHit
+      div.payload.assignSomeByName(input.payload)
+    }
+
+    val sqrtHit = input.opcode === p.Opcode.SQRT
+    val sqrt = Stream(SqrtInput())
+    if(p.withSqrt) {
+      input.ready setWhen (sqrtHit && sqrt.ready)
+      sqrt.valid := input.valid && sqrtHit
+      sqrt.payload.assignSomeByName(input.payload)
+    }
+
+
     val fmaHit = input.opcode === p.Opcode.FMA
     val mulHit = input.opcode === p.Opcode.MUL || fmaHit
     val mul = Stream(new MulInput())
     val divSqrtToMul = Stream(new MulInput())
+    if(!p.withDivSqrt){
+      divSqrtToMul.valid := False
+      divSqrtToMul.payload.assignDontCare()
+    }
 
     if(p.withMul) {
       input.ready setWhen (mulHit && mul.ready && !divSqrtToMul.valid)
@@ -910,7 +951,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 //      val flag = io.port(input.source).completion.flag
       when(forceNan) {
         output.setNanQuiet
-        NV setWhen(input.valid && (infinitynan || input.rs1.isNanSignaling || input.rs2.isNanSignaling))
+        NV setWhen(infinitynan || input.rs1.isNanSignaling || input.rs2.isNanSignaling)
       } elsewhen(forceOverflow) {
         output.setInfinity
       } elsewhen(forceZero) {
@@ -956,6 +997,145 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
       input.ready := (input.add ? decode.mulToAdd.ready | output.ready) || input.divSqrt
     }
+  }
+
+
+  val div = p.withDiv generate new Area{
+    val input = decode.div.halfPipe()
+    val haltIt = True
+    val output = input.haltWhen(haltIt).swapPayload(new MergeInput())
+
+    val dividerShift = if(p.withDouble) 0 else 1
+    val divider = FpuDiv(p.internalMantissaSize + dividerShift)
+    divider.io.input.a := input.rs1.mantissa << dividerShift
+    divider.io.input.b := input.rs2.mantissa << dividerShift
+    val dividerResult = divider.io.output.result >> dividerShift
+    val dividerScrap = divider.io.output.remain =/= 0 || divider.io.output.result(0, dividerShift bits) =/= 0
+
+    val cmdSent = RegInit(False) setWhen(divider.io.input.fire) clearWhen(!haltIt)
+    divider.io.input.valid := input.valid && !cmdSent
+    divider.io.output.ready := input.ready
+    output.payload.assignSomeByName(input.payload)
+
+    val needShift = !dividerResult.msb
+    val mantissa = needShift ? dividerResult(0, p.internalMantissaSize + 1 bits) |  dividerResult(1, p.internalMantissaSize + 1 bits)
+    val scrap = dividerScrap || !needShift && dividerResult(0)
+    val exponentOffset = 1 << (p.internalExponentSize + (if(p.withDouble) 0 else 1))
+    val exponent = input.rs1.exponent + U(exponentOffset | exponentOne) - input.rs2.exponent - U(needShift)
+
+    output.value.setNormal
+    output.value.sign := input.rs1.sign ^ input.rs2.sign
+    output.value.exponent := exponent.resized
+    output.value.mantissa := mantissa
+    output.scrap := scrap
+    if(!p.withDouble) when(exponent.takeHigh(2) === 3){ output.value.exponent(p.internalExponentSize-3, 3 bits) := 7} //Handle overflow
+
+
+
+    val underflowThreshold = muxDouble[UInt](input.format)(exponentOne + exponentOffset - 1023 - 53) (exponentOne + exponentOffset - 127 - 24)
+    val underflowExp = muxDouble[UInt](input.format)(exponentOne + exponentOffset - 1023 - 54) (exponentOne + exponentOffset - 127 - 25)
+    val forceUnderflow = exponent <  underflowThreshold
+    val forceOverflow = input.rs1.isInfinity || input.rs2.isZero
+    val infinitynan = input.rs1.isZero && input.rs2.isZero
+    val forceNan = input.rs1.isNan || input.rs2.isNan || infinitynan
+    val forceZero = input.rs1.isZero
+
+
+
+    output.NV := False
+    output.DZ := !forceNan && input.rs2.isZero
+
+    when(exponent(exponent.getWidth-3, 3 bits) === 7) { output.value.exponent(p.internalExponentSize-2, 2 bits) := 3 }
+
+    when(forceNan) {
+      output.value.setNanQuiet
+      output.NV setWhen((infinitynan || input.rs1.isNanSignaling || input.rs2.isNanSignaling))
+    } elsewhen(forceOverflow) {
+      output.value.setInfinity
+    } elsewhen(forceZero) {
+      output.value.setZero
+    } elsewhen(forceUnderflow) {
+      output.value.exponent := underflowExp.resized
+    }
+
+
+    haltIt clearWhen(divider.io.output.valid)
+  }
+
+
+
+  val sqrt = p.withSqrt generate new Area{
+    val input = decode.sqrt.halfPipe()
+    val haltIt = True
+    val output = input.haltWhen(haltIt).swapPayload(new MergeInput())
+
+    val needShift = !input.rs1.exponent.lsb
+    val sqrt = FpuSqrt(p.internalMantissaSize)
+    sqrt.io.input.a := (needShift ? (U"1" @@ input.rs1.mantissa @@ U"0") | (U"01" @@ input.rs1.mantissa))
+
+    val cmdSent = RegInit(False) setWhen(sqrt.io.input.fire) clearWhen(!haltIt)
+    sqrt.io.input.valid := input.valid && !cmdSent
+    sqrt.io.output.ready := input.ready
+    output.payload.assignSomeByName(input.payload)
+
+
+    val scrap = sqrt.io.output.remain =/= 0
+    val exponent =   RegNext(exponentOne-exponentOne/2 -1 +^ (input.rs1.exponent >> 1) + U(input.rs1.exponent.lsb))
+
+    output.value.setNormal
+    output.value.sign := input.rs1.sign
+    output.value.exponent := exponent
+    output.value.mantissa := sqrt.io.output.result
+    output.scrap := scrap
+    output.NV := False
+    output.DZ := False
+
+    val negative  = !input.rs1.isNan && !input.rs1.isZero && input.rs1.sign
+
+    when(input.rs1.isInfinity){
+      output.value.setInfinity
+    }
+    when(negative){
+      output.value.setNanQuiet
+      output.NV := True
+    }
+    when(input.rs1.isNan){
+      output.value.setNanQuiet
+      output.NV := !input.rs1.isQuiet
+    }
+    when(input.rs1.isZero){
+      output.value.setZero
+    }
+
+
+//    val underflowThreshold = muxDouble[UInt](input.format)(exponentOne + exponentOffset - 1023 - 53) (exponentOne + exponentOffset - 127 - 24)
+//    val underflowExp = muxDouble[UInt](input.format)(exponentOne + exponentOffset - 1023 - 54) (exponentOne + exponentOffset - 127 - 25)
+//    val forceUnderflow = exponent <  underflowThreshold
+//    val forceOverflow = input.rs1.isInfinity// || input.rs2.isInfinity
+//    val infinitynan = input.rs1.isZero && input.rs2.isZero
+//    val forceNan = input.rs1.isNan || input.rs2.isNan || infinitynan
+//    val forceZero = input.rs1.isZero
+//
+//
+//
+//    output.NV := False
+//    output.DZ := !forceNan && input.rs2.isZero
+//
+//    when(exponent(exponent.getWidth-3, 3 bits) === 7) { output.value.exponent(p.internalExponentSize-2, 2 bits) := 3 }
+//
+//    when(forceNan) {
+//      output.value.setNanQuiet
+//      output.NV setWhen((infinitynan || input.rs1.isNanSignaling || input.rs2.isNanSignaling))
+//    } elsewhen(forceOverflow) {
+//      output.value.setInfinity
+//    } elsewhen(forceZero) {
+//      output.value.setZero
+//    } elsewhen(forceUnderflow) {
+//      output.value.exponent := underflowExp.resized
+//    }
+
+
+    haltIt clearWhen(sqrt.io.output.valid)
   }
 
   val divSqrt = p.withDivSqrt generate new Area {
@@ -1263,7 +1443,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
 
 //      val flag = io.port(input.source).completion.flag
-      output.NV := (input.valid && (infinityNan || input.rs1.isNanSignaling || input.rs2.isNanSignaling))
+      output.NV := infinityNan || input.rs1.isNanSignaling || input.rs2.isNanSignaling
       output.DZ := False
       when(forceNan) {
         output.value.setNanQuiet
@@ -1286,6 +1466,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     //TODO maybe load can bypass merge and round.
     val inputs = ArrayBuffer[Stream[MergeInput]]()
     inputs += load.s1.output.stage()
+    if(p.withSqrt) (inputs += sqrt.output)
+    if(p.withDiv) (inputs += div.output)
     if(p.withAdd) (inputs += add.result.output)
     if(p.withMul) (inputs += mul.result.output)
     if(p.withShortPipMisc) (inputs += shortPip.rfOutput.pipelined(m2s = true))
@@ -1422,7 +1604,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
 
     when(input.valid){
-      for(i <- 0 until rfLockCount) when(input.lockId === i){
+      for(i <- 0 until p.rfLockCount) when(input.lockId === i){
         rf.lock(i).valid := False
       }
     }
@@ -1516,19 +1698,40 @@ object FpuSynthesisBench extends App{
     SpinalVerilog(new Component{
       val a = Delay(in UInt(width bits), 3)
       val sel = Delay(in UInt(log2Up(width) bits),3)
-//      val result =
-//      val output = Delay(result, 3)
+      //      val result =
+      //      val output = Delay(result, 3)
       setDefinitionName(Rotate3.this.getName())
     })
   }
 
+  class Div(width : Int) extends Rtl{
+    override def getName(): String = "div_" + width
+    override def getRtlPath(): String = getName() + ".v"
+    SpinalVerilog(new UnsignedDivider(width,width, false).setDefinitionName(Div.this.getName()))
+  }
 
+  class Add(width : Int) extends Rtl{
+    override def getName(): String = "add_" + width
+    override def getRtlPath(): String = getName() + ".v"
+    SpinalVerilog(new Component{
+      val a, b = in UInt(width bits)
+      val result = out(a + b)
+      setDefinitionName(Add.this.getName())
+    })
+  }
+
+  class DivSqrtRtl(width : Int) extends Rtl{
+    override def getName(): String = "DivSqrt_" + width
+    override def getRtlPath(): String = getName() + ".v"
+    SpinalVerilog(new FpuDiv(width).setDefinitionName(DivSqrtRtl.this.getName()))
+  }
 
   val rtls = ArrayBuffer[Rtl]()
   rtls += new Fpu(
     "32",
     portCount = 1,
     FpuParameter(
+//      withDivSqrt = false,
       withDouble = false
     )
   )
@@ -1536,11 +1739,18 @@ object FpuSynthesisBench extends App{
     "64",
     portCount = 1,
     FpuParameter(
+//      withDivSqrt = false,
       withDouble = true
     )
   )
 
-//  rtls += new Shifter(24)
+//  rtls += new Div(52)
+//  rtls += new Div(23)
+//  rtls += new Add(64)
+//  rtls += new DivSqrtRtl(52)
+//  rtls += new DivSqrtRtl(23)
+
+  //  rtls += new Shifter(24)
 //  rtls += new Shifter(32)
 //  rtls += new Shifter(52)
 //  rtls += new Shifter(64)
@@ -1558,3 +1768,27 @@ object FpuSynthesisBench extends App{
 
   Bench(rtls, targets)
 }
+
+//Fpu_32 ->
+//Artix 7 -> 136 Mhz 1471 LUT 1336 FF
+//Artix 7 -> 196 Mhz 1687 LUT 1371 FF
+//Fpu_64 ->
+//Artix 7 -> 105 Mhz 2822 LUT 2132 FF
+//Artix 7 -> 161 Mhz 3114 LUT 2272 FF
+//
+//
+//
+//Fpu_32 ->
+//Artix 7 -> 128 Mhz 1693 LUT 1481 FF
+//Artix 7 -> 203 Mhz 1895 LUT 1481 FF
+//Fpu_64 ->
+//Artix 7 -> 99 Mhz 3073 LUT 2396 FF
+//Artix 7 -> 164 Mhz 3433 LUT 2432 FF
+
+
+//Fpu_32 ->
+//Artix 7 -> 112 Mhz 1790 LUT 1666 FF
+//Artix 7 -> 158 Mhz 1989 LUT 1701 FF
+//Fpu_64 ->
+//Artix 7 -> 100 Mhz 3294 LUT 2763 FF
+//Artix 7 -> 151 Mhz 3708 LUT 2904 FF

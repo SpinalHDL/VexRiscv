@@ -50,7 +50,7 @@ case class FpuFloat(exponentSize: Int,
   def isInfinity  =  special && exponent(1 downto 0) === FpuFloat.INFINITY
   def isNan       =  special && exponent(1 downto 0) === FpuFloat.NAN
   def isQuiet     =  mantissa.msb
-  def isNanSignaling  =  special && exponent(1 downto 0) === FpuFloat.NAN && !isQuiet
+  def isNanSignaling  = special && exponent(1 downto 0) === FpuFloat.NAN && !isQuiet
   def isCanonical = exponent(FpuFloat.NAN_CANONICAL_BIT)
 
   def setNormal    =  { special := False }
@@ -118,10 +118,13 @@ object FpuRoundModeInstr extends SpinalEnum(){
 case class FpuParameter( withDouble : Boolean,
                          mulWidthA : Int = 18,
                          mulWidthB : Int = 18,
+                         rfLockCount : Int = 8,
                          sim : Boolean = false,
                          withAdd : Boolean = true,
                          withMul : Boolean = true,
-                         withDivSqrt : Boolean = true,
+                         withDivSqrt : Boolean = false,
+                         withDiv : Boolean = true,
+                         withSqrt : Boolean = true,
                          withShortPipMisc : Boolean = true){
 
   val internalMantissaSize = if(withDouble) 52 else 23
