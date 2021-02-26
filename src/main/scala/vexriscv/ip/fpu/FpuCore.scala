@@ -1004,7 +1004,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       output.roundMode := input.roundMode
       output.scrap := norm.scrap
       output.value := norm.output
-      output.NV := NV //TODO isn't propagated in FMA
+      output.NV := NV
       output.DZ := False
 
       decode.mulToAdd.valid := input.valid && input.add
@@ -1018,6 +1018,10 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       decode.mulToAdd.lockId := input.lockId
       decode.mulToAdd.roundMode := input.roundMode
       if (p.withDouble) decode.mulToAdd.format := input.format
+
+      when(NV){
+        decode.mulToAdd.rs1.mantissa.msb := False
+      }
 
       input.ready := (input.add ? decode.mulToAdd.ready | output.ready) || input.divSqrt
     }
@@ -1558,7 +1562,23 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val ufThreshold = muxDouble[UInt](input.format)(exponentF64Subnormal-52+1)(exponentF32Subnormal-23+1)
     val ofThreshold = muxDouble[UInt](input.format)(exponentF64Infinity-1)(exponentF32Infinity-1)
 
-    when(!math.special && math.exponent <= ufSubnormalThreshold && roundAdjusted.asUInt =/= 0){ //Do not catch exact 1.17549435E-38 underflow, but, who realy care ?
+    //catch exact 1.17549435E-38 underflow, but, who realy care ?
+//    val borringCase = input.value.exponent === ufSubnormalThreshold && roundAdjusted.asUInt < U"11"
+//    when(!math.special && (math.exponent <= ufSubnormalThreshold || borringCase) && roundAdjusted.asUInt =/= 0){
+//      uf := True
+//    }
+    val threshold = input.roundMode.mux(
+      FpuRoundMode.RNE -> U"110",
+      FpuRoundMode.RTZ -> U"110",
+      FpuRoundMode.RDN -> (input.value.sign ? U"101" | U"111"),
+      FpuRoundMode.RUP -> (input.value.sign ? U"111" | U"101"),
+      FpuRoundMode.RMM -> U"110"
+    )
+    val borringRound = (input.value.mantissa(1 downto 0) ## input.scrap)
+    if(p.withDouble) when(input.format === FpuFormat.FLOAT) { borringRound := (input.value.mantissa(30 downto 29) ## input.value.mantissa(28 downto 0).orR)}
+
+    val borringCase = input.value.exponent === ufSubnormalThreshold && borringRound.asUInt < threshold
+    when(!math.special && (math.exponent <= ufSubnormalThreshold || borringCase) && roundAdjusted.asUInt =/= 0){
       uf := True
     }
     when(!math.special && math.exponent > ofThreshold){
@@ -1840,6 +1860,11 @@ cat all1.txt | grep "Errors found in"
 testfloat  -tininessafter -all2 > all2.txt
 cat all2.txt | grep "Errors found in"
 
+testfloat  -tininessafter -f32_mulAdd > fma.txt
+
+testfloat  -tininessafter -all2  -level 2 -checkall  > all2.txt
+
+
 
 all1 =>
 Errors found in f32_to_ui64_rx_minMag:
@@ -1848,28 +1873,29 @@ Errors found in f64_to_ui64_rx_minMag:
 Errors found in f64_to_i64_rx_minMag:
 
 all2 =>
-Errors found in f32_add, rounding near_even:
-Errors found in f32_add, rounding minMag:
-Errors found in f32_add, rounding min:
-Errors found in f32_add, rounding max:
-Errors found in f32_sub, rounding near_even:
-Errors found in f32_sub, rounding minMag:
-Errors found in f32_sub, rounding min:
-Errors found in f32_sub, rounding max:
-Errors found in f32_mul, rounding near_even:
-Errors found in f32_mul, rounding min:
-Errors found in f32_mul, rounding max:
-Errors found in f32_div, rounding near_even:
-Errors found in f32_div, rounding minMag:
-Errors found in f32_div, rounding min:
-Errors found in f32_div, rounding max:
-Errors found in f64_mul, rounding near_even:
-Errors found in f64_mul, rounding min:
-Errors found in f64_mul, rounding max:
-Errors found in f64_div, rounding near_even:
-Errors found in f64_div, rounding minMag:
-Errors found in f64_div, rounding min:
-Errors found in f64_div, rounding max:
+
+
+Errors found in f32_mulAdd, rounding min:
++00.7FFFFF  +67.000001  -01.000000
+        => -01.000000 ...ux  expected -01.000000 ....x
++67.000001  +00.7FFFFF  -01.000000
+        => -01.000000 ...ux  expected -01.000000 ....x
+-00.7FFFFF  -67.000001  -01.000000
+        => -01.000000 ...ux  expected -01.000000 ....x
+-67.000001  -00.7FFFFF  -01.000000
+        => -01.000000 ...ux  expected -01.000000 ....x
+Errors found in f32_mulAdd, rounding max:
++00.7FFFFF  -67.000001  +01.000000
+        => +01.000000 ...ux  expected +01.000000 ....x
++67.000001  -00.7FFFFF  +01.000000
+        => +01.000000 ...ux  expected +01.000000 ....x
++66.7FFFFE  -01.000001  +01.000000
+        => +01.000000 ...ux  expected +01.000000 ....x
+-00.7FFFFF  +67.000001  +01.000000
+        => +01.000000 ...ux  expected +01.000000 ....x
+-67.000001  +00.7FFFFF  +01.000000
+        => +01.000000 ...ux  expected +01.000000 ....x
+
 
 
  */

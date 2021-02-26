@@ -43,6 +43,10 @@ void applyRounding(int rounding){
 #define toF32(v) (*((float32_t*)&v))
 #define fromF32(x) (*((float*)&(x.v)))
 
+
+#define toF64(v) (*((float64_t*)&v))
+#define fromF64(x) (*((double*)&(x.v)))
+
 JNIEXPORT jfloat API JNICALL Java_vexriscv_ip_fpu_FpuMath_addF32(JNIEnv * env, jobject obj, jfloat a, jfloat b, jint rounding){
     applyRounding(rounding);
     float32_t v = f32_add(toF32(a), toF32(b));
@@ -53,4 +57,23 @@ JNIEXPORT jfloat API JNICALL Java_vexriscv_ip_fpu_FpuMath_mulF32(JNIEnv * env, j
     applyRounding(rounding);
     float32_t v = f32_mul(toF32(a), toF32(b));
     return fromF32(v);
+}
+JNIEXPORT jint API JNICALL Java_vexriscv_ip_fpu_FpuMath_mulFlagF32(JNIEnv * env, jobject obj, jfloat a, jfloat b, jint rounding){
+    applyRounding(rounding);
+    softfloat_exceptionFlags = 0;
+    float32_t v = f32_mul(toF32(a), toF32(b));
+    return softfloat_exceptionFlags;
+}
+
+
+JNIEXPORT jfloat API JNICALL Java_vexriscv_ip_fpu_FpuMath_d2f(JNIEnv * env, jobject obj, jdouble a,  jint rounding){
+    applyRounding(rounding);
+    float32_t v = f64_to_f32(toF64(a));
+    return fromF32(v);
+}
+JNIEXPORT jint API JNICALL Java_vexriscv_ip_fpu_FpuMath_d2fFlag(JNIEnv * env, jobject obj, jdouble a, jint rounding){
+    applyRounding(rounding);
+    softfloat_exceptionFlags = 0;
+    float32_t v = f64_to_f32(toF64(a));
+    return softfloat_exceptionFlags;
 }
