@@ -10,6 +10,7 @@ import vexriscv.ip.fpu._
 import scala.collection.mutable.ArrayBuffer
 
 class FpuPlugin(externalFpu : Boolean = false,
+                simHalt : Boolean = false,
                 p : FpuParameter) extends Plugin[VexRiscv] with VexRiscvRegressionArg {
 
   object FPU_ENABLE extends Stageable(Bool())
@@ -222,10 +223,20 @@ class FpuPlugin(externalFpu : Boolean = false,
 
     val internal = (!externalFpu).generate (pipeline plug new Area{
       val fpu = FpuCore(1, p)
-      fpu.io.port(0).cmd << port.cmd
-      fpu.io.port(0).commit << port.commit
-      fpu.io.port(0).rsp >> port.rsp
-      fpu.io.port(0).completion <> port.completion
+      if(simHalt) {
+        val cmdHalt = in(Bool).setName("fpuCmdHalt").addAttribute(Verilator.public)
+        val commitHalt = in(Bool).setName("fpuCommitHalt").addAttribute(Verilator.public)
+        val rspHalt = in(Bool).setName("fpuRspHalt").addAttribute(Verilator.public)
+        fpu.io.port(0).cmd << port.cmd.haltWhen(cmdHalt)
+        fpu.io.port(0).commit << port.commit.haltWhen(commitHalt)
+        fpu.io.port(0).rsp.haltWhen(rspHalt) >> port.rsp
+        fpu.io.port(0).completion <> port.completion
+      } else {
+        fpu.io.port(0).cmd << port.cmd
+        fpu.io.port(0).commit << port.commit
+        fpu.io.port(0).rsp >> port.rsp
+        fpu.io.port(0).completion <> port.completion
+      }
     })
 
 

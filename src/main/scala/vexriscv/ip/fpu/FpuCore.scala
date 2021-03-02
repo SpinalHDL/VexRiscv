@@ -179,25 +179,10 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     })
   }
 
-//  val completion = for(source <- 0 until portCount) yield new Area{
-//    def port = io.port(source)
-//    port.completion.flag.NV := False
-//    port.completion.flag.DZ := False
-//    port.completion.flag.OF := False
-//    port.completion.flag.UF := False
-//    port.completion.flag.NX := False
-//
-//    val increments = ArrayBuffer[Bool]()
-//
-//    afterElaboration{
-//      port.completion.count := increments.map(_.asUInt.resize(log2Up(increments.size + 1))).reduceBalancedTree(_ + _)
-//    }
-//  }
-
   val commitFork = new Area{
     val load, commit = Vec(Stream(FpuCommit(p)), portCount)
     for(i <- 0 until portCount){
-      val fork = new StreamFork(FpuCommit(p), 2)
+      val fork = new StreamFork(FpuCommit(p), 2, synchronous = true)
       fork.io.input << io.port(i).commit
       fork.io.outputs(0) >> load(i)
       fork.io.outputs(1).pipelined(m2s = true, s2m = true) >> commit(i) //Pipelining here is light, as it only use the flags of the payload
@@ -214,8 +199,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   }
 
   class CommitArea(source : Int) extends Area{
+    val pending = new Tracker(4)
     val add, mul, div, sqrt, short = new Tracker(4)
-    val input = commitFork.commit(source).haltWhen(List(add, mul, div, sqrt, short).map(_.full).orR).toFlow
+    val input = commitFork.commit(source).haltWhen(List(add, mul, div, sqrt, short).map(_.full).orR || !pending.notEmpty).toFlow
 
     when(input.fire){
       add.inc   setWhen(List(FpuOpcode.ADD).map(input.opcode === _).orR)
@@ -224,6 +210,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       sqrt.inc  setWhen(List(FpuOpcode.SQRT).map(input.opcode === _).orR)
       short.inc setWhen(List(FpuOpcode.SGNJ, FpuOpcode.MIN_MAX, FpuOpcode.FCVT_X_X).map(input.opcode === _).orR)
       rf.scoreboards(source).writes(input.rd) := input.write
+      pending.dec := True
     }
   }
 
@@ -237,7 +224,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
   val scheduler = for(portId <- 0 until portCount;
                       scoreboard = rf.scoreboards(portId)) yield new Area{
-    val input = io.port(portId).cmd.combStage()
+    val input = io.port(portId).cmd.pipelined(s2m = true)
     val useRs1, useRs2, useRs3, useRd = False
     switch(input.opcode){
       is(p.Opcode.LOAD)      { useRd := True }
@@ -265,7 +252,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val rfBusy = (rfHits, rfTargets).zipped.map(_ ^ _)
 
     val hits = (0 to 3).map(id => uses(id) && rfBusy(id))
-    val hazard = hits.orR || !rf.init.done
+    val hazard = hits.orR || !rf.init.done || commitLogic(portId).pending.full
     val output = input.haltWhen(hazard)
     when(input.valid && rf.init.done){
       scoreboard.targetWrite.address := input.rd
@@ -273,6 +260,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
     when(output.fire && useRd){
       scoreboard.targetWrite.valid := True
+      commitLogic(portId).pending.inc := True
     }
   }
 
@@ -287,7 +275,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   }
 
   val read = new Area{
-    val s0 = cmdArbiter.output.pipelined(m2s = true, s2m = true) //TODO may need to remove m2s for store latency
+    val s0 = cmdArbiter.output.pipelined() //TODO may need to remove m2s for store latency
     val s1 = s0.m2sPipe()
     val output = s1.swapPayload(RfReadOutput())
     val rs1Entry = rf.ram.readSync(s0.source @@ s0.rs1,enable = !output.isStall)
@@ -982,7 +970,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
       when(exp(exp.getWidth-3, 3 bits) >= 5) { output.exponent(p.internalExponentSize-2, 2 bits) := 3 }
 
-//      val flag = io.port(input.source).completion.flag
       when(forceNan) {
         output.setNanQuiet
         NV setWhen(infinitynan || input.rs1.isNanSignaling || input.rs2.isNanSignaling)
@@ -1479,8 +1466,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       if (p.withDouble) output.format := input.format
       output.scrap := (mantissa(1) | mantissa(0) | roundingScrap)
 
-
-//      val flag = io.port(input.source).completion.flag
       output.NV := infinityNan || input.rs1.isNanSignaling || input.rs2.isNanSignaling
       output.DZ := False
       when(forceNan) {

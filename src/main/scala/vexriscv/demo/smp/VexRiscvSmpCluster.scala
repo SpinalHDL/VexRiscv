@@ -167,7 +167,8 @@ object VexRiscvSmpClusterGen {
                      withSupervisor : Boolean = true,
                      withFloat : Boolean = false,
                      withDouble : Boolean = false,
-                     externalFpu : Boolean = true
+                     externalFpu : Boolean = true,
+                     simHalt : Boolean = false
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -280,6 +281,7 @@ object VexRiscvSmpClusterGen {
 
     if(withFloat) config.plugins += new FpuPlugin(
       externalFpu = externalFpu,
+      simHalt = simHalt,
       p = FpuParameter(withDouble = withDouble)
     )
     config

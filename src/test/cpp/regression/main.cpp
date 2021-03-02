@@ -1848,6 +1848,11 @@ public:
 				instanceCycles += 1;
 
 				for(SimElement* simElement : simElements) simElement->postCycle();
+				#ifdef RVF
+				top->fpuCmdHalt = VL_RANDOM_I(1);
+                top->fpuCommitHalt = VL_RANDOM_I(1);
+                top->fpuRspHalt = VL_RANDOM_I(1);
+                #endif
 
 
 
@@ -3815,10 +3820,10 @@ string riscvTestMemory[] = {
 
 
 string riscvTestFloat[] = {
+    "rv32uf-p-fmadd",
     "rv32uf-p-fadd",
     "rv32uf-p-fcmp",
     "rv32uf-p-fcvt_w",
-    "rv32uf-p-fmadd",
     "rv32uf-p-ldst",
     "rv32uf-p-recoding",
     "rv32uf-p-fclass",
@@ -3830,9 +3835,9 @@ string riscvTestFloat[] = {
 
 
 string riscvTestDouble[] = {
+    "rv32ud-p-fmadd",
     "rv32ud-p-fadd",
     "rv32ud-p-fcvt",
-    "rv32ud-p-fmadd",
     "rv32ud-p-recoding",
     "rv32ud-p-fclass",
     "rv32ud-p-fcvt_w",
