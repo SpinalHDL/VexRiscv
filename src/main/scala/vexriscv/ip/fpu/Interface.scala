@@ -118,7 +118,6 @@ object FpuRoundModeInstr extends SpinalEnum(){
 case class FpuParameter( withDouble : Boolean,
                          mulWidthA : Int = 18,
                          mulWidthB : Int = 18,
-                         rfLockCount : Int = 8,
                          sim : Boolean = false,
                          withAdd : Boolean = true,
                          withMul : Boolean = true,
@@ -160,8 +159,9 @@ case class FpuCmd(p : FpuParameter) extends Bundle{
 }
 
 case class FpuCommit(p : FpuParameter) extends Bundle{
+  val opcode = FpuOpcode()
+  val rd = UInt(5 bits)
   val write = Bool()
-  val sync = Bool()
   val value = p.storeLoadType() // IEEE 754
 }
 

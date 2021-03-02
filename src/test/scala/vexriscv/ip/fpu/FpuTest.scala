@@ -55,7 +55,7 @@ class FpuTest extends FunSuite{
   }
 
   def testP(p : FpuParameter){
-    val portCount = 1
+    val portCount = 4
 
     val config = SimConfig
     config.allOptimisation
@@ -276,8 +276,9 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
+            cmd.rd #= rd
             cmd.value #= value
-            cmd.sync #= true
+            cmd.opcode #= cmd.opcode.spinalEnum.LOAD
           }
         }
 
@@ -326,7 +327,8 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.sync #= false
+            cmd.rd #= rd
+            cmd.opcode #= opcode
           }
         }
 
@@ -404,7 +406,8 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.sync #= true
+            cmd.rd #= rd
+            cmd.opcode #= FpuOpcode.I2F
             cmd.value #= value.toLong & 0xFFFFFFFFl
           }
         }
@@ -436,7 +439,8 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.sync #= true
+            cmd.rd #= rd
+            cmd.opcode #= FpuOpcode.FMV_W_X
             cmd.value #= value.toLong & 0xFFFFFFFFl
           }
         }
@@ -454,7 +458,8 @@ class FpuTest extends FunSuite{
           }
           commitQueue += {cmd =>
             cmd.write #= true
-            cmd.sync #= false
+            cmd.rd #= rd
+            cmd.opcode #= FpuOpcode.MIN_MAX
           }
         }
 

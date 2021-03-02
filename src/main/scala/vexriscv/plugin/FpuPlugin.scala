@@ -22,7 +22,7 @@ class FpuPlugin(externalFpu : Boolean = false,
   object FPU_ARG extends Stageable(Bits(2 bits))
   object FPU_FORMAT extends Stageable(FpuFormat())
 
-  var port : FpuPort = null
+  var port : FpuPort = null //Commit port is already isolated
 
   override def getVexRiscvRegressionArgs(): Seq[String] = {
     var args = List[String]()
@@ -331,7 +331,8 @@ class FpuPlugin(externalFpu : Boolean = false,
       commit.value(31 downto 0) := (input(FPU_COMMIT_LOAD) ? dBusEncoding.loadData()(31 downto 0)  | input(RS1))
       if(p.withDouble) commit.value(63 downto 32) :=  dBusEncoding.loadData()(63 downto 32)
       commit.write := arbitration.isValid && !arbitration.removeIt
-      commit.sync := input(FPU_COMMIT_SYNC)
+      commit.opcode := input(FPU_OPCODE)
+      commit.rd := input(INSTRUCTION)(rdRange).asUInt
 
       when(isCommit && !commit.ready){
         arbitration.haltByOther := True
