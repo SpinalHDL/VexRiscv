@@ -223,6 +223,7 @@ class CfuPlugin(val stageCount : Int,
       }
     }
 
+    pipeline.stages.dropRight(1).foreach(s => s.output(CFU_IN_FLIGHT) clearWhen(s.arbitration.isStuck))
     addPrePopTask(() => stages.dropWhile(_ != memory).reverse.dropWhile(_ != joinStage).foreach(s => s.input(CFU_IN_FLIGHT).init(False)))
   }
 }
