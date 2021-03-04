@@ -68,7 +68,6 @@ class FpuTest extends FunSuite{
       dut.clockDomain.forkSimSpeedPrinter(5.0)
 
 
-
       class TestCase(op : String){
         def build(arg : String) = new ProcessStream(s"testfloat_gen $arg -tininessafter -forever -$op"){
           def f32_f32_f32 ={
