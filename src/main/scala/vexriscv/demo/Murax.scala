@@ -483,3 +483,13 @@ object Murax_arty{
     SpinalVerilog(Murax(MuraxConfig.default(false).copy(coreFrequency = 100 MHz,onChipRamSize = 32 kB, onChipRamHexFile = hex)))
   }
 }
+
+
+object MuraxAsicBlackBox{
+  def main(args: Array[String]) {
+    println("Warning this soc do not has any rom to boot on.")
+    val config = SpinalConfig()
+    config.addStandardMemBlackboxing(blackboxAll)
+    config.generateVerilog(Murax(MuraxConfig.default(false).copy(coreFrequency = 100 MHz,onChipRamSize = 32 kB)))
+  }
+}
