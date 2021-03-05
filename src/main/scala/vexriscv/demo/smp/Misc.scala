@@ -2,6 +2,7 @@ package vexriscv.demo.smp
 
 
 import spinal.core._
+import spinal.core.fiber._
 import spinal.lib.bus.bmb._
 import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig, WishboneSlaveFactory}
 import spinal.lib.com.jtag.Jtag
@@ -9,7 +10,7 @@ import spinal.lib._
 import spinal.lib.bus.bmb.sim.{BmbMemoryMultiPort, BmbMemoryTester}
 import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
 import spinal.lib.eda.bench.Bench
-import spinal.lib.generator.{Generator, Handle}
+import spinal.lib.generator._
 import spinal.lib.misc.Clint
 import spinal.lib.sim.{SimData, SparseMemory, StreamDriver, StreamMonitor, StreamReadyRandomizer}
 import vexriscv.{VexRiscv, VexRiscvConfig}

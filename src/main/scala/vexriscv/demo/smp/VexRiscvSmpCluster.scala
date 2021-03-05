@@ -11,7 +11,9 @@ import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig, WishboneToBmb, Wishbon
 import spinal.lib.com.jtag.{Jtag, JtagInstructionDebuggerGenerator, JtagTapInstructionCtrl}
 import spinal.lib.com.jtag.sim.JtagTcp
 import spinal.lib.com.jtag.xilinx.Bscane2BmbMasterGenerator
-import spinal.lib.generator.Handle
+import spinal.lib.generator._
+import spinal.core.fiber._
+import spinal.idslplugin.PostInitCallback
 import spinal.lib.misc.plic.PlicMapping
 import spinal.lib.system.debugger.SystemDebuggerConfig
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
@@ -25,7 +27,7 @@ import vexriscv.ip.fpu.FpuParameter
 
 case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig], withExclusiveAndInvalidation : Boolean, forcePeripheralWidth : Boolean = true, outOfOrderDecoder : Boolean = true)
 
-class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator{
+class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator with PostInitCallback{
   val cpuCount = p.cpuConfigs.size
 
   val debugCd = ClockDomainResetGenerator()
@@ -36,11 +38,16 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator{
   systemCd.holdDuration.load(63)
   systemCd.setInput(debugCd)
 
-  this.onClockDomain(systemCd.outputClockDomain)
+
+  systemCd.outputClockDomain.push()
+  override def postInitCallback(): VexRiscvSmpClusterBase.this.type = {
+    systemCd.outputClockDomain.pop()
+    this
+  }
 
   implicit val interconnect = BmbInterconnectGenerator()
 
-  val debugBridge = JtagInstructionDebuggerGenerator() onClockDomain(debugCd.outputClockDomain)
+  val debugBridge = debugCd.outputClockDomain on JtagInstructionDebuggerGenerator()
   debugBridge.jtagClockDomain.load(ClockDomain.external("jtag", withReset = false))
 
   val debugPort = debugBridge.produceIo(debugBridge.logic.jtagBridge.io.ctrl)

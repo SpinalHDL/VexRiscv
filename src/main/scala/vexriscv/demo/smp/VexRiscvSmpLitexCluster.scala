@@ -1,9 +1,11 @@
 package vexriscv.demo.smp
 
 import spinal.core._
+import spinal.core.fiber._
 import spinal.lib.bus.bmb._
 import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
 import spinal.lib.bus.wishbone.{WishboneConfig, WishboneToBmbGenerator}
+import spinal.lib.generator.GeneratorComponent
 import spinal.lib.sim.SparseMemory
 import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
 import vexriscv.plugin.{AesPlugin, DBusCachedPlugin}
@@ -126,9 +128,9 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   )
 
   def dutGen = {
-    val toplevel = new VexRiscvLitexSmpCluster(
+    val toplevel = GeneratorComponent(new VexRiscvLitexSmpCluster(
       p = parameter
-    ).toComponent()
+    ))
     toplevel
   }
 
@@ -197,9 +199,10 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
   )
 
   def dutGen = {
-    val top = new VexRiscvLitexSmpCluster(
+    import GeneratorComponent.toGenerator
+    val top = new GeneratorComponent(new VexRiscvLitexSmpCluster(
       p = parameter
-    ).toComponent()
+    ))
     top.rework{
       top.clintWishbone.setAsDirectionLess.allowDirectionLessIo
       top.peripheral.setAsDirectionLess.allowDirectionLessIo.simPublic()
