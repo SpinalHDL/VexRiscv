@@ -43,14 +43,14 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
   }
 
   def enableJtag(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator) : Unit = debugCd{
-    this.debugClockDomain.merge(debugCd.outputClockDomain)
+    this.debugClockDomain.load(debugCd.outputClockDomain)
     val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
     debugAskReset.loadNothing()
     withDebug.load(DEBUG_JTAG)
   }
 
   def enableJtagInstructionCtrl(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator) : Unit = debugCd{
-    this.debugClockDomain.merge(debugCd.outputClockDomain)
+    this.debugClockDomain.load(debugCd.outputClockDomain)
     val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
     debugAskReset.loadNothing()
     withDebug.load(DEBUG_JTAG_CTRL)
@@ -58,7 +58,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
   }
 
   def enableDebugBus(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator) : Unit = debugCd{
-    this.debugClockDomain.merge(debugCd.outputClockDomain)
+    this.debugClockDomain.load(debugCd.outputClockDomain)
     val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
     debugAskReset.loadNothing()
     withDebug.load(DEBUG_BUS)
@@ -67,7 +67,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
   val debugBmbAccessSource = Handle[BmbAccessCapabilities]
   val debugBmbAccessRequirements = Handle[BmbAccessParameter]
   def enableDebugBmb(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator, mapping : AddressMapping)(implicit debugMaster : BmbImplicitDebugDecoder = null) : Unit = debugCd{
-    this.debugClockDomain.merge(debugCd.outputClockDomain)
+    this.debugClockDomain.load(debugCd.outputClockDomain)
     val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
     debugAskReset.loadNothing()
     withDebug.load(DEBUG_BMB)
@@ -131,6 +131,9 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
       case _ =>
     }
   }
+
+
+  logic.soon(debugReset)
 
   val parameterGenerator = new Generator {
     val iBusParameter, dBusParameter = product[BmbParameter]
