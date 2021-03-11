@@ -27,7 +27,7 @@ import vexriscv.ip.fpu.FpuParameter
 
 case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig], withExclusiveAndInvalidation : Boolean, forcePeripheralWidth : Boolean = true, outOfOrderDecoder : Boolean = true)
 
-class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator with PostInitCallback{
+class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with PostInitCallback{
   val cpuCount = p.cpuConfigs.size
 
   val debugCd = ClockDomainResetGenerator()
@@ -50,7 +50,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator 
   val debugBridge = debugCd.outputClockDomain on JtagInstructionDebuggerGenerator()
   debugBridge.jtagClockDomain.load(ClockDomain.external("jtag", withReset = false))
 
-  val debugPort = debugBridge.produceIo(debugBridge.logic.jtagBridge.io.ctrl)
+  val debugPort = Handle(debugBridge.logic.jtagBridge.io.ctrl.toIo)
 
   val dBusCoherent = BmbBridgeGenerator()
   val dBusNonCoherent = BmbBridgeGenerator()
@@ -87,7 +87,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Generator 
 
 class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends VexRiscvSmpClusterBase(p) {
   val peripheralBridge = BmbToWishboneGenerator(DefaultMapping)
-  val peripheral = peripheralBridge.produceIo(peripheralBridge.logic.io.output)
+  val peripheral = Handle(peripheralBridge.logic.io.output.toIo)
   if(p.forcePeripheralWidth) interconnect.slaves(peripheralBridge.bmb).forceAccessSourceDataWidth(32)
 
   val plic = BmbPlicGenerator()(interconnect = null)
@@ -133,8 +133,8 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
   }
   val clintWishbone = clintWishboneBridge.produceIo(clintWishboneBridge.logic.bridge.io.input)
 
-  val interrupts = add task (in Bits(32 bits))
-  for(i <- 1 to 31) yield plic.addInterrupt(interrupts.derivate(_.apply(i)), i)
+  val interrupts = in Bits(32 bits)
+  for(i <- 1 to 31) yield plic.addInterrupt(interrupts(i), i)
 
   for ((core, cpuId) <- cores.zipWithIndex) {
     core.cpu.setTimerInterrupt(clint.timerInterrupt(cpuId))

@@ -248,13 +248,13 @@ object BmbToLiteDramTester extends App{
   }
 }
 
-case class BmbToLiteDramGenerator(mapping : AddressMapping)(implicit interconnect : BmbInterconnectGenerator) extends Generator{
-  val liteDramParameter = createDependency[LiteDramNativeParameter]
-  val bmb = produce(logic.io.input)
-  val dram = produceIo(logic.io.output)
+case class BmbToLiteDramGenerator(mapping : AddressMapping)(implicit interconnect : BmbInterconnectGenerator) extends Area{
+  val liteDramParameter = Handle[LiteDramNativeParameter]
+  val bmb = Handle(logic.io.input)
+  val dram = Handle(logic.io.output.toIo)
 
   val accessSource = Handle[BmbAccessCapabilities]
-  val accessRequirements = createDependency[BmbAccessParameter]
+  val accessRequirements = Handle[BmbAccessParameter]
   interconnect.addSlave(
     accessSource             = accessSource,
     accessCapabilities       = accessSource,
@@ -262,20 +262,20 @@ case class BmbToLiteDramGenerator(mapping : AddressMapping)(implicit interconnec
     bus                      = bmb,
     mapping                  = mapping
   )
-  val logic = add task BmbToLiteDram(
+  val logic = Handle(BmbToLiteDram(
     bmbParameter = accessRequirements.toBmbParameter(),
     liteDramParameter = liteDramParameter,
     wdataFifoSize = 32,
     rdataFifoSize = 32
-  )
+  ))
 }
 
-case class BmbToWishboneGenerator(mapping : AddressMapping)(implicit interconnect : BmbInterconnectGenerator) extends Generator{
-  val bmb = produce(logic.io.input)
-  val wishbone = produce(logic.io.output)
+case class BmbToWishboneGenerator(mapping : AddressMapping)(implicit interconnect : BmbInterconnectGenerator) extends Area{
+  val bmb = Handle(logic.io.input)
+  val wishbone = Handle(logic.io.output)
 
   val accessSource = Handle[BmbAccessCapabilities]
-  val accessRequirements = createDependency[BmbAccessParameter]
+  val accessRequirements = Handle[BmbAccessParameter]
   interconnect.addSlave(
     accessSource             = accessSource,
     accessCapabilities       = accessSource,
@@ -283,7 +283,7 @@ case class BmbToWishboneGenerator(mapping : AddressMapping)(implicit interconnec
     bus                      = bmb,
     mapping                  = mapping
   )
-  val logic = add task BmbToWishbone(
+  val logic = Handle(BmbToWishbone(
     p = accessRequirements.toBmbParameter()
-  )
+  ))
 }
