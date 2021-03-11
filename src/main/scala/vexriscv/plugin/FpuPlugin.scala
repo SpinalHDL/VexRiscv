@@ -241,7 +241,7 @@ class FpuPlugin(externalFpu : Boolean = false,
 
 
     val csr = pipeline plug new Area{
-      val pendings = Reg(UInt(5 bits)) init(0)
+      val pendings = Reg(UInt(6 bits)) init(0)
       pendings := pendings + U(port.cmd.fire) - U(port.completion.fire) - U(port.rsp.fire)
 
       val hasPending = pendings =/= 0
