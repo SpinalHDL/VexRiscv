@@ -17,7 +17,7 @@ import spinal.idslplugin.PostInitCallback
 import spinal.lib.misc.plic.PlicMapping
 import spinal.lib.system.debugger.SystemDebuggerConfig
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
-import vexriscv.plugin.{BranchPlugin, CsrAccess, CsrPlugin, CsrPluginConfig, DBusCachedPlugin, DBusSimplePlugin, DYNAMIC_TARGET, DebugPlugin, DecoderSimplePlugin, FpuPlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusCachedPlugin, IBusSimplePlugin, IntAluPlugin, MmuPlugin, MmuPortConfig, MulDivIterativePlugin, MulPlugin, RegFilePlugin, STATIC, SrcPlugin, StaticMemoryTranslatorPlugin, YamlPlugin}
+import vexriscv.plugin._
 import vexriscv.{Riscv, VexRiscv, VexRiscvBmbGenerator, VexRiscvConfig, plugin}
 
 import scala.collection.mutable
@@ -168,6 +168,7 @@ object VexRiscvSmpClusterGen {
                      iCacheWays : Int = 2,
                      dCacheWays : Int = 2,
                      iBusRelax : Boolean = false,
+                     injectorStage : Boolean = false,
                      earlyBranch : Boolean = false,
                      dBusCmdMasterPipe : Boolean = false,
                      withMmu : Boolean = true,
@@ -175,7 +176,8 @@ object VexRiscvSmpClusterGen {
                      withFloat : Boolean = false,
                      withDouble : Boolean = false,
                      externalFpu : Boolean = true,
-                     simHalt : Boolean = false
+                     simHalt : Boolean = false,
+                     regfileRead : RegFileReadKind = plugin.ASYNC
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -195,7 +197,7 @@ object VexRiscvSmpClusterGen {
           prediction = vexriscv.plugin.NONE,
           historyRamSizeLog2 = 9,
           relaxPredictorAddress = true,
-          injectorStage = false,
+          injectorStage = injectorStage,
           relaxedPcCalculation = iBusRelax,
           config = InstructionCacheConfig(
             cacheSize = iCacheSize,
@@ -250,7 +252,7 @@ object VexRiscvSmpClusterGen {
           catchIllegalInstruction = true
         ),
         new RegFilePlugin(
-          regFileReadyKind = plugin.ASYNC,
+          regFileReadyKind = regfileRead,
           zeroBoot = false,
           x0Init = true
         ),
