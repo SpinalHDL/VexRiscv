@@ -185,7 +185,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       val fork = new StreamFork(FpuCommit(p), 2, synchronous = true)
       fork.io.input << io.port(i).commit
       fork.io.outputs(0) >> load(i)
-      fork.io.outputs(1).pipelined(m2s = true, s2m = true) >> commit(i) //Pipelining here is light, as it only use the flags of the payload
+      fork.io.outputs(1).pipelined(m2s = false, s2m = true) >> commit(i) //Pipelining here is light, as it only use the flags of the payload
     }
   }
 
@@ -417,7 +417,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
 
     val s0 = new Area{
-      val input = decode.load.pipelined(m2s = true, s2m = true)
+      val input = decode.load.pipelined(m2s = true, s2m = true).stage()
       val filtred = commitFork.load.map(port => port.takeWhen(List(FpuOpcode.LOAD, FpuOpcode.FMV_W_X, FpuOpcode.I2F).map(_ === port.opcode).orR))
       def feed = filtred(input.source)
       val hazard = !feed.valid

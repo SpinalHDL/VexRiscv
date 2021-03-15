@@ -267,7 +267,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       val fs = Reg(Bits(2 bits)) init(1)
       val sd = fs === 3
 
-      when(stages.last.arbitration.isFiring && stages.last.input(FPU_ENABLE)){
+      when(stages.last.arbitration.isFiring && stages.last.input(FPU_ENABLE) && stages.last.input(FPU_OPCODE) =/= FpuOpcode.STORE){
         fs := 3 //DIRTY
       }
 
@@ -349,7 +349,7 @@ class FpuPlugin(externalFpu : Boolean = false,
         arbitration.haltByOther := True
       }
 
-      port.commit <-/< commit
+      port.commit << commit.pipelined(s2m = true, m2s = false)
     }
 
     pipeline.stages.dropRight(1).foreach(s => s.output(FPU_FORKED) clearWhen(s.arbitration.isStuck))
