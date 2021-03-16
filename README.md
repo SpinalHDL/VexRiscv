@@ -694,7 +694,7 @@ Accuracy, roundings (RNE, RTZ, RDN, RUP, RMM) and compliance:
  
  There is a diagram of the FPU design and its CPU integration : 
  
- ![fpuDesign](assets/fpuDesign.svg?raw=true "")
+ ![fpuDesign](assets/fpuDesign.png?raw=true "")
  
  The FPU can be parametrized with FpuParameter data structure : 
  
