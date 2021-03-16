@@ -19,6 +19,7 @@
 - [Adding a new CSR via the plugin system](#adding-a-new-csr-via-the-plugin-system)
 - [CPU clock and resets](#cpu-clock-and-resets)
 - [VexRiscv Architecture](#vexriscv-architecture)
+  * [FPU](#fpu)
   * [Plugins](#plugins)
 
 
@@ -668,6 +669,53 @@ via the VexRiscv implementation:
 If you generate the CPU without any plugin, it will only contain the definition of the 5 pipeline stages and their basic arbitration, but nothing else,
 and everything else, including the program counter is added into the CPU via plugins.
 
+### FPU
+
+Features : 
+
+- Support IEEE 754 float and optionaly double
+- Implement Subnormal (few cycles lost in case of subnormal load/store)
+- Implement exceptions flags
+- The FPU can be shared between multiple CPU
+- Can be integrated inside or outside the CPU via the FpuPlugin
+- Fully pipelined, can produce one result per cycle for most operations (add,sub, mul, fma, load, store), as long there is no inter-dependancies
+- Implement multiplication using multiple sub multiplication operations in parallel ("FPGA friendly")
+- Division done with radix 4 (2 bits per cycle)
+- Square root done with radix 2 (1 bit per cycle)
+- Currently only compatible with the DBusCachedPlugin for load and store
+- 64 bits Load and store can be done in one cycle via the DBusCachedPlugin (even if VexRiscv is RV32)
+
+Accuracy, roundings (RNE, RTZ, RDN, RUP, RMM) and compliance: 
+
+- Fully implemented excepted in the cases specified bellow
+- In FMA, the result of the multiplication is truncated before the addition (keep mantissa width bits)
+- A very special corner case of underflow flag do not follow IEEE 754 (rounding from subnormal to normal number)
+- Very specific, but SGNJ instruction will not mutate the value from/to F32/F64 (no NaN-boxing mutation)
+ 
+ There is a diagram of the FPU design and its CPU integration : 
+ 
+ ![fpuDesign](assets/fpuDesign.svg?raw=true "")
+ 
+ The FPU can be parametrized with FpuParameter data structure : 
+ 
+ | Parameters | type | description |
+ | ------ | ----------- | ------ |
+ | withDouble   | Boolean | Enable 64 bits floating point (32 bits always enabled) |
+ | asyncRegFile   | Boolean | Implement the register file using combinatorial reads (instead of syncronous reads) |
+ | mulWidthA   | Boolean | Specify the width of the left operand of multiplication blocks |
+ | mulWidthB   | Boolean | Same than above but the the right operand |
+
+Synthesis results of the FPU itself, without the CPU integration, on the fast speed grade : 
+
+```
+Fpu 32 bits ->
+  Artix 7 relaxed -> 135 Mhz 1786 LUT 1778 FF 
+  Artix 7 FMax    -> 205 Mhz 2101 LUT 1778 FF 
+Fpu 64/32 bits ->
+  Artix 7 relaxed -> 101 Mhz 3336 LUT 3033 FF 
+  Artix 7 FMax    -> 165 Mhz 3728 LUT 3175 FF 
+```
+ 
 ### Plugins
 
 This chapter describes the currently implemented plugins.
@@ -692,6 +740,7 @@ This chapter describes the currently implemented plugins.
 - [MemoryTranslatorPlugin](#memorytranslatorplugin)
 - [DebugPlugin](#debugplugin)
 - [YamlPlugin](#yamlplugin)
+- [FpuPlugin](#fpuplugin)
 
 
 #### IBusSimplePlugin
@@ -1090,4 +1139,15 @@ The OpenOCD port is here: <https://github.com/SpinalHDL/openocd_riscv>
 
 This plugin offers a service to other plugins to generate a useful Yaml file describing the CPU configuration. It contains, for instance, the sequence of instructions required
 to flush the data cache (information used by openocd).
+
+
+#### FpuPlugin
+
+Allow the integration of a internal or a external FPU into VexRiscv (See the FPU chapter)
+
+| Parameters | type | description |
+| ------ | ----------- | ------ |
+| externalFpu   | Boolean | When false the FPU is instanciated in Vex, else the plugin has a `port` interface to which you can connect an external FPU |
+| p   | FpuParameter | Parameter with which the connected FPU will be created |
+
 
