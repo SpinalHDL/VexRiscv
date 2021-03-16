@@ -278,36 +278,38 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val s0 = cmdArbiter.output.pipelined() //TODO may need to remove m2s for store latency
     val s1 = s0.m2sPipe()
     val output = s1.swapPayload(RfReadOutput())
-    val rs1Entry = rf.ram.readSync(s0.source @@ s0.rs1,enable = !output.isStall)
-    val rs2Entry = rf.ram.readSync(s0.source @@ s0.rs2,enable = !output.isStall)
-    val rs3Entry = rf.ram.readSync(s0.source @@ s0.rs3,enable = !output.isStall)
+    val rs = if(p.asyncRegFile){
+      List(s1.rs1, s1.rs2, s1.rs3).map(a =>  rf.ram.readAsync(s1.source @@ a))
+    } else {
+      List(s0.rs1, s0.rs2, s0.rs3).map(a =>  rf.ram.readSync(s0.source @@ a, enable = !output.isStall))
+    }
     output.source := s1.source
     output.opcode := s1.opcode
     output.arg := s1.arg
     output.roundMode := s1.roundMode
     output.rd := s1.rd
-    output.rs1 := rs1Entry.value
-    output.rs2 := rs2Entry.value
-    output.rs3 := rs3Entry.value
+    output.rs1 := rs(0).value
+    output.rs2 := rs(1).value
+    output.rs3 := rs(2).value
     if(p.withDouble){
-      output.rs1Boxed := rs1Entry.boxed
-      output.rs2Boxed := rs2Entry.boxed
+      output.rs1Boxed := rs(0).boxed
+      output.rs2Boxed := rs(1).boxed
       output.format := s1.format
       val store = s1.opcode === FpuOpcode.STORE ||s1.opcode === FpuOpcode.FMV_X_W
       val sgnjBypass = s1.opcode === FpuOpcode.SGNJ && s1.format === FpuFormat.DOUBLE
       when(!sgnjBypass) {
         when(store) { //Pass through
-          output.format := rs1Entry.boxed ? FpuFormat.FLOAT | FpuFormat.DOUBLE
-        } elsewhen (s1.format === FpuFormat.FLOAT =/= rs1Entry.boxed) {
+          output.format := rs(0).boxed ? FpuFormat.FLOAT | FpuFormat.DOUBLE
+        } elsewhen (s1.format === FpuFormat.FLOAT =/= rs(0).boxed) {
           output.rs1.setNanQuiet
           output.rs1.sign := False
         }
       }
-      when(s1.format === FpuFormat.FLOAT =/= rs2Entry.boxed) {
+      when(s1.format === FpuFormat.FLOAT =/= rs(1).boxed) {
         output.rs2.setNanQuiet
         output.rs2.sign := False
       }
-      when(s1.format === FpuFormat.FLOAT =/= rs3Entry.boxed) {
+      when(s1.format === FpuFormat.FLOAT =/= rs(2).boxed) {
         output.rs3.setNanQuiet
       }
     }
@@ -1003,23 +1005,26 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       output.NV := NV
       output.DZ := False
 
-      decode.mulToAdd.valid := input.valid && input.add
-      decode.mulToAdd.source := input.source
-      decode.mulToAdd.rs1.mantissa := norm.output.mantissa >> 1 //FMA Precision lost
-      decode.mulToAdd.rs1.exponent := norm.output.exponent
-      decode.mulToAdd.rs1.sign := norm.output.sign
-      decode.mulToAdd.rs1.special := norm.output.special
-      decode.mulToAdd.rs2 := input.rs3
-      decode.mulToAdd.rd := input.rd
-      decode.mulToAdd.roundMode := input.roundMode
-      decode.mulToAdd.needCommit := False
-      if (p.withDouble) decode.mulToAdd.format := input.format
+      val mulToAdd = Stream(AddInput())
+      decode.mulToAdd << mulToAdd.stage()
+
+      mulToAdd.valid := input.valid && input.add
+      mulToAdd.source := input.source
+      mulToAdd.rs1.mantissa := norm.output.mantissa >> 1 //FMA Precision lost
+      mulToAdd.rs1.exponent := norm.output.exponent
+      mulToAdd.rs1.sign := norm.output.sign
+      mulToAdd.rs1.special := norm.output.special
+      mulToAdd.rs2 := input.rs3
+      mulToAdd.rd := input.rd
+      mulToAdd.roundMode := input.roundMode
+      mulToAdd.needCommit := False
+      if (p.withDouble) mulToAdd.format := input.format
 
       when(NV){
-        decode.mulToAdd.rs1.mantissa.msb := False
+        mulToAdd.rs1.mantissa.msb := False
       }
 
-      input.ready := (input.add ? decode.mulToAdd.ready | output.ready) || input.divSqrt
+      input.ready := (input.add ? mulToAdd.ready | output.ready) || input.divSqrt
     }
   }
 
@@ -1348,6 +1353,27 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
   val add = p.withAdd generate new Area{
 
+
+    class PreShifterOutput extends AddInput{
+      val absRs1Bigger = Bool()
+      val rs1ExponentBigger = Bool()
+    }
+
+    val preShifter = new Area{
+      val input = decode.add.combStage()
+      val output = input.swapPayload(new PreShifterOutput)
+
+      val exp21 = input.rs2.exponent -^ input.rs1.exponent
+      val rs1ExponentBigger = (exp21.msb || input.rs2.isZero) && !input.rs1.isZero
+      val rs1ExponentEqual = input.rs1.exponent === input.rs2.exponent
+      val rs1MantissaBigger = input.rs1.mantissa > input.rs2.mantissa
+      val absRs1Bigger = ((rs1ExponentBigger || rs1ExponentEqual && rs1MantissaBigger) && !input.rs1.isZero || input.rs1.isInfinity) && !input.rs2.isInfinity
+
+      output.payload.assignSomeByName(input.payload)
+      output.absRs1Bigger := absRs1Bigger
+      output.rs1ExponentBigger := rs1ExponentBigger
+    }
+
     class ShifterOutput extends AddInput{
       val xSign, ySign = Bool()
       val xMantissa, yMantissa = UInt(p.internalMantissaSize+3 bits)
@@ -1357,18 +1383,21 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
 
     val shifter = new Area {
-      val input = decode.add.stage()
+      val input = preShifter.output.stage()
       val output = input.swapPayload(new ShifterOutput)
       output.payload.assignSomeByName(input.payload)
 
       val exp21 = input.rs2.exponent -^ input.rs1.exponent
-      val rs1ExponentBigger = (exp21.msb || input.rs2.isZero) && !input.rs1.isZero
-      val rs1ExponentEqual = input.rs1.exponent === input.rs2.exponent
-      val rs1MantissaBigger = input.rs1.mantissa > input.rs2.mantissa
-      val absRs1Bigger = ((rs1ExponentBigger || rs1ExponentEqual && rs1MantissaBigger) && !input.rs1.isZero || input.rs1.isInfinity) && !input.rs2.isInfinity
+//      val rs1ExponentBigger = (exp21.msb || input.rs2.isZero) && !input.rs1.isZero
+//      val rs1ExponentEqual = input.rs1.exponent === input.rs2.exponent
+//      val rs1MantissaBigger = input.rs1.mantissa > input.rs2.mantissa
+//      val absRs1Bigger = ((rs1ExponentBigger || rs1ExponentEqual && rs1MantissaBigger) && !input.rs1.isZero || input.rs1.isInfinity) && !input.rs2.isInfinity
       val shiftBy = exp21.asSInt.abs//rs1ExponentBigger ? (0-exp21) | exp21
       val shiftOverflow = (shiftBy >= p.internalMantissaSize+3)
       val passThrough = shiftOverflow || (input.rs1.isZero) || (input.rs2.isZero)
+
+      def absRs1Bigger = input.absRs1Bigger
+      def rs1ExponentBigger = input.rs1ExponentBigger
 
       //Note that rs1ExponentBigger can be replaced by absRs1Bigger bellow to avoid xsigned two complement in math block at expense of combinatorial path
       val xySign = absRs1Bigger ? input.rs1.sign | input.rs2.sign

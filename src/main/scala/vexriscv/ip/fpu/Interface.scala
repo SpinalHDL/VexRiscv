@@ -116,6 +116,7 @@ object FpuRoundModeInstr extends SpinalEnum(){
 
 
 case class FpuParameter( withDouble : Boolean,
+                         asyncRegFile : Boolean = false,
                          mulWidthA : Int = 18,
                          mulWidthB : Int = 18,
                          sim : Boolean = false,
