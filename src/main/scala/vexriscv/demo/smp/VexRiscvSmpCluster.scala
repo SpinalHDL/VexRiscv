@@ -76,7 +76,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
       cpu.dBus -> List(dBusCoherent.bmb)
     )
     cpu.enableDebugBmb(
-      debugCd = debugCd,
+      debugCd = debugCd.outputClockDomain,
       resetCd = systemCd,
       mapping = SizeMapping(cpuId*0x1000, 0x1000)
     )
