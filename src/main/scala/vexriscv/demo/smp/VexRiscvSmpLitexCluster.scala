@@ -8,7 +8,8 @@ import spinal.lib.bus.wishbone.{WishboneConfig, WishboneToBmbGenerator}
 import spinal.lib.generator.GeneratorComponent
 import spinal.lib.sim.SparseMemory
 import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
-import vexriscv.plugin.{AesPlugin, DBusCachedPlugin}
+import vexriscv.ip.fpu.{FpuCore, FpuParameter}
+import vexriscv.plugin.{AesPlugin, DBusCachedPlugin, FpuPlugin}
 
 
 case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParameter,
@@ -32,6 +33,30 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
     iArbiter.bmb        -> List(peripheralBridge.bmb),
     dBusNonCoherent.bmb -> List(peripheralBridge.bmb)
   )
+
+  val fpu = p.cluster.fpu generate new Area{
+    val logic = Handle{
+      new FpuCore(
+        portCount = cpuCount,
+        p =  FpuParameter(
+          withDouble = true,
+          asyncRegFile = false
+        )
+      )
+    }
+
+    val connect = Handle{
+      for(i <- 0 until cpuCount;
+          vex = cores(i).cpu.logic.cpu;
+          port = logic.io.port(i)) {
+        val plugin = vex.service(classOf[FpuPlugin])
+        plugin.port.cmd >> port.cmd
+        plugin.port.commit >> port.commit
+        plugin.port.completion := port.completion.stage()
+        plugin.port.rsp << port.rsp
+      }
+    }
+  }
 
   if(p.cluster.withExclusiveAndInvalidation) interconnect.masters(dBusNonCoherent.bmb).withOutOfOrderDecoder()
 
@@ -78,6 +103,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var wishboneMemory = false
   var outOfOrderDecoder = true
   var aesInstruction = false
+  var fpu = false
   var netlistDirectory = "."
   var netlistName = "VexRiscvLitexSmpCluster"
   assert(new scopt.OptionParser[Unit]("VexRiscvLitexSmpClusterCmdGen") {
@@ -96,6 +122,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("aes-instruction") action { (v, c) => aesInstruction = v.toBoolean }
     opt[String]("out-of-order-decoder") action { (v, c) => outOfOrderDecoder = v.toBoolean  }
     opt[String]("wishbone-memory" ) action { (v, c) => wishboneMemory = v.toBoolean  }
+    opt[String]("fpu" ) action { (v, c) => fpu = v.toBoolean  }
   }.parse(args))
 
   val coherency = coherentDma || cpuCount > 1
@@ -112,14 +139,21 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
           dCacheSize = dCacheSize,
           iCacheWays = iCacheWays,
           dCacheWays = dCacheWays,
-          coherency = coherency
+          coherency = coherency,
+          iBusRelax = true,
+          earlyBranch = true,
+          withFloat = fpu,
+          withDouble = fpu,
+          externalFpu = fpu,
+          loadStoreWidth = if(fpu) 64 else 32
         )
         if(aesInstruction) c.add(new AesPlugin)
         c
       }},
       withExclusiveAndInvalidation = coherency,
       forcePeripheralWidth = !wishboneMemory,
-      outOfOrderDecoder = outOfOrderDecoder
+      outOfOrderDecoder = outOfOrderDecoder,
+      fpu = fpu
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = liteDramWidth),
     liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),

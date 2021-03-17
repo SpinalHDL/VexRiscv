@@ -25,7 +25,11 @@ import scala.collection.mutable.ArrayBuffer
 import spinal.lib.generator._
 import vexriscv.ip.fpu.FpuParameter
 
-case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig], withExclusiveAndInvalidation : Boolean, forcePeripheralWidth : Boolean = true, outOfOrderDecoder : Boolean = true)
+case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig],
+                                       withExclusiveAndInvalidation : Boolean,
+                                       forcePeripheralWidth : Boolean = true,
+                                       outOfOrderDecoder : Boolean = true,
+                                       fpu : Boolean = false)
 
 class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with PostInitCallback{
   val cpuCount = p.cpuConfigs.size

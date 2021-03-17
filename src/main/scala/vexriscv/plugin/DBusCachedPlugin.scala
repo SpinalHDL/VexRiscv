@@ -116,6 +116,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   override def bypassStore(data: Bits): Unit = {
     val prefix = s"DBusBypass${bypassStoreList.size}"
     bypassStoreList += ConditionalContext.isTrue().setName(prefix + "_cond") -> CombInit(data).setName(prefix + "_value")
+    assert(config.cpuDataWidth >= data.getWidth, "Data cache word width is too small for that")
   }
 
 
