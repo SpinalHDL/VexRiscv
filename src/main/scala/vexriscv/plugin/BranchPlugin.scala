@@ -66,7 +66,6 @@ class BranchPlugin(earlyBranch : Boolean,
   object IS_FENCEI extends Stageable(Bool)
 
   var jumpInterface : Flow[UInt] = null
-  var predictionJumpInterface : Flow[UInt] = null
   var predictionExceptionPort : Flow[ExceptionCause] = null
   var branchExceptionPort : Flow[ExceptionCause] = null
 

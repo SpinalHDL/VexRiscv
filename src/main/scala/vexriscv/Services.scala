@@ -8,7 +8,7 @@ import spinal.lib._
 import scala.beans.BeanProperty
 
 trait JumpService{
-  def createJumpInterface(stage : Stage, priority : Int = 0) : Flow[UInt]
+  def createJumpInterface(stage : Stage, priority : Int = 0) : Flow[UInt] //High priority win
 }
 
 trait IBusFetcher{

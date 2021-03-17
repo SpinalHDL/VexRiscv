@@ -339,6 +339,8 @@ case class CsrRead(that : Data , bitOffset : Int)
 case class CsrReadToWriteOverride(that : Data, bitOffset : Int) //Used for special cases, as MIP where there shadow stuff
 case class CsrOnWrite(doThat :() => Unit)
 case class CsrDuringWrite(doThat :() => Unit)
+case class CsrDuringRead(doThat :() => Unit)
+case class CsrDuring(doThat :() => Unit)
 case class CsrOnRead(doThat : () => Unit)
 case class CsrMapping() extends CsrInterface{
   val mapping = mutable.LinkedHashMap[Int,ArrayBuffer[Any]]()
@@ -348,7 +350,10 @@ case class CsrMapping() extends CsrInterface{
   override def r2w(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrReadToWriteOverride(that,bitOffset))
   override def onWrite(csrAddress: Int)(body: => Unit): Unit = addMappingAt(csrAddress, CsrOnWrite(() => body))
   override def duringWrite(csrAddress: Int)(body: => Unit): Unit = addMappingAt(csrAddress, CsrDuringWrite(() => body))
+  override def duringRead(csrAddress: Int)(body: => Unit): Unit = addMappingAt(csrAddress, CsrDuringRead(() => body))
+  override def during(csrAddress: Int)(body: => Unit): Unit = addMappingAt(csrAddress, CsrDuring(() => body))
   override def onRead(csrAddress: Int)(body: => Unit): Unit =  addMappingAt(csrAddress, CsrOnRead(() => {body}))
+  override def duringAny(): Bool = ???
 }
 
 
@@ -356,6 +361,9 @@ trait CsrInterface{
   def onWrite(csrAddress : Int)(doThat : => Unit) : Unit
   def onRead(csrAddress : Int)(doThat : => Unit) : Unit
   def duringWrite(csrAddress: Int)(body: => Unit): Unit
+  def duringRead(csrAddress: Int)(body: => Unit): Unit
+  def during(csrAddress: Int)(body: => Unit): Unit
+  def duringAny(): Bool
   def r(csrAddress : Int, bitOffset : Int, that : Data): Unit
   def w(csrAddress : Int, bitOffset : Int, that : Data): Unit
   def rw(csrAddress : Int, bitOffset : Int,that : Data): Unit ={
@@ -411,6 +419,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     exceptionPortsInfos += ExceptionPortInfo(interface,stage,priority)
     interface
   }
+
+
 
   var exceptionPendings : Vec[Bool] = null
   override def isExceptionPending(stage : Stage): Bool = exceptionPendings(pipeline.stages.indexOf(stage))
@@ -478,6 +488,9 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def onWrite(csrAddress: Int)(body: => Unit): Unit = csrMapping.onWrite(csrAddress)(body)
   override def duringWrite(csrAddress: Int)(body: => Unit): Unit = csrMapping.duringWrite(csrAddress)(body)
   override def onRead(csrAddress: Int)(body: => Unit): Unit = csrMapping.onRead(csrAddress)(body)
+  override def duringRead(csrAddress: Int)(body: => Unit): Unit = csrMapping.duringRead(csrAddress)(body)
+  override def during(csrAddress: Int)(body: => Unit): Unit = csrMapping.during(csrAddress)(body)
+  override def duringAny(): Bool = pipeline.execute.arbitration.isValid && pipeline.execute.input(IS_CSR)
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -531,7 +544,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
 
     if(supervisorGen) {
-      redoInterface = pcManagerService.createJumpInterface(pipeline.execute, -1)
+      redoInterface = pcManagerService.createJumpInterface(pipeline.execute, 10)
     }
 
     exceptionPendings = Vec(Bool, pipeline.stages.length)
@@ -736,12 +749,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         satpAccess(CSR.SATP, 31 -> satp.MODE, 22 -> satp.ASID, 0 -> satp.PPN)
 
 
-        if(supervisorGen) {
+        val satpLogic = supervisorGen generate new Area {
           redoInterface.valid := False
           redoInterface.payload := decode.input(PC)
-          duringWrite(CSR.SATP){
-            execute.arbitration.flushNext := True
+          duringWrite(CSR.SATP) {
             redoInterface.valid := True
+            execute.arbitration.flushNext := True
+            decode.arbitration.haltByOther := True
           }
         }
       }
@@ -1136,6 +1150,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
             for (element <- jobs) element match {
               case element : CsrDuringWrite => when(writeInstruction){element.doThat()}
+              case element : CsrDuringRead => when(readInstruction){element.doThat()}
+              case element : CsrDuring => {element.doThat()}
               case _ =>
             }
             when(writeEnable) {

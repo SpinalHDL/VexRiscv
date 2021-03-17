@@ -49,14 +49,25 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
   injectorStage = (!config.twoCycleCache && !withoutInjectorStage) || injectorStage,
   relaxPredictorAddress = relaxPredictorAddress,
   fetchRedoGen = true,
-  predictionBuffer = predictionBuffer){
+  predictionBuffer = predictionBuffer) with VexRiscvRegressionArg{
   import config._
+
+
 
   assert(isPow2(cacheSize))
   assert(!(memoryTranslatorPortConfig != null && config.cacheSize/config.wayCount > 4096), "When the I$ is used with MMU, each way can't be bigger than a page (4096 bytes)")
 
 
   assert(!(withoutInjectorStage && injectorStage))
+
+
+  override def getVexRiscvRegressionArgs(): Seq[String] = {
+    var args = List[String]()
+    args :+= "IBUS=CACHED"
+    args :+= s"IBUS_DATA_WIDTH=$memDataWidth"
+    args :+= s"COMPRESSED=${if(compressedGen) "yes" else "no"}"
+    args
+  }
 
   var iBus  : InstructionCacheMemBus = null
   var mmuBus : MemoryTranslatorBus = null
