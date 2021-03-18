@@ -34,29 +34,33 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
     dBusNonCoherent.bmb -> List(peripheralBridge.bmb)
   )
 
-  val fpu = p.cluster.fpu generate new Area{
+  val fpuGroups = (cores.reverse.grouped(4)).toList.reverse
+  val fpu = p.cluster.fpu generate { for(group <- fpuGroups) yield new Area{
+    val extraStage = group.size > 2
+
     val logic = Handle{
       new FpuCore(
-        portCount = cpuCount,
+        portCount = group.size,
         p =  FpuParameter(
           withDouble = true,
-          asyncRegFile = false
+          asyncRegFile = false,
+          schedulerM2sPipe = extraStage
         )
       )
     }
 
     val connect = Handle{
-      for(i <- 0 until cpuCount;
-          vex = cores(i).cpu.logic.cpu;
+      for(i <- 0 until group.size;
+          vex = group(i).cpu.logic.cpu;
           port = logic.io.port(i)) {
         val plugin = vex.service(classOf[FpuPlugin])
-        plugin.port.cmd >> port.cmd
-        plugin.port.commit >> port.commit
-        plugin.port.completion := port.completion.stage()
+        plugin.port.cmd.pipelined(m2s = false, s2m = false) >> port.cmd
+        plugin.port.commit.pipelined(m2s = extraStage, s2m = false) >> port.commit
+        plugin.port.completion := port.completion.m2sPipe()
         plugin.port.rsp << port.rsp
       }
     }
-  }
+  }}
 
   if(p.cluster.withExclusiveAndInvalidation) interconnect.masters(dBusNonCoherent.bmb).withOutOfOrderDecoder()
 
@@ -81,12 +85,17 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
 
   // Interconnect pipelining (FMax)
   for(core <- cores) {
-    interconnect.setPipelining(core.cpu.dBus)(cmdValid = true, cmdReady = true, rspValid = true)
+    interconnect.setPipelining(core.cpu.dBus)(cmdValid = true, cmdReady = true, rspValid = true, invValid = true, ackValid = true, syncValid = true)
     interconnect.setPipelining(core.cpu.iBus)(cmdHalfRate = true, rspValid = true)
     interconnect.setPipelining(iArbiter.bmb)(cmdHalfRate = true, rspValid = true)
   }
+  interconnect.setPipelining(dBusCoherent.bmb)(cmdValid = true, cmdReady = true)
   interconnect.setPipelining(dBusNonCoherent.bmb)(cmdValid = true, cmdReady = true, rspValid = true)
   interconnect.setPipelining(peripheralBridge.bmb)(cmdHalfRate = !p.wishboneMemory, cmdValid = p.wishboneMemory, cmdReady = p.wishboneMemory, rspValid = true)
+  if(!p.wishboneMemory) {
+    interconnect.setPipelining(iBridge.bmb)(cmdHalfRate = true)
+    interconnect.setPipelining(dBridge.bmb)(cmdReady = true)
+  }
 }
 
 
