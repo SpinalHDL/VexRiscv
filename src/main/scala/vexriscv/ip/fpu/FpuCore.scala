@@ -11,7 +11,7 @@ object FpuDivSqrtIterationState extends SpinalEnum{
   val IDLE, YY, XYY, Y2_XYY, DIV, _15_XYY2, Y_15_XYY2, Y_15_XYY2_RESULT, SQRT = newElement()
 }
 
-//TODO cleanup rounding
+
 case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   val io = new Bundle {
     val port = Vec(slave(FpuPort(p)), portCount)
@@ -137,7 +137,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val roundMode = FpuRoundMode()
     val format = p.withDouble generate FpuFormat()
     val NV = Bool()
-    val DZ = Bool() //TODO
+    val DZ = Bool()
   }
 
   case class RoundOutput() extends Bundle{
@@ -275,7 +275,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
   }
 
   val read = new Area{
-    val s0 = cmdArbiter.output.pipelined() //TODO may need to remove m2s for store latency
+    val s0 = cmdArbiter.output.pipelined()
     val s1 = s0.m2sPipe()
     val output = s1.swapPayload(RfReadOutput())
     val rs = if(p.asyncRegFile){
@@ -513,9 +513,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         }
         shift.input := (ohInput.asUInt |<< 1).resized
 
-        val subnormalShiftOffset = if(!p.withDouble) U(0) else ((input.format === FpuFormat.DOUBLE) ? U(0) | U(0)) //TODO remove ?
-        val subnormalExpOffset = if(!p.withDouble) U(0) else ((input.format === FpuFormat.DOUBLE)   ? U(0) | U(0))
-
         when(input.valid && (input.i2f || isSubnormal) && !done){
           busy := True
           when(boot){
@@ -523,7 +520,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
               input.value.getDrivingReg(0, 32 bits) := B(input.value.asUInt.twoComplement(True).resize(32 bits))
               patched := True
             } otherwise {
-              shift.by := OHToUInt(OHMasking.first((ohInput).reversed)) + (input.i2f ? U(0) | subnormalShiftOffset)
+              shift.by := OHToUInt(OHMasking.first((ohInput).reversed))
               boot := False
               i2fZero := input.value(31 downto 0) === 0
             }
@@ -535,7 +532,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
         val expOffset = (UInt(p.internalExponentSize bits))
         expOffset := 0
         when(isSubnormal){
-          expOffset := (shift.by-subnormalExpOffset).resized
+          expOffset := shift.by.resized
         }
 
         when(!input.isStall){
@@ -1169,6 +1166,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     haltIt clearWhen(sqrt.io.output.valid)
   }
 
+  //divSqrt isn't realy used anymore
   val divSqrt = p.withDivSqrt generate new Area {
     val input = decode.divSqrt.halfPipe()
     assert(false, "Need to implement commit tracking")
@@ -1515,7 +1513,6 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
 
   val merge = new Area {
-    //TODO maybe load can bypass merge and round.
     val inputs = ArrayBuffer[Stream[MergeInput]]()
     inputs += load.s1.output.stage()
     if(p.withSqrt) (inputs += sqrt.output)
