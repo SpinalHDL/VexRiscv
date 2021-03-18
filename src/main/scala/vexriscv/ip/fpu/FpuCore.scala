@@ -267,7 +267,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
 
   val cmdArbiter = new Area{
     val arbiter = StreamArbiterFactory.noLock.roundRobin.build(FpuCmd(p), portCount)
-    arbiter.io.inputs <> Vec(scheduler.map(_.output))
+    arbiter.io.inputs <> Vec(scheduler.map(_.output.pipelined(m2s = p.schedulerM2sPipe)))
 
     val output = arbiter.io.output.swapPayload(RfReadInput())
     output.source := arbiter.io.chosen
