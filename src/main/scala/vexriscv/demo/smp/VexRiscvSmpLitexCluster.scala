@@ -16,7 +16,8 @@ case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParamet
                                              liteDram : LiteDramNativeParameter,
                                              liteDramMapping : AddressMapping,
                                              coherentDma : Boolean,
-                                             wishboneMemory : Boolean)
+                                             wishboneMemory : Boolean,
+                                             cpuPerFpu : Int)
 
 
 class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexRiscvSmpClusterWithPeripherals(p.cluster) {
@@ -34,7 +35,7 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
     dBusNonCoherent.bmb -> List(peripheralBridge.bmb)
   )
 
-  val fpuGroups = (cores.reverse.grouped(4)).toList.reverse
+  val fpuGroups = (cores.reverse.grouped(p.cpuPerFpu)).toList.reverse
   val fpu = p.cluster.fpu generate { for(group <- fpuGroups) yield new Area{
     val extraStage = group.size > 2
 
@@ -113,6 +114,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var outOfOrderDecoder = true
   var aesInstruction = false
   var fpu = false
+  var cpuPerFpu = 4
   var netlistDirectory = "."
   var netlistName = "VexRiscvLitexSmpCluster"
   assert(new scopt.OptionParser[Unit]("VexRiscvLitexSmpClusterCmdGen") {
@@ -132,6 +134,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("out-of-order-decoder") action { (v, c) => outOfOrderDecoder = v.toBoolean  }
     opt[String]("wishbone-memory" ) action { (v, c) => wishboneMemory = v.toBoolean  }
     opt[String]("fpu" ) action { (v, c) => fpu = v.toBoolean  }
+    opt[String]("cpu-per-fpu") action { (v, c) => cpuPerFpu = v.toInt }
   }.parse(args))
 
   val coherency = coherentDma || cpuCount > 1
@@ -167,7 +170,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = liteDramWidth),
     liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
     coherentDma = coherentDma,
-    wishboneMemory = wishboneMemory
+    wishboneMemory = wishboneMemory,
+    cpuPerFpu = cpuPerFpu
   )
 
   def dutGen = {
@@ -241,7 +245,8 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
     liteDramMapping = SizeMapping(0x80000000l, 0x70000000l),
     coherentDma = false,
-    wishboneMemory = false
+    wishboneMemory = false,
+    cpuPerFpu = 4
   )
 
   def dutGen = {
