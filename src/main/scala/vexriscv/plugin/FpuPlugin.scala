@@ -11,7 +11,7 @@ import scala.collection.mutable.ArrayBuffer
 
 class FpuPlugin(externalFpu : Boolean = false,
                 simHalt : Boolean = false,
-                p : FpuParameter) extends Plugin[VexRiscv] with VexRiscvRegressionArg {
+                val p : FpuParameter) extends Plugin[VexRiscv] with VexRiscvRegressionArg {
 
   object FPU_ENABLE extends Stageable(Bool())
   object FPU_COMMIT extends Stageable(Bool())

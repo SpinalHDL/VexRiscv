@@ -304,7 +304,7 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
       }
 
       //Avoid having two C instruction executed in a single step
-      if(pipeline(RVC_GEN)){
+      if(pipeline.config.withRvc){
         val cleanStep = RegNext(stepIt && decode.arbitration.isFiring) init(False)
         execute.arbitration.flushNext setWhen(cleanStep)
       }

@@ -29,7 +29,7 @@ class SrcPlugin(separatedAddSub : Boolean = false, executeInsertion : Boolean = 
       val imm = Riscv.IMM(input(INSTRUCTION))
       insert(SRC1) := input(SRC1_CTRL).mux(
         Src1CtrlEnum.RS   -> output(RS1),
-        Src1CtrlEnum.PC_INCREMENT -> (if(pipeline(RVC_GEN)) Mux(input(IS_RVC), B(2), B(4)) else B(4)).resized,
+        Src1CtrlEnum.PC_INCREMENT -> (if(pipeline.config.withRvc) Mux(input(IS_RVC), B(2), B(4)) else B(4)).resized,
         Src1CtrlEnum.IMU  -> imm.u.resized,
         Src1CtrlEnum.URS1 -> input(INSTRUCTION)(Riscv.rs1Range).resized
       )

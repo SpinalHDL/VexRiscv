@@ -16,6 +16,7 @@ trait IBusFetcher{
   def incoming() : Bool
   def pcValid(stage : Stage) : Bool
   def getInjectionPort() : Stream[Bits]
+  def withRvc() : Boolean
 }
 
 
