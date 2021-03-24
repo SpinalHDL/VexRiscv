@@ -32,6 +32,11 @@ object RvcDecompressor{
     def lwspImm = B"0000" ## i(3 downto 2) ## i(12) ## i(6 downto 4) ## B"00"
     def swspImm = B"0000" ## i(8 downto 7) ## i(12 downto 9) ## B"00"
 
+    val lfdImm = B"0000" ## i(6 downto 5) ## i(12 downto 10) ## B"000"
+    def sfdImm = lfdImm
+    def lfdspImm = B"000" ## i(4 downto 2) ## i(12) ## i(6 downto 5) ## B"000"
+    def sfdspImm = B"000" ## i(9 downto 7) ## i(12 downto 10) ## B"000"
+
 
     val x0 = B"00000"
     val x1 = B"00001"
@@ -39,8 +44,12 @@ object RvcDecompressor{
 
     switch(i(1 downto 0) ## i(15 downto 13)){
       is(0){ret := addi5spnImm ## B"00010" ## B"000" ## rcl ## B"0010011"} //C.ADDI4SPN -> addi rd0, x2, nzuimm[9:2].
+      is(1){ret := lfdImm ## rch ## B"011" ## rcl ## B"0000111" } //C.FLD (w/ D ext)
       is(2){ret := lwImm ## rch ## B"010" ## rcl ## B"0000011"} //C.LW -> lw rd', offset[6:2](rs1')
+      is(3){ret := lwImm ## rch ## B"010" ## rcl ## B"0000111" } //C.FLW (w/ F ext)
+      is(5){ret := sfdImm(11 downto 5) ## rcl ## rch ## B"011" ## sfdImm(4 downto 0) ## B"0100111" } //C.FSD (w/ D ext)
       is(6){ret := swImm(11 downto 5) ## rcl  ## rch ## B"010" ## swImm(4 downto 0) ## B"0100011"} //C.SW -> sw rs2',offset[6:2](rs1')
+      is(7){ret := swImm(11 downto 5) ## rcl ## rch ## B"010" ## swImm(4 downto 0) ## B"0100111" } //C.FSW (w/ F ext)
       is(8){ret := addImm ## i(11 downto 7) ## B"000" ## i(11 downto 7) ## B"0010011"} //C.ADDI -> addi rd, rd, nzimm[5:0].
       is(9){ret := jalImm(20) ## jalImm(10 downto 1) ## jalImm(11) ## jalImm(19 downto 12) ## x1 ## B"1101111"} //C.JAL -> jalr x1, rs1, 0.
       is(10){ret := lImm ## B"00000" ## B"000" ## i(11 downto 7) ## B"0010011"} //C.LI -> addi rd, x0, imm[5:0].
@@ -76,7 +85,9 @@ object RvcDecompressor{
       is(14){ ret := bImm(12) ## bImm(10 downto 5) ## x0 ## rch ## B"000" ## bImm(4 downto 1) ## bImm(11) ## B"1100011" }
       is(15){ ret := bImm(12) ## bImm(10 downto 5) ## x0 ## rch ## B"001" ## bImm(4 downto 1) ## bImm(11) ## B"1100011" }
       is(16){ ret := B"0000000" ## i(6 downto 2) ## i(11 downto 7) ## B"001" ## i(11 downto 7) ## B"0010011"   }
+      is(17){ ret := lfdspImm ## x2 ## B"011" ## i(11 downto 7) ## B"0000111" } // C.FLDSP (w/ D ext)
       is(18){ ret := lwspImm ## x2 ## B"010" ## i(11 downto 7) ## B"0000011" }
+      is(19){ ret := lwspImm ## x2 ## B"010" ## i(11 downto 7) ## B"0000111" } // C.FLWSP (w/ F ext)
       is(20) {
         val add = B"000_0000" ## i(6 downto 2) ## (i(12) ? i(11 downto 7) | x0) ## B"000" ## i(11 downto 7) ## B"0110011"   //add => add rd, rd, rs2  mv => add rd, x0, rs2
         val j =  B"0000_0000_0000" ## i(11 downto 7) ## B"000" ## (i(12) ? x1 | x0)  ## B"1100111"  //jr => jalr x0, rs1, 0.    jalr => jalr x1, rs1, 0.
@@ -84,7 +95,9 @@ object RvcDecompressor{
         val addJ = (i(6 downto 2) === 0) ? j | add
         ret := (i(12 downto 2) === B"100_0000_0000") ? ebreak | addJ
       }
+      is(21){ ret := sfdspImm(11 downto 5) ## i(6 downto 2)  ## x2 ## B"011" ## sfdspImm(4 downto 0) ## B"0100111" } // C.FSDSP (w/ D ext)
       is(22){ ret := swspImm(11 downto 5) ## i(6 downto 2)  ## x2 ## B"010" ## swspImm(4 downto 0) ## B"0100011" }
+      is(23){ ret := swspImm(11 downto 5) ## i(6 downto 2)  ## x2 ## B"010" ## swspImm(4 downto 0) ## B"0100111" } // C.FSWSP (w/ F ext)
     }
 
     ret
