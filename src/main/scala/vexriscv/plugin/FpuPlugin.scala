@@ -306,6 +306,10 @@ class FpuPlugin(externalFpu : Boolean = false,
 
       insert(FPU_COMMIT_SYNC) := List(FpuOpcode.LOAD, FpuOpcode.FMV_W_X, FpuOpcode.I2F).map(_ === input(FPU_OPCODE)).orR
       insert(FPU_COMMIT_LOAD) := input(FPU_OPCODE) === FpuOpcode.LOAD
+
+      if(serviceExist(classOf[IWake])) when(forked){
+        service(classOf[IWake]).askWake() //Ensure that no WFI followed by a FPU stall the FPU interface for other CPU
+      }
     }
 
     writeBack plug new Area{ //WARNING IF STAGE CHANGE, update the regression rsp capture filter for the golden model (top->VexRiscv->lastStageIsFiring)
