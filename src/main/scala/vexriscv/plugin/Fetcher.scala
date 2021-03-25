@@ -256,10 +256,17 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       val throw2Bytes = throw2BytesReg || input.pc(1)
       val unaligned = throw2Bytes || bufferValid
       def aligned = !unaligned
+
+      //Latch and patches are there to ensure that the decoded instruction do not mutate while being halted and unscheduled to ensure FpuPlugin cmd fork from consistancy
+      val bufferValidLatch = RegNextWhen(bufferValid, input.valid)
+      val throw2BytesLatch = RegNextWhen(throw2Bytes, input.valid)
+      val bufferValidPatched = input.valid ? bufferValid | bufferValidLatch
+      val throw2BytesPatched = input.valid ? throw2Bytes | throw2BytesLatch
+
       val raw = Mux(
-        sel = bufferValid,
+        sel = bufferValidPatched,
         whenTrue = input.rsp.inst(15 downto 0) ## bufferData,
-        whenFalse = input.rsp.inst(31 downto 16) ## (throw2Bytes ? input.rsp.inst(31 downto 16) | input.rsp.inst(15 downto 0))
+        whenFalse = input.rsp.inst(31 downto 16) ## (throw2BytesPatched ? input.rsp.inst(31 downto 16) | input.rsp.inst(15 downto 0))
       )
       val isRvc = raw(1 downto 0) =/= 3
       val decompressed = RvcDecompressor(raw(15 downto 0), pipeline.config.withRvf, pipeline.config.withRvd)
