@@ -32,6 +32,14 @@ object CsrAccess {
   object NONE extends CsrAccess
 }
 
+object CsrPlugin {
+  object IS_CSR extends Stageable(Bool)
+  object CSR_WRITE_OPCODE extends Stageable(Bool)
+  object CSR_READ_OPCODE extends Stageable(Bool)
+  object IS_PMP_CFG extends Stageable(Bool)
+  object IS_PMP_ADDR extends Stageable(Bool)
+}
+
 case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage, priority : Int)
 case class CsrPluginConfig(
                             catchIllegalAccess  : Boolean,
@@ -399,6 +407,7 @@ trait IWake{
 class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface with IWake{
   import config._
   import CsrAccess._
+  import CsrPlugin._
 
   assert(!(wfiGenAsNop && wfiGenAsWait))
 
@@ -440,9 +449,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   }
 
   object ENV_CTRL extends Stageable(EnvCtrlEnum())
-  object IS_CSR extends Stageable(Bool)
-  object CSR_WRITE_OPCODE extends Stageable(Bool)
-  object CSR_READ_OPCODE extends Stageable(Bool)
   object PIPELINED_CSR_READ extends Stageable(Bits(32 bits))
 
   var allowInterrupts : Bool = null
@@ -1029,8 +1035,12 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           || (input(INSTRUCTION)(14 downto 13) === B"11" && imm.z === 0)
         )
         insert(CSR_READ_OPCODE) := input(INSTRUCTION)(13 downto 7) =/= B"0100000"
+        
+        if (pipeline.serviceExist(classOf[PmpPlugin])) {
+          insert(IS_PMP_CFG) := input(INSTRUCTION)(31 downto 24) === 0x3a
+          insert(IS_PMP_ADDR) := input(INSTRUCTION)(31 downto 24) === 0x3b
+        }
       }
-
 
       execute plug new Area{
         import execute._
@@ -1103,25 +1113,27 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           True -> Mux(input(INSTRUCTION)(12), readToWriteData & ~writeSrc, readToWriteData | writeSrc)
         )
 
-        when(arbitration.isValid && input(IS_CSR)) {
-          if(!pipelineCsrRead) output(REGFILE_WRITE_DATA) := readData
-          arbitration.haltItself setWhen(blockedBySideEffects)
-        }
-        if(pipelineCsrRead){
-          insert(PIPELINED_CSR_READ) := readData
-          when(memory.arbitration.isValid && memory.input(IS_CSR)) {
-            memory.output(REGFILE_WRITE_DATA) := memory.input(PIPELINED_CSR_READ)
+        val csrAddress = input(INSTRUCTION)(csrRange)
+        val pmpAccess = if (pipeline.serviceExist(classOf[PmpPlugin])) {
+          input(IS_PMP_CFG) | input(IS_PMP_ADDR)
+        } else False
+
+        when (~pmpAccess) {
+          when(arbitration.isValid && input(IS_CSR)) {
+            if(!pipelineCsrRead) output(REGFILE_WRITE_DATA) := readData
+            arbitration.haltItself setWhen(blockedBySideEffects)
           }
+          if(pipelineCsrRead){
+            insert(PIPELINED_CSR_READ) := readData
+            when(memory.arbitration.isValid && memory.input(IS_CSR)) {
+              memory.output(REGFILE_WRITE_DATA) := memory.input(PIPELINED_CSR_READ)
+            }
+          }
+        }.elsewhen(arbitration.isValid && input(IS_CSR)) {
+          illegalAccess := False
         }
-//
-//        Component.current.rework{
-//          when(arbitration.isFiring && input(IS_CSR)) {
-//            memory.input(REGFILE_WRITE_DATA).getDrivingReg := readData
-//          }
-//        }
 
         //Translation of the csrMapping into real logic
-        val csrAddress = input(INSTRUCTION)(csrRange)
         Component.current.afterElaboration{
           def doJobs(jobs : ArrayBuffer[Any]): Unit ={
             val withWrite = jobs.exists(j => j.isInstanceOf[CsrWrite] || j.isInstanceOf[CsrOnWrite] || j.isInstanceOf[CsrDuringWrite])
