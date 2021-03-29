@@ -28,12 +28,13 @@
 
 This repository hosts a RISC-V implementation written in SpinalHDL. Here are some specs :
 
-- RV32I[M][C][A] instruction set (Atomic only inside a single core)
+- RV32I[M][A][F[D]][C] instruction set
 - Pipelined from 2 to 5+ stages ([Fetch*X], Decode, Execute, [Memory], [WriteBack])
 - 1.44 DMIPS/Mhz --no-inline when nearly all features are enabled (1.57 DMIPS/Mhz when the divider lookup table is enabled)
 - Optimized for FPGA, does not use any vendor specific IP block / primitive
 - AXI4, Avalon, wishbone ready
 - Optional MUL/DIV extensions
+- Optional F32/F64 FPU (require data cache for now)
 - Optional instruction and data caches
 - Optional hardware refilled MMU
 - Optional debug extension allowing Eclipse debugging via a GDB >> openOCD >> JTAG connection
@@ -688,7 +689,7 @@ Features :
 Accuracy, roundings (RNE, RTZ, RDN, RUP, RMM) and compliance: 
 
 - Fully implemented excepted in the cases specified bellow
-- In FMA, the result of the multiplication is truncated before the addition (keep mantissa width bits)
+- In FMA, the result of the multiplication is rounded before the addition (keep mantissa width + 2 bits)
 - A very special corner case of underflow flag do not follow IEEE 754 (rounding from subnormal to normal number)
 - Very specific, but SGNJ instruction will not mutate the value from/to F32/F64 (no NaN-boxing mutation)
  
@@ -715,7 +716,7 @@ Fpu 64/32 bits ->
   Artix 7 relaxed -> 101 Mhz 3336 LUT 3033 FF 
   Artix 7 FMax    -> 165 Mhz 3728 LUT 3175 FF 
 ```
- 
+
 ### Plugins
 
 This chapter describes the currently implemented plugins.
@@ -1150,4 +1151,13 @@ Allow the integration of a internal or a external FPU into VexRiscv (See the FPU
 | externalFpu   | Boolean | When false the FPU is instanciated in Vex, else the plugin has a `port` interface to which you can connect an external FPU |
 | p   | FpuParameter | Parameter with which the connected FPU will be created |
 
+#### AesPlugin
 
+This plugin allow to accelerate AES encryption/decryption by using an internal ROM to solve SBOX and permutations, allowing in practice to execute one AES round in about 21 cycles.
+
+For more documentation, check src/main/scala/vexriscv/plugin/AesPlugin.scala, a software C driver can be found here : <https://github.com/SpinalHDL/SaxonSoc/blob/dev-0.3/software/standalone/driver/aes_custom.h>
+
+It was also ported on libressl via the following patch :
+<https://github.com/SpinalHDL/buildroot-spinal-saxon/blob/main/patches/libressl/0000-vexriscv-aes.patch>
+
+Speed up of 4 was observed in libressl running in linux. <https://github.com/SpinalHDL/SaxonSoc/pull/53#issuecomment-730133020>
