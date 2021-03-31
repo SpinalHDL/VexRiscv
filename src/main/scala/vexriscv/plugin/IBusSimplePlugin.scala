@@ -180,6 +180,7 @@ case class IBusSimpleBus(plugin: IBusSimplePlugin) extends Bundle with IMasterSl
 
   //cmdForkPersistence need to bet set
   def toAhbLite3Master(): AhbLite3Master = {
+    assert(plugin.cmdForkPersistence)
     val bus = AhbLite3Master(IBusSimpleBus.getAhbLite3Config())
     bus.HADDR     := this.cmd.pc
     bus.HWRITE    := False
