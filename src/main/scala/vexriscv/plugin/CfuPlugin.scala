@@ -114,7 +114,7 @@ class CfuPlugin(val stageCount : Int,
   val CFU_ENABLE = new Stageable(Bool()).setCompositeName(this, "CFU_ENABLE")
   val CFU_IN_FLIGHT = new Stageable(Bool()).setCompositeName(this, "CFU_IN_FLIGHT")
   val CFU_ENCODING = new Stageable(UInt(log2Up(encodings.size) bits)).setCompositeName(this, "CFU_ENCODING")
-  val CFU_INPUT_2_KIND = new Stageable(CfuPlugin.Input2Kind()).setCompositeName(this, "CFU_ENCODING")
+  val CFU_INPUT_2_KIND = new Stageable(CfuPlugin.Input2Kind()).setCompositeName(this, "CFU_INPUT_2_KIND")
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline._
@@ -187,7 +187,7 @@ class CfuPlugin(val stageCount : Int,
       if(p.CFU_INPUTS >= 1) bus.cmd.inputs(0) := input(RS1)
       if(p.CFU_INPUTS >= 2)  bus.cmd.inputs(1) := input(CFU_INPUT_2_KIND).mux(
         CfuPlugin.Input2Kind.RS -> input(RS2),
-        CfuPlugin.Input2Kind.IMM_I -> IMM(input(INSTRUCTION)).i_sext
+        CfuPlugin.Input2Kind.IMM_I -> IMM(input(INSTRUCTION)).h_sext
       )
     }
 
