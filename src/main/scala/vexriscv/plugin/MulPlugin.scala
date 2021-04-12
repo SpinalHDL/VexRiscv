@@ -5,7 +5,8 @@ import spinal.core._
 import spinal.lib.KeepAttribute
 
 //Input buffer generaly avoid the FPGA synthesis to duplicate reg inside the DSP cell, which could stress timings quite much.
-class MulPlugin(inputBuffer : Boolean = false) extends Plugin[VexRiscv]{
+class MulPlugin(var inputBuffer : Boolean = false,
+                var outputBuffer : Boolean = false) extends Plugin[VexRiscv] with VexRiscvRegressionArg {
   object MUL_LL extends Stageable(UInt(32 bits))
   object MUL_LH extends Stageable(SInt(34 bits))
   object MUL_HL extends Stageable(SInt(34 bits))
@@ -14,6 +15,10 @@ class MulPlugin(inputBuffer : Boolean = false) extends Plugin[VexRiscv]{
   object MUL_LOW extends Stageable(SInt(34+16+2 bits))
 
   object IS_MUL extends Stageable(Bool)
+
+  override def getVexRiscvRegressionArgs(): Seq[String] = {
+    List("MUL=yes")
+  }
 
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
@@ -53,16 +58,25 @@ class MulPlugin(inputBuffer : Boolean = false) extends Plugin[VexRiscv]{
 //      a := input(SRC1)
 //      b := input(SRC2)
 
+      val delay = (if(inputBuffer) 1 else 0) + (if(outputBuffer) 1 else 0)
+
+      val delayLogic = (delay != 0) generate new Area{
+        val counter = Reg(UInt(log2Up(delay+1) bits))
+        when(arbitration.isValid && input(IS_MUL) && counter =/= delay){
+          arbitration.haltItself := True
+        }
+
+        counter := counter + 1
+        when(!arbitration.isStuck || arbitration.isStuckByOthers){
+          counter := 0
+        }
+      }
+
       val withInputBuffer = inputBuffer generate new Area{
         val rs1 = RegNext(input(RS1))
         val rs2 = RegNext(input(RS2))
         a := rs1
         b := rs2
-
-        val delay = RegNext(arbitration.isStuck)
-        when(arbitration.isValid && input(IS_MUL) && !delay){
-          arbitration.haltItself := True
-        }
       }
 
       val noInputBuffer = (!inputBuffer) generate new Area{
@@ -91,10 +105,25 @@ class MulPlugin(inputBuffer : Boolean = false) extends Plugin[VexRiscv]{
       val bSLow = (False ## b(15 downto 0)).asSInt
       val aHigh = (((aSigned && a.msb) ## a(31 downto 16))).asSInt
       val bHigh = (((bSigned && b.msb) ## b(31 downto 16))).asSInt
-      insert(MUL_LL) := aULow * bULow
-      insert(MUL_LH) := aSLow * bHigh
-      insert(MUL_HL) := aHigh * bSLow
-      insert(MUL_HH) := aHigh * bHigh
+
+      val withOuputBuffer = outputBuffer generate new Area{
+        val mul_ll = RegNext(aULow * bULow)
+        val mul_lh = RegNext(aSLow * bHigh)
+        val mul_hl = RegNext(aHigh * bSLow)
+        val mul_hh = RegNext(aHigh * bHigh)
+
+        insert(MUL_LL) := mul_ll
+        insert(MUL_LH) := mul_lh
+        insert(MUL_HL) := mul_hl
+        insert(MUL_HH) := mul_hh
+      }
+
+      val noOutputBuffer = (!outputBuffer) generate new Area{
+        insert(MUL_LL) := aULow * bULow
+        insert(MUL_LH) := aSLow * bHigh
+        insert(MUL_HL) := aHigh * bSLow
+        insert(MUL_HH) := aHigh * bHigh
+      }
 
       Component.current.afterElaboration{
         //Avoid synthesis tools to retime RS1 RS2 from execute stage to decode stage leading to bad timings (ex : Vivado, even if retiming is disabled)

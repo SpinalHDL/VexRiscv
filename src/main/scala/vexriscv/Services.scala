@@ -8,7 +8,7 @@ import spinal.lib._
 import scala.beans.BeanProperty
 
 trait JumpService{
-  def createJumpInterface(stage : Stage, priority : Int = 0) : Flow[UInt]
+  def createJumpInterface(stage : Stage, priority : Int = 0) : Flow[UInt] //High priority win
 }
 
 trait IBusFetcher{
@@ -16,6 +16,7 @@ trait IBusFetcher{
   def incoming() : Bool
   def pcValid(stage : Stage) : Bool
   def getInjectionPort() : Stream[Bits]
+  def withRvc() : Boolean
 }
 
 

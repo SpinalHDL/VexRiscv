@@ -35,6 +35,7 @@ bin/
 *.cf
 *.json
 *.vcd
+*.fst*
 !tester/src/test/resources/*.vhd
 obj_dir
 *.logTrace

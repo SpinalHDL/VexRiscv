@@ -173,19 +173,26 @@ class MulDivDimension extends VexRiscvDimension("MulDiv") {
     } :: l
 
 
-    if(!noMemory && !noWriteBack) l =
-      new VexRiscvPosition("MulDivFpga") {
-        override def testParam = "MUL=yes DIV=yes"
-        override def applyOn(config: VexRiscvConfig): Unit = {
-          config.plugins += new MulPlugin
-          config.plugins += new MulDivIterativePlugin(
-            genMul = false,
-            genDiv = true,
-            mulUnrollFactor = 32,
-            divUnrollFactor = 1
-          )
-        }
-      } :: l
+    if(!noMemory && !noWriteBack) {
+      val inputBuffer = r.nextBoolean()
+      val outputBuffer = r.nextBoolean()
+      l = new VexRiscvPosition(s"MulDivFpga$inputBuffer$outputBuffer") {
+          override def testParam = "MUL=yes DIV=yes"
+
+          override def applyOn(config: VexRiscvConfig): Unit = {
+            config.plugins += new MulPlugin(
+              inputBuffer = inputBuffer,
+              outputBuffer = outputBuffer
+            )
+            config.plugins += new MulDivIterativePlugin(
+              genMul = false,
+              genDiv = true,
+              mulUnrollFactor = 32,
+              divUnrollFactor = 1
+            )
+          }
+        } :: l
+    }
 
     random(r, l)
   }
@@ -438,6 +445,8 @@ class DBusDimension extends VexRiscvDimension("DBus") {
       val twoStageMmu = r.nextBoolean() && !noMemory && !noWriteBack
       val mmuConfig = if(universes.contains(VexRiscvUniverse.MMU)) MmuPortConfig(portTlbSize = 4, latency = if(twoStageMmu) 1 else 0, earlyRequireMmuLockup = Random.nextBoolean() && twoStageMmu, earlyCacheHits = Random.nextBoolean() && twoStageMmu) else null
       val memDataWidth = List(32,64,128)(r.nextInt(3))
+      val cpuDataWidthChoices = List(32,64,128).filter(_ <= memDataWidth)
+      val cpuDataWidth = cpuDataWidthChoices(r.nextInt(cpuDataWidthChoices.size))
       val bytePerLine = Math.max(memDataWidth/8, List(8,16,32,64)(r.nextInt(4)))
       var cacheSize = 0
       var wayCount = 0
@@ -455,8 +464,8 @@ class DBusDimension extends VexRiscvDimension("DBus") {
         cacheSize = 512 << r.nextInt(5)
         wayCount = 1 << r.nextInt(3)
       }while(cacheSize/wayCount < 512 || (catchAll && cacheSize/wayCount > 4096))
-      new VexRiscvPosition(s"Cached${memDataWidth}d" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "") + (if(withSmp) "Smp " else "") + (if(directTlbHit) "Dtlb " else "") + (if(twoStageMmu) "Tsmmu " else "") + (if(asyncTagMemory) "Atm" else "")) {
-        override def testParam = s"DBUS=CACHED DBUS_DATA_WIDTH=$memDataWidth " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")  + (if(withSmp) "DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes " else "")
+      new VexRiscvPosition(s"Cached${memDataWidth}d${cpuDataWidth}c" + "S" + cacheSize + "W" + wayCount + "BPL" + bytePerLine + (if(dBusCmdMasterPipe) "Cmp " else "") + (if(dBusCmdSlavePipe) "Csp " else "") + (if(dBusRspSlavePipe) "Rsp " else "") + (if(relaxedMemoryTranslationRegister) "Rmtr " else "") + (if(earlyWaysHits) "Ewh " else "") + (if(withAmo) "Amo " else "") + (if(withSmp) "Smp " else "") + (if(directTlbHit) "Dtlb " else "") + (if(twoStageMmu) "Tsmmu " else "") + (if(asyncTagMemory) "Atm" else "")) {
+        override def testParam = s"DBUS=CACHED DBUS_LOAD_DATA_WIDTH=$memDataWidth DBUS_STORE_DATA_WIDTH=$cpuDataWidth " + (if(withLrSc) "LRSC=yes " else "")  + (if(withAmo) "AMO=yes " else "")  + (if(withSmp) "DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes " else "")
 
         override def applyOn(config: VexRiscvConfig): Unit = {
           config.plugins += new DBusCachedPlugin(
@@ -465,7 +474,7 @@ class DBusDimension extends VexRiscvDimension("DBus") {
               bytePerLine = bytePerLine,
               wayCount = wayCount,
               addressWidth = 32,
-              cpuDataWidth = 32,
+              cpuDataWidth = cpuDataWidth, //Not tested
               memDataWidth = memDataWidth,
               catchAccessError = catchAll,
               catchIllegal = catchAll,

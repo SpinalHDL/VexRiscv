@@ -217,7 +217,7 @@ object VexRiscvSynthesisBench {
             frequencyTarget = 50 MHz,
             vivadoPath=sys.env.getOrElse("VIVADO_ARTIX_7_BIN", null),
             workspacePath=workspace + "_area",
-            toplevelPath=rtl.getRtlPath(),
+            rtl=rtl,
             family=getFamilyName(),
             device="xcku035-fbva900-3-e"
           )
@@ -230,7 +230,7 @@ object VexRiscvSynthesisBench {
             frequencyTarget = 800 MHz,
             vivadoPath=sys.env.getOrElse("VIVADO_ARTIX_7_BIN", null),
             workspacePath=workspace + "_fmax",
-            toplevelPath=rtl.getRtlPath(),
+            rtl=rtl,
             family=getFamilyName(),
             device="xcku035-fbva900-3-e"
           )
@@ -243,7 +243,7 @@ object VexRiscvSynthesisBench {
             frequencyTarget = 50 MHz,
             vivadoPath=sys.env.getOrElse("VIVADO_ARTIX_7_BIN", null),
             workspacePath=workspace + "_area",
-            toplevelPath=rtl.getRtlPath(),
+            rtl=rtl,
             family=getFamilyName(),
             device="xcku3p-ffvd900-3-e"
           )
@@ -256,7 +256,7 @@ object VexRiscvSynthesisBench {
             frequencyTarget = 800 MHz,
             vivadoPath=sys.env.getOrElse("VIVADO_ARTIX_7_BIN", null),
             workspacePath=workspace + "_fmax",
-            toplevelPath=rtl.getRtlPath(),
+            rtl=rtl,
             family=getFamilyName(),
             device="xcku3p-ffvd900-3-e"
           )

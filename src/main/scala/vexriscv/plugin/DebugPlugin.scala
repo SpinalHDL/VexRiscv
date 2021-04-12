@@ -7,6 +7,7 @@ import vexriscv._
 import vexriscv.ip._
 import spinal.core._
 import spinal.lib._
+import spinal.lib.blackbox.xilinx.s7.BSCANE2
 import spinal.lib.bus.amba3.apb.{Apb3, Apb3Config}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.bmb.{Bmb, BmbAccessCapabilities, BmbAccessParameter, BmbParameter}
@@ -149,6 +150,20 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
 
     jtagBridge.io.ctrl
   }
+
+  def fromBscane2(usedId : Int): Unit ={
+    val jtagConfig = SystemDebuggerConfig()
+
+    val bscane2 = BSCANE2(usedId)
+    val jtagClockDomain = ClockDomain(bscane2.TCK)
+
+    val jtagBridge = new JtagBridgeNoTap(jtagConfig, jtagClockDomain)
+    jtagBridge.io.ctrl << bscane2.toJtagTapInstructionCtrl()
+
+    val debugger = new SystemDebugger(jtagConfig)
+    debugger.io.remote <> jtagBridge.io.remote
+    debugger.io.mem <> this.from(debugger.io.mem.c)
+  }
 }
 
 case class DebugExtensionIo() extends Bundle with IMasterSlave{
@@ -289,7 +304,7 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
       }
 
       //Avoid having two C instruction executed in a single step
-      if(pipeline(RVC_GEN)){
+      if(pipeline.config.withRvc){
         val cleanStep = RegNext(stepIt && decode.arbitration.isFiring) init(False)
         execute.arbitration.flushNext setWhen(cleanStep)
       }
