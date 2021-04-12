@@ -4,8 +4,9 @@
  * SPDX-License-Identifier: MIT
  */
 
-#define TEST_ID    x28
-#define TRAP_RA    x30
+#define TEST_ID     x28
+#define TRAP_RETURN x30
+#define TRAP_EXIT   x9
 
 #define PMPCFG0    0x07120000
 #define PMPCFG0_   0x07920808
@@ -21,8 +22,8 @@
 #define PMPADDR5   0x20003fff // OFF   RW
 #define PMPADDR6   0x20001fff // NAPOT RWX
 #define PMPADDR7   0x20005fff // NAPOT R
-#define PMPADDR8   0x2000c000 // TOR    W
-#define PMPADDR9   0x2000d000 // TOR   R
+#define PMPADDR8   0x200d0000 // TOR    W
+#define PMPADDR9   0x200e0000 // TOR   R
 #define PMPADDR10  0xffffffff // TOR   RWX
 #define PMPADDR11  0x00000000 // OFF
 #define PMPADDR12  0x00000000 // OFF
@@ -32,19 +33,25 @@
 
 .global _start
 _start:
+    li TRAP_EXIT, 0x0
     la x1, trap
     csrw mtvec, x1
     j test0
 
 .global trap
 trap:
-    csrw mepc, TRAP_RA
+    csrw mepc, TRAP_RETURN
+    bnez TRAP_EXIT, trap_exit
     mret
+
+// return from trap, but stay in M-mode
+trap_exit:
+    jr TRAP_RETURN
 
 // configure PMP, attempt read/write from machine mode
 test0:
     li TEST_ID, 0
-    la TRAP_RA, fail
+    la TRAP_RETURN, fail
 
     li x1, 0x80000000
     li x4, 0x80008000
@@ -113,7 +120,7 @@ test0:
 // lock region 2, attempt read/write from machine mode
 test1:
     li TEST_ID, 1
-    la TRAP_RA, fail 
+    la TRAP_RETURN, fail 
     li x5, PMPCFG0_
     csrw pmpcfg0, x5            // lock region 2
     csrr x6, pmpcfg0
@@ -121,14 +128,14 @@ test1:
     li x1, 0x80008000
     li x2, 0xdeadbeef
     sw x2, 0x0(x1)              // should be OK (write 0x80008000)
-    la TRAP_RA, test2
+    la TRAP_RETURN, test2
     lw x3, 0x0(x1)              // should fault (read 0x80008000)
     j fail
 
 // "unlock" region 2, attempt read/write from machine mode
 test2:
     li TEST_ID, 2
-    la TRAP_RA, fail 
+    la TRAP_RETURN, fail 
     li x5, PMPCFG0
     csrw pmpcfg0, x5            // "unlock" region 2
     csrr x6, pmpcfg0
@@ -146,14 +153,14 @@ test2:
     li x1, 0x80008000
     li x2, 0xdeadbeef
     sw x2, 0x0(x1)              // should still be OK (write 0x80008000)
-    la TRAP_RA, test3
+    la TRAP_RETURN, test3
     lw x3, 0x0(x1)              // should still fault (read 0x80008000)
     j fail
 
 // verify masked CSR read/write operations
 test3:
     li TEST_ID, 3
-    la TRAP_RA, fail
+    la TRAP_RETURN, fail
     li x5, 0x00ff0000
     csrs pmpaddr3, x5
     csrr x6, pmpaddr3
@@ -182,7 +189,7 @@ test3:
 // jump into user mode
 test4:
     li TEST_ID, 4
-    la TRAP_RA, fail
+    la TRAP_RETURN, fail
     la x2, test5
     csrw mepc, x2
     mret
@@ -190,18 +197,18 @@ test4:
 // attempt to read/write region 2 from user mode
 test5:
     li TEST_ID, 5
-    la TRAP_RA, fail 
+    la TRAP_RETURN, fail 
     li x2, 0xdeadbeef
     li x1, 0x80008000
     sw x2, 0x0(x1)              // should be OK (write 0x80008000)
-    la TRAP_RA, test6
+    la TRAP_RETURN, test6
     lw x3, 0x0(x1)              // should fault (read 0x80008000)
     j fail
 
 // attempt to read/write other regions from user mode
 test6:
     li TEST_ID, 6
-    la TRAP_RA, fail
+    la TRAP_RETURN, fail
     li x2, 0xdeadbeef
     li x1, 0x80000000
     sw x2, 0x0(x1)
@@ -210,32 +217,71 @@ test6:
 
 test7:
     li TEST_ID, 7
-    la TRAP_RA, fail
+    la TRAP_RETURN, fail
     li x1, 0x80040000
     lw x3, 0x0(x1)              // should be OK (read 0x80040000)
-    la TRAP_RA, pass
+    la TRAP_RETURN, test8
     sw x3, 0x0(x1)              // should fault (write 0x80040000)
     j fail
     
 test8:
     li TEST_ID, 8
-    la TRAP_RA, fail 
+    la TRAP_RETURN, fail 
     li x2, 0xdeadbeef
-    li x1, 0x8002fff8
-    sw x2, 0x0(x4)              // should be OK (write 0x8002fff8)
-    la TRAP_RA, test9
-    lw x3, 0x0(x4)              // should fault (read 0x8002fff8)
+    li x1, 0x8033fff8
+    sw x2, 0x0(x4)              // should be OK (write region 8)
+    la TRAP_RETURN, test9
+    lw x3, 0x0(x4)              // should fault (read region 8)
     j fail
 
 test9:
     li TEST_ID, 9
-    la TRAP_RA, fail
-    li x1, 0x8003fff8
-    lw x3, 0x0(x1)              // should be OK (read 0x8003fff8)
-    la TRAP_RA, pass
-    sw x3, 0x0(x1)              // should fault (write 0x8003fff8)
+    la TRAP_RETURN, fail
+    li x1, 0x8037fff8
+    lw x3, 0x0(x1)              // should be OK (read region 9)
+    la TRAP_RETURN, test10a
+    sw x3, 0x0(x1)              // should fault (write region 9)
     j fail
-    
+
+// attempt to write a pmpcfg# register from U-mode
+test10a:
+    li TEST_ID, 10
+    la TRAP_RETURN, test10b
+    li TRAP_EXIT, 0x1
+    csrwi pmpcfg3, 0x0
+    j fail
+
+// check the result from M-mode
+test10b:
+    li TEST_ID, 10
+    li x5, PMPCFG3
+    csrr x6, pmpcfg3
+    bne x5, x6, fail
+
+// jump back into U-mode
+test11a:
+    li TEST_ID, 11
+    la TRAP_RETURN, fail
+    li TRAP_EXIT, 0x0
+    la x2, test11b
+    csrw mepc, x2
+    mret
+
+// attempt to write a pmpaddr# register from U-mode
+test11b:
+    li TEST_ID, 11
+    la TRAP_RETURN, test11c
+    li TRAP_EXIT, 0x1
+    csrwi pmpaddr10, 0x0
+    j fail
+
+// check the result from M-mode
+test11c:
+    li TEST_ID, 11
+    li x5, PMPADDR10
+    csrr x6, pmpaddr10
+    beq x5, x6, pass
+
 fail:
     li x2, 0xf00fff24
     sw TEST_ID, 0(x2)

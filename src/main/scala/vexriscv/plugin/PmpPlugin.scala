@@ -150,8 +150,9 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
       val csrAddress = input(INSTRUCTION)(csrRange)
       val accessAddr = input(IS_PMP_ADDR)
       val accessCfg = input(IS_PMP_CFG)
-      val pmpWrite = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE) & (accessAddr | accessCfg)
-      val pmpRead = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE) & (accessAddr | accessCfg)
+      val accessAny = (accessAddr | accessCfg) & privilegeService.isMachine()
+      val pmpWrite = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE) & accessAny
+      val pmpRead = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE) & accessAny
       val pmpIndex = csrAddress(log2Up(regions) - 1 downto 0).asUInt
       val pmpSelect = pmpIndex(log2Up(regions) - 3 downto 0)
 
