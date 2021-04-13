@@ -36,8 +36,6 @@ object CsrPlugin {
   object IS_CSR extends Stageable(Bool)
   object CSR_WRITE_OPCODE extends Stageable(Bool)
   object CSR_READ_OPCODE extends Stageable(Bool)
-  object IS_PMP_CFG extends Stageable(Bool)
-  object IS_PMP_ADDR extends Stageable(Bool)
 }
 
 case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage, priority : Int)
@@ -350,6 +348,7 @@ case class CsrDuringWrite(doThat :() => Unit)
 case class CsrDuringRead(doThat :() => Unit)
 case class CsrDuring(doThat :() => Unit)
 case class CsrOnRead(doThat : () => Unit)
+case class CsrIgnoreIllegal()
 case class CsrMapping() extends CsrInterface{
   val mapping = mutable.LinkedHashMap[Int,ArrayBuffer[Any]]()
   def addMappingAt(address : Int,that : Any) = mapping.getOrElseUpdate(address,new ArrayBuffer[Any]) += that
@@ -362,6 +361,7 @@ case class CsrMapping() extends CsrInterface{
   override def during(csrAddress: Int)(body: => Unit): Unit = addMappingAt(csrAddress, CsrDuring(() => body))
   override def onRead(csrAddress: Int)(body: => Unit): Unit =  addMappingAt(csrAddress, CsrOnRead(() => {body}))
   override def duringAny(): Bool = ???
+  override def ignoreIllegal(csrAddress: Int) : Unit = addMappingAt(csrAddress, CsrIgnoreIllegal())
 }
 
 
@@ -378,6 +378,7 @@ trait CsrInterface{
     r(csrAddress,bitOffset,that)
     w(csrAddress,bitOffset,that)
   }
+  def ignoreIllegal(csrAddress : Int) : Unit
 
   def r2w(csrAddress : Int, bitOffset : Int,that : Data): Unit
 
@@ -497,6 +498,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def duringRead(csrAddress: Int)(body: => Unit): Unit = csrMapping.duringRead(csrAddress)(body)
   override def during(csrAddress: Int)(body: => Unit): Unit = csrMapping.during(csrAddress)(body)
   override def duringAny(): Bool = pipeline.execute.arbitration.isValid && pipeline.execute.input(IS_CSR)
+  override def ignoreIllegal(csrAddress: Int): Unit = csrMapping.ignoreIllegal(csrAddress)
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -1049,11 +1051,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           || (input(INSTRUCTION)(14 downto 13) === B"11" && imm.z === 0)
         )
         insert(CSR_READ_OPCODE) := input(INSTRUCTION)(13 downto 7) =/= B"0100000"
-        
-        if (pipeline.serviceExist(classOf[PmpPlugin])) {
-          insert(IS_PMP_CFG) := input(INSTRUCTION)(31 downto 24) === 0x3a
-          insert(IS_PMP_ADDR) := input(INSTRUCTION)(31 downto 24) === 0x3b
-        }
       }
 
       execute plug new Area{
@@ -1127,32 +1124,25 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           True -> Mux(input(INSTRUCTION)(12), readToWriteData & ~writeSrc, readToWriteData | writeSrc)
         )
 
-        val csrAddress = input(INSTRUCTION)(csrRange)
-        val pmpAccess = if (pipeline.serviceExist(classOf[PmpPlugin])) {
-          input(IS_PMP_CFG) | input(IS_PMP_ADDR)
-        } else False
-
-        when (~pmpAccess) {
-          when(arbitration.isValid && input(IS_CSR)) {
-            if(!pipelineCsrRead) output(REGFILE_WRITE_DATA) := readData
-            arbitration.haltItself setWhen(blockedBySideEffects)
+        when(arbitration.isValid && input(IS_CSR)) {
+          if(!pipelineCsrRead) output(REGFILE_WRITE_DATA) := readData
+          arbitration.haltItself setWhen(blockedBySideEffects)
+        }
+        if(pipelineCsrRead){
+          insert(PIPELINED_CSR_READ) := readData
+          when(memory.arbitration.isValid && memory.input(IS_CSR)) {
+            memory.output(REGFILE_WRITE_DATA) := memory.input(PIPELINED_CSR_READ)
           }
-          if(pipelineCsrRead){
-            insert(PIPELINED_CSR_READ) := readData
-            when(memory.arbitration.isValid && memory.input(IS_CSR)) {
-              memory.output(REGFILE_WRITE_DATA) := memory.input(PIPELINED_CSR_READ)
-            }
-          }
-        }.elsewhen(arbitration.isValid && input(IS_CSR)) {
-          illegalAccess := False
         }
 
         //Translation of the csrMapping into real logic
+        val csrAddress = input(INSTRUCTION)(csrRange)
         Component.current.afterElaboration{
           def doJobs(jobs : ArrayBuffer[Any]): Unit ={
             val withWrite = jobs.exists(j => j.isInstanceOf[CsrWrite] || j.isInstanceOf[CsrOnWrite] || j.isInstanceOf[CsrDuringWrite])
             val withRead = jobs.exists(j => j.isInstanceOf[CsrRead] || j.isInstanceOf[CsrOnRead])
-            if(withRead && withWrite) {
+            val ignoreIllegal = jobs.exists(j => j.isInstanceOf[CsrIgnoreIllegal])
+            if(withRead && withWrite | ignoreIllegal) {
               illegalAccess := False
             } else {
               if (withWrite) illegalAccess.clearWhen(input(CSR_WRITE_OPCODE))

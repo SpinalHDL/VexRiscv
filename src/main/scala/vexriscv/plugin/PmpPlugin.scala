@@ -137,12 +137,24 @@ class PmpPlugin(regions : Int, ioRange : UInt => Bool) extends Plugin[VexRiscv] 
     val csrService = pipeline.service(classOf[CsrInterface])
     val privilegeService = pipeline.service(classOf[PrivilegeService])
 
+    for (i <- 0x3a0 to 0x3a3) csrService.ignoreIllegal(i)
+    for (i <- 0x3b0 to 0x3bf) csrService.ignoreIllegal(i)
+
     val pmpaddr = Mem(UInt(xlen bits), regions)
     val pmpcfg = Reg(Bits(8 * regions bits)) init(0)
     val boundLo, boundHi = Mem(UInt(30 bits), regions)
     val cfgRegion = pmpcfg.subdivideIn(8 bits)
     val cfgRegister = pmpcfg.subdivideIn(xlen bits)
     val lockMask = Reg(Bits(4 bits)) init(B"4'0")
+
+    object IS_PMP_CFG extends Stageable(Bool)
+    object IS_PMP_ADDR extends Stageable(Bool)
+    
+    decode plug new Area {
+      import decode._
+      insert(IS_PMP_CFG) := input(INSTRUCTION)(31 downto 24) === 0x3a
+      insert(IS_PMP_ADDR) := input(INSTRUCTION)(31 downto 24) === 0x3b
+    }
 
     execute plug new Area {
       import execute._
