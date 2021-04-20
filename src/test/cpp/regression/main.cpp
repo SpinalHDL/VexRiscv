@@ -2824,13 +2824,16 @@ public:
 	socklen_t addr_size;
 	char buffer[1024];
 	uint32_t timeSpacer = 0;
-	bool taskValid = false;
+	bool taskValid;
 	DebugPluginTask task;
 
 
 	DebugPlugin(Workspace* ws){
 		this->ws = ws;
 		this->top = ws->top;
+		taskValid = true; //true as a Workaround to enable the ebreak
+		task.wr = false;
+		task.address = 0;
 
 		#ifdef DEBUG_PLUGIN_EXTERNAL
 			ws->mTimeCmp = ~0;

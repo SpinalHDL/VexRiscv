@@ -226,6 +226,9 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
       val isPipBusy = RegNext(stages.map(_.arbitration.isValid).orR || iBusFetcher.incoming())
       val godmode = RegInit(False) setWhen(haltIt && !isPipBusy)
       val haltedByBreak = RegInit(False)
+      val allowEBreak = RegInit(False) setWhen(io.bus.cmd.valid)
+//      val allowEBreak = if(!pipeline.serviceExist(classOf[PrivilegeService])) True else pipeline.service(classOf[PrivilegeService]).isMachine()
+
 
       val hardwareBreakpoints = Vec(Reg(new Bundle{
         val valid = Bool()
@@ -276,8 +279,6 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
           }
         }
       }
-
-      val allowEBreak = if(!pipeline.serviceExist(classOf[PrivilegeService])) True else pipeline.service(classOf[PrivilegeService]).isMachine()
 
       decode.insert(DO_EBREAK) := !haltIt && (decode.input(IS_EBREAK) || hardwareBreakpoints.map(hb => hb.valid && hb.pc === (decode.input(PC) >> 1)).foldLeft(False)(_ || _)) && allowEBreak
       when(execute.arbitration.isValid && execute.input(DO_EBREAK)){
