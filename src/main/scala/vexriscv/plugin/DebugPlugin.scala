@@ -329,7 +329,7 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
         }
         if(pipeline.things.contains(DEBUG_BYPASS_CACHE)) pipeline(DEBUG_BYPASS_CACHE) := True
       }
-      when(!allowEBreak) {
+      when(allowEBreak) {
         pipeline.plugins.foreach {
           case p: ExceptionInhibitor => p.inhibateEbreakException()
           case _ =>
