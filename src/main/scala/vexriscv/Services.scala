@@ -56,6 +56,7 @@ trait InterruptionInhibitor{
 
 trait ExceptionInhibitor{
   def inhibateException() : Unit
+  def inhibateEbreakException() : Unit
 }
 
 

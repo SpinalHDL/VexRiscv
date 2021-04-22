@@ -176,8 +176,6 @@ case class DebugExtensionIo() extends Bundle with IMasterSlave{
   }
 }
 
-
-
 class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : Int = 0) extends Plugin[VexRiscv] {
 
   var io : DebugExtensionIo = null
@@ -226,9 +224,10 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
       val isPipBusy = RegNext(stages.map(_.arbitration.isValid).orR || iBusFetcher.incoming())
       val godmode = RegInit(False) setWhen(haltIt && !isPipBusy)
       val haltedByBreak = RegInit(False)
-      val allowEBreak = RegInit(False) setWhen(io.bus.cmd.valid)
-//      val allowEBreak = if(!pipeline.serviceExist(classOf[PrivilegeService])) True else pipeline.service(classOf[PrivilegeService]).isMachine()
+      val debugUsed = RegInit(False) setWhen(io.bus.cmd.valid) addAttribute(Verilator.public)
+      val disableEbreak = RegInit(False)
 
+      val allowEBreak = debugUsed && !disableEbreak
 
       val hardwareBreakpoints = Vec(Reg(new Bundle{
         val valid = Bool()
@@ -262,6 +261,7 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
               haltIt setWhen (io.bus.cmd.data(17)) clearWhen (io.bus.cmd.data(25))
               haltedByBreak clearWhen (io.bus.cmd.data(25))
               godmode clearWhen(io.bus.cmd.data(25))
+              disableEbreak setWhen (io.bus.cmd.data(18)) clearWhen (io.bus.cmd.data(26))
             }
           }
           is(0x1) {
@@ -328,6 +328,12 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
           case _ =>
         }
         if(pipeline.things.contains(DEBUG_BYPASS_CACHE)) pipeline(DEBUG_BYPASS_CACHE) := True
+      }
+      when(!allowEBreak) {
+        pipeline.plugins.foreach {
+          case p: ExceptionInhibitor => p.inhibateEbreakException()
+          case _ =>
+        }
       }
 
       val wakeService = serviceElse(classOf[IWake], null)

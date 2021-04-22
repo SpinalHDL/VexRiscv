@@ -1673,6 +1673,7 @@ public:
 		}
 		#endif
 
+
         bool failed = false;
 		try {
 			// run simulation for 100 clock periods
@@ -2824,16 +2825,13 @@ public:
 	socklen_t addr_size;
 	char buffer[1024];
 	uint32_t timeSpacer = 0;
-	bool taskValid;
+	bool taskValid = false;
 	DebugPluginTask task;
 
 
 	DebugPlugin(Workspace* ws){
 		this->ws = ws;
 		this->top = ws->top;
-		taskValid = true; //true as a Workaround to enable the ebreak
-		task.wr = false;
-		task.address = 0;
 
 		#ifdef DEBUG_PLUGIN_EXTERNAL
 			ws->mTimeCmp = ~0;
@@ -3499,6 +3497,11 @@ public:
 		if(clientSuccess) pass();
 		if(clientFail) fail();
 	}
+
+    virtual void postReset(){
+        Workspace::postReset();
+        top->VexRiscv->DebugPlugin_debugUsed = 1;
+    }
 };
 
 #endif
