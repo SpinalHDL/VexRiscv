@@ -1673,6 +1673,7 @@ public:
 		}
 		#endif
 
+
         bool failed = false;
 		try {
 			// run simulation for 100 clock periods
@@ -3496,6 +3497,11 @@ public:
 		if(clientSuccess) pass();
 		if(clientFail) fail();
 	}
+
+    virtual void postReset(){
+        Workspace::postReset();
+        top->VexRiscv->DebugPlugin_debugUsed = 1;
+    }
 };
 
 #endif

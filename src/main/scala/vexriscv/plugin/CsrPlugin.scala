@@ -32,6 +32,8 @@ object CsrAccess {
   object NONE extends CsrAccess
 }
 
+
+
 case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage, priority : Int)
 case class CsrPluginConfig(
                             catchIllegalAccess  : Boolean,
@@ -457,6 +459,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   var allowInterrupts : Bool = null
   var allowException  : Bool = null
+  var allowEbreakException : Bool = null
 
   val csrMapping = new CsrMapping()
 
@@ -565,6 +568,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
     allowInterrupts = True
     allowException = True
+    allowEbreakException = True
 
     for (i <- interruptSpecs) i.cond = i.cond.pull()
 
@@ -577,6 +581,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   def inhibateInterrupts() : Unit = allowInterrupts := False
   def inhibateException() : Unit  = allowException  := False
+  def inhibateEbreakException() : Unit  = allowEbreakException  := False
 
   override def isUser() : Bool = privilege === 0
   override def isSupervisor(): Bool = privilege === 1
@@ -1097,7 +1102,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
 
 
-        if(ebreakGen) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.EBREAK){
+        if(ebreakGen) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.EBREAK && allowEbreakException){
           selfException.valid := True
           selfException.code := 3
         }
