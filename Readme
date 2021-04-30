@@ -12,8 +12,14 @@ The BSCANE2 allows access between the internal FPGA logic and the JTAG Boundary 
 
 • After cloning all the files from https://github.com/SpinalHDL/VexRiscv, go to this path : src/main/scala/vexriscv/demo and find the Murax.scala file.
 
-• Comment out these lines to remove the toplevel jtag I/O pins:
-   Line 165, Line 395 to 397, Line 410 to 403
+• Comment out the following lines to remove the toplevel jtag I/O pins in Murax.scala file
+   val jtag = slave(Jtag())
+   val jtagClkBuffer = SB_GB()
+   jtagClkBuffer.USER_SIGNAL_TO_GLOBAL_BUFFER <> io.jtag_tck
+   jtagClkBuffer.GLOBAL_BUFFER_OUTPUT <> murax.io.jtag.tck
+   murax.io.jtag.tdi <> io.jtag_tdi
+   murax.io.jtag.tdo <> io.jtag_tdo
+   murax.io.jtag.tms <> io.jtag_tms
 
 • In the Murax.scala file, delete line number 253 and add the following lines :
           val jtagCtrl = JtagTapInstructionCtrl()
