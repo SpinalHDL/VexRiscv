@@ -51,7 +51,7 @@ src/openocd -c "set CPU0_YAML ..VexRiscv/cpu0.yaml" -f tcl/interface/usb_connect
 
 • You basically have to provide 2 files.
 usb_connect.cfg => interface configuration
-soc_init.cfg => take over the control of the CPU
+soc_init.cfg => take over the control of the CPU.
 
 • For usb_connect.cfg
 you can take it from https://github.com/SpinalHDL/SaxonSoc/blob/dev-0.3/bsp/digilent/ArtyA7SmpLinux/openocd/usb_connect.cfg (without modifications i would say)
