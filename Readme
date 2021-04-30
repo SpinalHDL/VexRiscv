@@ -67,7 +67,7 @@ you can take it from https://github.com/SpinalHDL/SaxonSoc/blob/dev-0.3/bsp/digi
 https://github.com/SpinalHDL/SaxonSoc/blob/dev-0.3/bsp/digilent/ArtyA7SmpLinux/openocd/soc_init.cfg
 You can take it but you need to : set cpu_count to 1 and remove Line 22 to 35.
 
-• Then, after openocd is running, in new terminal, follow the below commands in VexriscvSocSoftware folder ( https://github.com/SpinalHDL/VexRiscvSocSoftware ).
+• Then, after openocd is running, in new terminal, follow the below commands in VexriscvSocSoftware folder ( https://github.com/SpinalHDL/VexRiscvSocSoftware )
 
 • Go to the path VexRiscvSocSoftware/projects/murax/demo/build and then give the below commands :
 
