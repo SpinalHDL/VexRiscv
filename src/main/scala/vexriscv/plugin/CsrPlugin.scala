@@ -956,9 +956,9 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         targetPrivilege := exceptionPortCtrl.exceptionTargetPrivilege
       }
 
-      val trapCause = CombInit(interrupt.code)
+      val trapCause = CombInit(interrupt.code.resize(trapCodeWidth))
       if(exceptionPortCtrl != null) when( hadException){
-        trapCause := exceptionPortCtrl.exceptionContext.code
+        trapCause := exceptionPortCtrl.exceptionContext.code.resized
       }
 
       val xtvec = Xtvec().assignDontCare()
