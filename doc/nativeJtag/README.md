@@ -1,12 +1,3 @@
-# AcceleoIssueWithInvalids
-https://www.eclipse.org/forums/index.php/t/1091946/
-
-
-# DELETE THIS AFTER
-
-
-
-
 # Implementing VexRiscv Based Murax SoC on Arty A7 Artix-7 PCB from Digilent and Enabling JTAG Connection through Xilinx’s BSCANE2 Debug IP
 
 **By**<br>
