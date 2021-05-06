@@ -104,7 +104,7 @@ in e.g. the path:	`project_name.srcs\sources_1\imports\Downloads`
 1.	`usb_connect.cfg` (interface configuration)
 2.	`soc_init.cfg` (take over the control of the CPU)
 * `usb_connect.cfg`
-You can take it from … https://github.com/SpinalHDL/SaxonSoc/blob/dev-0.3/bsp/digilent/ArtyA7SmpLinux/openocd/usb_connect.cfg … without modifications as we would say, but make sure to check the entire path in your system for the files `xilinx-xc7.cfg` and `jtagspi.cfg`. If required, adapt the find and path for the lines:
+You can take it from ... https://github.com/SpinalHDL/SaxonSoc/blob/dev-0.3/bsp/digilent/ArtyA7SmpLinux/openocd/usb_connect.cfg ... without modifications as we would say. Be aware that it includes the two files `xilinx-xc7.cfg` and `jtagspi.cfg` which are part of the OpenOCD project ... https://github.com/riscv/riscv-openocd/tree/riscv/tcl/cpld , but make sure to check the path for the files. If required, adapt the find and path for the lines:
 ```
 [29]	source [find cpld/xilinx-xc7.cfg]
 [30]	source [find cpld/jtagspi.cfg]
