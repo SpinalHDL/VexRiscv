@@ -182,7 +182,9 @@ object VexRiscvSmpClusterGen {
                      externalFpu : Boolean = true,
                      simHalt : Boolean = false,
                      regfileRead : RegFileReadKind = plugin.ASYNC,
-                     rvc : Boolean = false
+                     rvc : Boolean = false,
+                     iTlbSize : Int = 4,
+                     dTlbSize : Int = 4
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -219,7 +221,7 @@ object VexRiscvSmpClusterGen {
             reducedBankWidth = true
           ),
           memoryTranslatorPortConfig = MmuPortConfig(
-            portTlbSize = 4,
+            portTlbSize = iTlbSize,
             latency = 1,
             earlyRequireMmuLockup = true,
             earlyCacheHits = true
@@ -247,7 +249,7 @@ object VexRiscvSmpClusterGen {
             withWriteAggregation = dBusWidth > 32
           ),
           memoryTranslatorPortConfig = MmuPortConfig(
-            portTlbSize = 4,
+            portTlbSize = dTlbSize,
             latency = 1,
             earlyRequireMmuLockup = true,
             earlyCacheHits = true
