@@ -181,6 +181,8 @@ object VexRiscvSmpClusterGen {
                      withDouble : Boolean = false,
                      externalFpu : Boolean = true,
                      simHalt : Boolean = false,
+                     decoderIsolationBench : Boolean = false,
+                     decoderStupid : Boolean = false,
                      regfileRead : RegFileReadKind = plugin.ASYNC,
                      rvc : Boolean = false
                     ) = {
@@ -254,7 +256,9 @@ object VexRiscvSmpClusterGen {
           )
         ),
         new DecoderSimplePlugin(
-          catchIllegalInstruction = true
+          catchIllegalInstruction = true,
+          decoderIsolationBench = decoderIsolationBench,
+          stupidDecoder = decoderStupid
         ),
         new RegFilePlugin(
           regFileReadyKind = regfileRead,
