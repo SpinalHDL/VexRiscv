@@ -700,7 +700,7 @@ public:
 				return;
 			}
 			i >>= 16;
-			if (i & 3 == 3) {
+			if ((i & 3) == 3) {
 				uint32_t u32Buf;
 				if(v2p(pc + 2, &pAddr, EXECUTE)){ trap(0, 12, pc + 2); return; }
 				if(iRead(pAddr, &u32Buf)){
@@ -1176,7 +1176,7 @@ public:
                 cout << "dRead size=" << size << endl;
                 fail();
             }
-            if(address & (size-1) != 0)
+            if((address & (size-1)) != 0)
             	cout << "Ref did a unaligned read" << endl;
     		if(ws->isPerifRegion(address)){
 				MemRead t = periphRead.front();
@@ -1195,7 +1195,7 @@ public:
     		return false;
         }
         virtual void dWrite(int32_t address, int32_t size, uint32_t data){
-            if(address & (size-1) != 0)
+            if((address & (size-1)) != 0)
             	cout << "Ref did a unaligned write" << endl;
 
     		if(!ws->isPerifRegion(address)){
@@ -1352,7 +1352,7 @@ public:
 				 " : WRITE mem" << hex << (1 << size) << "[" << addr << "] = " << *data << dec << endl;
 				for(uint32_t b = 0;b < (1 << size);b++){
 					uint32_t offset = (addr+b)&0x3;
-					if((mask >> offset) & 1 == 1)
+					if(((mask >> offset) & 1) == 1)
 						*mem.get(addr + b) = *data >> (offset*8);
 				}
 
@@ -2030,7 +2030,7 @@ public:
 
 	virtual void preCycle(){
 		if (top->iBus_cmd_valid && top->iBus_cmd_ready && pendingCount == 0) {
-			assertEq(top->iBus_cmd_payload_address & 3,0);
+			assertEq((top->iBus_cmd_payload_address & 3),0);
 			pendingCount = (1 << top->iBus_cmd_payload_size)/4;
 			address = top->iBus_cmd_payload_address;
 		}
