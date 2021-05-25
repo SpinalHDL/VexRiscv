@@ -186,7 +186,8 @@ object VexRiscvSmpClusterGen {
                      regfileRead : RegFileReadKind = plugin.ASYNC,
                      rvc : Boolean = false,
                      iTlbSize : Int = 4,
-                     dTlbSize : Int = 4
+                     dTlbSize : Int = 4,
+                     prediction : BranchPrediction = vexriscv.plugin.NONE
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -203,7 +204,7 @@ object VexRiscvSmpClusterGen {
         new IBusCachedPlugin(
           resetVector = resetVector,
           compressedGen = rvc,
-          prediction = vexriscv.plugin.NONE,
+          prediction = prediction,
           historyRamSizeLog2 = 9,
           relaxPredictorAddress = true,
           injectorStage = injectorStage,
