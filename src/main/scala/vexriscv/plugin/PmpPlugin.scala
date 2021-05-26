@@ -178,13 +178,16 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
       val writeData = csrService.writeData()
 
       val enable = RegInit(False)
-      for (i <- 0 until regions) {
-        csrService.onRead(0x3b0 + i) {csrService.readData().assignFromBits(cfgRegister(pmpSelect)) }
-        csrService.onWrite(0x3b0 + i) { enable := True }
+      for (i <- 0 until regions) csrService.allow(0x3b0 + i)
+      for (i <- 0 until (regions / 4)) csrService.allow(0x3a0 + i)
+      
+      csrService.duringAnyRead {
+        when (input(PMPCFG)) { csrService.readData().assignFromBits(cfgRegister(pmpSelect)) }
+        when (input(PMPADDR)) { csrService.readData() := pmpaddr.readAsync(pmpIndex).asBits }
       }
-      for (i <- 0 until (regions / 4)) {
-        csrService.onRead(0x3a0 + i) { csrService.readData() := pmpaddr.readAsync(pmpIndex).asBits }
-        csrService.onWrite(0x3a0 + i) { enable := True }
+
+      csrService.duringAnyWrite {
+        when (input(PMPCFG) | input(PMPADDR)) { enable := True }
       }
 
       val writer = new Area {

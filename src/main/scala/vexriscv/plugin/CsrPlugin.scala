@@ -344,13 +344,13 @@ case class CsrDuringWrite(doThat :() => Unit)
 case class CsrDuringRead(doThat :() => Unit)
 case class CsrDuring(doThat :() => Unit)
 case class CsrOnRead(doThat : () => Unit)
+case class CsrAllow()
 
 
 case class CsrMapping() extends CsrInterface{
   val mapping = mutable.LinkedHashMap[Int,ArrayBuffer[Any]]()
   val always = ArrayBuffer[Any]()
   val readDataSignal, readDataInit, writeDataSignal = Bits(32 bits)
-  val allowCsrSignal = False
   val hazardFree = Bool()
 
   readDataSignal := readDataInit
@@ -368,7 +368,7 @@ case class CsrMapping() extends CsrInterface{
   override def duringAnyRead(body: => Unit) : Unit = always += CsrDuringWrite(() => body)
   override def readData() = readDataSignal
   override def writeData() = writeDataSignal
-  override def allowCsr() = allowCsrSignal := True
+  override def allow(csrAddress: Int): Unit = addMappingAt(csrAddress, CsrAllow())
   override def isHazardFree() = hazardFree
 }
 
@@ -386,9 +386,9 @@ trait CsrInterface{
     r(csrAddress,bitOffset,that)
     w(csrAddress,bitOffset,that)
   }
+  def allow(csrAddress: Int): Unit
   def duringAnyWrite(body: => Unit) : Unit //Called all the durration of a Csr write instruction in the execute stage
   def duringAnyRead(body: => Unit) : Unit //same than above for read
-  def allowCsr() : Unit  //In case your csr do not use the regular API with csrAddress but is implemented using "side channels", you can call that if the current csr is implemented
   def isHazardFree() : Bool // You should not have any side effect nor use readData() until this return True
 
   def r2w(csrAddress : Int, bitOffset : Int,that : Data): Unit
@@ -517,7 +517,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def duringAny(): Bool = pipeline.execute.arbitration.isValid && pipeline.execute.input(IS_CSR)
   override def duringAnyWrite(body: => Unit) = csrMapping.duringAnyWrite(body)
   override def duringAnyRead(body: => Unit) = csrMapping.duringAnyRead(body)
-  override def allowCsr() = csrMapping.allowCsr()
+  override def allow(csrAddress: Int): Unit = csrMapping.allow(csrAddress)
   override def readData() = csrMapping.readData()
   override def writeData() = csrMapping.writeData()
   override def isHazardFree() = csrMapping.isHazardFree()
@@ -1181,6 +1181,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             } else {
               if (withWrite) illegalAccess.clearWhen(input(CSR_WRITE_OPCODE))
               if (withRead) illegalAccess.clearWhen(input(CSR_READ_OPCODE))
+              if (jobs.exists(j => j.isInstanceOf[CsrAllow])) illegalAccess := False
             }
 
 
@@ -1265,8 +1266,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             case element : CsrDuringWrite => when(writeInstruction){element.doThat()}
             case element : CsrDuringRead => when(readInstruction){element.doThat()}
           }
-
-          illegalAccess clearWhen(csrMapping.allowCsrSignal)
 
           when(privilege < csrAddress(9 downto 8).asUInt){
             illegalAccess := True
