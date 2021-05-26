@@ -344,8 +344,16 @@ case class CsrDuringWrite(doThat :() => Unit)
 case class CsrDuringRead(doThat :() => Unit)
 case class CsrDuring(doThat :() => Unit)
 case class CsrOnRead(doThat : () => Unit)
+
+
 case class CsrMapping() extends CsrInterface{
   val mapping = mutable.LinkedHashMap[Int,ArrayBuffer[Any]]()
+  val always = ArrayBuffer[Any]()
+  val readDataSignal, readDataInit, writeDataSignal = Bits(32 bits)
+  val allowCsrSignal = False
+  val hazardFree = Bool()
+
+  readDataSignal := readDataInit
   def addMappingAt(address : Int,that : Any) = mapping.getOrElseUpdate(address,new ArrayBuffer[Any]) += that
   override def r(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrRead(that,bitOffset))
   override def w(csrAddress : Int, bitOffset : Int, that : Data): Unit = addMappingAt(csrAddress, CsrWrite(that,bitOffset))
@@ -356,6 +364,12 @@ case class CsrMapping() extends CsrInterface{
   override def during(csrAddress: Int)(body: => Unit): Unit = addMappingAt(csrAddress, CsrDuring(() => body))
   override def onRead(csrAddress: Int)(body: => Unit): Unit =  addMappingAt(csrAddress, CsrOnRead(() => {body}))
   override def duringAny(): Bool = ???
+  override def durringWrite(body: => Unit) : Unit = always += CsrDuringRead(() => body)
+  override def durringRead(body: => Unit) : Unit = always += CsrDuringWrite(() => body)
+  override def readData() = readDataSignal
+  override def writeData() = writeDataSignal
+  override def allowCsr() = allowCsrSignal := True
+  override def isHazardFree() = hazardFree
 }
 
 
@@ -372,6 +386,10 @@ trait CsrInterface{
     r(csrAddress,bitOffset,that)
     w(csrAddress,bitOffset,that)
   }
+  def durringWrite(body: => Unit) : Unit //Called all the durration of a Csr write instruction in the execute stage
+  def durringRead(body: => Unit) : Unit //same than above for read
+  def allowCsr() : Unit  //In case your csr do not use the regular API with csrAddress but is implemented using "side channels", you can call that if the current csr is implemented
+  def isHazardFree() : Bool // You should not have any side effect nor use readData() until this return True
 
   def r2w(csrAddress : Int, bitOffset : Int,that : Data): Unit
 
@@ -396,6 +414,9 @@ trait CsrInterface{
     }
     ret
   }
+
+  def readData() : Bits //Return the 32 bits internal signal of the CsrPlugin for you to override (if you want)
+  def writeData() : Bits //Return the 32 bits value that the CsrPlugin want to write in the CSR (depend on readData combinatorialy)
 }
 
 
@@ -461,7 +482,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var allowException  : Bool = null
   var allowEbreakException : Bool = null
 
-  val csrMapping = new CsrMapping()
+  var csrMapping : CsrMapping = null
 
   //Print CSR mapping
   def printCsr() {
@@ -494,9 +515,17 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def duringRead(csrAddress: Int)(body: => Unit): Unit = csrMapping.duringRead(csrAddress)(body)
   override def during(csrAddress: Int)(body: => Unit): Unit = csrMapping.during(csrAddress)(body)
   override def duringAny(): Bool = pipeline.execute.arbitration.isValid && pipeline.execute.input(IS_CSR)
+  override def durringWrite(body: => Unit) = csrMapping.durringWrite(body)
+  override def durringRead(body: => Unit) = csrMapping.durringRead(body)
+  override def allowCsr() = csrMapping.allowCsr()
+  override def readData() = csrMapping.readData()
+  override def writeData() = csrMapping.writeData()
+  override def isHazardFree() = csrMapping.isHazardFree()
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
+
+    csrMapping = new CsrMapping()
 
     inWfi = False.addTag(Verilator.public)
 
@@ -1110,17 +1139,19 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
         val imm = IMM(input(INSTRUCTION))
         def writeSrc = input(SRC1)
-        val readData = Bits(32 bits)
+        def readData = csrMapping.readDataSignal
+        def writeData = csrMapping.writeDataSignal
         val writeInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_WRITE_OPCODE)
         val readInstruction = arbitration.isValid && input(IS_CSR) && input(CSR_READ_OPCODE)
         val writeEnable = writeInstruction && !arbitration.isStuck
         val readEnable  = readInstruction  && !arbitration.isStuck
+        csrMapping.hazardFree := !blockedBySideEffects
 
         val readToWriteData = CombInit(readData)
-        val writeData = if(noCsrAlu) writeSrc else input(INSTRUCTION)(13).mux(
+        writeData := (if(noCsrAlu) writeSrc else input(INSTRUCTION)(13).mux(
           False -> writeSrc,
           True -> Mux(input(INSTRUCTION)(12), readToWriteData & ~writeSrc, readToWriteData | writeSrc)
-        )
+        ))
 
         when(arbitration.isValid && input(IS_CSR)) {
           if(!pipelineCsrRead) output(REGFILE_WRITE_DATA) := readData
@@ -1185,13 +1216,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
           csrOhDecoder match {
             case false => {
-              readData := 0
+              csrMapping.readDataInit := 0
               switch(csrAddress) {
                 for ((address, jobs) <- csrMapping.mapping) {
                   is(address) {
                     doJobs(jobs)
                     for (element <- jobs) element match {
-                      case element: CsrRead if element.that.getBitsWidth != 0 => readData(element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
+                      case element: CsrRead if element.that.getBitsWidth != 0 => csrMapping.readDataInit (element.bitOffset, element.that.getBitsWidth bits) := element.that.asBits
                       case _ =>
                     }
                   }
@@ -1221,7 +1252,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
                   readDatas += masked
                 }
               }
-              readData := readDatas.reduceBalancedTree(_ | _)
+              csrMapping.readDataInit := readDatas.reduceBalancedTree(_ | _)
               for ((address, jobs) <- csrMapping.mapping) {
                 when(oh(address)){
                   doJobsOverride(jobs)
@@ -1229,6 +1260,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
               }
             }
           }
+
+          csrMapping.always.foreach {
+            case element : CsrDuringWrite => when(writeInstruction){element.doThat()}
+            case element : CsrDuringRead => when(readInstruction){element.doThat()}
+          }
+
+          illegalAccess clearWhen(csrMapping.allowCsrSignal)
 
           when(privilege < csrAddress(9 downto 8).asUInt){
             illegalAccess := True
