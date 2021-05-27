@@ -11,7 +11,6 @@ import vexriscv.plugin.MemoryTranslatorPort.{_}
 import spinal.core._
 import spinal.lib._
 import spinal.lib.fsm._
-import javax.net.ssl.TrustManager
 
 /* Each 32-bit pmpcfg# register contains four 8-bit configuration sections.
  * These section numbers contain flags which apply to regions defined by the
@@ -79,15 +78,15 @@ trait Pmp {
   def lBit = 7
 }
 
-class PmpSetter(grain : Int) extends Component with Pmp {
+class PmpSetter(cutoff : Int) extends Component with Pmp {
   val io = new Bundle {
     val addr = in UInt(xlen bits)
-    val base, mask = out UInt(xlen - grain bits)
+    val base, mask = out UInt(xlen - cutoff bits)
   }
 
   val ones = io.addr & ~(io.addr + 1)
-  io.base := io.addr(xlen - 1 - grain downto 0) ^ ones(xlen - 1 - grain downto 0)
-  io.mask := ~ones(xlen - grain downto 1)
+  io.base := io.addr(xlen - 3 downto cutoff - 2) ^ ones(xlen - 3 downto cutoff - 2)
+  io.mask := ~ones(xlen - 2 downto cutoff - 1)
 }
 
 case class ProtectedMemoryTranslatorPort(bus : MemoryTranslatorBus)
@@ -98,7 +97,7 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
 
   var setter : PmpSetter = null
   var dPort, iPort : ProtectedMemoryTranslatorPort = null
-  val grain = log2Up(granularity) - 1
+  val cutoff = log2Up(granularity) - 1
   
   override def newTranslationPort(priority : Int, args : Any): MemoryTranslatorBus = {
     val port = ProtectedMemoryTranslatorPort(MemoryTranslatorBus(new MemoryTranslatorBusParameter(0, 0)))
@@ -110,7 +109,7 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
   }
 
   override def setup(pipeline: VexRiscv): Unit = {
-    setter = new PmpSetter(grain)
+    setter = new PmpSetter(cutoff)
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -123,7 +122,7 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
 
     val pmpaddr = Mem(UInt(xlen bits), regions)
     val pmpcfg = Vector.fill(regions)(Reg(Bits(8 bits)) init(0))
-    val base, mask = Vector.fill(regions)(Reg(UInt(xlen - grain bits)))
+    val base, mask = Vector.fill(regions)(Reg(UInt(xlen - cutoff bits)))
 
     // object PMPCFG extends Stageable(Bool)
     // object PMPADDR extends Stageable(Bool)
@@ -313,7 +312,7 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
         dPort.bus.rsp.allowExecute := False
         dPort.bus.busy := False
 
-        val hits = getHits(address(31 downto grain))
+        val hits = getHits(address(31 downto cutoff))
 
         when(~hits.orR) {
           dPort.bus.rsp.allowRead := privilegeService.isMachine()
@@ -335,7 +334,7 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
         iPort.bus.rsp.allowWrite := False
         iPort.bus.busy := False
 
-        val hits = getHits(address(31 downto grain))
+        val hits = getHits(address(31 downto cutoff))
 
         when(~hits.orR) {
           iPort.bus.rsp.allowExecute := privilegeService.isMachine()
