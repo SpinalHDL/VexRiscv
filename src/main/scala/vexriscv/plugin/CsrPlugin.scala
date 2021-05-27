@@ -1147,6 +1147,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val readEnable  = readInstruction  && !arbitration.isStuck
         csrMapping.hazardFree := !blockedBySideEffects
 
+        val READDATASIGNAL = csrMapping.readDataSignal
+
         val readToWriteData = CombInit(readData)
         writeData := (if(noCsrAlu) writeSrc else input(INSTRUCTION)(13).mux(
           False -> writeSrc,
