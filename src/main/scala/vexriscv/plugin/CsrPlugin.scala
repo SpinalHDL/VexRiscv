@@ -346,7 +346,7 @@ case class CsrDuring(doThat :() => Unit)
 case class CsrOnRead(doThat : () => Unit)
 
 
-case class CsrMapping() extends CsrInterface{
+case class CsrMapping() extends Area with CsrInterface {
   val mapping = mutable.LinkedHashMap[Int,ArrayBuffer[Any]]()
   val always = ArrayBuffer[Any]()
   val readDataSignal, readDataInit, writeDataSignal = Bits(32 bits)
