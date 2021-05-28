@@ -2,10 +2,10 @@ package vexriscv
 
 import java.io.{File, OutputStream}
 import java.util.concurrent.{ForkJoinPool, TimeUnit}
-
 import org.apache.commons.io.FileUtils
 import org.scalatest.{BeforeAndAfterAll, FunSuite, ParallelTestExecution, Tag, Transformer}
 import spinal.core._
+import spinal.lib.DoCmd
 import vexriscv.demo._
 import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import vexriscv.plugin._
@@ -840,4 +840,34 @@ class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VE
     val clockPerSecond = (clockCounter/time*1e-3).toLong
     println(s"Duration=${(time/60).toInt}mn clocks=${(clockCounter*1e-6).toLong}M clockPerSecond=${clockPerSecond}K")
   }
+}
+
+
+object TestIndividualExplore extends App{
+  val seeds = mutable.HashSet[Int]()
+  val futures = mutable.ArrayBuffer[Future[Unit]]()
+  implicit val ec = ExecutionContext.fromExecutorService(
+    new ForkJoinPool(24, ForkJoinPool.defaultForkJoinWorkerThreadFactory, null, true)
+  )
+  for(i <- 0 until 1000){
+    val seed = Random.nextInt(1000000) + 1
+    futures += Future {
+      if (!seeds.contains(seed)) {
+//        val cmd = s"make run REGRESSION_PATH=../../src/test/cpp/regression VEXRISCV_FILE=VexRiscv.v WITH_USER_IO=no REDO=1 TRACE=yes TRACE_START=100000000000ll FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=mo THREAD_COUNT=1   IBUS=CACHED IBUS_DATA_WIDTH=128 COMPRESSED=yes DBUS=SIMPLE LRSC=yes  MUL=yes DIV=yes      FREERTOS=0 ZEPHYR=0 LINUX_REGRESSION=no SUPERVISOR=yes  CONCURRENT_OS_EXECUTIONS=yes MMU=yes PMP=no SEED=$seed"
+        val cmd = s"make run REGRESSION_PATH=../../src/test/cpp/regression VEXRISCV_FILE=VexRiscv.v WITH_USER_IO=no REDO=10 TRACE=yes TRACE_START=100000000000ll FLOW_INFO=no STOP_ON_ERROR=no DHRYSTONE=yes COREMARK=yes THREAD_COUNT=1   IBUS=CACHED IBUS_DATA_WIDTH=128 COMPRESSED=yes DBUS=SIMPLE LRSC=yes  MUL=yes DIV=yes      FREERTOS=0 ZEPHYR=2 LINUX_REGRESSION=yes SUPERVISOR=yes  CONCURRENT_OS_EXECUTIONS=yes MMU=yes PMP=no SEED=$seed"
+        val workspace = s"explor/seed_$seed"
+        FileUtils.copyDirectory(new File("simWorkspace/ref"), new File(workspace))
+        val str = DoCmd.doCmdWithLog(cmd, workspace)
+        if(!str.contains("REGRESSION SUCCESS")){
+          println(s"seed $seed FAILED with\n\n$str")
+          sys.exit(1)
+        }
+        FileUtils.deleteDirectory(new File(workspace))
+        println(s"seed $seed PASSED")
+      }
+    }
+  }
+
+  futures.foreach(Await.result(_, Duration.Inf))
+
 }

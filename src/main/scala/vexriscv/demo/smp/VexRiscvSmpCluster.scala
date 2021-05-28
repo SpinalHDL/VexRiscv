@@ -181,8 +181,13 @@ object VexRiscvSmpClusterGen {
                      withDouble : Boolean = false,
                      externalFpu : Boolean = true,
                      simHalt : Boolean = false,
+                     decoderIsolationBench : Boolean = false,
+                     decoderStupid : Boolean = false,
                      regfileRead : RegFileReadKind = plugin.ASYNC,
-                     rvc : Boolean = false
+                     rvc : Boolean = false,
+                     iTlbSize : Int = 4,
+                     dTlbSize : Int = 4,
+                     prediction : BranchPrediction = vexriscv.plugin.NONE
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -199,7 +204,7 @@ object VexRiscvSmpClusterGen {
         new IBusCachedPlugin(
           resetVector = resetVector,
           compressedGen = rvc,
-          prediction = vexriscv.plugin.NONE,
+          prediction = prediction,
           historyRamSizeLog2 = 9,
           relaxPredictorAddress = true,
           injectorStage = injectorStage,
@@ -219,7 +224,7 @@ object VexRiscvSmpClusterGen {
             reducedBankWidth = true
           ),
           memoryTranslatorPortConfig = MmuPortConfig(
-            portTlbSize = 4,
+            portTlbSize = iTlbSize,
             latency = 1,
             earlyRequireMmuLockup = true,
             earlyCacheHits = true
@@ -247,14 +252,16 @@ object VexRiscvSmpClusterGen {
             withWriteAggregation = dBusWidth > 32
           ),
           memoryTranslatorPortConfig = MmuPortConfig(
-            portTlbSize = 4,
+            portTlbSize = dTlbSize,
             latency = 1,
             earlyRequireMmuLockup = true,
             earlyCacheHits = true
           )
         ),
         new DecoderSimplePlugin(
-          catchIllegalInstruction = true
+          catchIllegalInstruction = true,
+          decoderIsolationBench = decoderIsolationBench,
+          stupidDecoder = decoderStupid
         ),
         new RegFilePlugin(
           regFileReadyKind = regfileRead,

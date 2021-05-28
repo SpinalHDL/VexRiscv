@@ -83,7 +83,7 @@ class FpuPlugin(externalFpu : Boolean = false,
     )
 
 
-    def arg(v : Int) = FPU_ARG -> U(v, 2 bits)
+    def arg(v : Int) = FPU_ARG -> B(v, 2 bits)
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(FPU_ENABLE, False)
 
