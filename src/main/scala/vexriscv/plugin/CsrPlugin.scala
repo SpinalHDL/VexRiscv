@@ -577,7 +577,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
 
     if(supervisorGen) {
-      redoInterface = pcManagerService.createJumpInterface(pipeline.execute, 10)
+      redoInterface = pcManagerService.createJumpInterface(pipeline.execute, -20) //Should lose against dynamic_target branch prediction correction
     }
 
     exceptionPendings = Vec(Bool, pipeline.stages.length)
