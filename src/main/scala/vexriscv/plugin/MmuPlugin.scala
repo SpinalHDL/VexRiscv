@@ -53,13 +53,13 @@ class MmuPlugin(ioRange : UInt => Bool,
     port.bus
   }
 
-  object IS_SFENCE_VMA extends Stageable(Bool)
+  object IS_SFENCE_VMA2 extends Stageable(Bool)
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
     import pipeline.config._
     val decoderService = pipeline.service(classOf[DecoderService])
-    decoderService.addDefault(IS_SFENCE_VMA, False)
-    decoderService.add(SFENCE_VMA, List(IS_SFENCE_VMA -> True))
+    decoderService.addDefault(IS_SFENCE_VMA2, False)
+    decoderService.add(SFENCE_VMA, List(IS_SFENCE_VMA2 -> True))
 
 
     dBusAccess = pipeline.service(classOf[DBusAccessService]).newDBusAccess()
@@ -296,18 +296,17 @@ class MmuPlugin(ioRange : UInt => Bool,
       }
     }
 
-    val fenceStage = stages.last
+    val fenceStage = execute
+
+    //Both SFENCE_VMA and SATP reschedule the next instruction in the CsrPlugin itself with one extra cycle to ensure side effect propagation.
     fenceStage plug new Area{
       import fenceStage._
-      when(arbitration.isValid && input(IS_SFENCE_VMA)){
-        for(port <- core.ports; line <- port.cache) line.valid := False //Assume that the instruction already fetched into the pipeline are ok
+      when(arbitration.isValid && arbitration.isFiring && input(IS_SFENCE_VMA2)){
+        for(port <- core.ports; line <- port.cache) line.valid := False
       }
 
-      csrService.duringWrite(CSR.SATP){
+      csrService.onWrite(CSR.SATP){
         for(port <- core.ports; line <- port.cache) line.valid := False
-        core.ports.filter(_.handle.args.earlyRequireMmuLockup).foreach{p =>
-          p.dirty := True
-        }
       }
     }
   }
