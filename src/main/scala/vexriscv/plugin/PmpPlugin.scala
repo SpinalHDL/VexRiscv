@@ -182,6 +182,10 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
         }
       }
 
+      when (arbitration.isFlushed) {
+        pending := False
+      }
+
       val writer = new Area {
         when (pending) {
           arbitration.haltItself := True
