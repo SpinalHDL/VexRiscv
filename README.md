@@ -19,8 +19,35 @@
 - [Adding a new CSR via the plugin system](#adding-a-new-csr-via-the-plugin-system)
 - [CPU clock and resets](#cpu-clock-and-resets)
 - [VexRiscv Architecture](#vexriscv-architecture)
-  * [FPU](#fpu)
-  * [Plugins](#plugins)
+  - [FPU](#fpu)
+  - [Plugins](#plugins)
+    - [IBusSimplePlugin](#ibussimpleplugin)
+    - [IBusCachedPlugin](#ibuscachedplugin)
+    - [DecoderSimplePlugin](#decodersimpleplugin)
+    - [RegFilePlugin](#regfileplugin)
+    - [HazardSimplePlugin](#hazardsimpleplugin)
+    - [SrcPlugin](#srcplugin)
+    - [IntAluPlugin](#intaluplugin)
+    - [LightShifterPlugin](#lightshifterplugin)
+    - [FullBarrelShifterPlugin](#fullbarrelshifterplugin)
+    - [BranchPlugin](#branchplugin)
+      - [Prediction NONE](#prediction-none)
+      - [Prediction STATIC](#prediction-static)
+      - [Prediction DYNAMIC](#prediction-dynamic)
+      - [Prediction DYNAMIC_TARGET](#prediction-dynamic_target)
+    - [DBusSimplePlugin](#dbussimpleplugin)
+    - [DBusCachedPlugin](#dbuscachedplugin)
+    - [MulPlugin](#mulplugin)
+    - [DivPlugin](#divplugin)
+    - [MulDivIterativePlugin](#muldiviterativeplugin)
+    - [CsrPlugin](#csrplugin)
+    - [StaticMemoryTranslatorPlugin](#staticmemorytranslatorplugin)
+    - [MmuPlugin](#mmuplugin)
+    - [PmpPlugin](#pmpplugin)
+    - [DebugPlugin](#debugplugin)
+    - [YamlPlugin](#yamlplugin)
+    - [FpuPlugin](#fpuplugin)
+    - [AesPlugin](#aesplugin)
 
 
 
@@ -1079,7 +1106,7 @@ fully associative TLB cache which is refilled automaticaly via a dbus access sha
 
 #### PmpPlugin
 
-This is a physical memory protection (PMP) plugin which conforms to the latest RISC-V privilege specification. PMP is configured by writing two special CSRs: `pmpcfg#` and `pmpaddr#`. The former contains the permissions and addressing modes for four protection regions, and the latter contains the encoded start address for a single region. Since the actual region bounds must be computed from the values written to these registers, writing them takes a few CPU cylces: (5 for `pmpcfg#` and 2-3 for `pmpaddr#`). This delay is necessary in order to centralize all of the decoding logic into a single component. Otherwise, it would have to be duplicated for each region, even though the decoding operation happens only when PMP is reprogrammed (e.g., on some context switches).
+This is a physical memory protection (PMP) plugin which conforms to the latest RISC-V privilege specification. PMP is configured by writing two special CSRs: `pmpcfg#` and `pmpaddr#`. The former contains the permissions and addressing modes for four protection regions, and the latter contains the encoded start address for a single region. Since the actual region bounds must be computed from the values written to these registers, writing them takes a few CPU cylces. This delay is necessary in order to centralize all of the decoding logic into a single component. Otherwise, it would have to be duplicated for each region, even though the decoding operation happens only when PMP is reprogrammed (e.g., on some context switches).
 
 #### DebugPlugin
 
