@@ -118,6 +118,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var rvc = false
   var netlistDirectory = "."
   var netlistName = "VexRiscvLitexSmpCluster"
+  var iTlbSize = 4
+  var dTlbSize = 4
   assert(new scopt.OptionParser[Unit]("VexRiscvLitexSmpClusterCmdGen") {
     help("help").text("prints this usage text")
     opt[Unit]("coherent-dma") action { (v, c) => coherentDma = true }
@@ -137,6 +139,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("fpu" ) action { (v, c) => fpu = v.toBoolean  }
     opt[String]("cpu-per-fpu") action { (v, c) => cpuPerFpu = v.toInt }
     opt[String]("rvc") action { (v, c) => rvc = v.toBoolean }
+    opt[String]("itlb-size") action { (v, c) => iTlbSize = v.toInt }
+    opt[String]("dtlb-size") action { (v, c) => dTlbSize = v.toInt }
   }.parse(args))
 
   val coherency = coherentDma || cpuCount > 1
@@ -161,7 +165,9 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
           externalFpu = fpu,
           loadStoreWidth = if(fpu) 64 else 32,
           rvc = rvc,
-          injectorStage = rvc
+          injectorStage = rvc,
+	  iTlbSize = iTlbSize,
+	  dTlbSize = dTlbSize
         )
         if(aesInstruction) c.add(new AesPlugin)
         c

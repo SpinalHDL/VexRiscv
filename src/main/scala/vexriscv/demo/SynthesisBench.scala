@@ -6,6 +6,7 @@ import spinal.lib.eda.bench._
 import spinal.lib.eda.icestorm.IcestormStdTargets
 import spinal.lib.eda.xilinx.VivadoFlow
 import spinal.lib.io.InOutWrapper
+import vexriscv.demo.smp.VexRiscvSmpClusterGen
 import vexriscv.plugin.CsrAccess.{READ_ONLY, READ_WRITE, WRITE_ONLY}
 import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
 import vexriscv.plugin.{BranchPlugin, CsrPlugin, CsrPluginConfig, DBusSimplePlugin, DecoderSimplePlugin, FullBarrelShifterPlugin, HazardSimplePlugin, IBusSimplePlugin, IntAluPlugin, LightShifterPlugin, NONE, RegFilePlugin, SrcPlugin, YamlPlugin}
@@ -200,9 +201,78 @@ object VexRiscvSynthesisBench {
       SpinalConfig(inlineRom = true).generateVerilog(wrap(new VexRiscv(LinuxGen.configFull(false, true, withSmp = true))).setDefinitionName(getRtlPath().split("\\.").head))
     }
 
+    val linuxFpuSmp = new Rtl {
+      override def getName(): String = "VexRiscv linux Fpu SMP"
+      override def getRtlPath(): String = "VexRiscvLinuxFpuSmp.v"
+      SpinalConfig(inlineRom = true).generateVerilog(wrap(new VexRiscv(
+        VexRiscvSmpClusterGen.vexRiscvConfig(
+        hartId = 0,
+        ioRange = _ (31 downto 28) === 0xF,
+        resetVector = 0x80000000l,
+        iBusWidth = 64,
+        dBusWidth = 64,
+        loadStoreWidth = 64,
+        iCacheSize = 4096*2,
+        dCacheSize = 4096*2,
+        iCacheWays = 2,
+        dCacheWays = 2,
+        withFloat = true,
+        withDouble = true,
+        externalFpu = false,
+        simHalt = true
+      ))).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
+    val linuxFpuSmpNoDecoder = new Rtl {
+      override def getName(): String = "VexRiscv linux Fpu SMP without decoder"
+      override def getRtlPath(): String = "VexRiscvLinuxFpuSmpNoDecoder.v"
+      SpinalConfig(inlineRom = true).generateVerilog(wrap(new VexRiscv(
+        VexRiscvSmpClusterGen.vexRiscvConfig(
+          hartId = 0,
+          ioRange = _ (31 downto 28) === 0xF,
+          resetVector = 0x80000000l,
+          iBusWidth = 64,
+          dBusWidth = 64,
+          loadStoreWidth = 64,
+          iCacheSize = 4096*2,
+          dCacheSize = 4096*2,
+          iCacheWays = 2,
+          dCacheWays = 2,
+          withFloat = true,
+          withDouble = true,
+          externalFpu = false,
+          simHalt = true,
+          decoderIsolationBench = true
+        ))).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
+    val linuxFpuSmpStupidDecoder = new Rtl {
+      override def getName(): String = "VexRiscv linux Fpu SMP stupid decoder"
+      override def getRtlPath(): String = "VexRiscvLinuxFpuSmpStupidDecoder.v"
+      SpinalConfig(inlineRom = true).generateVerilog(wrap(new VexRiscv(
+        VexRiscvSmpClusterGen.vexRiscvConfig(
+          hartId = 0,
+          ioRange = _ (31 downto 28) === 0xF,
+          resetVector = 0x80000000l,
+          iBusWidth = 64,
+          dBusWidth = 64,
+          loadStoreWidth = 64,
+          iCacheSize = 4096*2,
+          dCacheSize = 4096*2,
+          iCacheWays = 2,
+          dCacheWays = 2,
+          withFloat = true,
+          withDouble = true,
+          externalFpu = false,
+          simHalt = true,
+          decoderStupid = true
+        ))).setDefinitionName(getRtlPath().split("\\.").head))
+    }
+
 
 
     val rtls = List(
+//      linuxFpuSmp, linuxFpuSmpNoDecoder, linuxFpuSmpStupidDecoder
       twoStage, twoStageBarell, twoStageMulDiv, twoStageAll,
       threeStage, threeStageBarell, threeStageMulDiv, threeStageAll,
       smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced, linuxBalancedSmp

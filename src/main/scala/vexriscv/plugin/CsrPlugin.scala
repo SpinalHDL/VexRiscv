@@ -478,6 +478,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   object ENV_CTRL extends Stageable(EnvCtrlEnum())
   object IS_CSR extends Stageable(Bool)
+  object IS_SFENCE_VMA extends Stageable(Bool)
   object CSR_WRITE_OPCODE extends Stageable(Bool)
   object CSR_READ_OPCODE extends Stageable(Bool)
   object PIPELINED_CSR_READ extends Stageable(Bits(32 bits))
@@ -612,6 +613,11 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
     if(withExternalMhartid) externalMhartId = in UInt(mhartidWidth bits)
     if(utimeAccess != CsrAccess.NONE) utime = in UInt(64 bits) setName("utime")
+
+    if(supervisorGen) {
+      decoderService.addDefault(IS_SFENCE_VMA, False)
+      decoderService.add(SFENCE_VMA, List(IS_SFENCE_VMA -> True))
+    }
   }
 
   def inhibateInterrupts() : Unit = allowInterrupts := False
@@ -789,10 +795,15 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         satpAccess(CSR.SATP, 31 -> satp.MODE, 22 -> satp.ASID, 0 -> satp.PPN)
 
 
-        val satpLogic = supervisorGen generate new Area {
+        val rescheduleLogic = supervisorGen generate new Area {
           redoInterface.valid := False
           redoInterface.payload := decode.input(PC)
-          duringWrite(CSR.SATP) {
+
+          val rescheduleNext = False
+          when(execute.arbitration.isValid && execute.input(IS_SFENCE_VMA)) { rescheduleNext := True }
+          duringWrite(CSR.SATP) { rescheduleNext := True }
+
+          when(rescheduleNext){
             redoInterface.valid := True
             execute.arbitration.flushNext := True
             decode.arbitration.haltByOther := True
@@ -1161,8 +1172,12 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
         when(arbitration.isValid && input(IS_CSR)) {
           if(!pipelineCsrRead) output(REGFILE_WRITE_DATA) := readData
+        }
+
+        when(arbitration.isValid && (input(IS_CSR) || (if(supervisorGen) input(IS_SFENCE_VMA) else False))) {
           arbitration.haltItself setWhen(blockedBySideEffects)
         }
+
         if(pipelineCsrRead){
           insert(PIPELINED_CSR_READ) := readData
           when(memory.arbitration.isValid && memory.input(IS_CSR)) {
