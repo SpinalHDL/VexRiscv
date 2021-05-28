@@ -520,6 +520,7 @@ class MmuPmpDimension extends VexRiscvDimension("DBus") {
         override def applyOn(config: VexRiscvConfig): Unit = {
           config.plugins += new PmpPlugin(
             regions = 16,
+            granularity = 32,
             ioRange = _ (31 downto 28) === 0xF
           )
         }

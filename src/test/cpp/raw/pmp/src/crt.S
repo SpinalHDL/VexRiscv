@@ -10,7 +10,7 @@
 
 #define PMPCFG0    0x071a0000
 #define PMPCFG0_   0x079a0808
-#define PMPCFG1    0x191f0304
+#define PMPCFG1    0x1a190304
 #define PMPCFG2    0x000f090a
 #define PMPCFG3    0x1c1e1900
 
@@ -20,8 +20,8 @@
 #define PMPADDR3   0x20003fff // OFF   RWX -> 0x00000000 OFF RWX (test2)
 #define PMPADDR4   0x20003fff // OFF     X
 #define PMPADDR5   0x20003fff // OFF   RW
-#define PMPADDR6   0x20001fff // NAPOT RWX
-#define PMPADDR7   0x20005fff // NAPOT R
+#define PMPADDR6   0x22ffffff // NAPOT R
+#define PMPADDR7   0x2203ffff // NAPOT  W
 #define PMPADDR8   0x200d0000 // TOR    W
 #define PMPADDR9   0x200e0000 // TOR   R
 #define PMPADDR10  0xffffffff // TOR   RWX
@@ -29,7 +29,7 @@
 #define PMPADDR12  0x00000000 // OFF
 #define PMPADDR13  0x00000000 // NAPOT R
 #define PMPADDR14  0x00000000 // NAPOT  WX
-#define PMPADDR15  0x000001ff // NAPOT   X
+#define PMPADDR15  0xffffffff // NAPOT   X
 
 .global _start
 _start:
@@ -129,9 +129,9 @@ test1:
     bne x5, x6, fail
     li x1, 0x80800000
     li x2, 0xdeadbeef
-    sw x2, 0x0(x1)              // should be OK (write 0x80800000)
+    sw x2, 0x0(x1)              // should be OK (write region 2)
     la TRAP_RETURN, test2
-    lw x3, 0x0(x1)              // should fault (read 0x80800000)
+    lw x3, 0x0(x1)              // should fault (read region 2)
     j fail
 
 // "unlock" region 2, attempt read/write from machine mode
@@ -150,9 +150,9 @@ test2:
     beqz x6, fail
     li x1, 0x80800000
     li x2, 0xdeadbeef
-    sw x2, 0x0(x1)              // should still be OK (write 0x80800000)
+    sw x2, 0x0(x1)              // should still be OK (write region 2)
     la TRAP_RETURN, test3
-    lw x3, 0x0(x1)              // should still fault (read 0x80800000)
+    lw x3, 0x0(x1)              // should still fault (read region 2)
     j fail
 
 // verify masked CSR read/write operations
@@ -184,99 +184,78 @@ test3:
     li x5, 0x079a0707
     bne x5, x6, fail
 
-// jump into user mode
+// jump into U-mode
 test4:
     li TEST_ID, 4
     la TRAP_RETURN, fail
     la x2, test5
     csrw mepc, x2
-    # j pass
     mret
 
-// attempt to read/write region 2 from user mode
+// attempt to read/write the locked region from U-mode
 test5:
     li TEST_ID, 5
     la TRAP_RETURN, fail 
     li x2, 0xdeadbeef
     li x1, 0x80800000
-    sw x2, 0x0(x1)              // should be OK (write 0x80800000)
+    sw x2, 0x0(x1)              // should be OK (write region 2)
     la TRAP_RETURN, test6
-    lw x3, 0x0(x1)              // should fault (read 0x80800000)
+    lw x3, 0x0(x1)              // should fault (read region 2)
     j fail
 
-// attempt to read/write other regions from user mode
+// attempt to read/write overlapping regions from U-mode
 test6:
     li TEST_ID, 6
-    la TRAP_RETURN, fail
+    la TRAP_RETURN, fail 
     li x2, 0xdeadbeef
-    li x1, 0x80000000
-    sw x2, 0x0(x1)
-    lw x3, 0x0(x1)
-    bne x2, x3, fail            // should be OK (read/write 0x80000000)
+    li x1, 0x88000000
+    sw x2, 0x0(x1)              // should be OK (write region 6/7)
+    lw x3, 0x0(x1)              // should be OK (write region 6/7)
 
 test7:
     li TEST_ID, 7
     la TRAP_RETURN, fail
-    li x1, 0x80040000
-    lw x3, 0x0(x1)              // should be OK (read 0x80040000)
-    la TRAP_RETURN, test8
-    sw x3, 0x0(x1)              // should fault (write 0x80040000)
-    j fail
-    
-test8:
-    li TEST_ID, 8
-    la TRAP_RETURN, fail 
-    li x2, 0xdeadbeef
-    li x1, 0x8033fff8
-    sw x2, 0x0(x4)              // should be OK (write region 8)
-    la TRAP_RETURN, test9
-    lw x3, 0x0(x4)              // should fault (read region 8)
-    j fail
-
-test9:
-    li TEST_ID, 9
-    la TRAP_RETURN, fail
-    li x1, 0x8037fff8
-    lw x3, 0x0(x1)              // should be OK (read region 9)
-    la TRAP_RETURN, test10a
-    sw x3, 0x0(x1)              // should fault (write region 9)
+    li x1, 0x88fffff0
+    lw x3, 0x0(x1)              // should be OK (read region 6)
+    la TRAP_RETURN, test8a
+    sw x3, 0x0(x1)              // should fault (write region 6)
     j fail
 
 // attempt to write a pmpcfg# register from U-mode
-test10a:
-    li TEST_ID, 10
-    la TRAP_RETURN, test10b
+test8a:
+    li TEST_ID, 8
+    la TRAP_RETURN, test8b
     li TRAP_EXIT, 0x1
     csrwi pmpcfg3, 0x0
     j fail
 
 // check the result from M-mode
-test10b:
-    li TEST_ID, 10
+test8b:
+    li TEST_ID, 8
     li x5, PMPCFG3
     csrr x6, pmpcfg3
     bne x5, x6, fail
 
 // jump back into U-mode
-test11a:
-    li TEST_ID, 11
+test9a:
+    li TEST_ID, 9
     la TRAP_RETURN, fail
     li TRAP_EXIT, 0x0
-    la x2, test11b
+    la x2, test9b
     csrw mepc, x2
     mret
 
 // attempt to write a pmpaddr# register from U-mode
-test11b:
-    li TEST_ID, 11
-    la TRAP_RETURN, test11c
+test9b:
+    li TEST_ID, 9
+    la TRAP_RETURN, test9c
     li TRAP_EXIT, 0x1
     csrwi pmpaddr10, 0x0
     j fail
 
 // check the result from M-mode
-test11c:
-    li TEST_ID, 11
+test9c:
+    li TEST_ID, 9
     li x5, PMPADDR10
     csrr x6, pmpaddr10
     beq x5, x6, pass

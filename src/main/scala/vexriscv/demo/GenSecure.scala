@@ -41,7 +41,7 @@ object GenSecure extends App {
         ),
         new PmpPlugin(
           regions = 16,
-          granularity = 256,
+          granularity = 32,
           ioRange = _(31 downto 28) === 0xf
         ),
         new DecoderSimplePlugin(
