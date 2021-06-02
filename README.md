@@ -1072,6 +1072,11 @@ stage before jumping to mtvec.
 
 Static memory translator plugin which allows to specify which range of the memory addresses is I/O mapped and shouldn't be cached.
 
+| Parameters | type | description |
+| ------ | ----------- | ------ |
+| ioRange   | UInt => Bool | Function reference which eat an address and return true if the address should be uncached. ex : ioRange= _(31 downto 28) === 0xF => all 0xFXXXXXXX will be uncached|
+
+
 #### MmuPlugin
 
 Hardware refilled MMU implementation. Allows other plugins such as DBusCachedPlugin/IBusCachedPlugin to instanciate memory address translation ports. Each port has a small dedicated
