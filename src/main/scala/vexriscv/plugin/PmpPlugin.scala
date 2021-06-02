@@ -133,7 +133,7 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
     execute plug new Area {
       import execute._
 
-      val pending = RegInit(False)
+      val pending = RegInit(False) clearWhen(!arbitration.isStuck)
       val hazardFree = csrService.isHazardFree()
 
       val csrAddress = input(INSTRUCTION)(csrRange)
@@ -168,22 +168,15 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
       csrService.duringAnyWrite {
         when ((pmpcfgCsr | pmpaddrCsr) & machineMode) {
           csrService.allowCsr()
+          when (!pending) {
+            pending := True
+            writeData_ := csrService.writeData()
+            pmpNcfg_ := pmpNcfg
+            pmpcfgN_ := pmpcfgN
+            pmpaddrCsr_ := pmpcfgCsr
+            pmpcfgCsr_ := pmpaddrCsr
+          }
         }
-      }
-
-      csrService.onAnyWrite {
-        when ((pmpcfgCsr | pmpaddrCsr) & machineMode) {
-          pending := True
-          writeData_ := csrService.writeData()
-          pmpNcfg_ := pmpNcfg
-          pmpcfgN_ := pmpcfgN
-          pmpaddrCsr_ := pmpcfgCsr
-          pmpcfgCsr_ := pmpaddrCsr
-        }
-      }
-
-      when (arbitration.isFlushed) {
-        pending := False
       }
 
       val writer = new Area {
@@ -208,12 +201,12 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
 
         val stateIdle : State = new State with EntryPoint {
           onEntry {
+            pending := False
             enable := False
             counter := 0
           }
           onExit {
             enable := True
-            pending := False
             arbitration.haltItself := True
           }
           whenIsActive {
