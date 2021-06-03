@@ -364,8 +364,10 @@ case class CsrMapping() extends Area with CsrInterface {
   override def during(csrAddress: Int)(body: => Unit): Unit = addMappingAt(csrAddress, CsrDuring(() => body))
   override def onRead(csrAddress: Int)(body: => Unit): Unit =  addMappingAt(csrAddress, CsrOnRead(() => {body}))
   override def duringAny(): Bool = ???
-  override def durringWrite(body: => Unit) : Unit = always += CsrDuringRead(() => body)
-  override def durringRead(body: => Unit) : Unit = always += CsrDuringWrite(() => body)
+  override def duringAnyRead(body: => Unit) : Unit = always += CsrDuringRead(() => body)
+  override def duringAnyWrite(body: => Unit) : Unit = always += CsrDuringWrite(() => body)
+  override def onAnyRead(body: => Unit) : Unit = always += CsrOnRead(() => body)
+  override def onAnyWrite(body: => Unit) : Unit = always += CsrOnWrite(() => body)
   override def readData() = readDataSignal
   override def writeData() = writeDataSignal
   override def allowCsr() = allowCsrSignal := True
@@ -386,8 +388,10 @@ trait CsrInterface{
     r(csrAddress,bitOffset,that)
     w(csrAddress,bitOffset,that)
   }
-  def durringWrite(body: => Unit) : Unit //Called all the durration of a Csr write instruction in the execute stage
-  def durringRead(body: => Unit) : Unit //same than above for read
+  def duringAnyRead(body: => Unit) : Unit //Called all the durration of a Csr write instruction in the execute stage
+  def duringAnyWrite(body: => Unit) : Unit //same than above for read
+  def onAnyRead(body: => Unit) : Unit
+  def onAnyWrite(body: => Unit) : Unit
   def allowCsr() : Unit  //In case your csr do not use the regular API with csrAddress but is implemented using "side channels", you can call that if the current csr is implemented
   def isHazardFree() : Bool // You should not have any side effect nor use readData() until this return True
 
@@ -516,8 +520,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def duringRead(csrAddress: Int)(body: => Unit): Unit = csrMapping.duringRead(csrAddress)(body)
   override def during(csrAddress: Int)(body: => Unit): Unit = csrMapping.during(csrAddress)(body)
   override def duringAny(): Bool = pipeline.execute.arbitration.isValid && pipeline.execute.input(IS_CSR)
-  override def durringWrite(body: => Unit) = csrMapping.durringWrite(body)
-  override def durringRead(body: => Unit) = csrMapping.durringRead(body)
+  override def duringAnyRead(body: => Unit) = csrMapping.duringAnyRead(body)
+  override def duringAnyWrite(body: => Unit) = csrMapping.duringAnyWrite(body)
+  override def onAnyRead(body: => Unit) = csrMapping.onAnyRead(body)
+  override def onAnyWrite(body: => Unit) = csrMapping.onAnyWrite(body)
   override def allowCsr() = csrMapping.allowCsr()
   override def readData() = csrMapping.readData()
   override def writeData() = csrMapping.writeData()
@@ -1279,6 +1285,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           csrMapping.always.foreach {
             case element : CsrDuringWrite => when(writeInstruction){element.doThat()}
             case element : CsrDuringRead => when(readInstruction){element.doThat()}
+            case element : CsrOnWrite => when(writeEnable){element.doThat()}
+            case element : CsrOnRead => when(readEnable){element.doThat()}
           }
 
           illegalAccess clearWhen(csrMapping.allowCsrSignal)
