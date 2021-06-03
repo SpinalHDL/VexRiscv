@@ -133,7 +133,8 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
     execute plug new Area {
       import execute._
 
-      val pending = RegInit(False) clearWhen(!arbitration.isStuck)
+      val fsmPending = RegInit(False) clearWhen(!arbitration.isStuck)
+      val fsmComplete = False
       val hazardFree = csrService.isHazardFree()
 
       val csrAddress = input(INSTRUCTION)(csrRange)
@@ -168,8 +169,9 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
       csrService.duringAnyWrite {
         when ((pmpcfgCsr | pmpaddrCsr) & machineMode) {
           csrService.allowCsr()
-          when (!pending) {
-            pending := True
+          arbitration.haltItself := !fsmComplete
+          when (!fsmPending) {
+            fsmPending := True
             writeData_ := csrService.writeData()
             pmpNcfg_ := pmpNcfg
             pmpcfgN_ := pmpcfgN
@@ -179,30 +181,26 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
         }
       }
 
-      val controller = new StateMachine {
-        val enable = RegInit(False)
-        val counter = Reg(UInt(log2Up(regions) bits)) init(0)
+      val fsm = new StateMachine {
+        val fsmEnable = RegInit(False)
+        val fsmCounter = Reg(UInt(log2Up(regions) bits)) init(0)
 
         val stateIdle : State = new State with EntryPoint {
           onEntry {
-            pending := False
-            enable := False
-            counter := 0
+            fsmPending := False
+            fsmEnable := False
+            fsmComplete := True
+            fsmCounter := 0
           }
           whenIsActive {
-            when (pending) {
-              arbitration.haltItself := True
-              when (hazardFree) {
-                goto(stateWrite)
-              }
+            when (fsmPending & hazardFree) {
+              goto(stateWrite)
             }
           }
         }
 
         val stateWrite : State = new State {
-          onExit (enable := True)
           whenIsActive {
-            arbitration.haltItself := True
             when (pmpcfgCsr_) {
               val overwrite = writeData_.subdivideIn(8 bits)
               for (i <- 0 until 4) {
@@ -219,34 +217,33 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
               goto(stateAddr)
             }
           }
+          onExit (fsmEnable := True)
         }
 
         val stateCfg : State = new State {
-          onEntry (counter := pmpcfgN_ @@ U(0, 2 bits))
+          onEntry (fsmCounter := pmpcfgN_ @@ U(0, 2 bits))
           whenIsActive {
-            counter := counter + 1
-            when (counter(1 downto 0) === 3) {
+            fsmCounter := fsmCounter + 1
+            when (fsmCounter(1 downto 0) === 3) {
               goto(stateIdle)
-            } otherwise {
-              arbitration.haltItself := True
             }
           }
         }
 
         val stateAddr : State = new State {
-          onEntry (counter := pmpNcfg_)
+          onEntry (fsmCounter := pmpNcfg_)
           whenIsActive (goto(stateIdle))
         }
 
         when (pmpaddrCsr_) {
           setter.io.addr := writeData_.asUInt
         } otherwise {
-          setter.io.addr := pmpaddr(counter) 
+          setter.io.addr := pmpaddr(fsmCounter) 
         }
         
-        when (enable & ~pmpcfg(counter)(lBit)) {
-          base(counter) := setter.io.base
-          mask(counter) := setter.io.mask
+        when (fsmEnable & ~pmpcfg(fsmCounter)(lBit)) {
+          base(fsmCounter) := setter.io.base
+          mask(fsmCounter) := setter.io.mask
         }
       }
     }
