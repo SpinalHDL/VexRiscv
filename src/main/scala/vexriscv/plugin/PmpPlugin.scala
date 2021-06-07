@@ -124,9 +124,11 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
     val csrService = pipeline.service(classOf[CsrInterface])
     val privilegeService = pipeline.service(classOf[PrivilegeService])
 
-    val pmpaddr = Mem(UInt(xlen bits), regions)
-    val pmpcfg = Vector.fill(regions)(Reg(Bits(8 bits)) init(0))
-    val base, mask = Vector.fill(regions)(Reg(UInt(xlen - cutoff bits)))
+    val state = pipeline plug new Area {
+      val pmpaddr = Mem(UInt(xlen bits), regions)
+      val pmpcfg = Vector.fill(regions)(Reg(Bits(8 bits)) init (0))
+      val base, mask = Vector.fill(regions)(Reg(UInt(xlen - cutoff bits)))
+    }
 
     def machineMode : Bool = privilegeService.isMachine()
 
@@ -154,14 +156,14 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
           when (pmpcfgCsr) {
             csrService.allowCsr()
             csrService.readData() :=
-              pmpcfg(pmpcfgN @@ U(3, 2 bits)) ##
-              pmpcfg(pmpcfgN @@ U(2, 2 bits)) ##
-              pmpcfg(pmpcfgN @@ U(1, 2 bits)) ##
-              pmpcfg(pmpcfgN @@ U(0, 2 bits))
+              state.pmpcfg(pmpcfgN @@ U(3, 2 bits)) ##
+              state.pmpcfg(pmpcfgN @@ U(2, 2 bits)) ##
+              state.pmpcfg(pmpcfgN @@ U(1, 2 bits)) ##
+              state.pmpcfg(pmpcfgN @@ U(0, 2 bits))
           }
           when (pmpaddrCsr) {
             csrService.allowCsr()
-            csrService.readData() := pmpaddr(pmpNcfg).asBits
+            csrService.readData() := state.pmpaddr(pmpNcfg).asBits
           }
         }
       }
@@ -170,7 +172,7 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
         when ((pmpcfgCsr | pmpaddrCsr) & machineMode) {
           csrService.allowCsr()
           arbitration.haltItself := !fsmComplete
-          when (!fsmPending) {
+          when (!fsmPending && hazardFree) {
             fsmPending := True
             writeData_ := csrService.writeData()
             pmpNcfg_ := pmpNcfg
@@ -193,7 +195,7 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
             fsmCounter := 0
           }
           whenIsActive {
-            when (fsmPending & hazardFree) {
+            when (fsmPending) {
               goto(stateWrite)
             }
           }
@@ -204,15 +206,15 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
             when (pmpcfgCsr_) {
               val overwrite = writeData_.subdivideIn(8 bits)
               for (i <- 0 until 4) {
-                when (~pmpcfg(pmpcfgN_ @@ U(i, 2 bits))(lBit)) {
-                  pmpcfg(pmpcfgN_ @@ U(i, 2 bits)).assignFromBits(overwrite(i))
+                when (~state.pmpcfg(pmpcfgN_ @@ U(i, 2 bits))(lBit)) {
+                  state.pmpcfg(pmpcfgN_ @@ U(i, 2 bits)).assignFromBits(overwrite(i))
                 }
               }
               goto(stateCfg)
             }
             when (pmpaddrCsr_) {
-              when (~pmpcfg(pmpNcfg_)(lBit)) {
-                pmpaddr(pmpNcfg_) := writeData_.asUInt
+              when (~state.pmpcfg(pmpNcfg_)(lBit)) {
+                state.pmpaddr(pmpNcfg_) := writeData_.asUInt
               }
               goto(stateAddr)
             }
@@ -238,12 +240,12 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
         when (pmpaddrCsr_) {
           setter.io.addr := writeData_.asUInt
         } otherwise {
-          setter.io.addr := pmpaddr(fsmCounter) 
+          setter.io.addr := state.pmpaddr(fsmCounter)
         }
         
-        when (fsmEnable & ~pmpcfg(fsmCounter)(lBit)) {
-          base(fsmCounter) := setter.io.base
-          mask(fsmCounter) := setter.io.mask
+        when (fsmEnable & ~state.pmpcfg(fsmCounter)(lBit)) {
+          state.base(fsmCounter) := setter.io.base
+          state.mask(fsmCounter) := setter.io.mask
         }
       }
     }
@@ -251,13 +253,13 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
     pipeline plug new Area {
       def getHits(address : UInt) = {
         (0 until regions).map(i =>
-            ((address & mask(U(i, log2Up(regions) bits))) === base(U(i, log2Up(regions) bits))) & 
-            (pmpcfg(i)(lBit) | ~machineMode) & (pmpcfg(i)(aBits) === NAPOT)
+            ((address & state.mask(U(i, log2Up(regions) bits))) === state.base(U(i, log2Up(regions) bits))) &
+            (state.pmpcfg(i)(lBit) | ~machineMode) & (state.pmpcfg(i)(aBits) === NAPOT)
         )
       }
 
       def getPermission(hits : IndexedSeq[Bool], bit : Int) = {
-        (hits zip pmpcfg).map({ case (i, cfg) => i & cfg(bit) }).orR
+        (hits zip state.pmpcfg).map({ case (i, cfg) => i & cfg(bit) }).orR
       }
 
       val dGuard = new Area {
