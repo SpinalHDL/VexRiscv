@@ -16,9 +16,9 @@ class HaltOnExceptionPlugin() extends Plugin[VexRiscv] with ExceptionService {
   //Mannage ExceptionService calls
   val exceptionPortsInfos = ArrayBuffer[ExceptionPortInfo]()
   def exceptionCodeWidth = 4
-  override def newExceptionPort(stage : Stage, priority : Int = 0) = {
-    val interface = Flow(ExceptionCause())
-    exceptionPortsInfos += ExceptionPortInfo(interface,stage,priority)
+  override def newExceptionPort(stage : Stage, priority : Int = 0, codeWidth : Int = 4) = {
+    val interface = Flow(ExceptionCause(4))
+    exceptionPortsInfos += ExceptionPortInfo(interface,stage,priority, codeWidth)
     interface
   }
   override def isExceptionPending(stage : Stage): Bool = False

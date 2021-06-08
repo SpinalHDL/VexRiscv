@@ -26,13 +26,20 @@ trait DecoderService{
   def addDefault(key : Stageable[_ <: BaseType], value : Any)
 }
 
-case class ExceptionCause() extends Bundle{
-  val code = UInt(4 bits)
+case class ExceptionCause(codeWidth : Int) extends Bundle{
+  val code = UInt(codeWidth bits)
   val badAddr = UInt(32 bits)
+
+  def resizeCode(width : Int): ExceptionCause ={
+    val ret = ExceptionCause(width)
+    ret.badAddr := badAddr
+    ret.code := code.resized
+    ret
+  }
 }
 
 trait ExceptionService{
-  def newExceptionPort(stage : Stage, priority : Int = 0) : Flow[ExceptionCause]
+  def newExceptionPort(stage : Stage, priority : Int = 0, codeWidth : Int = 4) : Flow[ExceptionCause]
   def isExceptionPending(stage : Stage) : Bool
 }
 

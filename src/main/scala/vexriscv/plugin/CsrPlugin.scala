@@ -34,7 +34,7 @@ object CsrAccess {
 
 
 
-case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage, priority : Int)
+case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage, priority : Int, codeWidth : Int)
 case class CsrPluginConfig(
                             catchIllegalAccess  : Boolean,
                             mvendorid           : BigInt,
@@ -441,9 +441,9 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   //Mannage ExceptionService calls
   val exceptionPortsInfos = ArrayBuffer[ExceptionPortInfo]()
-  override def newExceptionPort(stage : Stage, priority : Int = 0) = {
-    val interface = Flow(ExceptionCause())
-    exceptionPortsInfos += ExceptionPortInfo(interface,stage,priority)
+  override def newExceptionPort(stage : Stage, priority : Int = 0, codeWidth : Int = 4) = {
+    val interface = Flow(ExceptionCause(codeWidth))
+    exceptionPortsInfos += ExceptionPortInfo(interface,stage,priority,codeWidth)
     interface
   }
 
@@ -847,10 +847,11 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
       //Aggregate all exception port and remove required instructions
       val exceptionPortCtrl = exceptionPortsInfos.nonEmpty generate new Area{
+        val codeWidth = exceptionPortsInfos.map(_.codeWidth).max
         val firstStageIndexWithExceptionPort = exceptionPortsInfos.map(i => indexOf(i.stage)).min
         val exceptionValids = Vec(stages.map(s => Bool().setPartialName(s.getName())))
         val exceptionValidsRegs = Vec(stages.map(s => Reg(Bool).init(False).setPartialName(s.getName()))).allowUnsetRegToAvoidLatch
-        val exceptionContext = Reg(ExceptionCause())
+        val exceptionContext = Reg(ExceptionCause(codeWidth))
         val exceptionTargetPrivilegeUncapped = U"11"
 
         switch(exceptionContext.code){
@@ -876,17 +877,19 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val groupedByStage = exceptionPortsInfos.map(_.stage).distinct.map(s => {
           val stagePortsInfos = exceptionPortsInfos.filter(_.stage == s).sortWith(_.priority > _.priority)
           val stagePort = stagePortsInfos.length match{
-            case 1 => stagePortsInfos.head.port
+            case 1 => {
+              stagePortsInfos.head.port.translateWith(stagePortsInfos.head.port.payload.resizeCode(codeWidth))
+            }
             case _ => {
-              val groupedPort = Flow(ExceptionCause())
+              val groupedPort = Flow(ExceptionCause(codeWidth))
               val valids = stagePortsInfos.map(_.port.valid)
-              val codes = stagePortsInfos.map(_.port.payload)
+              val codes = stagePortsInfos.map(_.port.payload.resizeCode(codeWidth))
               groupedPort.valid := valids.orR
               groupedPort.payload := MuxOH(OHMasking.first(stagePortsInfos.map(_.port.valid).asBits), codes)
               groupedPort
             }
           }
-          ExceptionPortInfo(stagePort,s,0)
+          ExceptionPortInfo(stagePort,s,0, codeWidth)
         })
 
         val sortedByStage = groupedByStage.sortWith((a, b) => pipeline.indexOf(a.stage) < pipeline.indexOf(b.stage))
