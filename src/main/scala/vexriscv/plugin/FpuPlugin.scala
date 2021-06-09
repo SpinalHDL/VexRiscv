@@ -165,57 +165,6 @@ class FpuPlugin(externalFpu : Boolean = false,
 //    exposeEncoding()
   }
 
-  def exposeEncoding(): Unit ={
-    val d = pipeline.service(classOf[DecoderSimplePlugin])
-    val commits, rsps, rs1, commitsN, rspsN, rs1N = ArrayBuffer[MaskedLiteral]()
-    def filter(encoding : Int, list : ArrayBuffer[MaskedLiteral]) = list.filter(e => (e.value & 0x7F) == encoding)
-    def filterNotLs(list : ArrayBuffer[MaskedLiteral]) = list.filter(e => !List(0x7, 0x27).contains(e.value & 0x7F))
-
-    for((key, t) <- d.encodings; if(t.map(_._1).contains(FPU_ENABLE));
-        (s, v) <- t){
-      def isSet =  v.head.source.asInstanceOf[Literal].getValue == 1
-      if(s == FPU_COMMIT) (if(isSet)commits += key else  commitsN += key)
-      if(s == FPU_RSP) (if(isSet)rsps += key else rspsN += key)
-      if(s == pipeline.config.RS1_USE) (if(isSet)rs1 += key else rs1N += key)
-    }
-
-    val commitLut, rspLut, rs1Lut = Array.fill(32)(false)
-    filter(0x53,commits).foreach{m =>
-      val idx = (m.value >> 27).toInt
-      commitLut(idx) = true
-    }
-    filter(0x53,commitsN).foreach{m =>
-      val idx = (m.value >> 27).toInt
-      assert(!commitLut(idx))
-    }
-    println("COMMIT => ")
-    println(commitLut.mkString(","))
-
-
-    filter(0x53,rsps).foreach{m =>
-      val idx = (m.value >> 27).toInt
-      rspLut(idx) = true
-    }
-    filter(0x53,rspsN).foreach{m =>
-      val idx = (m.value >> 27).toInt
-      assert(!rspLut(idx))
-    }
-    println("RSP => ")
-    println(rspLut.mkString(","))
-
-    filter(0x53,rs1).foreach{m =>
-      val idx = (m.value >> 27).toInt
-      rs1Lut(idx) = true
-    }
-    filter(0x53,rs1N).foreach{m =>
-      val idx = (m.value >> 27).toInt
-      assert(!rs1Lut(idx))
-    }
-    println("rs1 => ")
-    println(rs1Lut.mkString(","))
-
-  }
-
   override def build(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
@@ -295,7 +244,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       port.cmd.valid     := arbitration.isValid && input(FPU_ENABLE) && !forked && !hazard
       port.cmd.opcode    := input(FPU_OPCODE)
       port.cmd.arg       := input(FPU_ARG)
-      port.cmd.rs1       := ((input(FPU_OPCODE) === FpuOpcode.STORE) ? input(INSTRUCTION)(rs2Range).asUInt | input(INSTRUCTION)(rs1Range).asUInt)
+      port.cmd.rs1       := input(INSTRUCTION)(rs1Range).asUInt
       port.cmd.rs2       := input(INSTRUCTION)(rs2Range).asUInt
       port.cmd.rs3       := input(INSTRUCTION)(rs3Range).asUInt
       port.cmd.rd        := input(INSTRUCTION)(rdRange).asUInt

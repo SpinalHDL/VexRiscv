@@ -229,7 +229,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val useRs1, useRs2, useRs3, useRd = False
     switch(input.opcode){
       is(p.Opcode.LOAD)      { useRd := True }
-      is(p.Opcode.STORE)     { useRs1 := True }
+      is(p.Opcode.STORE)     { useRs2 := True }
       is(p.Opcode.ADD)       { useRd  := True; useRs1 := True; useRs2 := True }
       is(p.Opcode.MUL)       { useRd  := True; useRs1 := True; useRs2 := True }
       is(p.Opcode.DIV)       { useRd  := True; useRs1 := True; useRs2 := True }
@@ -255,6 +255,9 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val hits = (0 to 3).map(id => uses(id) && rfBusy(id))
     val hazard = hits.orR || !rf.init.done || commitLogic(portId).pending.full
     val output = input.haltWhen(hazard)
+    when(input.opcode === p.Opcode.STORE){
+      output.rs1 := input.rs2 //Datapath optimisation to unify rs source in the store pipeline
+    }
     when(input.valid && rf.init.done){
       scoreboard.targetWrite.address := input.rd
       scoreboard.targetWrite.data := !rfTargets.last
