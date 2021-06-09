@@ -136,7 +136,7 @@ object StreamForkVex{
 object StreamVexPimper{
   implicit class StreamFlushPimper[T <: Data](pimped : Stream[T]){
     def m2sPipeWithFlush(flush : Bool, discardInput : Boolean = true, collapsBubble : Boolean = true, flushInput : Bool = null): Stream[T] = {
-      val ret = cloneOf(pimped)
+      val ret = cloneOf(pimped).setCompositeName(pimped, "m2sPipe", true)
 
       val rValid = RegInit(False)
       val rData = Reg(pimped.payloadType)
