@@ -293,8 +293,8 @@ class FpuTest extends FunSuite{
         def storeRaw(rs : Int, format : FpuFormat.E)(body : FpuRsp => Unit): Unit ={
           cmdAdd {cmd =>
             cmd.opcode #= cmd.opcode.spinalEnum.STORE
-            cmd.rs1 #= rs
-            cmd.rs2.randomize()
+            cmd.rs1.randomize()
+            cmd.rs2 #= rs
             cmd.rs3.randomize()
             cmd.rd.randomize()
             cmd.arg.randomize()
