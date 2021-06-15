@@ -35,6 +35,7 @@ bin/
 *.cf
 *.json
 *.vcd
+*.fst*
 !tester/src/test/resources/*.vhd
 obj_dir
 *.logTrace
@@ -45,6 +46,7 @@ obj_dir
 *.tcl
 *.o
 *.bin
+explor
 
 simWorkspace/
 tmp/

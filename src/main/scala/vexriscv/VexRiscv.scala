@@ -16,7 +16,9 @@ object VexRiscvConfig{
 
   def apply(plugins : Seq[Plugin[VexRiscv]] = ArrayBuffer()) : VexRiscvConfig = apply(true,true,plugins)
 }
-
+trait VexRiscvRegressionArg{
+  def getVexRiscvRegressionArgs() : Seq[String]
+}
 case class VexRiscvConfig(){
   var withMemoryStage = true
   var withWriteBackStage = true
@@ -28,6 +30,26 @@ case class VexRiscvConfig(){
       case Some(x) => Some(x.asInstanceOf[T])
       case None => None
     }
+  }
+  def get[T](clazz: Class[T]): T = {
+    plugins.find(_.getClass == clazz) match {
+      case Some(x) => x.asInstanceOf[T]
+    }
+  }
+
+  def withRvc = plugins.find(_.isInstanceOf[IBusFetcher]) match {
+    case Some(x) => x.asInstanceOf[IBusFetcher].withRvc
+    case None => false
+  }
+
+  def withRvf = find(classOf[FpuPlugin]) match {
+    case Some(x) => true
+    case None => false
+  }
+
+  def withRvd = find(classOf[FpuPlugin]) match {
+    case Some(x) => x.p.withDouble
+    case None => false
   }
 
   //Default Stageables
@@ -83,11 +105,20 @@ case class VexRiscvConfig(){
   }
   object SRC1_CTRL  extends Stageable(Src1CtrlEnum())
   object SRC2_CTRL  extends Stageable(Src2CtrlEnum())
+
+  def getRegressionArgs() : Seq[String] = {
+    val str = ArrayBuffer[String]()
+    plugins.foreach{
+      case e : VexRiscvRegressionArg => str ++= e.getVexRiscvRegressionArgs()
+      case _ =>
+    }
+    str
+  }
 }
 
 
 
-object RVC_GEN extends PipelineThing[Boolean]
+
 class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   type  T = VexRiscv
   import config._
@@ -115,8 +146,6 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
     memory.arbitration.removeIt.noBackendCombMerge
   }
   execute.arbitration.flushNext.noBackendCombMerge
-
-  this(RVC_GEN) = false
 }
 
 

@@ -4,7 +4,7 @@
 #include "VVexRiscv_RiscvCore.h"
 #endif
 #include "verilated.h"
-#include "verilated_vcd_c.h"
+#include "verilated_fst_c.h"
 #include <stdio.h>
 #include <iostream>
 #include <stdlib.h>
@@ -175,8 +175,12 @@ void loadBinImpl(string path,Memory* mem, uint32_t offset) {
 
 #define TEXTIFY(A) #A
 
+void breakMe(){
+    int a = 0;
+}
 #define assertEq(x,ref) if(x != ref) {\
 	printf("\n*** %s is %d but should be %d ***\n\n",TEXTIFY(x),x,ref);\
+	breakMe();\
 	throw std::exception();\
 }
 
@@ -223,7 +227,8 @@ class success : public std::exception { };
 #define SIP 0x144
 #define SATP 0x180
 
-
+#define UTIME    0xC01 // rdtime
+#define UTIMEH   0xC81
 
 #define SSTATUS_SIE         0x00000002
 #define SSTATUS_SPIE        0x00000020
@@ -232,10 +237,42 @@ class success : public std::exception { };
 #ifdef SUPERVISOR
 #define MSTATUS_READ_MASK 0xFFFFFFFF
 #else
-#define MSTATUS_READ_MASK 0x1888
+#define MSTATUS_READ_MASK 0x7888
 #endif
 
+#ifdef RVF
+#define STATUS_FS_MASK 0x6000
+#else
+#define STATUS_FS_MASK 0x0000
+#endif
 
+#define FFLAGS 0x1
+#define FRM    0x2
+#define FCSR   0x3
+
+#define u32 uint32_t
+#define u64 uint64_t
+
+class FpuRsp{
+public:
+	u32 flags;
+	u64 value;
+};
+
+class FpuCommit{
+public:
+	u64 value;
+};
+
+class FpuCompletion{
+public:
+	u32 flags;
+};
+
+
+bool fpuCommitLut[32] = {true,true,true,true,true,true,false,false,true,false,false,true,false,false,false,false,false,false,false,false,false,false,false,false,false,false,true,false,false,false,true,false};
+bool fpuRspLut[32] = {false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,true,false,false,false,true,false,false,false,true,false,false,false};
+bool fpuRs1Lut[32] = {false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,false,true,false,false,false,true,false};
 class RiscvGolden {
 public:
 	int32_t pc, lastPc;
@@ -250,6 +287,9 @@ public:
     uint32_t medeleg;
 	uint32_t mideleg;
 
+    queue<FpuRsp> fpuRsp;
+    queue<FpuCommit> fpuCommit;
+    queue<FpuCompletion> fpuCompletion;
 
 	union status {
 		uint32_t raw;
@@ -265,7 +305,8 @@ public:
 			uint32_t spp : 1;
 			uint32_t _3 : 2;
 			uint32_t mpp : 2;
-			uint32_t _4 : 4;
+			uint32_t fs : 2;
+			uint32_t _4 : 2;
 			uint32_t mprv : 1;
 			uint32_t sum : 1;
 			uint32_t mxr : 1;
@@ -374,9 +415,19 @@ public:
 		};
 	};
 
+	union fcsr {
+		uint32_t raw;
+		struct __attribute__((packed)){
+			uint32_t flags : 5;
+			uint32_t frm : 3;
+		};
+	}fcsr;
+
 
 	bool lrscReserved;
 	uint32_t lrscReservedAddress;
+    u32 fpuCompletionTockens;
+    u32 dutRfWriteValue;
 
 	RiscvGolden() {
 		pc = 0x80000000;
@@ -384,7 +435,6 @@ public:
 		for (int i = 0; i < 32; i++)
 			regs[i] = 0;
 
-		status.raw = 0;
 		ie.raw = 0;
 		mtvec.raw = 0x80000020;
 		mcause.raw = 0;
@@ -394,6 +444,15 @@ public:
 		status.raw = 0;
 		status.mpp = 3;
 		status.spp = 1;
+		#ifdef RVF
+		status.fs = 1;
+		misa |= 1 << 5;
+		#endif
+		#ifdef RVD
+		misa |= 1 << 3;
+		#endif
+		fcsr.flags = 0;
+		fcsr.frm = 0;
 		privilege = 3;
 		medeleg = 0;
 		mideleg = 0;
@@ -403,6 +462,7 @@ public:
 		stepCounter = 0;
 		sbadaddr = 42;
 		lrscReserved = false;
+		fpuCompletionTockens = 0;
 	}
 
 	virtual void rfWrite(int32_t address, int32_t data) {
@@ -422,8 +482,8 @@ public:
 	uint32_t mepc, sepc;
 
 	virtual bool iRead(int32_t address, uint32_t *data) = 0;
-	virtual bool dRead(int32_t address, int32_t size, uint32_t *data) = 0;
-	virtual void dWrite(int32_t address, int32_t size, uint32_t data) = 0;
+	virtual bool dRead(int32_t address, int32_t size, uint8_t *data) = 0;
+	virtual void dWrite(int32_t address, int32_t size, uint8_t *data) = 0;
 
 	enum AccessKind {READ,WRITE,EXECUTE,READ_WRITE};
 	virtual bool isMmuRegion(uint32_t v) = 0;
@@ -433,11 +493,11 @@ public:
 			*p = v;
 		} else {
 			Tlb tlb;
-			dRead((satp.ppn << 12) | ((v >> 22) << 2), 4, &tlb.raw);
+			dRead((satp.ppn << 12) | ((v >> 22) << 2), 4, (uint8_t*)&tlb.raw);
 			if(!tlb.v) return true;
 			bool superPage = true;
 			if(!tlb.x && !tlb.r && !tlb.w){
-				dRead((tlb.ppn << 12) | (((v >> 12) & 0x3FF) << 2), 4, &tlb.raw);
+				dRead((tlb.ppn << 12) | (((v >> 12) & 0x3FF) << 2), 4, (uint8_t*)&tlb.raw);
 				if(!tlb.v) return true;
 				superPage = false;
 			}
@@ -461,10 +521,10 @@ public:
     }
 	void trap(bool interrupt,int32_t cause, bool valueWrite, uint32_t value) {
 #ifdef FLOW_INFO
-	    cout << "TRAP " << (interrupt ? "interrupt" : "exception") << " cause=" << cause << " PC=0x" << hex << pc << " val=0x" << hex << value << dec << endl;
-	    if(cause == 9){
-	        cout << hex <<  " a7=0x" << regs[17] << " a0=0x" << regs[10] << " a1=0x" << regs[11] << " a2=0x" << regs[12] << dec << endl;
-	    }
+//	    cout << "TRAP " << (interrupt ? "interrupt" : "exception") << " cause=" << cause << " PC=0x" << hex << pc << " val=0x" << hex << value << dec << endl;
+//	    if(cause == 9){
+//	        cout << hex <<  " a7=0x" << regs[17] << " a0=0x" << regs[10] << " a1=0x" << regs[11] << " a2=0x" << regs[12] << dec << endl;
+//	    }
 #endif
 		//Check leguality of the interrupt
 		if(interrupt) {
@@ -530,7 +590,7 @@ public:
 	virtual bool csrRead(int32_t csr, uint32_t *value){
 		if(((csr >> 8) & 0x3) > privilege) return true;
 		switch(csr){
-		case MSTATUS: *value = status.raw & MSTATUS_READ_MASK; break;
+		case MSTATUS: *value = (status.raw | (((status.raw & 0x6000) == 0x6000) ? 0x80000000 : 0)) & MSTATUS_READ_MASK;  break;
 		case MIP: *value = getIp().raw; break;
 		case MIE: *value = ie.raw; break;
 		case MTVEC: *value = mtvec.raw; break;
@@ -543,7 +603,7 @@ public:
 		case MIDELEG: *value = mideleg; break;
 		case MHARTID: *value = 0; break;
 
-		case SSTATUS: *value = status.raw & 0xC0133; break;
+		case SSTATUS: *value = (status.raw | (((status.raw & 0x6000) == 0x6000) ? 0x80000000 : 0)) & (0x800C0133 | STATUS_FS_MASK); break;
 		case SIP: *value = getIp().raw & 0x333; break;
 		case SIE: *value = ie.raw & 0x333; break;
 		case STVEC: *value = stvec.raw; break;
@@ -552,6 +612,18 @@ public:
 		case SEPC: *value = sepc; break;
 		case SSCRATCH: *value = sscratch; break;
 		case SATP: *value = satp.raw; break;
+
+		#ifdef RVF
+		case FCSR: *value = fcsr.raw; break;
+		case FRM: *value = fcsr.frm; break;
+		case FFLAGS: *value = fcsr.flags; break;
+		#endif
+
+        #ifdef UTIME_INPUT
+		case UTIME: *value  = dutRfWriteValue; break;
+		case UTIMEH: *value  = dutRfWriteValue; break;
+		#endif
+
 		default: return true; break;
 		}
 		return false;
@@ -566,12 +638,12 @@ public:
 		return value;
 	}
 
-	#define maskedWrite(dst, src, mask) dst=(dst & ~mask)|(src & mask);
+	#define maskedWrite(dst, src, mask) dst=((dst) & ~(mask))|((src) & (mask));
 
 	virtual bool csrWrite(int32_t csr, uint32_t value){
 		if(((csr >> 8) & 0x3) > privilege) return true;
 		switch(csr){
-		case MSTATUS: status.raw = value; break;
+		case MSTATUS: status.raw = value & 0x7FFFFFFF; break;
 		case MIP: ipSoft = value; break;
 		case MIE: ie.raw = value; break;
 		case MTVEC: mtvec.raw = value; break;
@@ -583,7 +655,7 @@ public:
 		case MEDELEG: medeleg = value & (~0x8); break;
 		case MIDELEG: mideleg = value; break;
 
-		case SSTATUS: maskedWrite(status.raw, value,0xC0133); break;
+		case SSTATUS: maskedWrite(status.raw, value, 0xC0133 | STATUS_FS_MASK);  break;
 		case SIP: maskedWrite(ipSoft, value,0x333); break;
 		case SIE: maskedWrite(ie.raw, value,0x333); break;
 		case STVEC: stvec.raw = value; break;
@@ -591,7 +663,13 @@ public:
 		case STVAL: sbadaddr = value; break;
 		case SEPC: sepc = value; break;
 		case SSCRATCH: sscratch = value; break;
-		case SATP: satp.raw = value; break;
+		case SATP: satp.raw = value;  break;
+
+		#ifdef RVF
+		case FCSR: fcsr.raw = value & 0x7F; break;
+		case FRM: fcsr.frm = value; break;
+		case FFLAGS: fcsr.flags = value; break;
+		#endif
 
 		default: ilegalInstruction(); return true; break;
 		}
@@ -664,6 +742,14 @@ public:
 	virtual void step() {
 	    stepCounter++;
 	    livenessStep = 0;
+
+	    while(fpuCompletionTockens != 0 && !fpuCompletion.empty()){
+            FpuCompletion completion = fpuCompletion.front(); fpuCompletion.pop();
+            fcsr.flags |= completion.flags;
+            fpuCompletionTockens -= 1;
+        }
+
+
 		#define rd32 ((i >> 7) & 0x1F)
 		#define iBits(lo,  len) ((i >> lo) & ((1 << len)-1))
 		#define iBitsSigned(lo, len) int32_t(i) << (32-lo-len) >> (32-len)
@@ -676,6 +762,7 @@ public:
 		#define i32_sb_imm ((iBits(8, 4) << 1) + (iBits(25,6) << 5) + (iBits(7,1) << 11) + (iSign() << 12))
 		#define i32_csr iBits(20, 12)
 		#define i32_func3 iBits(12, 3)
+		#define i32_func7 iBits(25, 7)
 		#define i16_addi4spn_imm ((iBits(6, 1) << 2) + (iBits(5, 1) << 3) + (iBits(11, 2) << 4) + (iBits(7, 4) << 6))
 		#define i16_lw_imm ((iBits(6, 1) << 2) + (iBits(10, 3) << 3) + (iBits(5, 1) << 6))
 		#define i16_addr2 (iBits(2,3) + 8)
@@ -721,6 +808,98 @@ public:
 		if ((i & 0x3) == 0x3) {
 			//32 bit
 			switch (i & 0x7F) {
+			#ifdef RVF
+			case 0x43:// RVFD
+			case 0x47:
+			case 0x4B:
+			case 0x4F:
+			case 0x53: {
+			    u32 format = iBits(25,2);
+			    u32 opcode = iBits(27,5);
+			    bool withCommit = fpuCommitLut[opcode];
+			    bool withRsp = fpuRspLut[opcode];
+			    bool withRs1 = fpuRs1Lut[opcode];
+			    if((i & 0x7F) != 0x53) { // FMADD
+			        withCommit = true;
+			        withRsp = false;
+			    }
+			    #ifdef RVD
+			    if(format > 1) ilegalInstruction();
+			    #else
+			    if(format > 0) ilegalInstruction();
+			    #endif
+
+			    if(withCommit){
+			        FpuCommit commit = fpuCommit.front(); fpuCommit.pop();
+			        fpuCompletionTockens += 1;
+//			        cout << "withRs1 " << withRs1 << " " << opcode << endl;
+                    if(withRs1 && memcmp(&i32_rs1, &commit.value, 4)){
+                        cout << "FPU commit missmatch DUT=" << hex << commit.value << " REF=" << i32_rs1 << dec << endl;
+                        fail();
+                        return;
+                    }
+			    }
+			    if(withRsp){
+			        auto rsp = fpuRsp.front(); fpuRsp.pop();
+			        fcsr.flags |= rsp.flags;
+			        rfWrite(rd32, (u32)rsp.value);
+			    }
+                status.fs = 3;
+                pcWrite(pc + 4);
+			} break;
+			case 0x07: { //Fpu load
+                uint32_t size = 1 << ((i >> 12) & 0x3);
+                if(size < 4) ilegalInstruction();
+                #ifdef RVD
+                if(size > 8) ilegalInstruction();
+                #else
+                if(format > 4) ilegalInstruction();
+                #endif
+                auto commit = fpuCommit.front();  fpuCommit.pop();
+                fpuCompletionTockens += 1;
+
+
+                uint64_t data = 0;
+                uint32_t address = i32_rs1 + i32_i_imm;
+                if(address & (size-1)){
+                    trap(0, 4, address);
+                } else {
+                    if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
+                    if(dRead(pAddr, size, (uint8_t*)&data)){
+                        trap(0, 5, address);
+                    } else {
+                        if(memcmp(&data, &commit.value, size)){
+                            cout << "FPU load missmatch DUT=" << hex << commit.value << " REF=" << data << dec << endl;
+                            fail();
+                        } else {
+                            status.fs = 3;
+                            pcWrite(pc + 4);
+                        }
+                    }
+                }
+			} break;
+			case 0x27: { //Fpu store
+                uint32_t size = 1 << ((i >> 12) & 0x3);
+                if(size < 4) ilegalInstruction();
+                #ifdef RVD
+                if(size > 8) ilegalInstruction();
+                #else
+                if(format > 4) ilegalInstruction();
+                #endif
+
+                auto rsp = fpuRsp.front(); fpuRsp.pop();
+                fcsr.flags |= rsp.flags;
+                uint32_t address = i32_rs1 + i32_s_imm;
+                if(address & (size-1)){
+                    trap(0, 6, address);
+                } else {
+                    if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
+                    dWrite(pAddr, size, (uint8_t*) &rsp.value);
+                    status.fs = 3;
+                    pcWrite(pc + 4);
+                }
+			} break;
+			#endif
 			case 0x37:rfWrite(rd32, i & 0xFFFFF000);pcWrite(pc + 4);break; // LUI
 			case 0x17:rfWrite(rd32, (i & 0xFFFFF000) + pc);pcWrite(pc + 4);break; //AUIPC
 			case 0x6F:rfWrite(rd32, pc + 4);pcWrite(pc + (iBits(21, 10) << 1) + (iBits(20, 1) << 11) + (iBits(12, 8) << 12) + (iSign() << 20));break; //JAL
@@ -747,7 +926,7 @@ public:
 					trap(0, 4, address);
 				} else {
 					if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
-					if(dRead(pAddr, size, &data)){
+					if(dRead(pAddr, size, (uint8_t*)&data)){
 					    trap(0, 5, address);
 					} else {
                         switch ((i >> 12) & 0x7) {
@@ -767,7 +946,7 @@ public:
 					trap(0, 6, address);
 				} else {
 					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
-					dWrite(pAddr, size, i32_rs2);
+					dWrite(pAddr, size, (uint8_t*)&i32_rs2);
 					pcWrite(pc + 4);
 				}
 			}break;
@@ -890,7 +1069,7 @@ public:
 							trap(0, 4, address);
 						} else {
 							if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
-							if(dRead(pAddr, 4, &data)){
+							if(dRead(pAddr, 4, (uint8_t*)&data)){
 							    trap(0, 5, address);
 							} else {
 								lrscReserved = true;
@@ -912,7 +1091,7 @@ public:
                             bool hit = lrscReserved;
                             #endif
 							if(hit){
-								dWrite(pAddr, 4, i32_rs2);
+								dWrite(pAddr, 4, (uint8_t*)&i32_rs2);
 							}
 							lrscReserved = false;
 							rfWrite(rd32, !hit);
@@ -934,7 +1113,7 @@ public:
 
                         uint32_t pAddr;
 						if(v2p(addr, &pAddr, READ_WRITE)){ trap(0, 15, addr); return; }
-                        if(dRead(pAddr, 4, (uint32_t*)&readValue)){
+                        if(dRead(pAddr, 4, (uint8_t*)&readValue)){
                         	trap(0, 15, addr); return;
                             return;
                         }
@@ -951,7 +1130,7 @@ public:
                         case 0x1C: writeValue = max((unsigned int)src, (unsigned int)readValue); break;
                         default: ilegalInstruction(); return; break;
                         }
-                        dWrite(pAddr, 4, writeValue);
+                        dWrite(pAddr, 4, (uint8_t*)&writeValue);
 						rfWrite(rd32, readValue);
 						pcWrite(pc + 4);
                         #endif
@@ -984,7 +1163,7 @@ public:
 					trap(0, 4, address);
 				} else {
 					if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
-					if(dRead(pAddr, 4, &data)) {
+					if(dRead(pAddr, 4, (uint8_t*)&data)) {
 					    trap(0, 5, address);
 					} else {
 					    rfWrite(i16_addr2, data); pcWrite(pc + 2);
@@ -997,7 +1176,7 @@ public:
 					trap(0, 6, address);
 				} else {
 					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
-					dWrite(pAddr, 4, i16_rf2);
+					dWrite(pAddr, 4, (uint8_t*)&i16_rf2);
                     pcWrite(pc + 2);
 				}
 			}break;
@@ -1033,7 +1212,7 @@ public:
 					trap(0, 4, address);
 				} else {
 					if(v2p(address, &pAddr, READ)){ trap(0, 13, address); return; }
-				    if(dRead(pAddr, 4, &data)){
+				    if(dRead(pAddr, 4,(uint8_t*) &data)){
 					    trap(0, 5, address);
                     } else {
 					    rfWrite(rd32, data); pcWrite(pc + 2);
@@ -1063,7 +1242,7 @@ public:
 					trap(0,6, address);
 				} else {
 					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
-					dWrite(pAddr, 4, regs[iBits(2,5)]); pcWrite(pc + 2);
+					dWrite(pAddr, 4, (uint8_t*)&regs[iBits(2,5)]); pcWrite(pc + 2);
 				}
 			}break;
 			}
@@ -1106,7 +1285,7 @@ public:
 	uint32_t bootPc = -1;
 	uint32_t iStall = STALL,dStall = STALL;
 	#ifdef TRACE
-	VerilatedVcdC* tfp;
+	VerilatedFstC* tfp;
 	#endif
 	bool allowInvalidate = true;
 
@@ -1129,13 +1308,13 @@ public:
     	class MemWrite {
     	public:
     		int32_t address, size;
-    		uint32_t data;
+    		uint8_t data42[64];
     	};
 
     	class MemRead {
     	public:
     		int32_t address, size;
-    		uint32_t data;
+    		uint8_t data42[64];
     		bool error;
     	};
 
@@ -1171,8 +1350,8 @@ public:
     		return error;
         }
 
-        virtual bool dRead(int32_t address, int32_t size, uint32_t *data){
-            if(size < 1 || size > 4){
+        virtual bool dRead(int32_t address, int32_t size, uint8_t *data){
+            if(size < 1 || size > 8){
                 cout << "dRead size=" << size << endl;
                 fail();
             }
@@ -1186,29 +1365,30 @@ public:
 					cout << " DUT : address=" << t.address  << " size=" << t.size << endl;
 					fail();
 				}
-				*data = t.data;
+
+                for(int i = 0; i < size; i++){
+                    data[i] = t.data42[i];
+                }
 				periphRead.pop();
 				return t.error;
     		}else {
-            	mem.read(address, size, (uint8_t*)data);
+            	mem.read(address, size, data);
     		}
     		return false;
         }
-        virtual void dWrite(int32_t address, int32_t size, uint32_t data){
-            if((address & (size-1)) != 0)
+        virtual void dWrite(int32_t address, int32_t size, uint8_t *data){
+            if(address & (size-1) != 0)
             	cout << "Ref did a unaligned write" << endl;
 
     		if(!ws->isPerifRegion(address)){
-    			mem.write(address, size, (uint8_t*)&data);
+    			mem.write(address, size, data);
     		}
     		if(ws->isDBusCheckedRegion(address)){
 				MemWrite w;
 				w.address = address;
 				w.size = size;
-				switch(size){
-				case 1: w.data = data & 0xFF; break;
-				case 2: w.data = data & 0xFFFF; break;
-				case 4: w.data = data; break;
+                for(int i = 0; i < size; i++){
+				    w.data42[i] = data[i];
 				}
 				periphWritesGolden.push(w);
 				if(periphWritesGolden.size() > 10){
@@ -1231,10 +1411,12 @@ public:
         	case 0:
     			MemWrite t = periphWrites.front();
     			MemWrite t2 = periphWritesGolden.front();
-    			if(t.address != t2.address || t.size != t2.size || t.data != t2.data){
+    			bool dataMatch = true;
+    			for(int i = 0;i < min(t.size, t2.size);i++) dataMatch &= t.data42[i] == t2.data42[i];
+    			if(t.address != t2.address || t.size != t2.size || !dataMatch){
     				cout << hex << "periphWrite missmatch" << endl;
-    				cout << " DUT address=" << t.address << " size=" << t.size  << " data=" << t.data << endl;
-    				cout << " REF address=" << t2.address << " size=" << t2.size  << " data=" << t2.data << endl;
+    				cout << " DUT address=" << t.address << " size=" << t.size  << " data=" << *((uint32_t*)t.data42) << endl;
+    				cout << " REF address=" << t2.address << " size=" << t2.size  << " data=" << *((uint32_t*)t2.data42) << endl;
     				fail();
     			}
     			periphWrites.pop();
@@ -1309,7 +1491,9 @@ public:
     }
 
     Workspace* withRiscvRef(){
+        #ifdef WITH_RISCV_REF
     	riscvRefEnable = true;
+        #endif
 		return this;
     }
 
@@ -1321,6 +1505,12 @@ public:
         allowInvalidate = false;
         return this;
     }
+    Workspace* writeWord(uint32_t address, uint32_t data){
+        mem.write(address, 4, (uint8_t*)&data);
+        riscvRef.mem.write(address, 4, (uint8_t*)&data);
+        return this;
+    }
+
     virtual bool isPerifRegion(uint32_t addr) { return false; }
     virtual bool isMmuRegion(uint32_t addr) { return true;}
     virtual void iBusAccess(uint32_t addr, uint32_t *data, bool *error) {
@@ -1337,43 +1527,19 @@ public:
 
 
     virtual bool isDBusCheckedRegion(uint32_t address){ return isPerifRegion(address);}
-	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
-		assertEq(addr % (1 << size), 0);
+	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size, uint8_t *data, bool *error) {
+		assertEq(addr % size, 0);
 		if(!isPerifRegion(addr)) {
 			if(wr){
-				memTraces <<
-				#ifdef TRACE_WITH_TIME
-				(currentTime
-				#ifdef REF
-				-2
-				 #endif
-				 ) <<
-				 #endif
-				 " : WRITE mem" << hex << (1 << size) << "[" << addr << "] = " << *data << dec << endl;
-				for(uint32_t b = 0;b < (1 << size);b++){
-					uint32_t offset = (addr+b)&0x3;
-					if(((mask >> offset) & 1) == 1)
-						*mem.get(addr + b) = *data >> (offset*8);
+				for(uint32_t b = 0;b < size;b++){
+                    *mem.get(addr + b) = ((uint8_t*)data)[b];
 				}
 
 			}else{
-				*data = VL_RANDOM_I(32);
-				for(uint32_t b = 0;b < (1 << size);b++){
-					uint32_t offset = (addr+b)&0x3;
-					*data &= ~(0xFF << (offset*8));
-					*data |= mem[addr + b] << (offset*8);
+                uint32_t innerOffset = addr & (DBUS_LOAD_DATA_WIDTH/8-1);
+				for(uint32_t b = 0;b < size;b++){
+					((uint8_t*)data)[b] = mem[addr + b];
 				}
-				/*
-				memTraces <<
-				#ifdef TRACE_WITH_TIME
-				(currentTime
-				#ifdef REF
-				-2
-				 #endif
-				 ) <<
-				 #endif
-				  " : READ  mem" << (1 << size) << "[" << addr << "] = " << *data << endl;*/
-
 			}
 		}
 
@@ -1382,21 +1548,9 @@ public:
 			if(isDBusCheckedRegion(addr)){
 				CpuRef::MemWrite w;
 				w.address = addr;
-				while((mask & 1) == 0){
-				    mask >>= 1;
-				    w.address++;
-				    w.data >>= 8;
-				}
-				switch(mask){
-				case 1: size = 0; break;
-				case 3: size = min(1u, size); break;
-				case 15: size = min(2u, size); break;
-				}
-				w.size = 1 << size;
-				switch(size){
-				case 0: w.data = *data & 0xFF; break;
-				case 1: w.data = *data & 0xFFFF; break;
-				case 2: w.data = *data ; break;
+				w.size = size;
+				for(uint32_t b = 0;b < size;b++){
+				    w.data42[b] = data[b];
 				}
 				riscvRef.periphWrites.push(w);
 			}
@@ -1404,8 +1558,10 @@ public:
 			if(isPerifRegion(addr)){
 				CpuRef::MemRead r;
 				r.address = addr;
-				r.size = 1 << size;
-				r.data = *data;
+				r.size = size;
+				for(uint32_t b = 0;b < size;b++){
+				    r.data42[b] = data[b];
+				}
 				r.error = *error;
 				riscvRef.periphRead.push(r);
 			}
@@ -1453,9 +1609,9 @@ public:
 		// init trace dump
 		#ifdef TRACE
 		Verilated::traceEverOn(true);
-		tfp = new VerilatedVcdC;
+		tfp = new VerilatedFstC;
 		top->trace(tfp, 99);
-		tfp->open((vcdName + ".vcd").c_str());
+		tfp->open((vcdName + ".fst").c_str());
 		#endif
 
 		// Reset
@@ -1517,6 +1673,7 @@ public:
 		}
 		#endif
 
+
         bool failed = false;
 		try {
 			// run simulation for 100 clock periods
@@ -1545,10 +1702,15 @@ public:
 				//if(mTime == mTimeCmp) printf("SIM timer tick\n");
 				#endif
 
+
+				#ifdef UTIME_INPUT
+				top->utime = mTime;
+				#endif
+
 				currentTime = i;
 
                 #ifdef FLOW_INFO
-                    if(i % 2000000 == 0) cout << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "**" << endl << "PROGRESS TRACE_START=" << i << endl;
+                    if(i % 5000000 == 0) cout << endl << "**" << endl << "**"  << endl << "PROGRESS TRACE_START=" << i << endl;
                 #endif
 
 
@@ -1582,6 +1744,37 @@ public:
                         }
                     }
 				#endif
+
+                #ifdef RVF
+                if(riscvRefEnable) {
+                    if(top->VexRiscv->writeBack_FpuPlugin_commit_valid && top->VexRiscv->writeBack_FpuPlugin_commit_ready && top->VexRiscv->writeBack_FpuPlugin_commit_payload_write){
+                        FpuCommit c;
+                        c.value = top->VexRiscv->writeBack_FpuPlugin_commit_payload_value;
+                        riscvRef.fpuCommit.push(c);
+                    }
+
+                    if(top->VexRiscv->FpuPlugin_port_rsp_valid && top->VexRiscv->FpuPlugin_port_rsp_ready && top->VexRiscv->lastStageIsFiring){
+                        FpuRsp c;
+                        c.value = top->VexRiscv->FpuPlugin_port_rsp_payload_value;
+                        c.flags = (top->VexRiscv->FpuPlugin_port_rsp_payload_NX << 0) |
+                                  (top->VexRiscv->FpuPlugin_port_rsp_payload_NV << 4);
+                        riscvRef.fpuRsp.push(c);
+                    }
+
+                    if(top->VexRiscv->FpuPlugin_port_completion_valid && top->VexRiscv->FpuPlugin_port_completion_payload_written){
+                        FpuCompletion c;
+                        c.flags = (top->VexRiscv->FpuPlugin_port_completion_payload_flags_NX << 0) |
+                                  (top->VexRiscv->FpuPlugin_port_completion_payload_flags_UF << 1) |
+                                  (top->VexRiscv->FpuPlugin_port_completion_payload_flags_OF << 2) |
+                                  (top->VexRiscv->FpuPlugin_port_completion_payload_flags_DZ << 3) |
+                                  (top->VexRiscv->FpuPlugin_port_completion_payload_flags_NV << 4);
+                        riscvRef.fpuCompletion.push(c);
+                    }
+                }
+                #endif
+
+
+
                 if(top->VexRiscv->lastStageIsFiring){
                    	if(riscvRefEnable) {
 //                        privilegeCounters[riscvRef.privilege]++;
@@ -1591,6 +1784,7 @@ public:
 //                            cout << "- S " << privilegeCounters[1] << endl;
 //                            cout << "- M " << privilegeCounters[3] << endl;
 //                        }
+                        riscvRef.dutRfWriteValue = top->VexRiscv->lastStageRegFileWrite_payload_data;
                    	    riscvRef.step();
                    	    bool mIntTimer = false;
                    	    bool mIntExt = false;
@@ -1655,6 +1849,11 @@ public:
 				instanceCycles += 1;
 
 				for(SimElement* simElement : simElements) simElement->postCycle();
+				#ifdef RVF
+				top->fpuCmdHalt = VL_RANDOM_I(1);
+                top->fpuCommitHalt = VL_RANDOM_I(1);
+                top->fpuRspHalt = VL_RANDOM_I(1);
+                #endif
 
 
 
@@ -1717,7 +1916,8 @@ public:
 
 	virtual void dutPutChar(char c){}
 
-	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+	virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size, uint8_t *dataBytes, bool *error) {
+        uint32_t *data = ((uint32_t*)dataBytes);
 		if(wr){
 			switch(addr){
 			case 0xF0010000u: {
@@ -1780,19 +1980,10 @@ public:
 			case 0xF00FFF4Cu: *data = mTimeCmp >> 32; break;
 			case 0xF0010004u: *data = ~0;		      break;
 			}
-			memTraces <<
-			#ifdef TRACE_WITH_TIME
-			(currentTime
-			#ifdef REF
-			-2
-			 #endif
-			 ) <<
-			 #endif
-			  " : READ  mem" << (1 << size) << "[" << addr << "] = " << *data << endl;
 		}
 
 		*error = addr == 0xF00FFF60u;
-		Workspace::dBusAccess(addr,wr,size,mask,data,error);
+		Workspace::dBusAccess(addr,wr,size,dataBytes,error);
 	}
 
 
@@ -2187,7 +2378,7 @@ public:
 		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
 			pending = true;
 			data_next = top->dBus_cmd_payload_data;
-			ws->dBusAccess(top->dBus_cmd_payload_address,top->dBus_cmd_payload_wr,top->dBus_cmd_payload_size,0xF,&data_next,&error_next);
+			ws->dBusAccess(top->dBus_cmd_payload_address,top->dBus_cmd_payload_wr,1 << top->dBus_cmd_payload_size,((uint8_t*)&data_next) + (top->dBus_cmd_payload_address & 3),&error_next);
 		}
 	}
 
@@ -2362,7 +2553,7 @@ public:
 #include <queue>
 
 struct DBusCachedTask{
-	char data[DBUS_DATA_WIDTH/8];
+	char data[DBUS_LOAD_DATA_WIDTH/8];
 	bool error;
 	bool last;
 	bool exclusive;
@@ -2389,22 +2580,30 @@ public:
 	virtual void onReset(){
 		top->dBus_cmd_ready = 1;
 		top->dBus_rsp_valid = 0;
+		#ifdef DBUS_AGGREGATION
+		top->dBus_rsp_payload_aggregated = 0;
+		#endif
 		#ifdef DBUS_INVALIDATE
 		top->dBus_inv_valid = 0;
 		top->dBus_ack_ready = 0;
 		top->dBus_sync_valid = 0;
+		#ifdef DBUS_AGGREGATION
+		top->dBus_sync_payload_aggregated = 0;
+		#endif
 		#endif
 	}
 
 	virtual void preCycle(){
 		if (top->dBus_cmd_valid && top->dBus_cmd_ready) {
             if(top->dBus_cmd_payload_wr){
+                int size = 1 << top->dBus_cmd_payload_size;
                 #ifdef DBUS_INVALIDATE
                     pendingSync += 1;
                 #endif
                 #ifndef DBUS_EXCLUSIVE
                     bool error;
-                    ws->dBusAccess(top->dBus_cmd_payload_address,1,2,top->dBus_cmd_payload_mask,&top->dBus_cmd_payload_data,&error);
+                    int shift = top->dBus_cmd_payload_address & (DBUS_STORE_DATA_WIDTH/8-1);
+                    ws->dBusAccess(top->dBus_cmd_payload_address,1,size,((uint8_t*)&top->dBus_cmd_payload_data) + shift,&error);
                 #else
                     bool cancel = false, error = false;
                     if(top->dBus_cmd_payload_exclusive){
@@ -2416,31 +2615,28 @@ public:
                     if(!cancel) {
                         for(int idx = 0;idx < 1;idx++){
                             bool localError = false;
-                            ws->dBusAccess(top->dBus_cmd_payload_address+idx*4,1,2,top->dBus_cmd_payload_mask >> idx*4,((uint32_t*)&top->dBus_cmd_payload_data)+idx, &localError);
+                            int shift = top->dBus_cmd_payload_address & (DBUS_STORE_DATA_WIDTH/8-1);
+                            ws->dBusAccess(top->dBus_cmd_payload_address,1,size,((uint8_t*)&top->dBus_cmd_payload_data) + shift,&localError);
                             error |= localError;
-
-                             //printf("%d ", (int)localError);
                         }
                     }
 
-                   // printf("%x %d\n", top->dBus_cmd_payload_address, (int)error);
                     rsp.last = true;
                     rsp.error = error;
                     rsps.push(rsp);
                 #endif
             } else {
                 bool error = false;
-                uint32_t beatCount = top->dBus_cmd_payload_length*32/DBUS_DATA_WIDTH;
+                uint32_t beatCount = (((1 << top->dBus_cmd_payload_size)*8+DBUS_LOAD_DATA_WIDTH-1) / DBUS_LOAD_DATA_WIDTH)-1;
+                uint32_t startAt = top->dBus_cmd_payload_address;
+                uint32_t endAt = top->dBus_cmd_payload_address + (1 << top->dBus_cmd_payload_size);
+                uint32_t address = top->dBus_cmd_payload_address & ~(DBUS_LOAD_DATA_WIDTH/8-1);
+                uint8_t buffer[64];
+                ws->dBusAccess(top->dBus_cmd_payload_address,0,1 << top->dBus_cmd_payload_size,buffer, &error);
                 for(int beat = 0;beat <= beatCount;beat++){
-                    if(top->dBus_cmd_payload_length == 0){
-                        uint32_t sel = (top->dBus_cmd_payload_address >> 2) & (DBUS_DATA_WIDTH/32-1);
-                        ws->dBusAccess(top->dBus_cmd_payload_address,0,2,0,((uint32_t*)rsp.data) + sel,&error);
-                    } else {
-                        for(int idx = 0;idx < DBUS_DATA_WIDTH/32;idx++){
-                            bool localError = false;
-                            ws->dBusAccess(top->dBus_cmd_payload_address + beat * DBUS_DATA_WIDTH/8 + idx*4,0,2,0,((uint32_t*)rsp.data)+idx, &localError);
-                            error |= localError;
-                        }
+                    for(int i = 0;i < DBUS_LOAD_DATA_WIDTH/8;i++){
+                        rsp.data[i] = (address >= startAt && address < endAt) ? buffer[address-top->dBus_cmd_payload_address] : VL_RANDOM_I(8);
+                        address += 1;
                     }
                     rsp.last = beat == beatCount;
                     #ifdef DBUS_EXCLUSIVE
@@ -2477,7 +2673,7 @@ public:
 			rsps.pop();
 			top->dBus_rsp_valid = 1;
 			top->dBus_rsp_payload_error = rsp.error;
-            for(int idx = 0;idx < DBUS_DATA_WIDTH/32;idx++){
+            for(int idx = 0;idx < DBUS_LOAD_DATA_WIDTH/32;idx++){
                 ((uint32_t*)&top->dBus_rsp_payload_data)[idx] = ((uint32_t*)rsp.data)[idx];
             }
 			top->dBus_rsp_payload_last = rsp.last;
@@ -2486,7 +2682,7 @@ public:
             #endif
 		} else{
 			top->dBus_rsp_valid = 0;
-            for(int idx = 0;idx < DBUS_DATA_WIDTH/32;idx++){
+            for(int idx = 0;idx < DBUS_LOAD_DATA_WIDTH/32;idx++){
 			    ((uint32_t*)&top->dBus_rsp_payload_data)[idx] = VL_RANDOM_I(32);
 			}
 			top->dBus_rsp_payload_error = VL_RANDOM_I(1);
@@ -3014,7 +3210,7 @@ public:
 				if(code == 1 || code2 == 1){
 					pass();
 				}else{
-					cout << "Error code " << code/2 << endl;
+					cout << "Error code " << code2/2 << endl;
 					fail();
 				}
 			}
@@ -3084,12 +3280,13 @@ public:
 	}
 
 
-    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size, uint8_t *dataBytes, bool *error) {
         if(wr && addr == 0xF00FFF2C){
+            uint32_t *data = (uint32_t*)dataBytes;
             out32 << hex << setw(8) << std::setfill('0') << *data << dec;
             if(++out32Counter % 4 == 0) out32 << "\n";
         }
-    	WorkspaceRegression::dBusAccess(addr,wr,size,mask,data,error);
+    	WorkspaceRegression::dBusAccess(addr,wr,size,dataBytes,error);
     }
 
 	virtual void checks(){
@@ -3300,6 +3497,11 @@ public:
 		if(clientSuccess) pass();
 		if(clientFail) fail();
 	}
+
+    virtual void postReset(){
+        Workspace::postReset();
+        top->VexRiscv->DebugPlugin_debugUsed = 1;
+    }
 };
 
 #endif
@@ -3429,41 +3631,43 @@ public:
 
 
 
-    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
-        if(isPerifRegion(addr)) switch(addr){
-    		//TODO Emulate peripherals here
-    		case 0xFFFFFFE0: if(wr) fail(); else *data = mTime; break;
-    		case 0xFFFFFFE4: if(wr) fail(); else *data = mTime >> 32; break;
-    		case 0xFFFFFFE8: if(wr) mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data; else *data = mTimeCmp; break;
-    		case 0xFFFFFFEC: if(wr) mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); else *data = mTimeCmp >> 32; break;
-    		case 0xFFFFFFF8:
-    		    if(wr){
-    		        char c = (char)*data;
-                    cout << c;
-                    logTraces << c;
-                    logTraces.flush();
-                    onStdout(c);
-				} else {
-				    #ifdef WITH_USER_IO
-					if(stdinNonEmpty()){
-						char c;
-						read(0, &c, 1);
-						*data = c;
-					} else
-					#endif
-					if(!customCin.empty()){
-					    *data = customCin.front();
-                        customCin.pop();
-					} else {
-						*data = -1;
-					}
-				}
-				break;
-    		case 0xFFFFFFFC: fail(); break; //Simulation end
-    		default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " mask=0x" << mask << " data=0x" << data << dec << endl; fail(); break;
-    	}
+    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint8_t *dataBytes, bool *error) {
+        uint32_t *data = (uint32_t*)dataBytes;
 
-    	Workspace::dBusAccess(addr,wr,size,mask,data,error);
+        if(isPerifRegion(addr)) {
+            switch(addr){
+                case 0xFFFFFFE0: if(wr) fail(); else *data = mTime; break;
+                case 0xFFFFFFE4: if(wr) fail(); else *data = mTime >> 32; break;
+                case 0xFFFFFFE8: if(wr) mTimeCmp = (mTimeCmp & 0xFFFFFFFF00000000) | *data; else *data = mTimeCmp; break;
+                case 0xFFFFFFEC: if(wr) mTimeCmp = (mTimeCmp & 0x00000000FFFFFFFF) | (((uint64_t)*data) << 32); else *data = mTimeCmp >> 32; break;
+                case 0xFFFFFFF8:
+                    if(wr){
+                        char c = (char)*data;
+                        cout << c;
+                        logTraces << c;
+                        logTraces.flush();
+                        onStdout(c);
+                    } else {
+                        #ifdef WITH_USER_IO
+                        if(stdinNonEmpty()){
+                            char c;
+                            read(0, &c, 1);
+                            *data = c;
+                        } else
+                        #endif
+                        if(!customCin.empty()){
+                            *data = customCin.front();
+                            customCin.pop();
+                        } else {
+                            *data = -1;
+                        }
+                    }
+                    break;
+                case 0xFFFFFFFC: fail(); break; //Simulation end
+                default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " mask=0x"  << " data=0x" << data << dec << endl; fail(); break;
+    		}
+    	}
+        Workspace::dBusAccess(addr,wr,size,dataBytes,error);
     }
 
     virtual void onStdout(char c){
@@ -3533,9 +3737,9 @@ public:
 
 
 
-    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size,uint32_t mask, uint32_t *data, bool *error) {
+    virtual void dBusAccess(uint32_t addr,bool wr, uint32_t size, uint8_t *dataBytes, bool *error) {
+        uint32_t *data = (uint32_t*)dataBytes;
         if(isPerifRegion(addr)) switch(addr){
-    		//TODO Emulate peripherals here
     		case 0xF0010000: if(wr && *data != 0) fail(); else *data = 0;  break;
     		case 0xF001BFF8: if(wr) fail(); else *data = mTime; break;
     		case 0xF001BFFC: if(wr) fail(); else *data = mTime >> 32; break;
@@ -3566,10 +3770,9 @@ public:
 					}
 				}
 				break;
-    		default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " mask=0x" << mask << " data=0x" << data << dec << endl; fail(); break;
+    		default: cout << "Unmapped peripheral access : addr=0x" << hex << addr << " wr=" << wr << " data=0x" << data << dec << endl; fail(); break;
     	}
-
-    	Workspace::dBusAccess(addr,wr,size,mask,data,error);
+        Workspace::dBusAccess(addr,wr,size,dataBytes,error);
     }
 
     virtual void onStdout(char c){
@@ -3619,6 +3822,35 @@ string riscvTestMemory[] = {
 	"rv32ui-p-sb",
 	"rv32ui-p-sh",
 	"rv32ui-p-sw"
+};
+
+
+string riscvTestFloat[] = {
+    "rv32uf-p-fmadd",
+    "rv32uf-p-fadd",
+    "rv32uf-p-fcmp",
+    "rv32uf-p-fcvt_w",
+    "rv32uf-p-ldst",
+    "rv32uf-p-recoding",
+    "rv32uf-p-fclass",
+    "rv32uf-p-fcvt",
+    "rv32uf-p-fdiv",
+    "rv32uf-p-fmin",
+    "rv32uf-p-move"
+};
+
+
+string riscvTestDouble[] = {
+    "rv32ud-p-fmadd",
+    "rv32ud-p-fadd",
+    "rv32ud-p-fcvt",
+    "rv32ud-p-recoding",
+    "rv32ud-p-fclass",
+    "rv32ud-p-fcvt_w",
+    "rv32ud-p-fmin",
+    "rv32ud-p-fcmp",
+    "rv32ud-p-fdiv",
+    "rv32ud-p-ldst"
 };
 
 
@@ -3791,6 +4023,8 @@ string complianceTestC[] = {
 
 
 
+
+
 struct timespec timer_start(){
     struct timespec start_time;
     clock_gettime(CLOCK_REALTIME, &start_time); //CLOCK_PROCESS_CPUTIME_ID
@@ -3862,7 +4096,40 @@ int main(int argc, char **argv, char **env) {
 	timespec startedAt = timer_start();
 
 
+#ifdef LINUX_SOC_SMP
+    {
 
+	    LinuxSocSmp soc("linuxSmp");
+	    #ifndef DEBUG_PLUGIN_EXTERNAL
+	    soc.withRiscvRef();
+		soc.loadBin(EMULATOR, 0x80000000);
+		soc.loadBin(VMLINUX,  0x80400000);
+		soc.loadBin(DTB,      0x80FF0000);
+		soc.loadBin(RAMDISK,  0x81000000);
+		#endif
+		//soc.setIStall(true);
+		//soc.setDStall(true);
+		soc.bootAt(0x80000000);
+		soc.run(0);
+//		soc.run((496300000l + 2000000) / 2);
+//		soc.run(438700000l/2);
+        return -1;
+    }
+#endif
+
+
+
+    #ifdef RVF
+    for(const string &name : riscvTestFloat){
+        redo(REDO,RiscvTest(name).withRiscvRef()->bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
+    }
+    #endif
+    #ifdef RVD
+    for(const string &name : riscvTestDouble){
+        redo(REDO,RiscvTest(name).withRiscvRef()->bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
+    }
+    #endif
+    //return 0;
 
 //#ifdef LITEX
 //	LitexSoC("linux")
@@ -3934,27 +4201,6 @@ int main(int argc, char **argv, char **env) {
     }
 #endif
 
-
-#ifdef LINUX_SOC_SMP
-    {
-
-	    LinuxSocSmp soc("linuxSmp");
-	    #ifndef DEBUG_PLUGIN_EXTERNAL
-	    soc.withRiscvRef();
-		soc.loadBin(EMULATOR, 0x80000000);
-		soc.loadBin(VMLINUX,  0xC0000000);
-		soc.loadBin(DTB,      0xC4000000);
-		soc.loadBin(RAMDISK,  0xC2000000);
-		#endif
-		//soc.setIStall(true);
-		//soc.setDStall(true);
-		soc.bootAt(0x80000000);
-		soc.run(0);
-//		soc.run((496300000l + 2000000) / 2);
-//		soc.run(438700000l/2);
-        return -1;
-    }
-#endif
 
 
 
@@ -4029,25 +4275,26 @@ int main(int argc, char **argv, char **env) {
 			#endif
 
 			for(const string &name : riscvTestMain){
-				redo(REDO,RiscvTest(name).run();)
+				redo(REDO,RiscvTest(name).withRiscvRef()->run();)
 			}
 			for(const string &name : riscvTestMemory){
-				redo(REDO,RiscvTest(name).run();)
+				redo(REDO,RiscvTest(name).withRiscvRef()->run();)
 			}
+
 
 			#ifdef MUL
 			for(const string &name : riscvTestMul){
-				redo(REDO,RiscvTest(name).run();)
+				redo(REDO,RiscvTest(name).withRiscvRef()->run();)
 			}
 			#endif
 			#ifdef DIV
 			for(const string &name : riscvTestDiv){
-				redo(REDO,RiscvTest(name).run();)
+				redo(REDO,RiscvTest(name).withRiscvRef()->run();)
 			}
 			#endif
 
             #ifdef COMPRESSED
-            redo(REDO,RiscvTest("rv32uc-p-rvc").bootAt(0x800000FCu)->run());
+            redo(REDO,RiscvTest("rv32uc-p-rvc").withRiscvRef()->bootAt(0x800000FCu)->run());
             #endif
 
 			#if defined(CSR) && !defined(CSR_SKIP_TEST)

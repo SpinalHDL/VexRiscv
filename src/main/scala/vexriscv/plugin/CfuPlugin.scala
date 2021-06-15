@@ -49,13 +49,11 @@ case class CfuCmd( p : CfuBusParameter ) extends Bundle{
 }
 
 case class CfuRsp(p : CfuBusParameter) extends Bundle{
-  val response_ok = Bool()
   val response_id = UInt(p.CFU_REQ_RESP_ID_W bits)
   val outputs = Vec(Bits(p.CFU_OUTPUT_DATA_W bits), p.CFU_OUTPUTS)
 
   def weakAssignFrom(m : CfuRsp): Unit ={
     def s = this
-    s.response_ok := m.response_ok
     s.response_id := m.response_id
     s.outputs := m.outputs
   }
@@ -105,7 +103,6 @@ class CfuPlugin(val stageCount : Int,
 //  assert(p.CFU_FUNCTION_ID_W == 3)
 
   var bus : CfuBus = null
-  var joinException : Flow[ExceptionCause] = null
 
   lazy val forkStage = pipeline.execute
   lazy val joinStage = pipeline.stages(Math.min(pipeline.stages.length - 1, pipeline.indexOf(forkStage) + stageCount))
@@ -121,7 +118,6 @@ class CfuPlugin(val stageCount : Int,
     import pipeline.config._
 
     bus = master(CfuBus(p))
-    joinException = pipeline.service(classOf[ExceptionService]).newExceptionPort(joinStage)
 
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(CFU_ENABLE, False)
@@ -207,19 +203,11 @@ class CfuPlugin(val stageCount : Int,
         bus.rsp.combStage()
       }
 
-      joinException.valid := False
-      joinException.code := 15
-      joinException.badAddr := 0
-
       rsp.ready := False
       when(input(CFU_IN_FLIGHT)){
         arbitration.haltItself setWhen(!rsp.valid)
         rsp.ready := !arbitration.isStuckByOthers
         output(REGFILE_WRITE_DATA) := rsp.outputs(0)
-
-        when(arbitration.isValid){
-          joinException.valid := !rsp.response_ok
-        }
       }
     }
 
@@ -252,7 +240,6 @@ case class CfuTest() extends Component{
     val bus = slave(CfuBus(CfuTest.getCfuParameter()))
   }
   io.bus.rsp.arbitrationFrom(io.bus.cmd)
-  io.bus.rsp.response_ok := True
   io.bus.rsp.response_id := io.bus.cmd.request_id
   io.bus.rsp.outputs(0) := ~(io.bus.cmd.inputs(0) & io.bus.cmd.inputs(1))
 }
@@ -321,7 +308,6 @@ case class CfuDecoder(p : CfuBusParameter,
     io.input.rsp.payload := io.outputs.map(_.rsp.payload).read(OHToUInt(rspHits))
     if(!hasDefault) when(rspNoHit.doIt) {
       io.input.rsp.valid := True
-      io.input.rsp.response_ok := False
       io.input.rsp.response_id := rspNoHit.response_id
     }
     for(output <- io.outputs) output.rsp.ready := io.input.rsp.ready

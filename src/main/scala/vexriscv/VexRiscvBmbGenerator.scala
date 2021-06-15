@@ -7,7 +7,7 @@ import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
 import spinal.lib.generator._
 import spinal.lib.slave
 import vexriscv.plugin._
-
+import spinal.core.fiber._
 
 object VexRiscvBmbGenerator{
   val DEBUG_NONE = 0
@@ -17,7 +17,7 @@ object VexRiscvBmbGenerator{
   val DEBUG_BMB = 4
 }
 
-case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGenerator = null) extends Generator {
+case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGenerator = null) extends Area {
   import VexRiscvBmbGenerator._
 
   val config = Handle[VexRiscvConfig]
@@ -27,14 +27,14 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
   val debugAskReset = Handle[() => Unit]
   val hardwareBreakpointCount = Handle(0)
 
-  val iBus, dBus = product[Bmb]
+  val iBus, dBus = Handle[Bmb]
 
-  val externalInterrupt = product[Bool]
-  val externalSupervisorInterrupt = product[Bool]
-  val timerInterrupt = product[Bool]
-  val softwareInterrupt = product[Bool]
+  val externalInterrupt = Handle[Bool]
+  val externalSupervisorInterrupt = Handle[Bool]
+  val timerInterrupt = Handle[Bool]
+  val softwareInterrupt = Handle[Bool]
 
-  def setTimerInterrupt(that: Handle[Bool]) = Dependable(that, timerInterrupt){timerInterrupt := that}
+  def setTimerInterrupt(that: Handle[Bool]) =    Dependable(that, timerInterrupt){timerInterrupt := that}
   def setSoftwareInterrupt(that: Handle[Bool]) = Dependable(that, softwareInterrupt){softwareInterrupt := that}
 
 
@@ -42,63 +42,52 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
     withDebug.load(DEBUG_NONE)
   }
 
-  def enableJtag(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator) : Unit = debugCd{
-    this.debugClockDomain.merge(debugCd.outputClockDomain)
+  def enableJtag(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator) : Unit = debugCd.rework{
+    this.debugClockDomain.load(debugCd.outputClockDomain)
     val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
-    debugAskReset.load(null)
+    debugAskReset.loadNothing()
     withDebug.load(DEBUG_JTAG)
   }
 
-  def enableJtagInstructionCtrl(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator) : Unit = debugCd{
-    this.debugClockDomain.merge(debugCd.outputClockDomain)
+  def enableJtagInstructionCtrl(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator) : Unit = debugCd.rework{
+    this.debugClockDomain.load(debugCd.outputClockDomain)
     val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
-    debugAskReset.load(null)
+    debugAskReset.loadNothing()
     withDebug.load(DEBUG_JTAG_CTRL)
-    dependencies += jtagClockDomain
   }
 
-  def enableDebugBus(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator) : Unit = debugCd{
-    this.debugClockDomain.merge(debugCd.outputClockDomain)
+  def enableDebugBus(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator) : Unit = debugCd.rework{
+    this.debugClockDomain.load(debugCd.outputClockDomain)
     val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
-    debugAskReset.load(null)
+    debugAskReset.loadNothing()
     withDebug.load(DEBUG_BUS)
   }
 
   val debugBmbAccessSource = Handle[BmbAccessCapabilities]
   val debugBmbAccessRequirements = Handle[BmbAccessParameter]
-  def enableDebugBmb(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator, mapping : AddressMapping)(implicit debugMaster : BmbImplicitDebugDecoder = null) : Unit = debugCd{
-    this.debugClockDomain.merge(debugCd.outputClockDomain)
+  def enableDebugBmb(debugCd : Handle[ClockDomain], resetCd : ClockDomainResetGenerator, mapping : AddressMapping)(implicit debugMaster : BmbImplicitDebugDecoder = null) : Unit = debugCd.on{
+    this.debugClockDomain.load(debugCd)
     val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
-    debugAskReset.load(null)
+    debugAskReset.loadNothing()
     withDebug.load(DEBUG_BMB)
-    val slaveModel = interconnectSmp.addSlave(
+    val slaveModel = debugCd on interconnectSmp.addSlave(
       accessSource = debugBmbAccessSource,
       accessCapabilities = debugBmbAccessSource.derivate(DebugExtensionBus.getBmbAccessParameter(_)),
       accessRequirements = debugBmbAccessRequirements,
       bus = debugBmb,
       mapping = mapping
     )
-    slaveModel.onClockDomain(debugCd.outputClockDomain)
     debugBmb.derivatedFrom(debugBmbAccessRequirements)(Bmb(_))
     if(debugMaster != null) interconnectSmp.addConnection(debugMaster.bus, debugBmb)
-    dependencies += debugBmb
   }
 
-
-  dependencies ++= List(config)
-  dependencies += Dependable(withDebug) {
-    if (withDebug.get != DEBUG_NONE) {
-      dependencies ++= List(debugClockDomain, debugAskReset)
-    }
-  }
-
-  val jtag = add task (withDebug.get == DEBUG_JTAG generate slave(Jtag()))
+  val jtag = Handle(withDebug.get == DEBUG_JTAG generate slave(Jtag()))
   val jtagInstructionCtrl = withDebug.produce(withDebug.get == DEBUG_JTAG_CTRL generate JtagTapInstructionCtrl())
   val debugBus = withDebug.produce(withDebug.get == DEBUG_BUS generate DebugExtensionBus())
   val debugBmb = Handle[Bmb]
   val jtagClockDomain = Handle[ClockDomain]
 
-  val logic = add task new Area {
+  val logic = Handle(new Area {
     withDebug.get != DEBUG_NONE generate new Area {
       config.add(new DebugPlugin(debugClockDomain, hardwareBreakpointCount))
     }
@@ -131,7 +120,10 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
       }
       case _ =>
     }
-  }
+  })
+
+
+  logic.soon(debugReset)
 
   val parameterGenerator = new Generator {
     val iBusParameter, dBusParameter = product[BmbParameter]

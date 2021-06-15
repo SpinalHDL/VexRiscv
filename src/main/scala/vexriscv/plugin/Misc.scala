@@ -7,11 +7,11 @@ object RvcDecompressor{
 
   def main(args: Array[String]): Unit = {
     SpinalVerilog(new Component{
-      out(Delay((apply(Delay(in Bits(16 bits),2))),2))
+      out(Delay((apply(Delay(in Bits(16 bits),2), false, false)),2))
     }.setDefinitionName("Decompressor"))
   }
 
-  def apply(i : Bits): Bits ={
+  def apply(i : Bits, rvf : Boolean, rvd : Boolean): Bits ={
     val ret = Bits(32 bits).assignDontCare()
 
     val rch = B"01" ## i(9 downto 7)
@@ -20,6 +20,8 @@ object RvcDecompressor{
     val addi5spnImm = B"00" ## i(10 downto 7) ## i(12 downto 11) ## i(5) ## i(6) ## B"00"
     val lwImm = B"00000" ## i(5) ## i(12 downto 10)  ## i(6) ## B"00"
     def swImm = lwImm
+    val ldImm = B"0000" ## i(6 downto 5) ## i(12 downto 10) ## B"000"
+    def sdImm = ldImm
     val addImm = B((11 downto 5) -> i(12), (4 downto 0) -> i(6 downto 2))
     def lImm = addImm
     val jalImm = B((9 downto 0) -> i(12)) ## i(8) ## i(10 downto 9) ## i(6) ## i(7) ## i(2) ## i(11) ## i(5 downto 3) ## B"0"
@@ -31,6 +33,8 @@ object RvcDecompressor{
 
     def lwspImm = B"0000" ## i(3 downto 2) ## i(12) ## i(6 downto 4) ## B"00"
     def swspImm = B"0000" ## i(8 downto 7) ## i(12 downto 9) ## B"00"
+    def ldspImm = B"000" ## i(4 downto 2) ## i(12) ## i(6 downto 5) ## B"000"
+    def sdspImm = B"000" ## i(9 downto 7) ## i(12 downto 10) ## B"000"
 
 
     val x0 = B"00000"
@@ -39,8 +43,12 @@ object RvcDecompressor{
 
     switch(i(1 downto 0) ## i(15 downto 13)){
       is(0){ret := addi5spnImm ## B"00010" ## B"000" ## rcl ## B"0010011"} //C.ADDI4SPN -> addi rd0, x2, nzuimm[9:2].
+      if(rvd) is(1){ret := ldImm ## rch ##  B"011" ## rcl ## B"0000111"} // C.FLD
       is(2){ret := lwImm ## rch ## B"010" ## rcl ## B"0000011"} //C.LW -> lw rd', offset[6:2](rs1')
+      if(rvf) is(3){ret := lwImm ## rch ##  B"010" ## rcl ## B"0000111"} // C.FLW
+      if(rvd) is(5){ret := sdImm(11 downto 5) ## rcl  ## rch ## B"011" ## sdImm(4 downto 0) ## B"0100111"} // C.FSD
       is(6){ret := swImm(11 downto 5) ## rcl  ## rch ## B"010" ## swImm(4 downto 0) ## B"0100011"} //C.SW -> sw rs2',offset[6:2](rs1')
+      if(rvf) is(7){ret := swImm(11 downto 5) ## rcl  ## rch ## B"010" ## swImm(4 downto 0) ## B"0100111"} // C.FSW
       is(8){ret := addImm ## i(11 downto 7) ## B"000" ## i(11 downto 7) ## B"0010011"} //C.ADDI -> addi rd, rd, nzimm[5:0].
       is(9){ret := jalImm(20) ## jalImm(10 downto 1) ## jalImm(11) ## jalImm(19 downto 12) ## x1 ## B"1101111"} //C.JAL -> jalr x1, rs1, 0.
       is(10){ret := lImm ## B"00000" ## B"000" ## i(11 downto 7) ## B"0010011"} //C.LI -> addi rd, x0, imm[5:0].
@@ -76,7 +84,9 @@ object RvcDecompressor{
       is(14){ ret := bImm(12) ## bImm(10 downto 5) ## x0 ## rch ## B"000" ## bImm(4 downto 1) ## bImm(11) ## B"1100011" }
       is(15){ ret := bImm(12) ## bImm(10 downto 5) ## x0 ## rch ## B"001" ## bImm(4 downto 1) ## bImm(11) ## B"1100011" }
       is(16){ ret := B"0000000" ## i(6 downto 2) ## i(11 downto 7) ## B"001" ## i(11 downto 7) ## B"0010011"   }
+      if(rvd) is(17){ret := ldspImm ## x2 ## B"011" ## i(11 downto 7) ## B"0000111" } // C.FLDSP
       is(18){ ret := lwspImm ## x2 ## B"010" ## i(11 downto 7) ## B"0000011" }
+      if(rvf) is(19){ret := lwspImm ## x2 ## B"010" ## i(11 downto 7) ## B"0000111" } // C.FLWSP
       is(20) {
         val add = B"000_0000" ## i(6 downto 2) ## (i(12) ? i(11 downto 7) | x0) ## B"000" ## i(11 downto 7) ## B"0110011"   //add => add rd, rd, rs2  mv => add rd, x0, rs2
         val j =  B"0000_0000_0000" ## i(11 downto 7) ## B"000" ## (i(12) ? x1 | x0)  ## B"1100111"  //jr => jalr x0, rs1, 0.    jalr => jalr x1, rs1, 0.
@@ -84,7 +94,10 @@ object RvcDecompressor{
         val addJ = (i(6 downto 2) === 0) ? j | add
         ret := (i(12 downto 2) === B"100_0000_0000") ? ebreak | addJ
       }
+
+      if(rvd) is(21){ret := sdspImm(11 downto 5) ## i(6 downto 2)  ## x2 ## B"011" ## sdspImm(4 downto 0) ## B"0100111" } // C.FSDSP
       is(22){ ret := swspImm(11 downto 5) ## i(6 downto 2)  ## x2 ## B"010" ## swspImm(4 downto 0) ## B"0100011" }
+      if(rvf) is(23){ret := swspImm(11 downto 5) ## i(6 downto 2)  ## x2 ## B"010" ## swspImm(4 downto 0) ## B"0100111" } // C.FSwSP
     }
 
     ret
@@ -123,7 +136,7 @@ object StreamForkVex{
 object StreamVexPimper{
   implicit class StreamFlushPimper[T <: Data](pimped : Stream[T]){
     def m2sPipeWithFlush(flush : Bool, discardInput : Boolean = true, collapsBubble : Boolean = true, flushInput : Bool = null): Stream[T] = {
-      val ret = cloneOf(pimped)
+      val ret = cloneOf(pimped).setCompositeName(pimped, "m2sPipe", true)
 
       val rValid = RegInit(False)
       val rData = Reg(pimped.payloadType)

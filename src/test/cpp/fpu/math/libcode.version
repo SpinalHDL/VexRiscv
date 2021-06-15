@@ -1,0 +1,4 @@
+CODEABI_1.0 {
+    global: FpuMath_*;
+    local: *;
+}

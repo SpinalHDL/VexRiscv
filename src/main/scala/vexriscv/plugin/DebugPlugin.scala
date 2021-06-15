@@ -7,6 +7,7 @@ import vexriscv._
 import vexriscv.ip._
 import spinal.core._
 import spinal.lib._
+import spinal.lib.blackbox.xilinx.s7.BSCANE2
 import spinal.lib.bus.amba3.apb.{Apb3, Apb3Config}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.bmb.{Bmb, BmbAccessCapabilities, BmbAccessParameter, BmbParameter}
@@ -149,6 +150,20 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
 
     jtagBridge.io.ctrl
   }
+
+  def fromBscane2(usedId : Int): Unit ={
+    val jtagConfig = SystemDebuggerConfig()
+
+    val bscane2 = BSCANE2(usedId)
+    val jtagClockDomain = ClockDomain(bscane2.TCK)
+
+    val jtagBridge = new JtagBridgeNoTap(jtagConfig, jtagClockDomain)
+    jtagBridge.io.ctrl << bscane2.toJtagTapInstructionCtrl()
+
+    val debugger = new SystemDebugger(jtagConfig)
+    debugger.io.remote <> jtagBridge.io.remote
+    debugger.io.mem <> this.from(debugger.io.mem.c)
+  }
 }
 
 case class DebugExtensionIo() extends Bundle with IMasterSlave{
@@ -160,8 +175,6 @@ case class DebugExtensionIo() extends Bundle with IMasterSlave{
     in(resetOut)
   }
 }
-
-
 
 class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : Int = 0) extends Plugin[VexRiscv] {
 
@@ -211,6 +224,10 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
       val isPipBusy = RegNext(stages.map(_.arbitration.isValid).orR || iBusFetcher.incoming())
       val godmode = RegInit(False) setWhen(haltIt && !isPipBusy)
       val haltedByBreak = RegInit(False)
+      val debugUsed = RegInit(False) setWhen(io.bus.cmd.valid) addAttribute(Verilator.public)
+      val disableEbreak = RegInit(False)
+
+      val allowEBreak = debugUsed && !disableEbreak
 
       val hardwareBreakpoints = Vec(Reg(new Bundle{
         val valid = Bool()
@@ -244,6 +261,7 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
               haltIt setWhen (io.bus.cmd.data(17)) clearWhen (io.bus.cmd.data(25))
               haltedByBreak clearWhen (io.bus.cmd.data(25))
               godmode clearWhen(io.bus.cmd.data(25))
+              disableEbreak setWhen (io.bus.cmd.data(18)) clearWhen (io.bus.cmd.data(26))
             }
           }
           is(0x1) {
@@ -261,8 +279,6 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
           }
         }
       }
-
-      val allowEBreak = if(!pipeline.serviceExist(classOf[PrivilegeService])) True else pipeline.service(classOf[PrivilegeService]).isMachine()
 
       decode.insert(DO_EBREAK) := !haltIt && (decode.input(IS_EBREAK) || hardwareBreakpoints.map(hb => hb.valid && hb.pc === (decode.input(PC) >> 1)).foldLeft(False)(_ || _)) && allowEBreak
       when(execute.arbitration.isValid && execute.input(DO_EBREAK)){
@@ -289,7 +305,7 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
       }
 
       //Avoid having two C instruction executed in a single step
-      if(pipeline(RVC_GEN)){
+      if(pipeline.config.withRvc){
         val cleanStep = RegNext(stepIt && decode.arbitration.isFiring) init(False)
         execute.arbitration.flushNext setWhen(cleanStep)
       }
@@ -312,6 +328,12 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
           case _ =>
         }
         if(pipeline.things.contains(DEBUG_BYPASS_CACHE)) pipeline(DEBUG_BYPASS_CACHE) := True
+      }
+      when(allowEBreak) {
+        pipeline.plugins.foreach {
+          case p: ExceptionInhibitor => p.inhibateEbreakException()
+          case _ =>
+        }
       }
 
       val wakeService = serviceElse(classOf[IWake], null)
