@@ -55,5 +55,15 @@ jobs:
     - name: Compile tests
       run: sbt "+test:compile"
 
-    - name: Run tests
-      run: sbt "+test"
+    - name: Test Dhrystones
+      run: make regression_dhrystone -C scripts/regression
+
+    - name: Test Baremetal
+      run: make regression_random_baremetal -C scripts/regression
+
+    - name: Test Machine OS
+      run: make regression_random_machine_os -C scripts/regression
+
+    - name: Test Linux
+      run: make regression_random_linux -C scripts/regression
+
