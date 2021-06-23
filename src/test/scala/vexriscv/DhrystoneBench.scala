@@ -2,13 +2,13 @@ package vexriscv
 
 import java.io.File
 
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 import spinal.core.SpinalVerilog
 import vexriscv.demo._
 
 import scala.sys.process._
 
-class DhrystoneBench extends FunSuite {
+class DhrystoneBench extends AnyFunSuite {
   def doCmd(cmd: String): String = {
     val stdOut = new StringBuilder()
     class Logger extends ProcessLogger {

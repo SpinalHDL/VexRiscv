@@ -3,7 +3,9 @@ package vexriscv
 import java.io.{File, OutputStream}
 import java.util.concurrent.{ForkJoinPool, TimeUnit}
 import org.apache.commons.io.FileUtils
-import org.scalatest.{BeforeAndAfterAll, FunSuite, ParallelTestExecution, Tag, Transformer}
+import org.scalatest.{BeforeAndAfterAll, ParallelTestExecution, Tag, Transformer}
+import org.scalatest.funsuite.AnyFunSuite
+
 import spinal.core._
 import spinal.lib.DoCmd
 import vexriscv.demo._
@@ -617,7 +619,7 @@ object PlayFuture extends App{
   Thread.sleep(8000)
 }
 
-class MultithreadedFunSuite(threadCount : Int) extends FunSuite {
+class MultithreadedFunSuite(threadCount : Int) extends AnyFunSuite {
   val finalThreadCount = if(threadCount > 0) threadCount else {
     new oshi.SystemInfo().getHardware.getProcessor.getLogicalProcessorCount
   }
@@ -650,7 +652,7 @@ class MultithreadedFunSuite(threadCount : Int) extends FunSuite {
     }
   }
 
-  override protected def test(testName: String, testTags: Tag*)(testFun: => Unit) {
+  def testMp(testName: String, testTags: Tag*)(testFun: => Unit) {
     val job = new Job(testFun)
     super.test(testName, testTags :_*)(job.join())
   }
@@ -662,7 +664,7 @@ class MultithreadedFunSuite(threadCount : Int) extends FunSuite {
 
 class FunTestPara extends MultithreadedFunSuite(3){
   def createTest(name : String): Unit ={
-    test(name){
+    testMp(name){
       for(i <- 0 to 4) {
         println(s"$name $i")
         Thread.sleep(500)
@@ -745,7 +747,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VE
       stdOut.toString()
     }
 
-    test(prefix + name) {
+    testMp(prefix + name) {
       println("START TEST " + prefix + name)
 
       //Cleanup
@@ -787,7 +789,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VE
 
   val rand = new Random(seed)
 
-  test("Info"){
+  testMp("Info"){
     println(s"MAIN_SEED=$seed")
   }
   println(s"Seed=$seed")

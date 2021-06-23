@@ -157,8 +157,8 @@ case class Murax(config : MuraxConfig) extends Component{
 
   val io = new Bundle {
     //Clocks / reset
-    val asyncReset = in Bool
-    val mainClk = in Bool
+    val asyncReset = in Bool()
+    val mainClk = in Bool()
 
     //Main components IO
     val jtag = slave(Jtag())
