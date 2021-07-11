@@ -214,6 +214,7 @@ object VexRiscvSmpClusterGen {
         mcycleAccess   = CsrAccess.NONE,
         minstretAccess = CsrAccess.NONE,
         ecallGen       = true,
+        ebreakGen      = true,
         wfiGenAsWait   = false,
         wfiGenAsNop    = true,
         ucycleAccess   = CsrAccess.NONE
