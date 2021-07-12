@@ -142,7 +142,7 @@ class MuraxApb3Timer extends Component{
       addressWidth = 8,
       dataWidth = 32
     ))
-    val interrupt = out Bool
+    val interrupt = out Bool()
   }
 
   val prescaler = Prescaler(16)
