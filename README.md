@@ -300,6 +300,7 @@ To create a new debug configuration:
 You can use the Eclipse + Zylin embedded CDT plugin to do it (http://opensource.zylin.com/embeddedcdt.html). Tested with Helios Service Release 2 (http://www.Eclipse.org/downloads/download.php?file=/technology/epp/downloads/release/helios/SR2/Eclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz) and the corresponding zylin plugin.
 
 To following commands will download Eclipse and install the plugin.
+
 ```sh
 wget http://www.eclipse.org/downloads/download.php?file=/technology/epp/downloads/release/helios/SR2/eclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz
 tar -xvzf download.php?file=%2Ftechnology%2Fepp%2Fdownloads%2Frelease%2Fhelios%2FSR2%2Feclipse-cpp-helios-SR2-linux-gtk-x86_64.tar.gz
@@ -310,6 +311,10 @@ cd eclipse
 See https://drive.google.com/drive/folders/1NseNHH05B6lmIXqQFVwK8xRjWE4ydeG-?usp=sharing to import a makefile project and create a debug configuration.
 
 Note that sometimes Eclipse needs to be restarted in order to be able to place new breakpoints.
+
+If you want to get more information about how all this JTAG / GDB stuff work, you can find great blog about it here : 
+
+<https://tomverbeure.github.io/2021/07/18/VexRiscv-OpenOCD-and-Traps.html>
 
 ## Briey SoC
 As a demonstration, a SoC named Briey is implemented in `src/main/scala/vexriscv/demo/Briey.scala`. This SoC is very similar to
