@@ -167,6 +167,7 @@ object VexRiscvSmpClusterGen {
                      dBusWidth : Int = 64,
                      loadStoreWidth : Int = 32,
                      coherency : Boolean = true,
+                     atomic : Boolean = true,
                      iCacheSize : Int = 8192,
                      dCacheSize : Int = 8192,
                      iCacheWays : Int = 2,
@@ -193,6 +194,32 @@ object VexRiscvSmpClusterGen {
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
     assert(!(withDouble && !withFloat))
 
+    val csrConfig = if(withSupervisor){
+      CsrPluginConfig.openSbi(mhartid = hartId, misa = Riscv.misaToInt(s"ima${if(withFloat) "f" else ""}${if(withDouble) "d" else ""}s")).copy(utimeAccess = CsrAccess.READ_ONLY)
+    } else {
+      CsrPluginConfig(
+        catchIllegalAccess = true,
+        mvendorid      = null,
+        marchid        = null,
+        mimpid         = null,
+        mhartid        = 0,
+        misaExtensionsInit = 0,
+        misaAccess     = CsrAccess.NONE,
+        mtvecAccess    = CsrAccess.READ_WRITE,
+        mtvecInit      = null,
+        mepcAccess     = CsrAccess.READ_WRITE,
+        mscratchGen    = false,
+        mcauseAccess   = CsrAccess.READ_ONLY,
+        mbadaddrAccess = CsrAccess.READ_ONLY,
+        mcycleAccess   = CsrAccess.NONE,
+        minstretAccess = CsrAccess.NONE,
+        ecallGen       = true,
+        ebreakGen      = true,
+        wfiGenAsWait   = false,
+        wfiGenAsNop    = true,
+        ucycleAccess   = CsrAccess.NONE
+      )
+    }
     val config = VexRiscvConfig(
       plugins = List(
         if(withMmu)new MmuPlugin(
@@ -245,9 +272,9 @@ object VexRiscvSmpClusterGen {
             catchAccessError  = true,
             catchIllegal      = true,
             catchUnaligned    = true,
-            withLrSc = true,
-            withAmo = true,
-            withExclusive = coherency,
+            withLrSc = atomic,
+            withAmo = atomic,
+            withExclusive = atomic,
             withInvalidate = coherency,
             withWriteAggregation = dBusWidth > 32
           ),
@@ -290,7 +317,7 @@ object VexRiscvSmpClusterGen {
           mulUnrollFactor = 32,
           divUnrollFactor = 1
         ),
-        new CsrPlugin(CsrPluginConfig.openSbi(mhartid = hartId, misa = Riscv.misaToInt(s"ima${if(withFloat) "f" else ""}${if(withDouble) "d" else ""}s")).copy(utimeAccess = CsrAccess.READ_ONLY)),
+        new CsrPlugin(csrConfig),
         new BranchPlugin(
           earlyBranch = earlyBranch,
           catchAddressMisaligned = true,

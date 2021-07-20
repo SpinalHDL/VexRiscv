@@ -5,7 +5,7 @@ import java.lang
 import java.util.Scanner
 
 import org.apache.commons.io.FileUtils
-import org.scalatest.FunSuite
+import org.scalatest.funsuite.AnyFunSuite
 import spinal.core.SpinalEnumElement
 import spinal.core.sim._
 import spinal.core._
@@ -18,9 +18,10 @@ import scala.collection.mutable
 import scala.collection.mutable.ArrayBuffer
 import scala.sys.process.ProcessLogger
 import scala.util.Random
+import org.scalatest.funsuite.AnyFunSuite
 
 //TODO Warning DataCache write aggregation will disable itself
-class FpuTest extends FunSuite{
+class FpuTest extends AnyFunSuite{
 
   val b2f = lang.Float.intBitsToFloat(_)
   val b2d = lang.Double.longBitsToDouble(_)
