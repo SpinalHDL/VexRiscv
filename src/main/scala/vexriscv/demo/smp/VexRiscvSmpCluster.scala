@@ -175,6 +175,7 @@ object VexRiscvSmpClusterGen {
                      iBusRelax : Boolean = false,
                      injectorStage : Boolean = false,
                      earlyBranch : Boolean = false,
+                     earlyShifterInjection : Boolean = true,
                      dBusCmdMasterPipe : Boolean = false,
                      withMmu : Boolean = true,
                      withSupervisor : Boolean = true,
@@ -299,7 +300,7 @@ object VexRiscvSmpClusterGen {
         new SrcPlugin(
           separatedAddSub = false
         ),
-        new FullBarrelShifterPlugin(earlyInjection = true),
+        new FullBarrelShifterPlugin(earlyInjection = earlyShifterInjection),
         //        new LightShifterPlugin,
         new HazardSimplePlugin(
           bypassExecute           = true,
