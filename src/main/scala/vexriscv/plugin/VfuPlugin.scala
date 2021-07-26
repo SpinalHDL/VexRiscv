@@ -70,6 +70,7 @@ class VfuPlugin(val stageCount : Int,
     decoderService.add(
       key = M"-------------------------0001011",
       values = List(
+        VFU_ENABLE -> True,
         REGFILE_WRITE_VALID      -> True, //If you want to write something back into the integer register file
         BYPASSABLE_EXECUTE_STAGE -> Bool(stageCount == 0),
         BYPASSABLE_MEMORY_STAGE  -> Bool(stageCount <= 1),
