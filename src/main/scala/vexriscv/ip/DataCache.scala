@@ -100,11 +100,11 @@ case class DataCacheConfig(cacheSize : Int,
       contextWidth = (if(!withWriteResponse) 1 else 0) + aggregationWidth,
       alignment  = BmbParameter.BurstAlignement.LENGTH,
       canExclusive = withExclusive,
-      withCachedRead = true
+      withCachedRead = true,
+      canInvalidate = withInvalidate,
+      canSync = withInvalidate
     )),
     BmbInvalidationParameter(
-      canInvalidate = withInvalidate,
-      canSync = withInvalidate,
       invalidateLength = log2Up(this.bytePerLine),
       invalidateAlignment = BmbParameter.BurstAlignement.LENGTH
     )
