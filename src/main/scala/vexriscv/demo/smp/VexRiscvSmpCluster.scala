@@ -275,7 +275,7 @@ object VexRiscvSmpClusterGen {
             catchUnaligned    = true,
             withLrSc = atomic,
             withAmo = atomic,
-            withExclusive = atomic,
+            withExclusive = coherency,
             withInvalidate = coherency,
             withWriteAggregation = dBusWidth > 32
           ),
