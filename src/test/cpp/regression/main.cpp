@@ -2747,8 +2747,10 @@ public:
 	virtual void preCycle(){
 		if ((top->dBusAvalon_read || top->dBusAvalon_write) && top->dBusAvalon_waitRequestn) {
 			if(top->dBusAvalon_write){
+                uint32_t size = __builtin_popcount(top->dBusAvalon_byteEnable);
+                uint32_t offset = ffs(top->dBusAvalon_byteEnable)-1;
 				bool error_next = false;
-				ws->dBusAccess(top->dBusAvalon_address + beatCounter * 4,1,2,top->dBusAvalon_byteEnable,&top->dBusAvalon_writeData,&error_next);
+				ws->dBusAccess(top->dBusAvalon_address + beatCounter * 4 + offset,1,size,((uint8_t*)&top->dBusAvalon_writeData)+offset,&error_next);
 				beatCounter++;
 				if(beatCounter == top->dBusAvalon_burstCount){
 					beatCounter = 0;
@@ -2756,7 +2758,7 @@ public:
 			} else {
 				for(int beat = 0;beat < top->dBusAvalon_burstCount;beat++){
 					DBusCachedAvalonTask rsp;
-					ws->dBusAccess(top->dBusAvalon_address  + beat * 4,0,2,0,&rsp.data,&rsp.error);
+					ws->dBusAccess(top->dBusAvalon_address  + beat * 4 ,0,4,((uint8_t*)&rsp.data),&rsp.error);
 					rsps.push(rsp);
 				}
 			}
