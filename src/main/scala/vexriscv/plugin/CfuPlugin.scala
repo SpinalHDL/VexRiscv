@@ -187,7 +187,7 @@ class CfuPlugin(val stageCount : Int,
       if(p.CFU_INPUTS >= 1) bus.cmd.inputs(0) := input(RS1)
       if(p.CFU_INPUTS >= 2)  bus.cmd.inputs(1) := input(CFU_INPUT_2_KIND).mux(
         CfuPlugin.Input2Kind.RS -> input(RS2),
-        CfuPlugin.Input2Kind.IMM_I -> IMM(input(INSTRUCTION)).i_sext
+        CfuPlugin.Input2Kind.IMM_I -> IMM(input(INSTRUCTION)).h_sext
       )
     }
 

@@ -268,7 +268,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
   }
 
   def toAxi4Shared(stageCmd : Boolean = false, pendingWritesMax  : Int = 7): Axi4Shared = {
-    val axi = Axi4Shared(p.getAxi4SharedConfig())
+    val axi = Axi4Shared(p.getAxi4SharedConfig()).setName("dbus_axi")
 
     val cmdPreFork = if (stageCmd) cmd.stage.stage().s2mPipe() else cmd
 
@@ -289,7 +289,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     axi.sharedCmd.cache := "1111"
     axi.sharedCmd.size := log2Up(p.memDataBytes)
     axi.sharedCmd.addr := cmdStage.address
-    axi.sharedCmd.len  := cmd.beatCountMinusOne.resized
+    axi.sharedCmd.len  := cmdStage.beatCountMinusOne.resized
 
     axi.writeData.arbitrationFrom(dataStage)
     axi.writeData.data := dataStage.data
