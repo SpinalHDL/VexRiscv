@@ -43,9 +43,9 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
   systemCd.setInput(debugCd)
 
 
-  systemCd.outputClockDomain.push()
+  val ctx = systemCd.outputClockDomain.push()
   override def postInitCallback(): VexRiscvSmpClusterBase.this.type = {
-    systemCd.outputClockDomain.pop()
+    ctx.restore()
     this
   }
 

@@ -51,52 +51,56 @@ object BrieyConfig{
       ),
       cpuPlugins = ArrayBuffer(
         new PcManagerSimplePlugin(0x80000000l, false),
-        //          new IBusSimplePlugin(
-        //            interfaceKeepData = false,
-        //            catchAccessFault = true
-        //          ),
-        new IBusCachedPlugin(
+        new IBusSimplePlugin(
           resetVector = 0x80000000l,
-          prediction = STATIC,
-          config = InstructionCacheConfig(
-            cacheSize = 4096,
-            bytePerLine =32,
-            wayCount = 1,
-            addressWidth = 32,
-            cpuDataWidth = 32,
-            memDataWidth = 32,
-            catchIllegalAccess = true,
-            catchAccessFault = true,
-            asyncTagMemory = false,
-            twoCycleRam = true,
-            twoCycleCache = true
-          )
+          cmdForkOnSecondStage = false,
+          cmdForkPersistence = true,
+          catchAccessFault = true,
+          compressedGen = true
+        ),
+//        new IBusCachedPlugin(
+//          resetVector = 0x80000000l,
+//          prediction = STATIC,
+//          compressedGen = true,
+//          config = InstructionCacheConfig(
+//            cacheSize = 4096,
+//            bytePerLine =32,
+//            wayCount = 1,
+//            addressWidth = 32,
+//            cpuDataWidth = 32,
+//            memDataWidth = 32,
+//            catchIllegalAccess = true,
+//            catchAccessFault = true,
+//            asyncTagMemory = false,
+//            twoCycleRam = true,
+//            twoCycleCache = true
+//          )
           //            askMemoryTranslation = true,
           //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
           //              portTlbSize = 4
           //            )
-        ),
-        //                    new DBusSimplePlugin(
-        //                      catchAddressMisaligned = true,
-        //                      catchAccessFault = true
-        //                    ),
-        new DBusCachedPlugin(
-          config = new DataCacheConfig(
-            cacheSize         = 4096,
-            bytePerLine       = 32,
-            wayCount          = 1,
-            addressWidth      = 32,
-            cpuDataWidth      = 32,
-            memDataWidth      = 32,
-            catchAccessError  = true,
-            catchIllegal      = true,
-            catchUnaligned    = true
-          ),
-          memoryTranslatorPortConfig = null
-          //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-          //              portTlbSize = 6
-          //            )
-        ),
+//        ),
+                            new DBusSimplePlugin(
+                              catchAddressMisaligned = true,
+                              catchAccessFault = true
+                            ),
+//        new DBusCachedPlugin(
+//          config = new DataCacheConfig(
+//            cacheSize         = 4096,
+//            bytePerLine       = 32,
+//            wayCount          = 1,
+//            addressWidth      = 32,
+//            cpuDataWidth      = 32,
+//            memDataWidth      = 32,
+//            catchAccessError  = true,
+//            catchIllegal      = true,
+//            catchUnaligned    = true
+//          ),
+//          memoryTranslatorPortConfig = null
+//          //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
+//          //              portTlbSize = 6
+//          //            )
+//        ),
         new StaticMemoryTranslatorPlugin(
           ioRange      = _(31 downto 28) === 0xF
         ),
@@ -104,7 +108,7 @@ object BrieyConfig{
           catchIllegalInstruction = true
         ),
         new RegFilePlugin(
-          regFileReadyKind = plugin.SYNC,
+          regFileReadyKind = plugin.ASYNC,
           zeroBoot = false
         ),
         new IntAluPlugin,
