@@ -11,6 +11,7 @@
 #include <iomanip>
 #include <time.h>
 #include <unistd.h>
+#include "verilated_fst_c.h"
 
 using namespace std;
 
@@ -140,7 +141,7 @@ public:
 	string name;
 	uint64_t time = 0;
 	#ifdef TRACE
-	VerilatedVcdC* tfp;
+	VerilatedFstC* tfp;
 	#endif
 
 	ofstream logTraces;
@@ -184,9 +185,9 @@ public:
 		// init trace dump
 		#ifdef TRACE
 		Verilated::traceEverOn(true);
-		tfp = new VerilatedVcdC;
+		tfp = new VerilatedFstC;
 		top->trace(tfp, 99);
-		tfp->open((string(name)+ ".vcd").c_str());
+		tfp->open((string(name)+ ".fst").c_str());
 		#endif
 
 		struct timespec start_time,tick_time;

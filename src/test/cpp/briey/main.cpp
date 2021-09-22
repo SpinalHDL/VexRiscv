@@ -6,7 +6,6 @@
 #include "VBriey_RiscvCore.h"
 #endif
 #include "verilated.h"
-#include "verilated_vcd_c.h"
 #include <stdio.h>
 #include <iostream>
 #include <stdlib.h>
