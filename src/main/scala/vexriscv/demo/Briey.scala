@@ -483,6 +483,8 @@ object BrieySim {
         dut.config.sdramLayout,
         clockDomain
       )
+
+      dut.io.coreInterrupt #= false
     }
   }
 }
