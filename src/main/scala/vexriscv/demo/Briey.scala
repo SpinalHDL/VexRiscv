@@ -192,6 +192,10 @@ class Briey(val config: BrieyConfig) extends Component{
     val vga           = master(Vga(vgaRgbConfig))
     val timerExternal = in(PinsecTimerCtrlExternal())
     val coreInterrupt = in Bool()
+
+    val axiIn0        = slave(Axi4(Axi4Config(addressWidth = 32, dataWidth = 64, idWidth = 0)))
+    val axiIn1        = slave(Axi4(Axi4Config(addressWidth = 32, dataWidth = 64, idWidth = 0)))
+    val axiOut0        = master(Axi4(Axi4Config(addressWidth = 28, dataWidth = 64, idWidth = 8)))
   }
 
   val resetCtrlClockDomain = ClockDomain(
@@ -314,19 +318,38 @@ class Briey(val config: BrieyConfig) extends Component{
       }
     }
 
+    // SoC 32 bits to 64 bits
+    val coreUpsizer = Axi4Upsizer(
+      inputConfig = core.dBus.config.copy(useId = true, idWidth = 4, useBurst = true),
+      outputConfig = core.dBus.config.copy(dataWidth = 64, useId = true, idWidth = 4, useBurst = true),
+      readPendingQueueSize = 64
+    )
 
     val axiCrossbar = Axi4CrossbarFactory()
 
+    //64 bits domain
     axiCrossbar.addSlaves(
-      ram.io.axi       -> (0x80000000L,   onChipRamSize),
-      sdramCtrl.io.axi -> (0x40000000L,   sdramLayout.capacity),
-      apbBridge.io.axi -> (0xF0000000L,   1 MB)
+      io.axiOut0            -> (0xC0000000L,   256 MiB)
     )
 
     axiCrossbar.addConnections(
-      core.iBus       -> List(ram.io.axi, sdramCtrl.io.axi),
-      core.dBus       -> List(ram.io.axi, sdramCtrl.io.axi, apbBridge.io.axi),
-      vgaCtrl.io.axi  -> List(            sdramCtrl.io.axi)
+      coreUpsizer.io.output -> List(io.axiOut0),
+      io.axiIn0             -> List(io.axiOut0),
+      io.axiIn1             -> List(io.axiOut0)
+    )
+
+    //32 bits domain
+    axiCrossbar.addSlaves(
+      ram.io.axi           -> (0x80000000L,   onChipRamSize),
+      sdramCtrl.io.axi     -> (0x40000000L,   sdramLayout.capacity),
+      apbBridge.io.axi     -> (0xF0000000L,   1 MB),
+      coreUpsizer.io.input -> (0xC0000000L,   256 MiB)
+    )
+
+    axiCrossbar.addConnections(
+      core.iBus       -> List(ram.io.axi, sdramCtrl.io.axi, coreUpsizer.io.input),
+      core.dBus       -> List(ram.io.axi, sdramCtrl.io.axi, coreUpsizer.io.input, apbBridge.io.axi),
+      vgaCtrl.io.axi  -> List(            sdramCtrl.io.axi, coreUpsizer.io.input)
     )
 
 
