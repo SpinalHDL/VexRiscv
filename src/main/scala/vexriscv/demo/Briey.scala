@@ -31,7 +31,8 @@ case class BrieyConfig(axiFrequency : HertzNumber,
                        sdramLayout: SdramLayout,
                        sdramTimings: SdramTimings,
                        cpuPlugins : ArrayBuffer[Plugin[VexRiscv]],
-                       uartCtrlConfig : UartCtrlMemoryMappedConfig)
+                       uartCtrlConfig : UartCtrlMemoryMappedConfig,
+                       memoryDataWidth : Int = 32)
 
 object BrieyConfig{
 
@@ -193,9 +194,9 @@ class Briey(val config: BrieyConfig) extends Component{
     val timerExternal = in(PinsecTimerCtrlExternal())
     val coreInterrupt = in Bool()
 
-    val axiIn0        = slave(Axi4(Axi4Config(addressWidth = 32, dataWidth = 64, idWidth = 0)))
-    val axiIn1        = slave(Axi4(Axi4Config(addressWidth = 32, dataWidth = 64, idWidth = 0)))
-    val axiOut0        = master(Axi4(Axi4Config(addressWidth = 28, dataWidth = 64, idWidth = 8)))
+    val axiIn0        = slave(Axi4(Axi4Config(addressWidth = 32, dataWidth = config.memoryDataWidth, idWidth = 0)))
+    val axiIn1        = slave(Axi4(Axi4Config(addressWidth = 32, dataWidth = config.memoryDataWidth, idWidth = 0)))
+    val axiOut0        = master(Axi4(Axi4Config(addressWidth = 28, dataWidth = config.memoryDataWidth, idWidth = 8)))
   }
 
   val resetCtrlClockDomain = ClockDomain(
@@ -209,7 +210,7 @@ class Briey(val config: BrieyConfig) extends Component{
     val systemResetUnbuffered  = False
     //    val coreResetUnbuffered = False
 
-    //Implement an counter to keep the reset axiResetOrder high 64 cycles
+    //Implement an counter to keep the reset axiResetOrder high config.4memoryDataWidth cycles
     // Also this counter will automaticly do a reset when the system boot.
     val systemResetCounter = Reg(UInt(6 bits)) init(0)
     when(systemResetCounter =/= U(systemResetCounter.range -> true)){
@@ -318,16 +319,16 @@ class Briey(val config: BrieyConfig) extends Component{
       }
     }
 
-    // SoC 32 bits to 64 bits
+    // SoC 32 bits to config.memoryDataWidth bits
     val coreUpsizer = Axi4Upsizer(
       inputConfig = core.dBus.config.copy(useId = true, idWidth = 4, useBurst = true),
-      outputConfig = core.dBus.config.copy(dataWidth = 64, useId = true, idWidth = 4, useBurst = true),
-      readPendingQueueSize = 64
+      outputConfig = core.dBus.config.copy(dataWidth = config.memoryDataWidth, useId = true, idWidth = 4, useBurst = true),
+      readPendingQueueSize = 4
     )
 
     val axiCrossbar = Axi4CrossbarFactory()
 
-    //64 bits domain
+    //config.4memoryDataWidth bits domain
     axiCrossbar.addSlaves(
       io.axiOut0            -> (0xC0000000L,   256 MiB)
     )
@@ -412,9 +413,17 @@ class Briey(val config: BrieyConfig) extends Component{
 //DE1-SoC
 object Briey{
   def main(args: Array[String]) {
-    val config = SpinalConfig()
-    config.generateVerilog({
-      val toplevel = new Briey(BrieyConfig.default)
+    val parser = new scopt.OptionParser[BrieyConfig]("SpinalCore") {
+      opt[Int]("memoryDataWidth") action { (v, c) => c.copy(memoryDataWidth = v) } text("Miaou")
+    }
+
+    val config = parser.parse(args, BrieyConfig.default) match {
+      case Some(config) => config
+      case None         => ???
+    }
+
+    SpinalConfig().generateVerilog({
+      val toplevel = new Briey(config)
       toplevel.axi.vgaCtrl.vga.ctrl.io.error.addAttribute(Verilator.public)
       toplevel.axi.vgaCtrl.vga.ctrl.io.frameStart.addAttribute(Verilator.public)
       toplevel
