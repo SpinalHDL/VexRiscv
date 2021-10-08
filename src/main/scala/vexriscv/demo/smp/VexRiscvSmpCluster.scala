@@ -189,7 +189,9 @@ object VexRiscvSmpClusterGen {
                      rvc : Boolean = false,
                      iTlbSize : Int = 4,
                      dTlbSize : Int = 4,
-                     prediction : BranchPrediction = vexriscv.plugin.NONE
+                     prediction : BranchPrediction = vexriscv.plugin.NONE,
+                     withDataCache : Boolean = true,
+                     withInstructionCache : Boolean = true
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -229,7 +231,7 @@ object VexRiscvSmpClusterGen {
           ioRange = ioRange
         ),
         //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
-        new IBusCachedPlugin(
+        if(withInstructionCache) new IBusCachedPlugin(
           resetVector = resetVector,
           compressedGen = rvc,
           prediction = prediction,
@@ -257,8 +259,16 @@ object VexRiscvSmpClusterGen {
             earlyRequireMmuLockup = true,
             earlyCacheHits = true
           )
+        ) else new IBusSimplePlugin(
+          resetVector = resetVector,
+          cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
+          prediction = NONE,
+          catchAccessFault = false,
+          compressedGen = rvc,
+          busLatencyMin = 2
         ),
-        new DBusCachedPlugin(
+        if(withDataCache) new DBusCachedPlugin(
           dBusCmdMasterPipe = dBusCmdMasterPipe || dBusWidth == 32,
           dBusCmdSlavePipe = true,
           dBusRspSlavePipe = true,
@@ -285,6 +295,10 @@ object VexRiscvSmpClusterGen {
             earlyRequireMmuLockup = true,
             earlyCacheHits = true
           )
+        ) else new DBusSimplePlugin(
+          catchAddressMisaligned = false,
+          catchAccessFault = false,
+          earlyInjection = false
         ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = true,
