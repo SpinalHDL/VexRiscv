@@ -266,7 +266,8 @@ object VexRiscvSmpClusterGen {
           prediction = NONE,
           catchAccessFault = false,
           compressedGen = rvc,
-          busLatencyMin = 2
+          busLatencyMin = 2,
+          vecRspBuffer = true
         ),
         if(withDataCache) new DBusCachedPlugin(
           dBusCmdMasterPipe = dBusCmdMasterPipe || dBusWidth == 32,
