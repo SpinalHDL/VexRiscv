@@ -259,7 +259,7 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
       }
 
       def getPermission(hits : IndexedSeq[Bool], bit : Int) = {
-        (hits zip state.pmpcfg).map({ case (i, cfg) => i & cfg(bit) }).orR
+        MuxOH(OHMasking.first(hits), state.pmpcfg.map(_(bit)))
       }
 
       val dGuard = new Area {
