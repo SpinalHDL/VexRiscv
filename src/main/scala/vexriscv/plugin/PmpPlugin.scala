@@ -90,7 +90,7 @@ class PmpSetter(cutoff : Int) extends Component with Pmp {
 
   val ones = io.addr & ~(io.addr + 1)
   io.base := io.addr(xlen - 3 downto cutoff - 2) ^ ones(xlen - 3 downto cutoff - 2)
-  io.mask := ~ones(xlen - 2 downto cutoff - 1)
+  io.mask := ~(ones(xlen - 4 downto cutoff - 2) @@ U"1")
 }
 
 case class ProtectedMemoryTranslatorPort(bus : MemoryTranslatorBus)
@@ -259,7 +259,7 @@ class PmpPlugin(regions : Int, granularity : Int, ioRange : UInt => Bool) extend
       }
 
       def getPermission(hits : IndexedSeq[Bool], bit : Int) = {
-        (hits zip state.pmpcfg).map({ case (i, cfg) => i & cfg(bit) }).orR
+        MuxOH(OHMasking.first(hits), state.pmpcfg.map(_(bit)))
       }
 
       val dGuard = new Area {
