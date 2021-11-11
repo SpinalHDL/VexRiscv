@@ -176,7 +176,7 @@ case class DebugExtensionIo() extends Bundle with IMasterSlave{
   }
 }
 
-class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : Int = 0) extends Plugin[VexRiscv] {
+class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : Int = 0, BreakpointReadback : Boolean = false) extends Plugin[VexRiscv] {
 
   var io : DebugExtensionIo = null
   val injectionAsks = ArrayBuffer[(Stage, Bool)]()
@@ -248,6 +248,17 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
         io.bus.rsp.data(3) := haltedByBreak
         io.bus.rsp.data(4) := stepIt
       }
+      if (BreakpointReadback) {
+        switch(RegNext(io.bus.cmd.address(7 downto 2))) {
+          for(i <- 0 until hardwareBreakpointCount){
+            is(0x10 + i){
+              io.bus.rsp.data(31 downto 1) := hardwareBreakpoints(i).pc.asBits
+              io.bus.rsp.data(0)           := hardwareBreakpoints(i).valid
+            }
+          }
+        }
+      }
+
 
       injectionPort.valid := False
       injectionPort.payload := io.bus.cmd.data
