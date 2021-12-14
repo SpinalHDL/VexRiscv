@@ -15,10 +15,10 @@ class Stageable[T <: Data](_dataType : => T) extends HardType[T](_dataType) with
 class Stage() extends Area{
   def outsideCondScope[T](that : => T) : T = {
     val body = Component.current.dslBody
-    body.push()
+    val ctx = body.push()
     val swapContext = body.swap()
     val ret = that
-    body.pop()
+    ctx.restore()
     swapContext.appendBack()
     ret
   }
