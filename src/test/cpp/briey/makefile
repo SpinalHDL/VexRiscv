@@ -13,7 +13,7 @@ ADDCFLAGS += -LDFLAGS -lSDL2
 
 ifeq ($(TRACE),yes)
 	VERILATOR_ARGS += --trace
-	ADDCFLAGS += -CFLAGS -DTRACE
+	ADDCFLAGS += -CFLAGS -DTRACE --trace-fst
 endif
 ifeq ($(DEBUG),yes)
 	ADDCFLAGS += -CFLAGS "-g3 -O0"

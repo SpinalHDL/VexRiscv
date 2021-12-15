@@ -77,9 +77,9 @@ case class DataCacheConfig(cacheSize : Int,
   )
 
   def getWishboneConfig() = WishboneConfig(
-    addressWidth = 30,
-    dataWidth = 32,
-    selWidth = 4,
+    addressWidth = 32-log2Up(memDataWidth/8),
+    dataWidth = memDataWidth,
+    selWidth = memDataBytes,
     useSTALL = false,
     useLOCK = false,
     useERR = true,
@@ -100,11 +100,11 @@ case class DataCacheConfig(cacheSize : Int,
       contextWidth = (if(!withWriteResponse) 1 else 0) + aggregationWidth,
       alignment  = BmbParameter.BurstAlignement.LENGTH,
       canExclusive = withExclusive,
-      withCachedRead = true
+      withCachedRead = true,
+      canInvalidate = withInvalidate,
+      canSync = withInvalidate
     )),
     BmbInvalidationParameter(
-      canInvalidate = withInvalidate,
-      canSync = withInvalidate,
       invalidateLength = log2Up(this.bytePerLine),
       invalidateAlignment = BmbParameter.BurstAlignement.LENGTH
     )
@@ -329,11 +329,12 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     val wishboneConfig = p.getWishboneConfig()
     val bus = Wishbone(wishboneConfig)
     val counter = Reg(UInt(log2Up(p.burstSize) bits)) init(0)
+    val addressShift = log2Up(p.memDataWidth/8)
 
     val cmdBridge = Stream (DataCacheMemCmd(p))
     val isBurst = cmdBridge.isBurst
     cmdBridge.valid := cmd.valid
-    cmdBridge.address := (isBurst ? (cmd.address(31 downto widthOf(counter) + 2) @@ counter @@ U"00") | (cmd.address(31 downto 2) @@ U"00"))
+    cmdBridge.address := (isBurst ? (cmd.address(31 downto widthOf(counter) + addressShift) @@ counter @@ U(0, addressShift bits)) | (cmd.address(31 downto addressShift) @@ U(0, addressShift bits)))
     cmdBridge.wr := cmd.wr
     cmdBridge.mask := cmd.mask
     cmdBridge.data := cmd.data
@@ -350,10 +351,10 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
     }
 
 
-    bus.ADR := cmdBridge.address >> 2
+    bus.ADR := cmdBridge.address >> addressShift
     bus.CTI := Mux(isBurst, cmdBridge.last ? B"111" | B"010", B"000")
     bus.BTE := B"00"
-    bus.SEL := cmdBridge.wr ? cmdBridge.mask | B"1111"
+    bus.SEL := cmdBridge.wr ? cmdBridge.mask | B((1 << p.memDataBytes)-1)
     bus.WE  := cmdBridge.wr
     bus.DAT_MOSI := cmdBridge.data
 

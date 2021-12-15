@@ -166,7 +166,11 @@ class CfuPlugin(val stageCount : Int,
 
     forkStage plug new Area{
       import forkStage._
-      val schedule = arbitration.isValid && input(CFU_ENABLE)
+      val hazard = stages.dropWhile(_ != forkStage).tail.map(s => s.arbitration.isValid && s.input(HAS_SIDE_EFFECT)).orR
+      val scheduleWish = arbitration.isValid && input(CFU_ENABLE)
+      val schedule = scheduleWish && !hazard
+      arbitration.haltItself setWhen(scheduleWish && hazard)
+
       val hold = RegInit(False) setWhen(schedule) clearWhen(bus.cmd.ready)
       val fired = RegInit(False) setWhen(bus.cmd.fire) clearWhen(!arbitration.isStuckByOthers)
       insert(CFU_IN_FLIGHT) := schedule || hold || fired

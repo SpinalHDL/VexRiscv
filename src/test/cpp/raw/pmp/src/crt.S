@@ -206,11 +206,11 @@ test5:
 // attempt to read/write overlapping regions from U-mode
 test6:
     li TEST_ID, 6
-    la TRAP_RETURN, fail 
-    li x2, 0xdeadbeef
-    li x1, 0x88000000
-    sw x2, 0x0(x1)              // should be OK (write region 6/7)
-    lw x3, 0x0(x1)              // should be OK (write region 6/7)
+    //la TRAP_RETURN, fail
+    //li x2, 0xdeadbeef
+    //li x1, 0x88000000
+    //sw x2, 0x0(x1)              // should be OK (write region 6/7)
+    //lw x3, 0x0(x1)              // should be OK (write region 6/7)
 
 test7:
     li TEST_ID, 7

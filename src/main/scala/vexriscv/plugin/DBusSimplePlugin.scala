@@ -327,13 +327,15 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       REGFILE_WRITE_VALID -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
       BYPASSABLE_MEMORY_STAGE  -> Bool(earlyInjection),
-      MEMORY_STORE -> False
-    ) ++ (if(catchAccessFault || catchAddressMisaligned) List(HAS_SIDE_EFFECT -> True) else Nil)
+      MEMORY_STORE -> False,
+      HAS_SIDE_EFFECT -> True
+    )
 
     val storeActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMS,
       RS2_USE -> True,
-      MEMORY_STORE -> True
+      MEMORY_STORE -> True,
+      HAS_SIDE_EFFECT -> True
     )
 
     decoderService.addDefault(MEMORY_ENABLE, False)

@@ -25,7 +25,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
   val debugClockDomain = Handle[ClockDomain]
   val debugReset = Handle[Bool]
   val debugAskReset = Handle[() => Unit]
-  val hardwareBreakpointCount = Handle(0)
+  val hardwareBreakpointCount = Handle.sync(0)
 
   val iBus, dBus = Handle[Bmb]
 

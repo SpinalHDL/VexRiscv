@@ -81,8 +81,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         //        REGFILE_WRITE_VALID -> True,
         //        BYPASSABLE_EXECUTE_STAGE -> False,
         //        BYPASSABLE_MEMORY_STAGE -> False,
-        MEMORY_WR -> False
-      ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
+        MEMORY_WR -> False,
+        HAS_SIDE_EFFECT -> True
+      )
     )
 
     if(withLrSc) decoderService.add(key, Seq(MEMORY_LRSC -> False))
@@ -103,8 +104,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         IntAluPlugin.ALU_CTRL -> IntAluPlugin.AluCtrlEnum.ADD_SUB,
         SRC2_CTRL -> Src2CtrlEnum.IMS,
 //        RS2_USE -> True,
-        MEMORY_WR -> True
-      ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
+        MEMORY_WR -> True,
+        HAS_SIDE_EFFECT -> True
+      )
     )
 
     if(withLrSc) decoderService.add(key, Seq(MEMORY_LRSC -> False))
@@ -156,13 +158,15 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       REGFILE_WRITE_VALID -> True,
       BYPASSABLE_EXECUTE_STAGE -> False,
       BYPASSABLE_MEMORY_STAGE -> False,
-      MEMORY_WR -> False
-    ) ++ (if(catchSomething) List(HAS_SIDE_EFFECT -> True) else Nil)
+      MEMORY_WR -> False,
+      HAS_SIDE_EFFECT -> True
+    )
 
     val storeActions = stdActions ++ List(
       SRC2_CTRL -> Src2CtrlEnum.IMS,
       RS2_USE -> True,
-      MEMORY_WR -> True
+      MEMORY_WR -> True,
+      HAS_SIDE_EFFECT -> True
     )
 
     decoderService.addDefault(MEMORY_ENABLE, False)

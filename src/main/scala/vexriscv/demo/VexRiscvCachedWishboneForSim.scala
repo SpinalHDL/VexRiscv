@@ -64,6 +64,7 @@ object VexRiscvCachedWishboneForSim{
               catchIllegal      = true,
               catchUnaligned    = true
             ),
+            dBusCmdMasterPipe = true, //required for wishbone
             memoryTranslatorPortConfig = null
             //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
             //              portTlbSize = 6

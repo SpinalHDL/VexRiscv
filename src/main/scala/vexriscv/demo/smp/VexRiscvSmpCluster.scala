@@ -43,9 +43,9 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
   systemCd.setInput(debugCd)
 
 
-  systemCd.outputClockDomain.push()
+  val ctx = systemCd.outputClockDomain.push()
   override def postInitCallback(): VexRiscvSmpClusterBase.this.type = {
-    systemCd.outputClockDomain.pop()
+    ctx.restore()
     this
   }
 
@@ -175,6 +175,7 @@ object VexRiscvSmpClusterGen {
                      iBusRelax : Boolean = false,
                      injectorStage : Boolean = false,
                      earlyBranch : Boolean = false,
+                     earlyShifterInjection : Boolean = true,
                      dBusCmdMasterPipe : Boolean = false,
                      withMmu : Boolean = true,
                      withSupervisor : Boolean = true,
@@ -188,7 +189,9 @@ object VexRiscvSmpClusterGen {
                      rvc : Boolean = false,
                      iTlbSize : Int = 4,
                      dTlbSize : Int = 4,
-                     prediction : BranchPrediction = vexriscv.plugin.NONE
+                     prediction : BranchPrediction = vexriscv.plugin.NONE,
+                     withDataCache : Boolean = true,
+                     withInstructionCache : Boolean = true
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -228,7 +231,7 @@ object VexRiscvSmpClusterGen {
           ioRange = ioRange
         ),
         //Uncomment the whole IBusCachedPlugin and comment IBusSimplePlugin if you want cached iBus config
-        new IBusCachedPlugin(
+        if(withInstructionCache) new IBusCachedPlugin(
           resetVector = resetVector,
           compressedGen = rvc,
           prediction = prediction,
@@ -256,8 +259,17 @@ object VexRiscvSmpClusterGen {
             earlyRequireMmuLockup = true,
             earlyCacheHits = true
           )
+        ) else new IBusSimplePlugin(
+          resetVector = resetVector,
+          cmdForkOnSecondStage = false,
+          cmdForkPersistence = false,
+          prediction = NONE,
+          catchAccessFault = false,
+          compressedGen = rvc,
+          busLatencyMin = 2,
+          vecRspBuffer = true
         ),
-        new DBusCachedPlugin(
+        if(withDataCache) new DBusCachedPlugin(
           dBusCmdMasterPipe = dBusCmdMasterPipe || dBusWidth == 32,
           dBusCmdSlavePipe = true,
           dBusRspSlavePipe = true,
@@ -274,7 +286,7 @@ object VexRiscvSmpClusterGen {
             catchUnaligned    = true,
             withLrSc = atomic,
             withAmo = atomic,
-            withExclusive = atomic,
+            withExclusive = coherency,
             withInvalidate = coherency,
             withWriteAggregation = dBusWidth > 32
           ),
@@ -284,6 +296,10 @@ object VexRiscvSmpClusterGen {
             earlyRequireMmuLockup = true,
             earlyCacheHits = true
           )
+        ) else new DBusSimplePlugin(
+          catchAddressMisaligned = false,
+          catchAccessFault = false,
+          earlyInjection = false
         ),
         new DecoderSimplePlugin(
           catchIllegalInstruction = true,
@@ -299,7 +315,7 @@ object VexRiscvSmpClusterGen {
         new SrcPlugin(
           separatedAddSub = false
         ),
-        new FullBarrelShifterPlugin(earlyInjection = true),
+        new FullBarrelShifterPlugin(earlyInjection = earlyShifterInjection),
         //        new LightShifterPlugin,
         new HazardSimplePlugin(
           bypassExecute           = true,

@@ -236,7 +236,8 @@ class IBusSimplePlugin(    resetVector : BigInt,
                        val memoryTranslatorPortConfig : Any = null,
                            relaxPredictorAddress : Boolean = true,
                            predictionBuffer : Boolean = true,
-                           bigEndian : Boolean = false
+                           bigEndian : Boolean = false,
+                           vecRspBuffer : Boolean = false
                       ) extends IBusFetcherImpl(
     resetVector = resetVector,
     keepPcPlus4 = keepPcPlus4,
@@ -351,7 +352,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
         //Manage flush for iBus transactions in flight
         val rspBuffer = new Area {
           val output = Stream(IBusSimpleRsp())
-          val c = StreamFifoLowLatency(IBusSimpleRsp(), busLatencyMin + (if(cmdForkOnSecondStage && cmdForkPersistence) 1 else 0))
+          val c = new StreamFifoLowLatency(IBusSimpleRsp(), busLatencyMin + (if(cmdForkOnSecondStage && cmdForkPersistence) 1 else 0), useVec = vecRspBuffer)
           val discardCounter = Reg(UInt(log2Up(pendingMax + 1) bits)) init (0)
           discardCounter := discardCounter - (c.io.pop.valid && discardCounter =/= 0).asUInt
           when(iBusRsp.flush) {
