@@ -16,6 +16,7 @@ import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
 import spinal.lib.com.spi.ddr._
 import spinal.lib.bus.simple._
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.Seq
 
 /**
  * Created by PIC32F_USER on 28/07/2017.
@@ -313,13 +314,13 @@ case class Murax(config : MuraxConfig) extends Component{
     //******** Memory mappings *********
     val apbDecoder = Apb3Decoder(
       master = apbBridge.io.apb,
-      slaves = apbMapping
+      slaves = apbMapping.toSeq
     )
 
     val mainBusDecoder = new Area {
       val logic = new MuraxPipelinedMemoryBusDecoder(
         master = mainBusArbiter.io.masterBus,
-        specification = mainBusMapping,
+        specification = mainBusMapping.toSeq,
         pipelineMaster = pipelineMainBus
       )
     }

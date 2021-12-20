@@ -4,6 +4,7 @@ import vexriscv.plugin._
 import spinal.core._
 
 import scala.collection.mutable.ArrayBuffer
+import scala.collection.Seq
 
 object VexRiscvConfig{
   def apply(withMemoryStage : Boolean, withWriteBackStage : Boolean, plugins : Seq[Plugin[VexRiscv]]): VexRiscvConfig = {
@@ -135,10 +136,10 @@ class VexRiscv(val config : VexRiscvConfig) extends Component with Pipeline{
   plugins ++= config.plugins
 
   //regression usage
-  val lastStageInstruction = CombInit(stages.last.input(config.INSTRUCTION)) keep() addAttribute (Verilator.public)
-  val lastStagePc = CombInit(stages.last.input(config.PC)) keep() addAttribute (Verilator.public)
-  val lastStageIsValid = CombInit(stages.last.arbitration.isValid) keep() addAttribute (Verilator.public)
-  val lastStageIsFiring = CombInit(stages.last.arbitration.isFiring) keep() addAttribute (Verilator.public)
+  val lastStageInstruction = CombInit(stages.last.input(config.INSTRUCTION)).keep().addAttribute (Verilator.public)
+  val lastStagePc = CombInit(stages.last.input(config.PC)).keep().addAttribute(Verilator.public)
+  val lastStageIsValid = CombInit(stages.last.arbitration.isValid).keep().addAttribute(Verilator.public)
+  val lastStageIsFiring = CombInit(stages.last.arbitration.isFiring).keep().addAttribute(Verilator.public)
 
   //Verilator perf
   decode.arbitration.removeIt.noBackendCombMerge
