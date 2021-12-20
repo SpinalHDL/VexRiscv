@@ -24,7 +24,7 @@ import spinal.lib.soc.pinsec.{PinsecTimerCtrl, PinsecTimerCtrlExternal}
 import spinal.lib.system.debugger.{JtagAxi4SharedDebugger, JtagBridge, SystemDebugger, SystemDebuggerConfig}
 
 import scala.collection.mutable.ArrayBuffer
-
+import scala.collection.Seq
 
 case class BrieyConfig(axiFrequency : HertzNumber,
                        onChipRamSize : BigInt,

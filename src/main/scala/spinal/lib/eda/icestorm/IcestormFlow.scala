@@ -13,6 +13,8 @@ import spinal.lib.eda.bench.Report
 
 import scala.sys.process._
 
+import scala.collection.Seq
+
 object IcestormFlow {
   def doCmd(cmd : Seq[String], path : String): String ={
     println(cmd)
