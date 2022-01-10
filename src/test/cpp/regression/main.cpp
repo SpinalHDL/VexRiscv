@@ -898,6 +898,7 @@ public:
                     status.fs = 3;
                     pcWrite(pc + 4);
                 }
+                lrscReserved = false;
 			} break;
 			#endif
 			case 0x37:rfWrite(rd32, i & 0xFFFFF000);pcWrite(pc + 4);break; // LUI
@@ -949,6 +950,7 @@ public:
 					dWrite(pAddr, size, (uint8_t*)&i32_rs2);
 					pcWrite(pc + 4);
 				}
+				lrscReserved = false;
 			}break;
 			case 0x13: //ALUi
 				switch ((i >> 12) & 0x7) {
@@ -1107,9 +1109,7 @@ public:
                         int32_t  src = i32_rs2;
                         int32_t readValue;
 
-                        #ifdef DBUS_EXCLUSIVE
                         lrscReserved = false;
-                        #endif
 
                         uint32_t pAddr;
 						if(v2p(addr, &pAddr, READ_WRITE)){ trap(0, 15, addr); return; }
