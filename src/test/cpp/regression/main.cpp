@@ -949,7 +949,7 @@ public:
 					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
 					dWrite(pAddr, size, (uint8_t*)&i32_rs2);
 					pcWrite(pc + 4);
-				    lrscReserved = false;
+                    lrscReserved = false;
 				}
 			}break;
 			case 0x13: //ALUi
@@ -1111,6 +1111,7 @@ public:
 
                         lrscReserved = false;
 
+
                         uint32_t pAddr;
 						if(v2p(addr, &pAddr, READ_WRITE)){ trap(0, 15, addr); return; }
                         if(dRead(pAddr, 4, (uint8_t*)&readValue)){
@@ -1178,6 +1179,7 @@ public:
 					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
 					dWrite(pAddr, 4, (uint8_t*)&i16_rf2);
                     pcWrite(pc + 2);
+                    lrscReserved = false;
 				}
 			}break;
 			case 8: rfWrite(rd32, regs[rd32] + i16_imm); pcWrite(pc + 2); break;
@@ -1243,6 +1245,7 @@ public:
 				} else {
 					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
 					dWrite(pAddr, 4, (uint8_t*)&regs[iBits(2,5)]); pcWrite(pc + 2);
+                    lrscReserved = false;
 				}
 			}break;
 			}
@@ -2610,7 +2613,6 @@ public:
                         bool hit = reservationValid && reservationAddress == top->dBus_cmd_payload_address;
                         rsp.exclusive = hit;
                         cancel = !hit;
-                        reservationValid = false;
                     }
                     if(!cancel) {
                         for(int idx = 0;idx < 1;idx++){
@@ -2621,6 +2623,7 @@ public:
                         }
                     }
 
+                    reservationValid = false;
                     rsp.last = true;
                     rsp.error = error;
                     rsps.push(rsp);
