@@ -897,8 +897,8 @@ public:
                     dWrite(pAddr, size, (uint8_t*) &rsp.value);
                     status.fs = 3;
                     pcWrite(pc + 4);
+                    lrscReserved = false;
                 }
-                lrscReserved = false;
 			} break;
 			#endif
 			case 0x37:rfWrite(rd32, i & 0xFFFFF000);pcWrite(pc + 4);break; // LUI
@@ -949,8 +949,8 @@ public:
 					if(v2p(address, &pAddr, WRITE)){ trap(0, 15, address); return; }
 					dWrite(pAddr, size, (uint8_t*)&i32_rs2);
 					pcWrite(pc + 4);
+				    lrscReserved = false;
 				}
-				lrscReserved = false;
 			}break;
 			case 0x13: //ALUi
 				switch ((i >> 12) & 0x7) {
