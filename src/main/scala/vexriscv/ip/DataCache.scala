@@ -864,8 +864,8 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
 
     val lrSc = withInternalLrSc generate new Area{
       val reserved = RegInit(False)
-      when(io.cpu.writeBack.isValid && !io.cpu.writeBack.isStuck && request.isLrsc){
-        reserved := !request.wr
+      when(io.cpu.writeBack.isValid && !io.cpu.writeBack.isStuck && request.wr){
+        reserved := False
       }
     }
 
