@@ -113,7 +113,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
 
         withDebug.get match {
           case DEBUG_JTAG => jtag <> plugin.io.bus.fromJtag()
-          case DEBUG_JTAG_CTRL => jtagInstructionCtrl <> plugin.io.bus.fromJtagInstructionCtrl(jtagClockDomain)
+          case DEBUG_JTAG_CTRL => jtagInstructionCtrl <> plugin.io.bus.fromJtagInstructionCtrl(jtagClockDomain, 0)
           case DEBUG_BUS => debugBus <> plugin.io.bus
           case DEBUG_BMB => debugBmb >> plugin.io.bus.fromBmb()
         }

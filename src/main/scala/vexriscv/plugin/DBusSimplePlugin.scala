@@ -567,8 +567,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         }
       }
 
-      if(!earlyInjection && !emitCmdInMemoryStage && config.withWriteBackStage)
-        assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(MEMORY_STORE) && arbitration.isStuck),"DBusSimplePlugin doesn't allow writeback stage stall when read happend")
+//      if(!earlyInjection && !emitCmdInMemoryStage && config.withWriteBackStage)
+//        assert(!(arbitration.isValid && input(MEMORY_ENABLE) && !input(MEMORY_STORE) && arbitration.isStuck),"DBusSimplePlugin doesn't allow writeback stage stall when read happend")
 
       //formal
       insert(FORMAL_MEM_RDATA) := input(MEMORY_READ_DATA)

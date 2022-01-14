@@ -175,7 +175,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
       withExclusiveAndInvalidation = coherency,
       forcePeripheralWidth = !wishboneMemory,
       outOfOrderDecoder = outOfOrderDecoder,
-      fpu = fpu
+      fpu = fpu,
+      jtagHeaderIgnoreWidth = 0
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = liteDramWidth),
     liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
@@ -250,7 +251,8 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
           resetVector = 0x80000000l
         )
       },
-      withExclusiveAndInvalidation = true
+      withExclusiveAndInvalidation = true,
+      jtagHeaderIgnoreWidth = 0
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
     liteDramMapping = SizeMapping(0x80000000l, 0x70000000l),
