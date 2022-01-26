@@ -689,8 +689,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val exceptionCode = Reg(UInt(trapCodeWidth bits))
       }
       val mtval = Reg(UInt(xlen bits))
-      val mcycle   = Reg(UInt(64 bits)) randBoot()
-      val minstret = Reg(UInt(64 bits)) randBoot()
+      val mcycle   = Reg(UInt(64 bits)) init(0)
+      val minstret = Reg(UInt(64 bits)) init(0)
 
 
       val medeleg = supervisorGen generate new Area {
