@@ -20,6 +20,8 @@
 #include <time.h>
 #include "encoding.h"
 
+#define VL_RANDOM_I_WIDTH(w) (VL_RANDOM_I() & (1l << w)-1l)
+
 using namespace std;
 
 struct timespec timer_get(){
@@ -1440,7 +1442,7 @@ public:
     }
 	Workspace(string name){
 	    vcdName = name;
-	    //seed = VL_RANDOM_I(32)^VL_RANDOM_I(32)^0x1093472;
+	    //seed = VL_RANDOM_I_WIDTH(32)^VL_RANDOM_I_WIDTH(32)^0x1093472;
 	    //srand48(seed);
     //    setIStall(false);
    //     setDStall(false);
@@ -1853,9 +1855,9 @@ public:
 
 				for(SimElement* simElement : simElements) simElement->postCycle();
 				#ifdef RVF
-				top->fpuCmdHalt = VL_RANDOM_I(1);
-                top->fpuCommitHalt = VL_RANDOM_I(1);
-                top->fpuRspHalt = VL_RANDOM_I(1);
+				top->fpuCmdHalt = VL_RANDOM_I_WIDTH(1);
+                top->fpuCommitHalt = VL_RANDOM_I_WIDTH(1);
+                top->fpuRspHalt = VL_RANDOM_I_WIDTH(1);
                 #endif
 
 
@@ -2052,7 +2054,7 @@ public:
 	//TODO doesn't catch when instruction removed ?
 	virtual void postCycle(){
 		top->iBus_rsp_valid = 0;
-		if(rPtr != wPtr && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+		if(rPtr != wPtr && (!ws->iStall || VL_RANDOM_I_WIDTH(7) < 100)){
 	        uint32_t inst_next;
 	        bool error_next;
 		    ws->iBusAccess(pendings[rPtr], &inst_next,&error_next);
@@ -2061,10 +2063,10 @@ public:
 			top->iBus_rsp_valid = 1;
 			top->iBus_rsp_payload_error = error_next;
 		} else {
-		    top->iBus_rsp_payload_inst = VL_RANDOM_I(32);
-		    top->iBus_rsp_payload_error = VL_RANDOM_I(1);
+		    top->iBus_rsp_payload_inst = VL_RANDOM_I_WIDTH(32);
+		    top->iBus_rsp_payload_error = VL_RANDOM_I_WIDTH(1);
 		}
-		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100;
+		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I_WIDTH(7) < 100;
 	}
 };
 #endif
@@ -2139,18 +2141,18 @@ public:
 	}
 	//TODO doesn't catch when instruction removed ?
 	virtual void postCycle(){
-		if(!rsps.empty() && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+		if(!rsps.empty() && (!ws->iStall || VL_RANDOM_I_WIDTH(7) < 100)){
 			IBusSimpleAvalonRsp rsp = rsps.front(); rsps.pop();
 			top->iBusAvalon_readDataValid = 1;
 			top->iBusAvalon_readData = rsp.data;
 			top->iBusAvalon_response = rsp.error ? 3 : 0;
 		} else {
 			top->iBusAvalon_readDataValid = 0;
-			top->iBusAvalon_readData = VL_RANDOM_I(32);
-			top->iBusAvalon_response = VL_RANDOM_I(2);
+			top->iBusAvalon_readData = VL_RANDOM_I_WIDTH(32);
+			top->iBusAvalon_response = VL_RANDOM_I_WIDTH(2);
 		}
 		if(ws->iStall)
-			top->iBusAvalon_waitRequestn = VL_RANDOM_I(7) < 100;
+			top->iBusAvalon_waitRequestn = VL_RANDOM_I_WIDTH(7) < 100;
 	}
 };
 #endif
@@ -2187,15 +2189,15 @@ public:
 
 	virtual void postCycle(){
 		if(ws->iStall)
-			top->iBusAhbLite3_HREADY = (!ws->iStall || VL_RANDOM_I(7) < 100);
+			top->iBusAhbLite3_HREADY = (!ws->iStall || VL_RANDOM_I_WIDTH(7) < 100);
 
 		if(pending && top->iBusAhbLite3_HREADY){
 			top->iBusAhbLite3_HRDATA = iBusAhbLite3_HRDATA;
 			top->iBusAhbLite3_HRESP  = iBusAhbLite3_HRESP;
 			pending = false;
 		} else {
-			top->iBusAhbLite3_HRDATA = VL_RANDOM_I(32);
-			top->iBusAhbLite3_HRESP = VL_RANDOM_I(1);
+			top->iBusAhbLite3_HRDATA = VL_RANDOM_I_WIDTH(32);
+			top->iBusAhbLite3_HRESP = VL_RANDOM_I_WIDTH(1);
 		}
 	}
 };
@@ -2233,7 +2235,7 @@ public:
 	virtual void postCycle(){
 		bool error;
 		top->iBus_rsp_valid = 0;
-		if(pendingCount != 0 && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+		if(pendingCount != 0 && (!ws->iStall || VL_RANDOM_I_WIDTH(7) < 100)){
 		    #ifdef IBUS_TC
             if((address & 0x70000000) == 0){
                 printf("IBUS_CACHED access out of range\n");
@@ -2251,7 +2253,7 @@ public:
 			address = address + IBUS_DATA_WIDTH/8;
 			top->iBus_rsp_valid = 1;
 		}
-		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I(7) < 100 && pendingCount == 0;
+		if(ws->iStall) top->iBus_cmd_ready = VL_RANDOM_I_WIDTH(7) < 100 && pendingCount == 0;
 	}
 };
 #endif
@@ -2266,7 +2268,7 @@ struct IBusCachedAvalonTask{
 
 class IBusCachedAvalon : public SimElement{
 public:
-	uint32_t inst_next = VL_RANDOM_I(32);
+	uint32_t inst_next = VL_RANDOM_I_WIDTH(32);
 	bool error_next = false;
 
 	queue<IBusCachedAvalonTask> tasks;
@@ -2296,7 +2298,7 @@ public:
 	virtual void postCycle(){
 		bool error;
 		top->iBusAvalon_readDataValid = 0;
-		if(!tasks.empty() && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+		if(!tasks.empty() && (!ws->iStall || VL_RANDOM_I_WIDTH(7) < 100)){
 			uint32_t &address = tasks.front().address;
 			uint32_t &pendingCount = tasks.front().pendingCount;
 			bool error;
@@ -2309,7 +2311,7 @@ public:
 				tasks.pop();
 		}
 		if(ws->iStall)
-			top->iBusAvalon_waitRequestn = VL_RANDOM_I(7) < 100;
+			top->iBusAvalon_waitRequestn = VL_RANDOM_I_WIDTH(7) < 100;
 	}
 };
 #endif
@@ -2341,9 +2343,9 @@ public:
 	virtual void postCycle(){
 
 		if(ws->iStall)
-			top->iBusWishbone_ACK = VL_RANDOM_I(7) < 100;
+			top->iBusWishbone_ACK = VL_RANDOM_I_WIDTH(7) < 100;
 
-        top->iBusWishbone_DAT_MISO = VL_RANDOM_I(32);
+        top->iBusWishbone_DAT_MISO = VL_RANDOM_I_WIDTH(32);
         if (top->iBusWishbone_CYC && top->iBusWishbone_STB && top->iBusWishbone_ACK) {
             if(top->iBusWishbone_WE){
 
@@ -2361,7 +2363,7 @@ public:
 #ifdef DBUS_SIMPLE
 class DBusSimple : public SimElement{
 public:
-	uint32_t data_next = VL_RANDOM_I(32);
+	uint32_t data_next = VL_RANDOM_I_WIDTH(32);
 	bool error_next = false;
 	bool pending = false;
 
@@ -2387,16 +2389,16 @@ public:
 
 	virtual void postCycle(){
 		top->dBus_rsp_ready = 0;
-		if(pending && (!ws->dStall || VL_RANDOM_I(7) < 100)){
+		if(pending && (!ws->dStall || VL_RANDOM_I_WIDTH(7) < 100)){
 			pending = false;
 			top->dBus_rsp_ready = 1;
 			top->dBus_rsp_data = data_next;
 			top->dBus_rsp_error = error_next;
 		} else{
-			top->dBus_rsp_data = VL_RANDOM_I(32);
+			top->dBus_rsp_data = VL_RANDOM_I_WIDTH(32);
 		}
 
-		if(ws->dStall) top->dBus_cmd_ready = VL_RANDOM_I(7) < 100 && !pending;
+		if(ws->dStall) top->dBus_cmd_ready = VL_RANDOM_I_WIDTH(7) < 100 && !pending;
 	}
 };
 #endif
@@ -2438,18 +2440,18 @@ public:
 	}
 	//TODO doesn't catch when instruction removed ?
 	virtual void postCycle(){
-		if(!rsps.empty() && (!ws->iStall || VL_RANDOM_I(7) < 100)){
+		if(!rsps.empty() && (!ws->iStall || VL_RANDOM_I_WIDTH(7) < 100)){
 			DBusSimpleAvalonRsp rsp = rsps.front(); rsps.pop();
 			top->dBusAvalon_readDataValid = 1;
 			top->dBusAvalon_readData = rsp.data;
 			top->dBusAvalon_response = rsp.error ? 3 : 0;
 		} else {
 			top->dBusAvalon_readDataValid = 0;
-			top->dBusAvalon_readData = VL_RANDOM_I(32);
-			top->dBusAvalon_response = VL_RANDOM_I(2);
+			top->dBusAvalon_readData = VL_RANDOM_I_WIDTH(32);
+			top->dBusAvalon_response = VL_RANDOM_I_WIDTH(2);
 		}
 		if(ws->iStall)
-			top->dBusAvalon_waitRequestn = VL_RANDOM_I(7) < 100;
+			top->dBusAvalon_waitRequestn = VL_RANDOM_I_WIDTH(7) < 100;
 	}
 };
 #endif
@@ -2492,10 +2494,10 @@ public:
 
 	virtual void postCycle(){
 		if(ws->iStall)
-			top->dBusAhbLite3_HREADY = (!ws->iStall || VL_RANDOM_I(7) < 100);
+			top->dBusAhbLite3_HREADY = (!ws->iStall || VL_RANDOM_I_WIDTH(7) < 100);
 
-        top->dBusAhbLite3_HRDATA = VL_RANDOM_I(32);
-        top->dBusAhbLite3_HRESP = VL_RANDOM_I(1);
+        top->dBusAhbLite3_HRDATA = VL_RANDOM_I_WIDTH(32);
+        top->dBusAhbLite3_HRESP = VL_RANDOM_I_WIDTH(1);
 
 		if(top->dBusAhbLite3_HREADY && dBusAhbLite3_HTRANS == 2 && !dBusAhbLite3_HWRITE){
 
@@ -2534,8 +2536,8 @@ public:
 
 	virtual void postCycle(){
 		if(ws->iStall)
-			top->dBusWishbone_ACK = VL_RANDOM_I(7) < 100;
-        top->dBusWishbone_DAT_MISO = VL_RANDOM_I(32);
+			top->dBusWishbone_ACK = VL_RANDOM_I_WIDTH(7) < 100;
+        top->dBusWishbone_DAT_MISO = VL_RANDOM_I_WIDTH(32);
         if (top->dBusWishbone_CYC && top->dBusWishbone_STB && top->dBusWishbone_ACK) {
             if(top->dBusWishbone_WE){
                 bool dummy;
@@ -2638,7 +2640,7 @@ public:
                 ws->dBusAccess(top->dBus_cmd_payload_address,0,1 << top->dBus_cmd_payload_size,buffer, &error);
                 for(int beat = 0;beat <= beatCount;beat++){
                     for(int i = 0;i < DBUS_LOAD_DATA_WIDTH/8;i++){
-                        rsp.data[i] = (address >= startAt && address < endAt) ? buffer[address-top->dBus_cmd_payload_address] : VL_RANDOM_I(8);
+                        rsp.data[i] = (address >= startAt && address < endAt) ? buffer[address-top->dBus_cmd_payload_address] : VL_RANDOM_I_WIDTH(8);
                         address += 1;
                     }
                     rsp.last = beat == beatCount;
@@ -2655,8 +2657,8 @@ public:
 
                 #ifdef DBUS_INVALIDATE
                     if(ws->allowInvalidate){
-                        if(VL_RANDOM_I(7) < 10){
-                            invalidationHint.push(top->dBus_cmd_payload_address + VL_RANDOM_I(5));
+                        if(VL_RANDOM_I_WIDTH(7) < 10){
+                            invalidationHint.push(top->dBus_cmd_payload_address + VL_RANDOM_I_WIDTH(5));
                         }
                     }
                 #endif
@@ -2671,7 +2673,7 @@ public:
 
 	virtual void postCycle(){
 
-		if(!rsps.empty() && (!ws->dStall || VL_RANDOM_I(7) < 100)){
+		if(!rsps.empty() && (!ws->dStall || VL_RANDOM_I_WIDTH(7) < 100)){
 			DBusCachedTask rsp = rsps.front();
 			rsps.pop();
 			top->dBus_rsp_valid = 1;
@@ -2686,33 +2688,33 @@ public:
 		} else{
 			top->dBus_rsp_valid = 0;
             for(int idx = 0;idx < DBUS_LOAD_DATA_WIDTH/32;idx++){
-			    ((uint32_t*)&top->dBus_rsp_payload_data)[idx] = VL_RANDOM_I(32);
+			    ((uint32_t*)&top->dBus_rsp_payload_data)[idx] = VL_RANDOM_I_WIDTH(32);
 			}
-			top->dBus_rsp_payload_error = VL_RANDOM_I(1);
-			top->dBus_rsp_payload_last = VL_RANDOM_I(1);
+			top->dBus_rsp_payload_error = VL_RANDOM_I_WIDTH(1);
+			top->dBus_rsp_payload_last = VL_RANDOM_I_WIDTH(1);
             #ifdef DBUS_EXCLUSIVE
-            top->dBus_rsp_payload_exclusive = VL_RANDOM_I(1);
+            top->dBus_rsp_payload_exclusive = VL_RANDOM_I_WIDTH(1);
             #endif
 		}
-		top->dBus_cmd_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
+		top->dBus_cmd_ready = (ws->dStall ? VL_RANDOM_I_WIDTH(7) < 100 : 1);
 
         #ifdef DBUS_INVALIDATE
             if(ws->allowInvalidate){
                 if(top->dBus_inv_ready) top->dBus_inv_valid = 0;
-                if(top->dBus_inv_valid == 0 && VL_RANDOM_I(7) < 5){
+                if(top->dBus_inv_valid == 0 && VL_RANDOM_I_WIDTH(7) < 5){
                     top->dBus_inv_valid = 1;
-                    top->dBus_inv_payload_fragment_enable = VL_RANDOM_I(7) < 100;
+                    top->dBus_inv_payload_fragment_enable = VL_RANDOM_I_WIDTH(7) < 100;
                     if(!invalidationHint.empty()){
                         top->dBus_inv_payload_fragment_address = invalidationHint.front();
                         invalidationHint.pop();
                     } else {
-                        top->dBus_inv_payload_fragment_address = VL_RANDOM_I(32);
+                        top->dBus_inv_payload_fragment_address = VL_RANDOM_I_WIDTH(32);
                     }
                 }
             }
-		    top->dBus_ack_ready = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
+		    top->dBus_ack_ready = (ws->dStall ? VL_RANDOM_I_WIDTH(7) < 100 : 1);
 		    if(top->dBus_sync_ready) top->dBus_sync_valid = 0;
-		    if(top->dBus_sync_valid == 0 && pendingSync != 0 && (ws->dStall ? VL_RANDOM_I(7) < 80 : 1) ){
+		    if(top->dBus_sync_valid == 0 && pendingSync != 0 && (ws->dStall ? VL_RANDOM_I_WIDTH(7) < 80 : 1) ){
 		        top->dBus_sync_valid = 1;
             }
         #endif
@@ -2767,7 +2769,7 @@ public:
 	}
 
 	virtual void postCycle(){
-		if(!rsps.empty() && (!ws->dStall || VL_RANDOM_I(7) < 100)){
+		if(!rsps.empty() && (!ws->dStall || VL_RANDOM_I_WIDTH(7) < 100)){
 			DBusCachedAvalonTask rsp = rsps.front();
 			rsps.pop();
 			top->dBusAvalon_response = rsp.error ? 3 : 0;
@@ -2775,11 +2777,11 @@ public:
 			top->dBusAvalon_readDataValid = 1;
 		} else{
 			top->dBusAvalon_readDataValid = 0;
-			top->dBusAvalon_readData = VL_RANDOM_I(32);
-			top->dBusAvalon_response = VL_RANDOM_I(2); //TODO
+			top->dBusAvalon_readData = VL_RANDOM_I_WIDTH(32);
+			top->dBusAvalon_response = VL_RANDOM_I_WIDTH(2); //TODO
 		}
 
-		top->dBusAvalon_waitRequestn = (ws->dStall ? VL_RANDOM_I(7) < 100 : 1);
+		top->dBusAvalon_waitRequestn = (ws->dStall ? VL_RANDOM_I_WIDTH(7) < 100 : 1);
 	}
 };
 #endif
@@ -3008,9 +3010,9 @@ public:
 			top->debug_bus_cmd_payload_data = task.data;
 		}else {
 			top->debug_bus_cmd_valid = 0;
-			top->debug_bus_cmd_payload_wr = VL_RANDOM_I(1);
-			top->debug_bus_cmd_payload_address = VL_RANDOM_I(8);
-			top->debug_bus_cmd_payload_data = VL_RANDOM_I(32);
+			top->debug_bus_cmd_payload_wr = VL_RANDOM_I_WIDTH(1);
+			top->debug_bus_cmd_payload_address = VL_RANDOM_I_WIDTH(8);
+			top->debug_bus_cmd_payload_data = VL_RANDOM_I_WIDTH(32);
 		}
 	}
 };
@@ -3059,8 +3061,8 @@ public:
 		}else {
 			top->debugBusAvalon_write = 0;
 			top->debugBusAvalon_read = 0;
-			top->debugBusAvalon_address = VL_RANDOM_I(8);
-			top->debugBusAvalon_writeData = VL_RANDOM_I(32);
+			top->debugBusAvalon_address = VL_RANDOM_I_WIDTH(8);
+			top->debugBusAvalon_writeData = VL_RANDOM_I_WIDTH(32);
 		}
 	}
 };
@@ -3373,7 +3375,7 @@ public:
 
 
 	uint32_t readCmd(uint32_t size, uint32_t address){
-		accessCmd(false, 2, address, VL_RANDOM_I(32));
+		accessCmd(false, 2, address, VL_RANDOM_I_WIDTH(32));
 		int error;
 		if((error = recv(clientSocket, buffer, 4, 0)) != 4){
 			printf("Should read 4 bytes, had %d", error);
@@ -4434,7 +4436,7 @@ int main(int argc, char **argv, char **env) {
 			}
 
             while(tasks.size() > FREERTOS_COUNT){
-                tasks.erase(tasks.begin() + (VL_RANDOM_I(32)%tasks.size()));
+                tasks.erase(tasks.begin() + (VL_RANDOM_I_WIDTH(32)%tasks.size()));
             }
 
 
@@ -4465,7 +4467,7 @@ int main(int argc, char **argv, char **env) {
             }
 
             while(tasks.size() > ZEPHYR_COUNT){
-                tasks.erase(tasks.begin() + (VL_RANDOM_I(32)%tasks.size()));
+                tasks.erase(tasks.begin() + (VL_RANDOM_I_WIDTH(32)%tasks.size()));
             }
 
 
