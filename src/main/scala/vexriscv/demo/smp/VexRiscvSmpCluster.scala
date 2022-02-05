@@ -26,6 +26,7 @@ import spinal.lib.generator._
 import vexriscv.ip.fpu.FpuParameter
 
 case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig],
+                                       jtagHeaderIgnoreWidth : Int,
                                        withExclusiveAndInvalidation : Boolean,
                                        forcePeripheralWidth : Boolean = true,
                                        outOfOrderDecoder : Boolean = true,
@@ -51,7 +52,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
 
   implicit val interconnect = BmbInterconnectGenerator()
 
-  val debugBridge = debugCd.outputClockDomain on JtagInstructionDebuggerGenerator()
+  val debugBridge = debugCd.outputClockDomain on JtagInstructionDebuggerGenerator(p.jtagHeaderIgnoreWidth)
   debugBridge.jtagClockDomain.load(ClockDomain.external("jtag", withReset = false))
 
   val debugPort = Handle(debugBridge.logic.jtagBridge.io.ctrl.toIo)

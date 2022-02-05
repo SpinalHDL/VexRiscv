@@ -40,7 +40,7 @@ jobs:
       with:
         path: |
           ~/tools
-        key: ${{ runner.os }}-tools_v2
+        key: ${{ runner.os }}-tools_v4
 
     - name: Setup env
       run: echo "$HOME/tools/bin" >> $GITHUB_PATH

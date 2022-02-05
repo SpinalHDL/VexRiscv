@@ -175,6 +175,7 @@ case class FenceFlags() extends Bundle {
 case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMasterSlave{
   val isValid = Bool()
   val isStuck = Bool()
+  val isFiring = Bool()
   val isUser = Bool()
   val haltIt = Bool()
   val isWrite = Bool()
@@ -187,7 +188,7 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   val exclusiveOk = Bool()
 
   override def asMaster(): Unit = {
-    out(isValid,isStuck,isUser, address, fence, storeData)
+    out(isValid,isStuck,isUser, address, fence, storeData, isFiring)
     in(haltIt, data, mmuException, unalignedAccess, accessError, isWrite, keepMemRspData, exclusiveOk)
   }
 }
@@ -864,8 +865,9 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
 
     val lrSc = withInternalLrSc generate new Area{
       val reserved = RegInit(False)
-      when(io.cpu.writeBack.isValid && !io.cpu.writeBack.isStuck && request.isLrsc){
-        reserved := !request.wr
+      when(io.cpu.writeBack.isValid && io.cpu.writeBack.isFiring){
+        reserved setWhen(request.isLrsc)
+        reserved clearWhen(request.wr)
       }
     }
 
