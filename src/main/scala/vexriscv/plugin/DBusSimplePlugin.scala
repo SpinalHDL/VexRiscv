@@ -518,9 +518,6 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
         }
 
       }
-
-
-      if(rspStage != execute) assert(!(dBus.rsp.ready && input(MEMORY_ENABLE) && arbitration.isValid && arbitration.isStuck),"DBusSimplePlugin doesn't allow memory stage stall when read happend")
     }
 
     //Reformat read responses, REGFILE_WRITE_DATA overriding
