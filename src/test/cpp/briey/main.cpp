@@ -382,6 +382,8 @@ public:
 		timeProcesses.push_back(asyncReset);
 		timeProcesses.push_back(jtag);
 		timeProcesses.push_back(uartRx);
+        top->io_uart_rxd = 1;
+
 
 		SdramConfig *sdramConfig = new SdramConfig(
 			2,  //byteCount
