@@ -206,7 +206,7 @@ object VexRiscvSmpClusterGen {
         mvendorid      = null,
         marchid        = null,
         mimpid         = null,
-        mhartid        = 0,
+        mhartid        = hartId,
         misaExtensionsInit = 0,
         misaAccess     = CsrAccess.NONE,
         mtvecAccess    = CsrAccess.READ_WRITE,
