@@ -53,7 +53,6 @@ object GenSmallAndProductiveCfu extends App{
         new CfuPlugin(
           stageCount = 1,
           allowZeroLatency = true,
-          cfuIndexWidth = 4,
           encodings = List(
             CfuPluginEncoding (
               instruction = M"-------------------------0001011",
@@ -64,7 +63,7 @@ object GenSmallAndProductiveCfu extends App{
           busParameter = CfuBusParameter(
             CFU_VERSION = 0,
             CFU_INTERFACE_ID_W = 0,
-            CFU_FUNCTION_ID_W = 7,
+            CFU_FUNCTION_ID_W = 3,
             CFU_REORDER_ID_W = 0,
             CFU_REQ_RESP_ID_W = 0,
             CFU_INPUTS = 2,
