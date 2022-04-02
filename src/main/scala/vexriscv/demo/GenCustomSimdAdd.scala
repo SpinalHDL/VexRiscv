@@ -13,7 +13,7 @@ object GenCustomSimdAdd extends App{
       plugins = List(
         new SimdAddPlugin,
         new IBusSimplePlugin(
-          resetVector = 0x00000000l,
+          resetVector = 0x80000000l,
           cmdForkOnSecondStage = false,
           cmdForkPersistence = false,
           prediction = NONE,
