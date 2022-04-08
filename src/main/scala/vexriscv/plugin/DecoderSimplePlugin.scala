@@ -79,6 +79,9 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false,
 
 
   override def setup(pipeline: VexRiscv): Unit = {
+    if(!catchIllegalInstruction) {
+      SpinalWarning("This VexRiscv configuration is set without illegal instruction catch support. Some software may rely on it (ex: Rust)")
+    }
     if(catchIllegalInstruction) {
       val exceptionService = pipeline.plugins.filter(_.isInstanceOf[ExceptionService]).head.asInstanceOf[ExceptionService]
       decodeExceptionPort = exceptionService.newExceptionPort(pipeline.decode).setName("decodeExceptionPort")

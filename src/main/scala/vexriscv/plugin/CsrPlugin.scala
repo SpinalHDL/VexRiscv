@@ -532,6 +532,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
 
+    if(!config.ebreakGen) {
+      SpinalWarning("This VexRiscv configuration is set without software ebreak instruction support. Some software may rely on it (ex: Rust). (This isn't related to JTAG ebreak)")
+    }
+
     csrMapping = new CsrMapping()
 
     inWfi = False.addTag(Verilator.public)
