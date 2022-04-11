@@ -54,12 +54,10 @@ int main(int argc, char **argv, char **env) {
 	printf("BOOT\n");
 	timespec startedAt = timer_start();
 
-	MuraxWorkspace().run(100e6);
+	MuraxWorkspace().run(1e9);
 
 	uint64_t duration = timer_end(startedAt);
 	cout << endl << "****************************************************************" << endl;
-	cout << "Had simulate " << workspaceCycles << " clock cycles in " << duration*1e-9 << " s (" << workspaceCycles / (duration*1e-9) << " Khz)" << endl;
-	cout << "****************************************************************" << endl << endl;
 
 
 	exit(0);
