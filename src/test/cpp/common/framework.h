@@ -127,7 +127,6 @@ public:
 
 
 class success : public std::exception { };
-static uint32_t workspaceCycles = 0;
 template <class T> class Workspace{
 public:
 
@@ -180,7 +179,7 @@ public:
 		#endif
 	}
 
-	Workspace* run(uint32_t timeout = 5000){
+	Workspace* run(double timeout = 1e6){
 
 		// init trace dump
 		#ifdef TRACE
@@ -205,6 +204,10 @@ public:
 					if(p->wakeEnable && p->wakeDelay < delay)
 						delay = p->wakeDelay;
 
+                if(time*timeToSec > timeout){
+                    printf("Simulation timeout triggered (%f)\n", time*timeToSec);
+                    fail();
+                }
 				if(delay == ~0l){
 					fail();
 				}
