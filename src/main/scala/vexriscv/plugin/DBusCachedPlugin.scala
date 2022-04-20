@@ -295,7 +295,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
     pipeline plug new Area{
       //Memory bandwidth counter
-      val rspCounter = RegInit(UInt(32 bits)) init(0)
+      val rspCounter = Reg(UInt(32 bits)) init(0)
       when(dBus.rsp.valid){
         rspCounter := rspCounter + 1
       }
