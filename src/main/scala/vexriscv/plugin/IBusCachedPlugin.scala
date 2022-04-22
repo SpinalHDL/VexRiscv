@@ -141,7 +141,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
       iBus.cmd.address.allowOverride := cache.io.mem.cmd.address
 
       //Memory bandwidth counter
-      val rspCounter = RegInit(UInt(32 bits)) init(0)
+      val rspCounter = Reg(UInt(32 bits)) init(0)
       when(iBus.rsp.valid){
         rspCounter := rspCounter + 1
       }
