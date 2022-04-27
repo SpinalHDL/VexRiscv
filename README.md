@@ -750,6 +750,12 @@ Fpu 64/32 bits ->
   Artix 7 FMax    -> 165 Mhz 3728 LUT 3175 FF 
 ```
 
+Note that if you want to debug FPU code via the openocd_riscv.vexriscv target, you need to use the GDB from : 
+
+https://static.dev.sifive.com/dev-tools/riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6.tar.gz
+
+More recent versions of gdb will not detect the FPU. Also, the openocd_riscv.vexriscv can't read CSR/FPU registers, so to have visibility on the floating points values, you need to compile your code in -O0, which will force values to be stored in memory (and so, be visible)
+
 ### Plugins
 
 This chapter describes the currently implemented plugins.
