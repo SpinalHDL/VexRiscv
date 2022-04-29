@@ -24,6 +24,7 @@ trait DecoderService{
   def add(key : MaskedLiteral,values : Seq[(Stageable[_ <: BaseType],Any)])
   def add(encoding :Seq[(MaskedLiteral,Seq[(Stageable[_ <: BaseType],Any)])])
   def addDefault(key : Stageable[_ <: BaseType], value : Any)
+  def forceIllegal() : Unit
 }
 
 case class ExceptionCause(codeWidth : Int) extends Bundle{

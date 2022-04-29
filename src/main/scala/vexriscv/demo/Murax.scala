@@ -335,6 +335,54 @@ object Murax{
   }
 }
 
+object MuraxCfu{
+  def main(args: Array[String]) {
+    SpinalVerilog{
+      val config = MuraxConfig.default
+      config.cpuPlugins += new CfuPlugin(
+        stageCount = 1,
+        allowZeroLatency = true,
+        encodings = List(
+          CfuPluginEncoding (
+            instruction = M"-------------------------0001011",
+            functionId = List(14 downto 12),
+            input2Kind = CfuPlugin.Input2Kind.RS
+          )
+        ),
+        busParameter = CfuBusParameter(
+          CFU_VERSION = 0,
+          CFU_INTERFACE_ID_W = 0,
+          CFU_FUNCTION_ID_W = 3,
+          CFU_REORDER_ID_W = 0,
+          CFU_REQ_RESP_ID_W = 0,
+          CFU_INPUTS = 2,
+          CFU_INPUT_DATA_W = 32,
+          CFU_OUTPUTS = 1,
+          CFU_OUTPUT_DATA_W = 32,
+          CFU_FLOW_REQ_READY_ALWAYS = false,
+          CFU_FLOW_RESP_READY_ALWAYS = false,
+          CFU_WITH_STATUS = true,
+          CFU_RAW_INSN_W = 32,
+          CFU_CFU_ID_W = 4,
+          CFU_STATE_INDEX_NUM = 5
+        )
+      )
+
+      val toplevel = Murax(config)
+
+      toplevel.rework {
+        for (plugin <- toplevel.system.cpu.plugins) plugin match {
+          case plugin: CfuPlugin => plugin.bus.toIo().setName("miaou")
+          case _ =>
+        }
+      }
+
+      toplevel
+    }
+  }
+}
+
+
 object Murax_iCE40_hx8k_breakout_board_xip{
 
   case class SB_GB() extends BlackBox{

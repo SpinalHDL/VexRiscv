@@ -71,6 +71,8 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false,
     }
   }
 
+  def forceIllegal() : Unit = if(catchIllegalInstruction) pipeline.decode.input(pipeline.config.LEGAL_INSTRUCTION) := False
+
   val defaults = mutable.LinkedHashMap[Stageable[_ <: BaseType], BaseType]()
   val encodings = mutable.LinkedHashMap[MaskedLiteral,ArrayBuffer[(Stageable[_ <: BaseType], BaseType)]]()
   var decodeExceptionPort : Flow[ExceptionCause] = null
