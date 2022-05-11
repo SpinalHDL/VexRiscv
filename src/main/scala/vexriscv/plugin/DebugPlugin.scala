@@ -319,6 +319,10 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
       if(pipeline.config.withRvc){
         val cleanStep = RegNext(stepIt && decode.arbitration.isFiring) init(False)
         execute.arbitration.flushNext setWhen(cleanStep)
+        when(cleanStep){
+          execute.arbitration.flushNext := True
+          iBusFetcher.forceNoDecode()
+        }
       }
 
       io.resetOut := RegNext(resetIt)

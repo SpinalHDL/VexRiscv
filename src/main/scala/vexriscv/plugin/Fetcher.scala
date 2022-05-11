@@ -33,6 +33,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 //  assert(!(cmdToRspStageCount == 1 && !injectorStage))
   assert(!(compressedGen && !decodePcGen))
   var fetcherHalt : Bool = null
+  var forceNoDecodeCond : Bool = null
   var pcValids : Vec[Bool] = null
   def pcValid(stage : Stage) = pcValids(pipeline.indexOf(stage))
   var incomingInstruction : Bool = null
@@ -50,6 +51,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
   var predictionJumpInterface : Flow[UInt] = null
 
   override def haltIt(): Unit = fetcherHalt := True
+  override def forceNoDecode(): Unit = forceNoDecodeCond := True
   case class JumpInfo(interface :  Flow[UInt], stage: Stage, priority : Int)
   val jumpInfos = ArrayBuffer[JumpInfo]()
   override def createJumpInterface(stage: Stage, priority : Int = 0): Flow[UInt] = {
@@ -63,6 +65,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 //  var decodeExceptionPort : Flow[ExceptionCause] = null
   override def setup(pipeline: VexRiscv): Unit = {
     fetcherHalt = False
+    forceNoDecodeCond = False
     incomingInstruction = False
     if(resetVector == null) externalResetVector = in(UInt(32 bits).setName("externalResetVector"))
 
@@ -408,6 +411,9 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         })
       }
 
+      Component.current.addPrePopTask(() => {
+        decode.arbitration.isValid clearWhen(forceNoDecodeCond)
+      })
 
       //Formal verification signals generation, miss prediction stuff ?
       val formal = new Area {
