@@ -193,7 +193,7 @@ class CfuPlugin(val stageCount : Int,
       arbitration.haltItself setWhen(scheduleWish && hazard)
 
       val hold = RegInit(False) setWhen(schedule) clearWhen(bus.cmd.ready)
-      val fired = RegInit(False) setWhen(bus.cmd.fire) clearWhen(!arbitration.isStuckByOthers)
+      val fired = RegInit(False) setWhen(bus.cmd.fire) clearWhen(!arbitration.isStuck)
       insert(CFU_IN_FLIGHT) := schedule || hold || fired
 
       bus.cmd.valid := (schedule || hold) && !fired
