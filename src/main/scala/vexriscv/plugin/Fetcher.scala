@@ -186,7 +186,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
       val predictionPcLoad = ifGen(prediction == DYNAMIC_TARGET) (Flow(UInt(32 bits)))
       if(prediction == DYNAMIC_TARGET) {
-        when(predictionPcLoad.valid) {
+        when(predictionPcLoad.valid && !forceNoDecodeCond) {
           pcReg := predictionPcLoad.payload
         }
       }
