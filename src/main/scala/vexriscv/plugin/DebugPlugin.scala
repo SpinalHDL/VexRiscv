@@ -342,6 +342,10 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
           case p : PrivilegeService => p.forceMachine()
           case _ =>
         }
+        pipeline.plugins.foreach{
+          case p : PredictionInterface => p.inDebugNoFetch()
+          case _ =>
+        }
         if(pipeline.things.contains(DEBUG_BYPASS_CACHE)) pipeline(DEBUG_BYPASS_CACHE) := True
       }
       when(allowEBreak) {
