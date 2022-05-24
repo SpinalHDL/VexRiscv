@@ -40,6 +40,7 @@ case class DataCacheConfig(cacheSize : Int,
   assert(isPow2(pendingMax))
   assert(rfDataWidth <= memDataWidth)
 
+  def lineCount = cacheSize/bytePerLine/wayCount
   def sizeMax = log2Up(bytePerLine)
   def sizeWidth = log2Up(sizeMax + 1)
   val aggregationWidth = if(withWriteAggregation) log2Up(memDataBytes+1) else 0
@@ -193,13 +194,18 @@ case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMaste
   }
 }
 
+case class DataCacheFlush(lineCount : Int) extends Bundle{
+  val singleLine = Bool()
+  val lineId = UInt(log2Up(lineCount) bits)
+}
+
 case class DataCacheCpuBus(p : DataCacheConfig, mmu : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave{
   val execute   = DataCacheCpuExecute(p)
   val memory    = DataCacheCpuMemory(p, mmu)
   val writeBack = DataCacheCpuWriteBack(p)
 
   val redo = Bool()
-  val flush = Event
+  val flush = Stream(DataCacheFlush(p.lineCount))
 
   override def asMaster(): Unit = {
     master(execute)
@@ -849,6 +855,9 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
         io.cpu.execute.haltIt := True
         when(!hold) {
           counter := counter + 1
+          when(io.cpu.flush.singleLine){
+            counter.msb := True
+          }
         }
       }
 
@@ -860,6 +869,9 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
       when(start){
         waitDone := True
         counter := 0
+        when(io.cpu.flush.singleLine){
+          counter := U"0" @@ io.cpu.flush.lineId
+        }
       }
     }
 

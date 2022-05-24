@@ -228,7 +228,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
     decoderService.addDefault(MEMORY_MANAGMENT, False)
     decoderService.add(MANAGEMENT, List(
-      MEMORY_MANAGMENT -> True
+      MEMORY_MANAGMENT -> True,
+      RS1_USE -> True
     ))
 
     withWriteResponse match {
@@ -343,6 +344,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       }
 
       cache.io.cpu.flush.valid := arbitration.isValid && input(MEMORY_MANAGMENT)
+      cache.io.cpu.flush.singleLine := input(INSTRUCTION)(Riscv.rs1Range) =/= 0
+      cache.io.cpu.flush.lineId := U(input(RS1) >> log2Up(bytePerLine)).resized
       cache.io.cpu.execute.args.totalyConsistent := input(MEMORY_FORCE_CONSTISTENCY)
       arbitration.haltItself setWhen(cache.io.cpu.flush.isStall || cache.io.cpu.execute.haltIt)
 
