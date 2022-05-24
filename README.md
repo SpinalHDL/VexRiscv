@@ -1038,7 +1038,7 @@ There is at least one cycle latency between a cmd and the corresponding rsp. The
 
 Multi way cache implementation with writh-through and allocate on read strategy. (Documentation is WIP)
 
-You can invalidate the whole cache via the 0x500F instruction, and you can invalidate a address range of one line via the instruction 0x500F | RS1 << 15 where RS1 should not be X0.
+You can invalidate the whole cache via the 0x500F instruction, and you can invalidate a address range (single line size) via the instruction 0x500F | RS1 << 15 where RS1 should not be X0 and point to one byte of the desired address to invalidate.
 
 #### MulPlugin
 
