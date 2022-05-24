@@ -106,11 +106,13 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
         iBus.load(plugin.iBus.toBmb())
         doExport(plugin.config.wayCount, "icacheWays")
         doExport(plugin.config.cacheSize, "icacheSize")
+        doExport(plugin.config.bytePerLine, "bytesPerLine")
       }
       case plugin: DBusCachedPlugin => {
         dBus.load(plugin.dBus.toBmb())
         doExport(plugin.config.wayCount, "dcacheWays")
         doExport(plugin.config.cacheSize, "dcacheSize")
+        doExport(plugin.config.bytePerLine, "bytesPerLine")
       }
       case plugin: MmuPlugin => {
         doExport(true, "mmu")
