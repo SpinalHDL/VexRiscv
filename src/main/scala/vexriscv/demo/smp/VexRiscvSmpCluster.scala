@@ -192,7 +192,9 @@ object VexRiscvSmpClusterGen {
                      dTlbSize : Int = 4,
                      prediction : BranchPrediction = vexriscv.plugin.NONE,
                      withDataCache : Boolean = true,
-                     withInstructionCache : Boolean = true
+                     withInstructionCache : Boolean = true,
+                     forceMisa : Boolean = false,
+                     forceMscratch : Boolean = false
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -207,12 +209,12 @@ object VexRiscvSmpClusterGen {
         marchid        = null,
         mimpid         = null,
         mhartid        = hartId,
-        misaExtensionsInit = 0,
-        misaAccess     = CsrAccess.NONE,
+        misaExtensionsInit = Riscv.misaToInt(s"ima${if(withFloat) "f" else ""}${if(withDouble) "d" else ""}s"),
+        misaAccess     = if(forceMisa) CsrAccess.WRITE_ONLY else CsrAccess.NONE,
         mtvecAccess    = CsrAccess.READ_WRITE,
         mtvecInit      = null,
         mepcAccess     = CsrAccess.READ_WRITE,
-        mscratchGen    = false,
+        mscratchGen    = forceMscratch,
         mcauseAccess   = CsrAccess.READ_ONLY,
         mbadaddrAccess = CsrAccess.READ_ONLY,
         mcycleAccess   = CsrAccess.NONE,

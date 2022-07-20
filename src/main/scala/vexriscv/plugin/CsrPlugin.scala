@@ -113,7 +113,7 @@ object CsrPluginConfig{
     xtvecModeGen        = false,
     noCsrAlu            = false,
     wfiGenAsNop         = false,
-    ebreakGen           = false, //TODO
+    ebreakGen           = true,
     userGen             = true,
     supervisorGen       = true,
     sscratchGen         = true,
@@ -713,10 +713,19 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       misaAccess(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
 
       //Machine CSR
-      READ_WRITE(CSR.MSTATUS,11 -> mstatus.MPP, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
+      READ_WRITE(CSR.MSTATUS, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
       READ_ONLY(CSR.MIP, 11 -> mip.MEIP, 7 -> mip.MTIP)
       READ_WRITE(CSR.MIP, 3 -> mip.MSIP)
       READ_WRITE(CSR.MIE, 11 -> mie.MEIE, 7 -> mie.MTIE, 3 -> mie.MSIE)
+
+      r(CSR.MSTATUS, 11 -> mstatus.MPP)
+      onWrite(CSR.MSTATUS){
+        switch(writeData()(12 downto 11)){
+          is(3){ mstatus.MPP := 3 }
+          if(supervisorGen) is(1){ mstatus.MPP := 1 }
+          if(userGen) is(0){ mstatus.MPP := 0 }
+        }
+      }
 
       mtvecAccess(CSR.MTVEC, 2 -> mtvec.base, 0 -> mtvec.mode)
       mepcAccess(CSR.MEPC, mepc)

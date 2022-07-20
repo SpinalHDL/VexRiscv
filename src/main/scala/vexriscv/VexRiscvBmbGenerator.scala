@@ -1,11 +1,11 @@
 package vexriscv
 
 import spinal.core._
-import spinal.lib.bus.bmb.{Bmb, BmbAccessCapabilities, BmbAccessParameter, BmbImplicitDebugDecoder, BmbInvalidationParameter, BmbParameter, BmbInterconnectGenerator}
+import spinal.lib.bus.bmb.{Bmb, BmbAccessCapabilities, BmbAccessParameter, BmbImplicitDebugDecoder, BmbInterconnectGenerator, BmbInvalidationParameter, BmbParameter}
 import spinal.lib.bus.misc.AddressMapping
 import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
 import spinal.lib.generator._
-import spinal.lib.slave
+import spinal.lib.{sexport, slave}
 import vexriscv.plugin._
 import spinal.core.fiber._
 
@@ -93,12 +93,35 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
     }
 
     val cpu = new VexRiscv(config)
+    def doExport(value : => Any, postfix : String) = {
+      sexport(Handle(value).setCompositeName(VexRiscvBmbGenerator.this, postfix))
+    }
+
+    doExport(cpu.plugins.exists(_.isInstanceOf[CfuPlugin]), "cfu")
+    doExport(cpu.plugins.exists(_.isInstanceOf[FpuPlugin]), "fpu")
     for (plugin <- cpu.plugins) plugin match {
       case plugin: IBusSimplePlugin => iBus.load(plugin.iBus.toBmb())
       case plugin: DBusSimplePlugin => dBus.load(plugin.dBus.toBmb())
-      case plugin: IBusCachedPlugin => iBus.load(plugin.iBus.toBmb())
-      case plugin: DBusCachedPlugin => dBus.load(plugin.dBus.toBmb())
+      case plugin: IBusCachedPlugin => {
+        iBus.load(plugin.iBus.toBmb())
+        doExport(plugin.config.wayCount, "icacheWays")
+        doExport(plugin.config.cacheSize, "icacheSize")
+        doExport(plugin.config.bytePerLine, "bytesPerLine")
+      }
+      case plugin: DBusCachedPlugin => {
+        dBus.load(plugin.dBus.toBmb())
+        doExport(plugin.config.wayCount, "dcacheWays")
+        doExport(plugin.config.cacheSize, "dcacheSize")
+        doExport(plugin.config.bytePerLine, "bytesPerLine")
+      }
+      case plugin: MmuPlugin => {
+        doExport(true, "mmu")
+      }
+      case plugin: StaticMemoryTranslatorPlugin => {
+        doExport(false, "mmu")
+      }
       case plugin: CsrPlugin => {
+        doExport(plugin.config.supervisorGen, "supervisor")
         externalInterrupt load plugin.externalInterrupt
         timerInterrupt load plugin.timerInterrupt
         softwareInterrupt load plugin.softwareInterrupt
