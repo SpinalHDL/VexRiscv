@@ -390,7 +390,7 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
           //Check if the decode instruction is driven by a register
           val instructionDriver = try {
-            decode.input(INSTRUCTION).getDrivingReg
+            decode.input(INSTRUCTION).getDrivingReg()
           } catch {
             case _: Throwable => null
           }

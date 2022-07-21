@@ -75,5 +75,5 @@ class Stage() extends Area{
     dontSample.getOrElseUpdate(s, ArrayBuffer[Bool]()) += cond
   }
   def inputInit[T <: BaseType](stageable : Stageable[T],initValue : T) =
-    Component.current.addPrePopTask(() => inputsDefault(stageable.asInstanceOf[Stageable[Data]]).asInstanceOf[T].getDrivingReg.init(initValue))
+    Component.current.addPrePopTask(() => inputsDefault(stageable.asInstanceOf[Stageable[Data]]).asInstanceOf[T].getDrivingReg().init(initValue))
 }

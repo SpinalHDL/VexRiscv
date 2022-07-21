@@ -371,7 +371,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         insert(MEMORY_VIRTUAL_ADDRESS) := cache.io.cpu.execute.address
         memory.input(MEMORY_VIRTUAL_ADDRESS)
         if(writeBack != null) addPrePopTask( () =>
-          KeepAttribute(memory.input(MEMORY_VIRTUAL_ADDRESS).getDrivingReg)
+          KeepAttribute(memory.input(MEMORY_VIRTUAL_ADDRESS).getDrivingReg())
         )
       }
     }
@@ -528,14 +528,14 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       dBusAccess.rsp.error := cache.io.cpu.writeBack.unalignedAccess || cache.io.cpu.writeBack.accessError
       dBusAccess.rsp.redo := cache.io.cpu.redo
       component.addPrePopTask{() =>
-        managementStage.input(IS_DBUS_SHARING).getDrivingReg clearWhen(dBusAccess.rsp.fire)
+        managementStage.input(IS_DBUS_SHARING).getDrivingReg() clearWhen(dBusAccess.rsp.fire)
         when(forceDatapath){
           execute.output(REGFILE_WRITE_DATA) := dBusAccess.cmd.address.asBits
         }
         if(mmuAndBufferStage != execute) mmuAndBufferStage.input(IS_DBUS_SHARING) init(False)
         managementStage.input(IS_DBUS_SHARING) init(False)
         when(dBusAccess.rsp.valid){
-          managementStage.input(IS_DBUS_SHARING).getDrivingReg := False
+          managementStage.input(IS_DBUS_SHARING).getDrivingReg() := False
         }
       }
     }
