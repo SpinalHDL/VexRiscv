@@ -120,6 +120,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var netlistName = "VexRiscvLitexSmpCluster"
   var iTlbSize = 4
   var dTlbSize = 4
+  var wishboneForce32b = false
   assert(new scopt.OptionParser[Unit]("VexRiscvLitexSmpClusterCmdGen") {
     help("help").text("prints this usage text")
     opt[Unit]("coherent-dma") action { (v, c) => coherentDma = true }
@@ -136,6 +137,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("aes-instruction") action { (v, c) => aesInstruction = v.toBoolean }
     opt[String]("out-of-order-decoder") action { (v, c) => outOfOrderDecoder = v.toBoolean  }
     opt[String]("wishbone-memory" ) action { (v, c) => wishboneMemory = v.toBoolean  }
+    opt[String]("wishbone-force-32b" ) action { (v, c) => wishboneForce32b = v.toBoolean  }
     opt[String]("fpu" ) action { (v, c) => fpu = v.toBoolean  }
     opt[String]("cpu-per-fpu") action { (v, c) => cpuPerFpu = v.toInt }
     opt[String]("rvc") action { (v, c) => rvc = v.toBoolean }
@@ -173,7 +175,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
         c
       }},
       withExclusiveAndInvalidation = coherency,
-      forcePeripheralWidth = !wishboneMemory,
+      forcePeripheralWidth = !wishboneMemory || wishboneForce32b,
       outOfOrderDecoder = outOfOrderDecoder,
       fpu = fpu,
       jtagHeaderIgnoreWidth = 0

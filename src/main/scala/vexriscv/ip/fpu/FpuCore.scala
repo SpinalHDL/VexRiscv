@@ -530,7 +530,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
           busy := True
           when(boot){
             when(input.i2f && !patched && input.value(31) && input.arg(0)){
-              input.value.getDrivingReg(0, 32 bits) := B(input.value.asUInt.twoComplement(True).resize(32 bits))
+              input.value.getDrivingReg()(0, 32 bits) := B(input.value.asUInt.twoComplement(True).resize(32 bits))
               patched := True
             } otherwise {
               shift.by := OHToUInt(OHMasking.first((ohInput).reversed))
@@ -1318,7 +1318,7 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
       is(_15_XYY2){
         when(mulBuffer.valid) {
           state := Y_15_XYY2
-          mulBuffer.payload.getDrivingReg := (U"11" << mulWidth-2) - (mulBuffer.payload)
+          mulBuffer.payload.getDrivingReg() := (U"11" << mulWidth-2) - (mulBuffer.payload)
         }
       }
       is(Y_15_XYY2){
