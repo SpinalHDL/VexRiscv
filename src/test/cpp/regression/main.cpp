@@ -668,9 +668,9 @@ public:
 		case SATP: satp.raw = value;  break;
 
 		#ifdef RVF
-		case FCSR: fcsr.raw = value & 0x7F; break;
-		case FRM: fcsr.frm = value; break;
-		case FFLAGS: fcsr.flags = value; break;
+		case FCSR: fcsr.raw = value & 0x7F; status.fs = 3; break;
+		case FRM: fcsr.frm = value; status.fs = 3; break;
+		case FFLAGS: fcsr.flags = value; status.fs = 3; break;
 		#endif
 
 		default: ilegalInstruction(); return true; break;

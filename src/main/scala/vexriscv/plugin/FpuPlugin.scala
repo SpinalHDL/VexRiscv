@@ -219,6 +219,9 @@ class FpuPlugin(externalFpu : Boolean = false,
       when(stages.last.arbitration.isFiring && stages.last.input(FPU_ENABLE) && stages.last.input(FPU_OPCODE) =/= FpuOpcode.STORE){
         fs := 3 //DIRTY
       }
+      when(List(CSR.FRM, CSR.FCSR, CSR.FFLAGS).map(id => service.isWriting(id)).orR){
+        fs := 3
+      }
 
       service.rw(CSR.SSTATUS, 13, fs)
       service.rw(CSR.MSTATUS, 13, fs)
