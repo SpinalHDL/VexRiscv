@@ -24,6 +24,7 @@ import spinal.core._
 import spinal.lib._
 import vexriscv.ip._
 import spinal.lib.bus.avalon.AvalonMM
+import spinal.lib.cpu.riscv.debug.DebugTransportModuleParameter
 import spinal.lib.eda.altera.{InterruptReceiverTag, ResetEmitterTag}
 import vexriscv.demo.smp.VexRiscvSmpClusterGen
 import vexriscv.ip.fpu.FpuParameter
@@ -141,13 +142,27 @@ object TestsWorkspace {
         withFloat = true,
         withDouble = true,
         externalFpu = false,
-        simHalt = true
+        simHalt = true,
+        privilegedDebug = true
       )
 
+      config.plugins += new EmbeddedRiscvJtag(
+        p = DebugTransportModuleParameter(
+          addressWidth = 7,
+          version      = 1,
+          idle         = 7
+        ),
+        withTunneling = false,
+        withTap = true
+      )
+
+//      l.foreach{
+//        case p : EmbeddedRiscvJtag => p.debugCd.load(ClockDomain.current.copy(reset = Bool().setName("debug_reset")))
+//        case _ =>
+//      }
 
       println("Args :")
       println(config.getRegressionArgs().mkString(" "))
-
 
       val toplevel = new VexRiscv(config)
 //      val toplevel = new VexRiscv(configLight)

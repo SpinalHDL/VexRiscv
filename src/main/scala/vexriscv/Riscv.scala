@@ -238,5 +238,13 @@ object Riscv{
     val FFLAGS = 0x1
     val FRM = 0x2
     val FCSR = 0x3
+
+    val DCSR      = 0x7B0
+    val DPC       = 0x7B1
+    val TSELECT   = 0x7A0
+    val TDATA1    = 0x7A1
+    val TDATA2    = 0x7A2
+    val TINFO     = 0x7a4
+    val TCONTROL  = 0x7A5
   }
 }
