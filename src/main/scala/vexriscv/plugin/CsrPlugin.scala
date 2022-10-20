@@ -88,6 +88,7 @@ case class CsrPluginConfig(
   def privilegeGen = userGen || supervisorGen
   def noException = this.copy(ecallGen = false, ebreakGen = false, catchIllegalAccess = false)
   def noExceptionButEcall = this.copy(ecallGen = true, ebreakGen = false, catchIllegalAccess = false)
+  def withEbreak = ebreakGen || withPrivilegedDebug
 }
 
 object CsrPluginConfig{
@@ -481,7 +482,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     val NONE, XRET = newElement()
     val WFI = if(wfiGenAsWait) newElement() else null
     val ECALL = if(ecallGen) newElement() else null
-    val EBREAK = if(ebreakGen) newElement() else null
+    val EBREAK = if(withEbreak) newElement() else null
   }
 
   object ENV_CTRL extends Stageable(EnvCtrlEnum())
@@ -540,7 +541,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
 
-    if(!config.ebreakGen) {
+    if(!config.withEbreak) {
       SpinalWarning("This VexRiscv configuration is set without software ebreak instruction support. Some software may rely on it (ex: Rust). (This isn't related to JTAG ebreak)")
     }
 
@@ -586,7 +587,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     if(wfiGenAsWait)   decoderService.add(WFI,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.WFI))
     if(wfiGenAsNop)   decoderService.add(WFI, Nil)
     if(ecallGen) decoderService.add(ECALL,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.ECALL, HAS_SIDE_EFFECT -> True))
-    if(ebreakGen) decoderService.add(EBREAK,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.EBREAK, HAS_SIDE_EFFECT -> True))
+    if(withEbreak) decoderService.add(EBREAK,  defaultEnv ++ List(ENV_CTRL -> EnvCtrlEnum.EBREAK, HAS_SIDE_EFFECT -> True))
 
     val  pcManagerService = pipeline.service(classOf[JumpService])
     jumpInterface = pcManagerService.createJumpInterface(pipeline.stages.last)
@@ -611,7 +612,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     privilege = UInt(2 bits).setName("CsrPlugin_privilege")
     forceMachineWire = False
 
-    if(catchIllegalAccess || ecallGen || ebreakGen)
+    if(catchIllegalAccess || ecallGen || withEbreak)
       selfException = newExceptionPort(pipeline.execute)
 
     allowInterrupts = True
@@ -677,7 +678,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
     when(forceMachineWire) { privilege := 3 }
 
-    val debug = withPrivilegedDebug generate pipeline plug new Area{
+    val debug = withPrivilegedDebug generate pipeline.plug(new Area{
       val iBusFetcher = service(classOf[IBusFetcher])
       def bus = debugBus
 
@@ -702,7 +703,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       val doResume = forceResume || bus.resume.isPending(1)
 
       // Pipeline execution timeout used to trigger some redo
-      val timeout = Timeout(3)
+      val timeout = Timeout(7)
       when(pipeline.stages.map(_.arbitration.isValid).orR){
         timeout.clear()
       }
@@ -753,10 +754,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val xdebugver = U(4, 4 bits)
 
         val stepLogic = new StateMachine{
-          val IDLE, SINGLE, WAIT, DELAY = new State()
+          val IDLE, SINGLE, WAIT = new State()
           setEntry(IDLE)
-
-          val isCause = RegInit(False)
 
           IDLE whenIsActive{
             when(step && bus.resume.rsp.valid){
@@ -764,30 +763,22 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             }
           }
           SINGLE whenIsActive{
-            when(iBusFetcher.incoming()) {
-              iBusFetcher.haltIt()
-              when(decode.arbitration.isValid) {
-                goto(WAIT)
-              }
+            when(decode.arbitration.isFiring) {
+              goto(WAIT)
             }
           }
 
           WAIT whenIsActive{
-            iBusFetcher.haltIt()
-            when(pipeline.lastStageIsFiring || trapEvent){ //TODO
-              doHalt := True
-              isCause := True
-              goto(DELAY)
-            }
+            decode.arbitration.haltByOther setWhen(decode.arbitration.isValid)
             //re resume the execution in case of timeout (ex cache miss)
-            when(timeout.state){
+            when(!doHalt && timeout.state){
               forceResume := True
-              goto(DELAY)
+              goto(SINGLE)
+            } otherwise {
+              when(stages.last.arbitration.isFiring) {
+                doHalt := True
+              }
             }
-          }
-          DELAY whenIsActive{
-            iBusFetcher.haltIt()
-            goto(IDLE)
           }
 
           always{
@@ -905,7 +896,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
         r(CSR.TDATA1, 0 -> slots.map(_.tdata1.read).read(tselect.index))
       }
-    }
+    })
 
 
     val machineCsr = pipeline plug new Area{
@@ -1220,7 +1211,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
         code.addTag(Verilator.public)
 
-        if(withPrivilegedDebug) valid setWhen(debug.doHalt)
+        if(withPrivilegedDebug) {
+          valid clearWhen(!debug.dcsr.stepie)
+          valid setWhen(debug.doHalt)
+        }
       }
 
 
@@ -1389,6 +1383,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         when(debug.doResume) {
           jumpInterface.valid   := True
           jumpInterface.payload := debug.dpc
+          lastStage.arbitration.flushIt := True
 
           privilegeReg := debug.dcsr.prv
           debug.running := True
@@ -1461,7 +1456,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
 
 
-        if(ebreakGen) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.EBREAK && allowEbreakException){
+        if(withEbreak) when(arbitration.isValid && input(ENV_CTRL) === EnvCtrlEnum.EBREAK && allowEbreakException){
           selfException.valid := True
           selfException.code := 3
         }

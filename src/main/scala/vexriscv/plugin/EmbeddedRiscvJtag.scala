@@ -83,4 +83,15 @@ mdw 0x80000000 16
 reg pc 0x80000000
 bp 0x80000114 4
 resume
+
+
+mdw 0x1000 16
+mww 0x1000 0x12345678
+mdw 0x1000 16
+
+#load_image /media/data/open/VexRiscv/src/test/resources/hex/dhrystoneO3.hex 0 ihex
+mww 0x80000000 0x13
+mww 0x80000004 0x13
+reg pc 0x80000000
+step; reg pc
 */
