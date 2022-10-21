@@ -805,7 +805,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
 
         val wakeService = serviceElse(classOf[IWake], null)
-        if(wakeService != null) when(debugMode || step){
+        if(wakeService != null) when(debugMode || step || bus.haltReq){
           wakeService.askWake()
         }
       }
