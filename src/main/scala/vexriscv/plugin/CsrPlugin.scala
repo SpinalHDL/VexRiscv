@@ -801,7 +801,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             case p : PredictionInterface => p.inDebugNoFetch()
             case _ =>
           }
-          if(pipeline.things.contains(DEBUG_BYPASS_CACHE)) pipeline(DEBUG_BYPASS_CACHE) := True
         }
 
         val wakeService = serviceElse(classOf[IWake], null)
@@ -864,7 +863,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
           val tdata1 = new Area{
             val read = B(0, 32 bits)
-            val tpe = Reg(UInt(4 bits)) init(2)
+            val tpe = U(2, 4 bits)
             val dmode = Reg(Bool()) init(False)
 
             val execute = RegInit(False)
@@ -877,8 +876,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
               default -> False
             )
 
-            csrrw(CSR.TDATA1, read, 2 -> execute , 3 -> u, 4-> s, 6 -> m, 32 - 4 -> tpe, 32 - 5 -> dmode, 12 -> action)
-
+            csrrw(CSR.TDATA1, read, 2 -> execute , 3 -> u, 4-> s, 6 -> m, 32 - 5 -> dmode, 12 -> action)
+            csrr(CSR.TDATA1, read, 32 - 4 -> tpe)
 
             //TODO action sizelo timing select sizehi maskmax
           }
