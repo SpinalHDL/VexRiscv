@@ -829,6 +829,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           when(enabled) {
             decode.arbitration.haltByOther := True
             when(timeout.state) {
+              decode.arbitration.flushIt := True
               dpc := decode.input(PC)
               running := False
               dcsr.cause := 2
