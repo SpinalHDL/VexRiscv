@@ -201,8 +201,9 @@ object VexRiscvSmpClusterGen {
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
     assert(!(withDouble && !withFloat))
 
+    val misa = Riscv.misaToInt(s"ima${if(withFloat) "f" else ""}${if(withDouble) "d" else ""}${if(rvc) "c" else ""}${if(withSupervisor) "s" else ""}")
     val csrConfig = if(withSupervisor){
-      CsrPluginConfig.openSbi(mhartid = hartId, misa = Riscv.misaToInt(s"ima${if(withFloat) "f" else ""}${if(withDouble) "d" else ""}s")).copy(utimeAccess = CsrAccess.READ_ONLY, withPrivilegedDebug = privilegedDebug)
+      CsrPluginConfig.openSbi(mhartid = hartId, misa = misa).copy(utimeAccess = CsrAccess.READ_ONLY, withPrivilegedDebug = privilegedDebug)
     } else {
       CsrPluginConfig(
         catchIllegalAccess = true,
@@ -210,7 +211,7 @@ object VexRiscvSmpClusterGen {
         marchid        = null,
         mimpid         = null,
         mhartid        = hartId,
-        misaExtensionsInit = Riscv.misaToInt(s"ima${if(withFloat) "f" else ""}${if(withDouble) "d" else ""}s"),
+        misaExtensionsInit = misa,
         misaAccess     = if(forceMisa) CsrAccess.WRITE_ONLY else CsrAccess.NONE,
         mtvecAccess    = CsrAccess.READ_WRITE,
         mtvecInit      = null,
