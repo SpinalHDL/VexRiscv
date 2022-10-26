@@ -12,7 +12,7 @@ import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import vexriscv.plugin._
 import vexriscv.{Riscv, VexRiscv, VexRiscvConfig, plugin}
 
-
+//make clean run IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yes SUPERVISOR=yes MMU=no CSR=yes CSR_SKIP_TEST=yes  COMPRESSED=no MUL=yes DIV=yes LRSC=yes AMO=yes REDO=0 TRACE=no COREMARK=no LINUX_REGRESSION=yes
 object VexRiscvAxi4LinuxPlicClint{
   def main(args: Array[String]) {
     val report = SpinalVerilog{
@@ -161,3 +161,4 @@ object VexRiscvAxi4LinuxPlicClint{
     }
   }
 }
+
