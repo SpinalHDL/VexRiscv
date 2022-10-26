@@ -2,15 +2,18 @@ package vexriscv.demo
 
 import spinal.core._
 import spinal.lib._
-import spinal.lib.bus.amba4.axi.Axi4ReadOnly
+import spinal.lib.bus.amba4.axi.{Axi4ReadOnly, Axi4SpecRenamer}
+import spinal.lib.bus.amba4.axilite.AxiLite4SpecRenamer
 import spinal.lib.com.jtag.Jtag
 import spinal.lib.eda.altera.{InterruptReceiverTag, ResetEmitterTag}
+import spinal.lib.misc.AxiLite4Clint
+import spinal.lib.misc.plic.AxiLite4Plic
 import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import vexriscv.plugin._
 import vexriscv.{Riscv, VexRiscv, VexRiscvConfig, plugin}
 
 
-object VexRiscvAxi4Linux{
+object VexRiscvAxi4LinuxPlicClint{
   def main(args: Array[String]) {
     val report = SpinalVerilog{
 
@@ -99,36 +102,42 @@ object VexRiscvAxi4Linux{
       )
 
       //CPU instanciation
-      val cpu = new VexRiscv(cpuConfig)
+      val cpu = new VexRiscv(cpuConfig){
+        val clintCtrl = new AxiLite4Clint(1, bufferTime = false)
+        val plicCtrl = new AxiLite4Plic(
+          sourceCount = 31,
+          targetCount = 2
+        )
+
+        val clint = clintCtrl.io.bus.toIo()
+        val plic = plicCtrl.io.bus.toIo()
+        val plicInterrupts = in Bits(32 bits)
+        plicCtrl.io.sources := plicInterrupts >> 1
+
+        AxiLite4SpecRenamer(clint)
+        AxiLite4SpecRenamer(plic)
+      }
 
       //CPU modifications to be an Avalon one
-      cpu.setDefinitionName("VexRiscvAxi4")
+      cpu.setDefinitionName("VexRiscvAxi4LinuxPlicClint")
       cpu.rework {
-        var iBus : Axi4ReadOnly = null
         for (plugin <- cpuConfig.plugins) plugin match {
-          case plugin: IBusSimplePlugin => {
-            plugin.iBus.setAsDirectionLess() //Unset IO properties of iBus
-            iBus = master(plugin.iBus.toAxi4ReadOnly().toFullConfig())
-              .setName("iBusAxi")
-              .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
-          }
           case plugin: IBusCachedPlugin => {
             plugin.iBus.setAsDirectionLess() //Unset IO properties of iBus
-            iBus = master(plugin.iBus.toAxi4ReadOnly().toFullConfig())
-              .setName("iBusAxi")
-              .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
-          }
-          case plugin: DBusSimplePlugin => {
-            plugin.dBus.setAsDirectionLess()
-            master(plugin.dBus.toAxi4Shared().toAxi4().toFullConfig())
-              .setName("dBusAxi")
-              .addTag(ClockDomainTag(ClockDomain.current))
+            Axi4SpecRenamer(
+              master(plugin.iBus.toAxi4ReadOnly().toFullConfig())
+                .setName("iBusAxi")
+                .addTag(ClockDomainTag(ClockDomain.current)) //Specify a clock domain to the iBus (used by QSysify)
+            )
           }
           case plugin: DBusCachedPlugin => {
             plugin.dBus.setAsDirectionLess()
-            master(plugin.dBus.toAxi4Shared().toAxi4().toFullConfig())
-              .setName("dBusAxi")
-              .addTag(ClockDomainTag(ClockDomain.current))
+
+            Axi4SpecRenamer(
+              master(plugin.dBus.toAxi4Shared().toAxi4().toFullConfig())
+                .setName("dBusAxi")
+                .addTag(ClockDomainTag(ClockDomain.current))
+            )
           }
           case plugin: DebugPlugin => plugin.debugClockDomain {
             plugin.io.bus.setAsDirectionLess()
@@ -143,10 +152,11 @@ object VexRiscvAxi4Linux{
         }
         for (plugin <- cpuConfig.plugins) plugin match {
           case plugin: CsrPlugin => {
-            plugin.externalInterrupt
-              .addTag(InterruptReceiverTag(iBus, ClockDomain.current))
-            plugin.timerInterrupt
-              .addTag(InterruptReceiverTag(iBus, ClockDomain.current))
+            plugin.timerInterrupt     setAsDirectionLess() := cpu.clintCtrl.io.timerInterrupt(0)
+            plugin.softwareInterrupt  setAsDirectionLess() := cpu.clintCtrl.io.softwareInterrupt(0)
+            plugin.externalInterrupt  setAsDirectionLess() := cpu.plicCtrl.io.targets(0)
+            plugin.externalInterruptS setAsDirectionLess() := cpu.plicCtrl.io.targets(1)
+            plugin.utime              setAsDirectionLess() := cpu.clintCtrl.io.time
           }
           case _ =>
         }
