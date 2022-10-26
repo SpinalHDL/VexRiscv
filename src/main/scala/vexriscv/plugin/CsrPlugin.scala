@@ -85,7 +85,7 @@ case class CsrPluginConfig(
                             debugTriggers       : Int     = 2
                           ){
   assert(!ucycleAccess.canWrite)
-  def privilegeGen = userGen || supervisorGen
+  def privilegeGen = userGen || supervisorGen || withPrivilegedDebug
   def noException = this.copy(ecallGen = false, ebreakGen = false, catchIllegalAccess = false)
   def noExceptionButEcall = this.copy(ecallGen = true, ebreakGen = false, catchIllegalAccess = false)
   def withEbreak = ebreakGen || withPrivilegedDebug
