@@ -132,7 +132,6 @@ object VexRiscvAxi4LinuxPlicClint{
           }
           case plugin: DBusCachedPlugin => {
             plugin.dBus.setAsDirectionLess()
-
             Axi4SpecRenamer(
               master(plugin.dBus.toAxi4Shared().toAxi4().toFullConfig())
                 .setName("dBusAxi")
@@ -148,9 +147,6 @@ object VexRiscvAxi4LinuxPlicClint{
               .addTag(ResetEmitterTag(plugin.debugClockDomain))
               .parent = null //Avoid the io bundle to be interpreted as a QSys conduit
           }
-          case _ =>
-        }
-        for (plugin <- cpuConfig.plugins) plugin match {
           case plugin: CsrPlugin => {
             plugin.timerInterrupt     setAsDirectionLess() := cpu.clintCtrl.io.timerInterrupt(0)
             plugin.softwareInterrupt  setAsDirectionLess() := cpu.clintCtrl.io.softwareInterrupt(0)
