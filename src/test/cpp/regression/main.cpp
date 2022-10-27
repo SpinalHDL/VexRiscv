@@ -3071,6 +3071,8 @@ public:
 
 #endif
 
+#include "jtag.h"
+
 void Workspace::fillSimELements(){
 	#ifdef IBUS_SIMPLE
 		simElements.push_back(new IBusSimple(this));
@@ -3120,6 +3122,9 @@ void Workspace::fillSimELements(){
 	#endif
 	#ifdef DEBUG_PLUGIN_AVALON
 		simElements.push_back(new DebugPluginAvalon(this));
+	#endif
+	#ifdef RISCV_JTAG
+		simElements.push_back(new Jtag(&top->jtag_tms, &top->jtag_tdi, &top->jtag_tdo, &top->jtag_tck, 4));
 	#endif
 }
 
@@ -4126,16 +4131,7 @@ int main(int argc, char **argv, char **env) {
 
 
 
-    #ifdef RVF
-    for(const string &name : riscvTestFloat){
-        redo(REDO,RiscvTest(name).withRiscvRef()->bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
-    }
-    #endif
-    #ifdef RVD
-    for(const string &name : riscvTestDouble){
-        redo(REDO,RiscvTest(name).withRiscvRef()->bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
-    }
-    #endif
+
     //return 0;
 
 //#ifdef LITEX
@@ -4364,6 +4360,17 @@ int main(int argc, char **argv, char **env) {
 		#ifdef AMO
 			redo(REDO,WorkspaceRegression("amo").withRiscvRef()->loadHex(string(REGRESSION_PATH) + "../raw/amo/build/amo.hex")->bootAt(0x00000000u)->run(10e3););
 		#endif
+
+        #ifdef RVF
+        for(const string &name : riscvTestFloat){
+            redo(REDO,RiscvTest(name).withRiscvRef()->bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
+        }
+        #endif
+        #ifdef RVD
+        for(const string &name : riscvTestDouble){
+            redo(REDO,RiscvTest(name).withRiscvRef()->bootAt(0x80000188u)->writeWord(0x80000184u, 0x00305073)->run();)
+        }
+        #endif
 
 		#ifdef DHRYSTONE
 			Dhrystone("dhrystoneO3_Stall","dhrystoneO3",true,true).run(1.5e6);
