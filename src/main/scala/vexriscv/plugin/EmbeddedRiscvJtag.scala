@@ -30,7 +30,7 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
   override def setup(pipeline: VexRiscv): Unit = {
     jtag = withTap generate slave(Jtag()).setName("jtag")
     jtagInstruction = !withTap generate slave(JtagTapInstructionCtrl()).setName("jtagInstruction")
-    ndmreset = Bool().setName("ndmreset")
+    ndmreset = out(Bool()).setName("ndmreset")
   }
 
   override def build(pipeline: VexRiscv): Unit = {
