@@ -9,7 +9,7 @@
 #include <netinet/tcp.h>
 
 /** Returns true on success, or false if there was an error */
-bool SetSocketBlockingEnabled(int fd, bool blocking)
+bool SetSocketBlockingEnabledRegression(int fd, bool blocking)
 {
    if (fd < 0) return false;
 
@@ -73,7 +73,7 @@ public:
 		    fprintf(stderr, "Error setting socket opts: %s\n", strerror(errno));
 		}*/
 
-		SetSocketBlockingEnabled(serverSocket,0);
+		SetSocketBlockingEnabledRegression(serverSocket,0);
 
 
 		//---- Configure settings of the server address struct ----//
