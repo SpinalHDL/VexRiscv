@@ -171,12 +171,12 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
     decoderService.addDefault(MEMORY_ENABLE, False)
     decoderService.add(
-      List(LB, LH, LW, LBU, LHU, LWU).map(_ -> loadActions) ++
+      List(LB, LH, LW, LBU, LHU).map(_ -> loadActions) ++
       List(SB, SH, SW).map(_ -> storeActions)
     )
 
     if(withLrSc){
-      List(LB, LH, LW, LBU, LHU, LWU, SB, SH, SW).foreach(e =>
+      List(LB, LH, LW, LBU, LHU, SB, SH, SW).foreach(e =>
         decoderService.add(e, Seq(MEMORY_LRSC -> False))
       )
       decoderService.add(
@@ -199,7 +199,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     }
 
     if(withAmo){
-      List(LB, LH, LW, LBU, LHU, LWU, SB, SH, SW).foreach(e =>
+      List(LB, LH, LW, LBU, LHU, SB, SH, SW).foreach(e =>
         decoderService.add(e, Seq(MEMORY_AMO -> False))
       )
       val amoActions = storeActions.filter(_._1 != SRC2_CTRL) ++ Seq(

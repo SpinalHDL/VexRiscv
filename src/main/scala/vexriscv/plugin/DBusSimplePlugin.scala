@@ -340,13 +340,13 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
     decoderService.addDefault(MEMORY_ENABLE, False)
     decoderService.add(
-      (if(onlyLoadWords) List(LW) else List(LB, LH, LW, LBU, LHU, LWU)).map(_ -> loadActions) ++
+      (if(onlyLoadWords) List(LW) else List(LB, LH, LW, LBU, LHU)).map(_ -> loadActions) ++
       List(SB, SH, SW).map(_ -> storeActions)
     )
 
 
     if(withLrSc){
-      List(LB, LH, LW, LBU, LHU, LWU, SB, SH, SW).foreach(e =>
+      List(LB, LH, LW, LBU, LHU, SB, SH, SW).foreach(e =>
         decoderService.add(e, Seq(MEMORY_ATOMIC -> False))
       )
       decoderService.add(
