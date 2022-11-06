@@ -164,6 +164,20 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
     debugger.io.remote <> jtagBridge.io.remote
     debugger.io.mem <> this.from(debugger.io.mem.c)
   }
+
+  def fromVJtag() : Unit = {
+    val jtagConfig = SystemDebuggerConfig(
+      memAddressWidth = 32,
+      memDataWidth    = 32,
+      remoteCmdWidth  = 1
+    )
+
+    val jtagBridge = new VJtagBridge(jtagConfig)
+
+    val debugger = new SystemDebugger(jtagConfig)
+    debugger.io.remote <> jtagBridge.io.remote
+    debugger.io.mem <> this.from(debugger.io.mem.c)
+  }
 }
 
 case class DebugExtensionIo() extends Bundle with IMasterSlave{
