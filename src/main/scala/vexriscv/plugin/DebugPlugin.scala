@@ -1,7 +1,7 @@
 package vexriscv.plugin
 
 import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
-import spinal.lib.system.debugger.{JtagBridge, JtagBridgeNoTap, SystemDebugger, SystemDebuggerConfig, SystemDebuggerMemBus}
+import spinal.lib.system.debugger.{JtagBridge, JtagBridgeNoTap, VJtagBridge, SystemDebugger, SystemDebuggerConfig, SystemDebuggerMemBus}
 import vexriscv.plugin.IntAluPlugin.{ALU_CTRL, AluCtrlEnum}
 import vexriscv._
 import vexriscv.ip._
