@@ -308,6 +308,10 @@ ifeq ($(RISCV_JTAG),yes)
 	ADDCFLAGS += -CFLAGS -DRISCV_JTAG
 endif
 
+ifeq ($(VEXRISCV_JTAG),yes)
+	ADDCFLAGS += -CFLAGS -DVEXRISCV_JTAG
+endif
+
 
 ifeq ($(REF),yes)
 	ADDCFLAGS += -CFLAGS -DREF

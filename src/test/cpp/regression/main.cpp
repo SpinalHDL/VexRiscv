@@ -3073,6 +3073,31 @@ public:
 
 #include "jtag.h"
 
+#ifdef VEXRISCV_JTAG
+class VexRiscvJtag : public SimElement{
+public:
+	Workspace *ws;
+	VVexRiscv* top;
+
+	VexRiscvJtag(Workspace* ws){
+		this->ws = ws;
+		this->top = ws->top;
+	}
+
+	virtual void onReset(){
+	    top->debugReset = 1;
+	}
+
+	virtual void preCycle(){
+
+	}
+
+	virtual void postCycle(){
+        top->debugReset = 0;
+	}
+};
+#endif
+
 void Workspace::fillSimELements(){
 	#ifdef IBUS_SIMPLE
 		simElements.push_back(new IBusSimple(this));
@@ -3126,6 +3151,10 @@ void Workspace::fillSimELements(){
 	#ifdef RISCV_JTAG
 		simElements.push_back(new Jtag(&top->jtag_tms, &top->jtag_tdi, &top->jtag_tdo, &top->jtag_tck, 4));
 	#endif
+    #ifdef VEXRISCV_JTAG
+        simElements.push_back(new Jtag(&top->jtag_tms, &top->jtag_tdi, &top->jtag_tdo, &top->jtag_tck, 4));
+        simElements.push_back(new VexRiscvJtag(this));
+    #endif
 }
 
 mutex Workspace::staticMutex;
