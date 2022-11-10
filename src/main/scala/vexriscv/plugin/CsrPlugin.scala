@@ -696,6 +696,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       bus.running :=  running
       bus.halted  := !running
       bus.unavailable := RegNext(ClockDomain.current.isResetActive)
+
+      val reseting   = RegNext(False) init(True)
+      bus.haveReset := RegInit(False) setWhen(reseting) clearWhen(bus.ackReset)
+
       val enterHalt = running.getAheadValue().fall(False)
 
       val doHalt = RegInit(False) setWhen(bus.haltReq && bus.running && !debugMode) clearWhen(enterHalt)
