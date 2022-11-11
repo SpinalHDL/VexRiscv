@@ -696,6 +696,9 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       bus.running :=  running
       bus.halted  := !running
       bus.unavailable := RegNext(ClockDomain.current.isResetActive)
+      when(debugMode){
+        inhibateInterrupts()
+      }
 
       val reseting   = RegNext(False) init(True)
       bus.haveReset := RegInit(False) setWhen(reseting) clearWhen(bus.ackReset)
@@ -767,6 +770,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             }
           }
           SINGLE whenIsActive{
+            when(trapEvent){
+              doHalt := True
+              goto(WAIT)
+            }
             when(decode.arbitration.isFiring) {
               goto(WAIT)
             }
@@ -1290,7 +1297,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       }
 
       val trapEnterDebug = False
-      if(withPrivilegedDebug) trapEnterDebug setWhen(debug.doHalt || trapCauseEbreakDebug || !hadException && debug.doHalt)
+      if(withPrivilegedDebug) trapEnterDebug setWhen(debug.doHalt || trapCauseEbreakDebug || !hadException && debug.doHalt || !debug.running)
       when(hadException || interruptJump){
         trapEvent := True
         fetcher.haltIt() //Avoid having the fetch confused by the incomming privilege switch
