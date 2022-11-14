@@ -103,6 +103,11 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
       case _ => config.add(new DebugPlugin(debugClockDomain, hardwareBreakpointCount))
     }
 
+    for (e <- config.plugins) e match {
+      case e: CsrPlugin => e.config.debugTriggers = hardwareBreakpointCount
+      case _ =>
+    }
+
     val cpu = new VexRiscv(config)
     def doExport(value : => Any, postfix : String) = {
       sexport(Handle(value).setCompositeName(VexRiscvBmbGenerator.this, postfix))

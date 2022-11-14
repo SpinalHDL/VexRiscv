@@ -82,7 +82,7 @@ case class CsrPluginConfig(
                             deterministicInteruptionEntry : Boolean = false, //Only used for simulatation purposes
                             wfiOutput           : Boolean = false,
                             withPrivilegedDebug : Boolean = false, //For the official RISC-V debug spec implementation
-                            debugTriggers       : Int     = 2
+                            var debugTriggers       : Int     = 2
                           ){
   assert(!ucycleAccess.canWrite)
   def privilegeGen = userGen || supervisorGen || withPrivilegedDebug
@@ -711,7 +711,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
       // Pipeline execution timeout used to trigger some redo
       val timeout = Timeout(7)
-      when(pipeline.stages.map(_.arbitration.isValid).orR){
+      when(pipeline.stages.tail.map(_.arbitration.isValid).orR){
         timeout.clear()
       }
 
@@ -770,6 +770,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             }
           }
           SINGLE whenIsActive{
+            timeout.clear()
             when(trapEvent){
               doHalt := True
               goto(WAIT)
@@ -783,7 +784,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             decode.arbitration.haltByOther setWhen(decode.arbitration.isValid)
             //re resume the execution in case of timeout (ex cache miss)
             when(!doHalt && timeout.state){
-              forceResume := True
               goto(SINGLE)
             } otherwise {
               when(stages.last.arbitration.isFiring) {
@@ -839,7 +839,9 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           when(enabled) {
             decode.arbitration.haltByOther := True
             when(timeout.state) {
-              decode.arbitration.flushIt := True
+              trapEvent := True
+              decode.arbitration.flushNext := True
+              decode.arbitration.removeIt := True
               dpc := decode.input(PC)
               running := False
               dcsr.cause := 2
@@ -906,6 +908,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
 
         r(CSR.TDATA1, 0 -> slots.map(_.tdata1.read).read(tselect.index))
+
+        decodeBreak.enabled clearWhen(!decode.arbitration.isValid)
       }
     })
 
@@ -1616,6 +1620,11 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           illegalAccess clearWhen(!arbitration.isValid || !input(IS_CSR))
         }
       }
+
+//      Component.toplevel.rework{
+//        out(CombInit(debug.running.pull())).setName("debug0")
+//        out(CombInit(pipeline.decode.arbitration.isFiring.pull())).setName("debug1")
+//      }
     }
   }
 }
