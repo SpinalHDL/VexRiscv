@@ -42,7 +42,10 @@ object RvcDecompressor{
     val x2 = B"00010"
 
     switch(i(1 downto 0) ## i(15 downto 13)){
-      is(0){ret := addi5spnImm ## B"00010" ## B"000" ## rcl ## B"0010011"} //C.ADDI4SPN -> addi rd0, x2, nzuimm[9:2].
+      is(0){
+        ret := addi5spnImm ## B"00010" ## B"000" ## rcl ## B"0010011"
+        when(i(12 downto 2) === 0) { ret := 0 } //Ensure 0 => illegal
+      } //C.ADDI4SPN -> addi rd0, x2, nzuimm[9:2].
       if(rvd) is(1){ret := ldImm ## rch ##  B"011" ## rcl ## B"0000111"} // C.FLD
       is(2){ret := lwImm ## rch ## B"010" ## rcl ## B"0000011"} //C.LW -> lw rd', offset[6:2](rs1')
       if(rvf) is(3){ret := lwImm ## rch ##  B"010" ## rcl ## B"0000111"} // C.FLW
