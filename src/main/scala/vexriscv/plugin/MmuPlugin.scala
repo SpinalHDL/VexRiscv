@@ -69,7 +69,7 @@ class MmuPlugin(ioRange : UInt => Bool,
     import pipeline._
     import pipeline.config._
     import Riscv._
-    val csrService = pipeline.service(classOf[CsrInterface])
+    val csrService = pipeline.service(classOf[CsrPlugin])
 
     //Sorted by priority
     val sortedPortsInfo = portsInfo.sortBy(_.priority)
@@ -89,6 +89,7 @@ class MmuPlugin(ioRange : UInt => Bool,
     val csr = pipeline plug new Area{
       val status = new Area{
         val sum, mxr, mprv = RegInit(False)
+        mprv clearWhen(csrService.xretAwayFromMachine)
       }
       val satp = new Area {
         val mode = RegInit(False)

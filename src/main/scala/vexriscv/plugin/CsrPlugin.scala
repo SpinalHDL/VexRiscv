@@ -470,6 +470,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var externalMhartId : UInt = null
   var utime : UInt = null
   var stoptime : Bool = null
+  var xretAwayFromMachine : Bool = null
 
   var debugBus : DebugHartBus = null
   var debugMode : Bool = null
@@ -633,6 +634,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       decoderService.add(SFENCE_VMA, List(IS_SFENCE_VMA -> True))
     }
 
+    xretAwayFromMachine = False
 
     injectionPort = withPrivilegedDebug generate pipeline.service(classOf[IBusFetcher]).getInjectionPort()
     debugMode = withPrivilegedDebug generate Bool().setName("debugMode")
@@ -751,7 +753,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val prv = RegInit(U"11")
         val step = RegInit(False) //TODO
         val nmip = False
-        val mprven = False
+        val mprven = True
         val cause = RegInit(U"000")
         val stoptime = RegInit(False)
         val stopcount = RegInit(False)
@@ -1380,14 +1382,20 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
               mstatus.MIE := mstatus.MPIE
               mstatus.MPIE := True
               jumpInterface.payload := mepc
-              if(privilegeGen) privilegeReg := mstatus.MPP
+              if(privilegeGen) {
+                privilegeReg := mstatus.MPP
+                xretAwayFromMachine setWhen(mstatus.MPP < 3)
+              }
             }
             if(supervisorGen) is(1){
               sstatus.SPP := U"0"
               sstatus.SIE := sstatus.SPIE
               sstatus.SPIE := True
               jumpInterface.payload := sepc
-              if(privilegeGen) privilegeReg := U"0" @@ sstatus.SPP
+              if(privilegeGen) {
+                privilegeReg := U"0" @@ sstatus.SPP
+                xretAwayFromMachine := True
+              }
             }
           }
         }
