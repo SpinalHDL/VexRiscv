@@ -469,6 +469,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var inWfi : Bool = null
   var externalMhartId : UInt = null
   var utime : UInt = null
+  var stoptime : Bool = null
 
   var debugBus : DebugHartBus = null
   var debugMode : Bool = null
@@ -752,8 +753,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val nmip = False
         val mprven = False
         val cause = RegInit(U"000")
-        val stoptime = False
-        val stopcount = False
+        val stoptime = RegInit(False)
+        val stopcount = RegInit(False)
         val stepie = RegInit(False) //TODO
         val ebreaku = userGen generate RegInit(False)
         val ebreaks = supervisorGen generate RegInit(False)
@@ -801,8 +802,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
 
 
-        r(CSR.DCSR, 3 -> nmip, 6 -> cause, 28 -> xdebugver, 4 -> mprven, 9 -> stoptime, 10 -> stopcount)
-        rw(CSR.DCSR, 0 -> prv, 2 -> step, 11 -> stepie, 15 -> ebreakm)
+        r(CSR.DCSR, 3 -> nmip, 6 -> cause, 28 -> xdebugver, 4 -> mprven)
+        rw(CSR.DCSR, 0 -> prv, 2 -> step, 9 -> stoptime, 10 -> stopcount, 11 -> stepie, 15 -> ebreakm)
         if(supervisorGen) rw(CSR.DCSR, 13 -> ebreaks)
         if(userGen)       rw(CSR.DCSR, 12 -> ebreaku)
 
@@ -819,6 +820,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           wakeService.askWake()
         }
       }
+      stoptime = out(debugMode && dcsr.stoptime).setName("stoptime")
 
       //Very limited subset of the trigger spec
       val trigger = (debugTriggers > 0) generate new Area {
@@ -1088,7 +1090,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       val stagesFromExecute = pipeline.stages.dropWhile(_ != execute)
 
       //Manage counters
-      mcycle := mcycle + 1
+      mcycle := mcycle + (if(withPrivilegedDebug) U(!debugMode || !debug.dcsr.stopcount) else U(1))
       when(lastStage.arbitration.isFiring) {
         minstret := minstret + 1
       }
