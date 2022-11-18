@@ -346,10 +346,12 @@ To connect OpenOCD (https://github.com/SpinalHDL/openocd_riscv) to the simulatio
 ```sh
 src/openocd -f tcl/interface/jtag_tcp.cfg -c "set BRIEY_CPU0_YAML /home/spinalvm/Spinal/VexRiscv/cpu0.yaml" -f tcl/target/briey.cfg
 ```
+To connect OpenOCD to Altera FPGAs (Intel VJTAG) see here: https://github.com/SpinalHDL/VexRiscv/tree/master/doc/vjtag
 
 You can find multiple software examples and demos here: <https://github.com/SpinalHDL/VexRiscvSocSoftware/tree/master/projects/briey>
 
 You can find some FPGA projects which instantiate the Briey SoC here (DE1-SoC, DE0-Nano): https://drive.google.com/drive/folders/0B-CqLXDTaMbKZGdJZlZ5THAxRTQ?usp=sharing
+
 
 Here are some measurements of Briey SoC timings and area:
 
