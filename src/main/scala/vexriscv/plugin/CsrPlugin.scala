@@ -1632,14 +1632,14 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
       }
 
-      val csrs = (0x7A0 to 0x7A5)
-      val miaouRead = csrs.map(v => isReading(v)).orR
-      val miaouWrite = csrs.map(v => isWriting(v)).orR
-
-      Component.toplevel.rework{
-        out(CombInit(miaouRead.pull())).setName("debug0")
-        out(CombInit(miaouWrite.pull())).setName("debug1")
-      }
+//      val csrs = (0x7A0 to 0x7A5)
+//      val miaouRead = csrs.map(v => isReading(v)).orR
+//      val miaouWrite = csrs.map(v => isWriting(v)).orR
+//
+//      Component.toplevel.rework{
+//        out(CombInit(miaouRead.pull())).setName("debug0")
+//        out(CombInit(miaouWrite.pull())).setName("debug1")
+//      }
     }
   }
 }
