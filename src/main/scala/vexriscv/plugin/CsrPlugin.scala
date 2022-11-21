@@ -895,6 +895,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
             csrrw(CSR.TDATA1, read, 2 -> execute , 3 -> u, 4-> s, 6 -> m, 32 - 5 -> dmode, 12 -> action)
             csrr(CSR.TDATA1, read, 32 - 4 -> tpe)
+            csrr(CSR.TDATA1, read, 20 -> B"011111")
 
             //TODO action sizelo timing select sizehi maskmax
           }
@@ -1631,10 +1632,14 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
       }
 
-//      Component.toplevel.rework{
-//        out(CombInit(debug.running.pull())).setName("debug0")
-//        out(CombInit(pipeline.decode.arbitration.isFiring.pull())).setName("debug1")
-//      }
+      val csrs = (0x7A0 to 0x7A5)
+      val miaouRead = csrs.map(v => isReading(v)).orR
+      val miaouWrite = csrs.map(v => isWriting(v)).orR
+
+      Component.toplevel.rework{
+        out(CombInit(miaouRead.pull())).setName("debug0")
+        out(CombInit(miaouWrite.pull())).setName("debug1")
+      }
     }
   }
 }
