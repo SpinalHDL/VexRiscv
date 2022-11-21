@@ -1231,7 +1231,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         code.addTag(Verilator.public)
 
         if(withPrivilegedDebug) {
-          valid clearWhen(!debug.dcsr.stepie)
+          valid clearWhen(debug.dcsr.step && !debug.dcsr.stepie)
           valid setWhen(debug.doHalt)
         }
       }
