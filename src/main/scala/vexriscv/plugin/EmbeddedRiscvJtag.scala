@@ -13,6 +13,7 @@ import vexriscv._
 
 
 class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
+                        var debugCd : ClockDomain = null,
                         var withTap : Boolean = true,
                         var withTunneling : Boolean = false
                         ) extends Plugin[VexRiscv] with VexRiscvRegressionArg{
@@ -24,16 +25,17 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
   var jtagInstruction : JtagTapInstructionCtrl = null
   var ndmreset : Bool = null
 
-//  val debugCd = Handle[ClockDomain].setName("debugCd")
-//  val noTapCd = Handle[ClockDomain].setName("jtagCd")
+
+  def setDebugCd(cd : ClockDomain) : this.type = {debugCd = cd; this}
 
   override def setup(pipeline: VexRiscv): Unit = {
     jtag = withTap generate slave(Jtag()).setName("jtag")
     jtagInstruction = !withTap generate slave(JtagTapInstructionCtrl()).setName("jtagInstruction")
     ndmreset = out(Bool()).setName("ndmreset")
+    assert(debugCd != null, "You need to set the debugCd of the VexRiscv EmbeddedRiscvJtag.")
   }
 
-  override def build(pipeline: VexRiscv): Unit = {
+  override def build(pipeline: VexRiscv): Unit = debugCd{
     val XLEN = 32
     val dm = DebugModule(
       DebugModuleParameter(

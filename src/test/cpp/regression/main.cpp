@@ -3150,6 +3150,7 @@ void Workspace::fillSimELements(){
 	#endif
 	#ifdef RISCV_JTAG
 		simElements.push_back(new Jtag(&top->jtag_tms, &top->jtag_tdi, &top->jtag_tdo, &top->jtag_tck, 4));
+        simElements.push_back(new VexRiscvJtag(this));
 	#endif
     #ifdef VEXRISCV_JTAG
         simElements.push_back(new Jtag(&top->jtag_tms, &top->jtag_tdi, &top->jtag_tdo, &top->jtag_tck, 4));

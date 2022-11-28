@@ -152,6 +152,7 @@ object TestsWorkspace {
           version      = 1,
           idle         = 7
         ),
+        debugCd = ClockDomain.current.copy(reset = Bool().setName("debugReset")),
         withTunneling = false,
         withTap = true
       )

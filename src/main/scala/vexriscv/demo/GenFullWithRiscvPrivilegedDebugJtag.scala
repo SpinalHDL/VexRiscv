@@ -82,6 +82,7 @@ object GenFullWithRiscvPrivilegedDebugJtag extends App{
           version      = 1,
           idle         = 7
         ),
+        debugCd = ClockDomain.current.copy(reset = Bool().setName("debugReset")),
         withTap = true,
         withTunneling = false
       ),
