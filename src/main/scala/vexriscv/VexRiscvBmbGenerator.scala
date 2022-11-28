@@ -143,7 +143,10 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
         softwareInterrupt load plugin.softwareInterrupt
         if (plugin.config.supervisorGen) externalSupervisorInterrupt load plugin.externalInterruptS
         withDebug.get match {
-          case DEBUG_RISCV => debugRiscv <> plugin.debugBus
+          case DEBUG_RISCV => {
+            assert(plugin.debugBus != null, "You need to enable CsrPluginConfig.withPrivilegedDebug")
+            debugRiscv <> plugin.debugBus
+          }
           case _ =>
         }
       }
