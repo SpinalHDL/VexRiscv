@@ -265,7 +265,7 @@ class FpuTest extends AnyFunSuite{
 
         def loadRaw(rd : Int, value : BigInt, format : FpuFormat.E): Unit ={
           cmdAdd {cmd =>
-            cmd.opcode #= cmd.opcode.spinalEnum.LOAD
+            cmd.opcode #= cmd.p.Opcode.LOAD
             cmd.rs1.randomize()
             cmd.rs2.randomize()
             cmd.rs3.randomize()
@@ -278,7 +278,7 @@ class FpuTest extends AnyFunSuite{
             cmd.write #= true
             cmd.rd #= rd
             cmd.value #= value
-            cmd.opcode #= cmd.opcode.spinalEnum.LOAD
+            cmd.opcode #= cmd.p.Opcode.LOAD
           }
         }
 
@@ -293,7 +293,7 @@ class FpuTest extends AnyFunSuite{
 
         def storeRaw(rs : Int, format : FpuFormat.E)(body : FpuRsp => Unit): Unit ={
           cmdAdd {cmd =>
-            cmd.opcode #= cmd.opcode.spinalEnum.STORE
+            cmd.opcode #= cmd.p.Opcode.STORE
             cmd.rs1.randomize()
             cmd.rs2 #= rs
             cmd.rs3.randomize()
@@ -395,7 +395,7 @@ class FpuTest extends AnyFunSuite{
 
         def i2f(rd : Int, value : Int, signed : Boolean, rounding : FpuRoundMode.E, format : FpuFormat.E): Unit ={
           cmdAdd {cmd =>
-            cmd.opcode #= cmd.opcode.spinalEnum.I2F
+            cmd.opcode #= cmd.p.Opcode.I2F
             cmd.rs1.randomize()
             cmd.rs2.randomize()
             cmd.rs3.randomize()
@@ -414,7 +414,7 @@ class FpuTest extends AnyFunSuite{
 
         def fmv_x_w(rs1 : Int)(body : Float => Unit): Unit ={
           cmdAdd {cmd =>
-            cmd.opcode #= cmd.opcode.spinalEnum.FMV_X_W
+            cmd.opcode #= cmd.p.Opcode.FMV_X_W
             cmd.rs1 #= rs1
             cmd.rs2.randomize()
             cmd.rs3.randomize()
@@ -428,7 +428,7 @@ class FpuTest extends AnyFunSuite{
 
         def fmv_w_x(rd : Int, value : Int): Unit ={
           cmdAdd {cmd =>
-            cmd.opcode #= cmd.opcode.spinalEnum.FMV_W_X
+            cmd.opcode #= cmd.p.Opcode.FMV_W_X
             cmd.rs1.randomize()
             cmd.rs2.randomize()
             cmd.rs3.randomize()
@@ -447,7 +447,7 @@ class FpuTest extends AnyFunSuite{
 
         def minMax(rd : Int, rs1 : Int, rs2 : Int, arg : Int, format : FpuFormat.E): Unit ={
           cmdAdd {cmd =>
-            cmd.opcode #= cmd.opcode.spinalEnum.MIN_MAX
+            cmd.opcode #= cmd.p.Opcode.MIN_MAX
             cmd.rs1 #= rs1
             cmd.rs2 #= rs2
             cmd.rs3.randomize()
