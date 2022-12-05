@@ -8,6 +8,7 @@ import spinal.lib.generator._
 import spinal.lib.{sexport, slave}
 import vexriscv.plugin._
 import spinal.core.fiber._
+import spinal.lib.cpu.riscv.debug.DebugHartBus
 
 object VexRiscvBmbGenerator{
   val DEBUG_NONE = 0
@@ -15,6 +16,7 @@ object VexRiscvBmbGenerator{
   val DEBUG_JTAG_CTRL = 2
   val DEBUG_BUS = 3
   val DEBUG_BMB = 4
+  val DEBUG_RISCV = 5
 }
 
 case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGenerator = null) extends Area {
@@ -63,6 +65,12 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
     withDebug.load(DEBUG_BUS)
   }
 
+  def enableRiscvDebug(debugCd :  Handle[ClockDomain], resetCd : ClockDomainResetGenerator) : Unit = debugCd.on{
+    this.debugClockDomain.load(debugCd)
+    debugAskReset.loadNothing()
+    withDebug.load(DEBUG_RISCV)
+  }
+
   val debugBmbAccessSource = Handle[BmbAccessCapabilities]
   val debugBmbAccessRequirements = Handle[BmbAccessParameter]
   def enableDebugBmb(debugCd : Handle[ClockDomain], resetCd : ClockDomainResetGenerator, mapping : AddressMapping)(implicit debugMaster : BmbImplicitDebugDecoder = null) : Unit = debugCd.on{
@@ -85,11 +93,19 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
   val jtagInstructionCtrl = withDebug.produce(withDebug.get == DEBUG_JTAG_CTRL generate JtagTapInstructionCtrl())
   val debugBus = withDebug.produce(withDebug.get == DEBUG_BUS generate DebugExtensionBus())
   val debugBmb = Handle[Bmb]
+  val debugRiscv = withDebug.produce(withDebug.get == DEBUG_RISCV generate DebugHartBus())
   val jtagClockDomain = Handle[ClockDomain]
 
   val logic = Handle(new Area {
-    withDebug.get != DEBUG_NONE generate new Area {
-      config.add(new DebugPlugin(debugClockDomain, hardwareBreakpointCount))
+    withDebug.get match {
+      case DEBUG_NONE =>
+      case DEBUG_RISCV =>
+      case _ => config.add(new DebugPlugin(debugClockDomain, hardwareBreakpointCount))
+    }
+
+    for (e <- config.plugins) e match {
+      case e: CsrPlugin => e.config.debugTriggers = hardwareBreakpointCount
+      case _ =>
     }
 
     val cpu = new VexRiscv(config)
@@ -126,6 +142,13 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
         timerInterrupt load plugin.timerInterrupt
         softwareInterrupt load plugin.softwareInterrupt
         if (plugin.config.supervisorGen) externalSupervisorInterrupt load plugin.externalInterruptS
+        withDebug.get match {
+          case DEBUG_RISCV => {
+            assert(plugin.debugBus != null, "You need to enable CsrPluginConfig.withPrivilegedDebug")
+            debugRiscv <> plugin.debugBus
+          }
+          case _ =>
+        }
       }
       case plugin: DebugPlugin => plugin.debugClockDomain {
         if(debugAskReset.get != null) when(RegNext(plugin.io.resetOut)) {

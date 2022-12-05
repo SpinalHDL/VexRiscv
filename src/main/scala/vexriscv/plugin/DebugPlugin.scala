@@ -1,7 +1,7 @@
 package vexriscv.plugin
 
 import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
-import spinal.lib.system.debugger.{JtagBridge, JtagBridgeNoTap, SystemDebugger, SystemDebuggerConfig, SystemDebuggerMemBus}
+import spinal.lib.system.debugger.{JtagBridge, JtagBridgeNoTap, VJtagBridge, SystemDebugger, SystemDebuggerConfig, SystemDebuggerMemBus}
 import vexriscv.plugin.IntAluPlugin.{ALU_CTRL, AluCtrlEnum}
 import vexriscv._
 import vexriscv.ip._
@@ -164,6 +164,20 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
     debugger.io.remote <> jtagBridge.io.remote
     debugger.io.mem <> this.from(debugger.io.mem.c)
   }
+
+  def fromVJtag() : Unit = {
+    val jtagConfig = SystemDebuggerConfig(
+      memAddressWidth = 32,
+      memDataWidth    = 32,
+      remoteCmdWidth  = 1
+    )
+
+    val jtagBridge = new VJtagBridge(jtagConfig)
+
+    val debugger = new SystemDebugger(jtagConfig)
+    debugger.io.remote <> jtagBridge.io.remote
+    debugger.io.mem <> this.from(debugger.io.mem.c)
+  }
 }
 
 case class DebugExtensionIo() extends Bundle with IMasterSlave{
@@ -179,7 +193,6 @@ case class DebugExtensionIo() extends Bundle with IMasterSlave{
 class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : Int = 0, BreakpointReadback : Boolean = false) extends Plugin[VexRiscv] {
 
   var io : DebugExtensionIo = null
-  val injectionAsks = ArrayBuffer[(Stage, Bool)]()
   var injectionPort : Stream[Bits] = null
 
 

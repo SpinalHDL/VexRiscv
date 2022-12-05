@@ -770,7 +770,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VE
       }
 
       //Setup test
-      val files = List("main.cpp", "encoding.h" ,"makefile", "dhrystoneO3.logRef", "dhrystoneO3C.logRef","dhrystoneO3MC.logRef","dhrystoneO3M.logRef")
+      val files = List("main.cpp", "jtag.h", "encoding.h" ,"makefile", "dhrystoneO3.logRef", "dhrystoneO3C.logRef","dhrystoneO3MC.logRef","dhrystoneO3M.logRef")
       files.foreach(f => FileUtils.copyFileToDirectory(new File(s"src/test/cpp/regression/$f"), new File(project)))
 
       //Test RTL
