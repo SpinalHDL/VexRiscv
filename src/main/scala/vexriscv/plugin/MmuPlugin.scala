@@ -41,7 +41,9 @@ case class MmuPortConfig(portTlbSize : Int, latency : Int = 0, earlyRequireMmuLo
 class MmuPlugin(ioRange : UInt => Bool,
                 virtualRange : UInt => Bool = address => True,
 //                allowUserIo : Boolean = false,
-                enableMmuInMachineMode : Boolean = false) extends Plugin[VexRiscv] with MemoryTranslator {
+                enableMmuInMachineMode : Boolean = false,
+                exportSatp: Boolean = false
+                ) extends Plugin[VexRiscv] with MemoryTranslator {
 
   var dBusAccess : DBusAccess = null
   val portsInfo = ArrayBuffer[MmuPort]()
@@ -91,10 +93,18 @@ class MmuPlugin(ioRange : UInt => Bool,
         val sum, mxr, mprv = RegInit(False)
         mprv clearWhen(csrService.xretAwayFromMachine)
       }
-      val satp = new Area {
-        val mode = RegInit(False)
-        val asid = Reg(Bits(9 bits))
-        val ppn = Reg(UInt(20 bits))
+      val satp = if(exportSatp) {
+        new Area {
+          val mode = out(RegInit(False))
+          val asid = out(Reg(Bits(9 bits)))
+          val ppn = out(Reg(UInt(20 bits)))
+        }
+      } else {
+        new Area {
+          val mode = RegInit(False)
+          val asid = Reg(Bits(9 bits))
+          val ppn = Reg(UInt(20 bits))
+        }
       }
 
       for(offset <- List(CSR.MSTATUS, CSR.SSTATUS)) csrService.rw(offset, 19 -> status.mxr, 18 -> status.sum, 17 -> status.mprv)
