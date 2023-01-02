@@ -15,7 +15,7 @@ trap_entry:
     csrr x29, mstatus
     and x29, x29, 0x080
     beqz x29, notExternalInterrupt
-    li x29, 0x1800     //000 disable interrupts
+    li x29, 0x1800     //1800 disable interrupts
     csrw mstatus,x29
     mret
 
@@ -227,7 +227,7 @@ test7:
     sw a3, 0(a0)
     li x29, 0x800     //800  external interrupts
     csrw mie,x29
-    li x29, 0x1808     //008 enable interrupts
+    li x29, 0x1808     //1808 enable interrupts
     lr.w a5, (a0)
     csrw mstatus,x29 //Enable external interrupt (will jump instantly due to testbench setup)
     nop
