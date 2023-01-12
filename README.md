@@ -319,7 +319,7 @@ If you want to get more information about how all this JTAG / GDB stuff work, yo
 
 ## Briey SoC
 As a demonstration, a SoC named Briey is implemented in `src/main/scala/vexriscv/demo/Briey.scala`. This SoC is very similar to
-the [Pinsec SoC](https://spinalhdl.github.io/SpinalDoc-RTD/SpinalHDL/Legacy/pinsec/hardware_toplevel.html#):
+the [Pinsec SoC](https://spinalhdl.github.io/SpinalDoc-RTD/v1.3.1/SpinalHDL/Legacy/pinsec/hardware_toplevel.html):
 
 ![Briey SoC](assets/brieySoc.png?raw=true "")
 
