@@ -613,9 +613,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     contextSwitching = Bool().setName("contextSwitching")
 
     privilege = UInt(2 bits).setName("CsrPlugin_privilege")
-    if (exportPrivilege) {
-      val export_priv = out(privilege)
-    }
+    if (exportPrivilege) out(privilege)
     forceMachineWire = False
 
     if(catchIllegalAccess || ecallGen || withEbreak)
