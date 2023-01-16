@@ -82,6 +82,7 @@ case class CsrPluginConfig(
                             deterministicInteruptionEntry : Boolean = false, //Only used for simulatation purposes
                             wfiOutput           : Boolean = false,
                             withPrivilegedDebug : Boolean = false, //For the official RISC-V debug spec implementation
+                            exportPrivilege     : Boolean = false,
                             var debugTriggers       : Int     = 2
                           ){
   assert(!ucycleAccess.canWrite)
@@ -612,6 +613,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     contextSwitching = Bool().setName("contextSwitching")
 
     privilege = UInt(2 bits).setName("CsrPlugin_privilege")
+    if (exportPrivilege) out(privilege)
     forceMachineWire = False
 
     if(catchIllegalAccess || ecallGen || withEbreak)
