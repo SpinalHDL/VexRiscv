@@ -12,7 +12,7 @@ object RvcDecompressor{
   }
 
   def apply(i : Bits, rvf : Boolean, rvd : Boolean): Bits ={
-    val ret = Bits(32 bits).assignDontCare()
+    val ret = B(0, 32 bits)
 
     val rch = B"01" ## i(9 downto 7)
     val rcl = B"01" ## i(4 downto 2)
