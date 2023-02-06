@@ -233,10 +233,15 @@ class FpuPlugin(externalFpu : Boolean = false,
     decode plug new Area{
       import decode._
 
+      val trap = decode.input(FPU_ENABLE) && csr.fs === 0 && !stagesFromExecute.map(_.arbitration.isValid).orR
+      when(trap){
+        pipeline.service(classOf[DecoderService]).forceIllegal()
+      }
+
       //Maybe it might be better to not fork before fire to avoid RF stall on commits
       val forked = Reg(Bool) setWhen(port.cmd.fire) clearWhen(!arbitration.isStuck) init(False)
 
-      val hazard = csr.pendings.msb || csr.csrActive
+      val hazard = csr.pendings.msb || csr.csrActive || csr.fs === 0
 
       arbitration.haltItself setWhen(arbitration.isValid && input(FPU_ENABLE) && hazard)
       arbitration.haltItself setWhen(port.cmd.isStall)
