@@ -128,6 +128,7 @@ object TestsWorkspace {
 
       // export IMAGES=/media/data/open/SaxonSoc/artyA7SmpUpdate/buildroot-regression/buildroot-build/images
       // make clean all IBUS=CACHED IBUS_DATA_WIDTH=64 COMPRESSED=no DBUS=CACHED DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 LRSC=yes AMO=yes SUPERVISOR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes MUL=yes DIV=yes RVF=yes RVD=yes DEBUG_PLUGIN=no LINUX_SOC_SMP=yes EMULATOR=$IMAGES/fw_jump.bin VMLINUX=$IMAGES/Image DTB=$IMAGES/linux.dtb RAMDISK=$IMAGES/rootfs.cpio  TRACE=yes REDO=1 DEBUG=ye WITH_USER_IO=no  FLOW_INFO=no TRACE_START=565000000000ll SEED=45
+      // make clean all IBUS=CACHED IBUS_DATA_WIDTH=64 COMPRESSED=no DBUS=CACHED DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 LRSC=yes AMO=yes SUPERVISOR=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes MUL=yes DIV=yes RVF=yes RVD=yes DEBUG_PLUGIN=no    RUN_HEX=/media/data/open/VexRiscv/src/test/cpp/raw/play/build/play.hex TRACE=yes
       val config = VexRiscvSmpClusterGen.vexRiscvConfig(
         hartId = 0,
         ioRange = _ (31 downto 28) === 0xF,
