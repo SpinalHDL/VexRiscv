@@ -357,6 +357,7 @@ case class CsrMapping() extends Area with CsrInterface {
   val readDataSignal, readDataInit, writeDataSignal = Bits(32 bits)
   val allowCsrSignal = False
   val hazardFree = Bool()
+  val doForceFailCsr = False
 
   readDataSignal := readDataInit
   def addMappingAt(address : Int,that : Any) = mapping.getOrElseUpdate(address,new ArrayBuffer[Any]) += that
@@ -377,6 +378,7 @@ case class CsrMapping() extends Area with CsrInterface {
   override def writeData() = writeDataSignal
   override def allowCsr() = allowCsrSignal := True
   override def isHazardFree() = hazardFree
+  override def forceFailCsr() = doForceFailCsr := True
 }
 
 
@@ -399,6 +401,7 @@ trait CsrInterface{
   def onAnyWrite(body: => Unit) : Unit
   def allowCsr() : Unit  //In case your csr do not use the regular API with csrAddress but is implemented using "side channels", you can call that if the current csr is implemented
   def isHazardFree() : Bool // You should not have any side effect nor use readData() until this return True
+  def forceFailCsr() : Unit
 
   def r2w(csrAddress : Int, bitOffset : Int,that : Data): Unit
 
@@ -539,6 +542,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def readData() = csrMapping.readData()
   override def writeData() = csrMapping.writeData()
   override def isHazardFree() = csrMapping.isHazardFree()
+  override def forceFailCsr() = csrMapping.forceFailCsr()
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -1619,7 +1623,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
           illegalAccess clearWhen(csrMapping.allowCsrSignal)
 
-          val forceFail = False
+          val forceFail = CombInit(csrMapping.doForceFailCsr)
           forceFail setWhen(privilege < csrAddress(9 downto 8).asUInt)
           if(withPrivilegedDebug) forceFail setWhen(!debugMode && csrAddress >> 4 === 0x7B)
           when(forceFail){
