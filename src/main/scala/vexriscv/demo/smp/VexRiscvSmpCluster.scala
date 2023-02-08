@@ -207,12 +207,12 @@ object VexRiscvSmpClusterGen {
     } else {
       CsrPluginConfig(
         catchIllegalAccess = true,
-        mvendorid      = null,
-        marchid        = null,
-        mimpid         = null,
+        mvendorid      = 0,
+        marchid        = 0,
+        mimpid         = 0,
         mhartid        = hartId,
         misaExtensionsInit = misa,
-        misaAccess     = if(forceMisa) CsrAccess.WRITE_ONLY else CsrAccess.NONE,
+        misaAccess     = if(forceMisa) CsrAccess.READ_ONLY else CsrAccess.NONE,
         mtvecAccess    = CsrAccess.READ_WRITE,
         mtvecInit      = null,
         mepcAccess     = CsrAccess.READ_WRITE,
