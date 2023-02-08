@@ -216,8 +216,8 @@ class FpuPlugin(externalFpu : Boolean = false,
       val fs = Reg(Bits(2 bits)) init(1)
       val sd = fs === 3
 
-      when(stages.last.arbitration.isFiring && stages.last.input(FPU_ENABLE) && stages.last.input(FPU_OPCODE) =/= FpuOpcode.STORE){
-        fs := 3 //DIRTY
+      when(port.completion.fire && (port.completion.written || port.completion.flags.any)){
+        fs := 3
       }
       when(List(CSR.FRM, CSR.FCSR, CSR.FFLAGS).map(id => service.isWriting(id)).orR){
         fs := 3
@@ -298,6 +298,9 @@ class FpuPlugin(externalFpu : Boolean = false,
           when(!arbitration.isStuck && !arbitration.isRemoved){
             csr.flags.NV setWhen(port.rsp.NV)
             csr.flags.NX setWhen(port.rsp.NX)
+            when(port.rsp.NV || port.rsp.NX){
+              csr.fs := 3
+            }
           }
         }
         when(!port.rsp.valid){
