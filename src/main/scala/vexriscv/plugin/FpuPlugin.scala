@@ -229,12 +229,14 @@ class FpuPlugin(externalFpu : Boolean = false,
       service.r(CSR.SSTATUS, 31, sd)
       service.r(CSR.MSTATUS, 31, sd)
 
-      when(fs === 0) {
-        for (csr <- List(CSR.FRM, CSR.FCSR, CSR.FFLAGS)) {
-          service.during(csr) {
-            service.forceFailCsr()
-          }
+      val accessFpuCsr = False
+      for (csr <- List(CSR.FRM, CSR.FCSR, CSR.FFLAGS)) {
+        service.during(csr) {
+          accessFpuCsr := True
         }
+      }
+      when(accessFpuCsr && fs === 0) {
+        service.forceFailCsr()
       }
     }
 
