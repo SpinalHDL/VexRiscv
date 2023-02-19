@@ -473,22 +473,7 @@ object VexRiscvCustomSynthesisBench {
       cpu
     }
 
-
-    val riscvDebug = new Rtl {
-      override def getName(): String = "riscvDebug"
-      override def getRtlPath(): String = "riscvDebug.v"
-      SpinalVerilog(gen(new CsrPlugin(CsrPluginConfig.smallest(0x80000000l).copy(withPrivilegedDebug = true)), new EmbeddedRiscvJtag(
-        p = DebugTransportModuleParameter(
-          addressWidth = 7,
-          version      = 1,
-          idle         = 7
-        ),
-        debugCd = ClockDomain.current.copy(reset = Bool().setName("debugReset")),
-        withTunneling = false,
-        withTap = true
-      )).setDefinitionName(getRtlPath().split("\\.").head))
-    }
-
+    
     val vexDebug = new Rtl {
       override def getName(): String = "vexDebug"
       override def getRtlPath(): String = "vexDebug.v"
@@ -499,7 +484,7 @@ object VexRiscvCustomSynthesisBench {
 
 
     //    val rtls = List(twoStage, twoStageBarell, twoStageMulDiv, twoStageAll, smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced, linuxBalancedSmp)
-    val rtls = List(riscvDebug, vexDebug)
+    val rtls = List(vexDebug)
     //    val rtls = List(smallest)
     val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
 
