@@ -1184,42 +1184,6 @@ Write Address 0x04 ->
 
 The OpenOCD port is here: <https://github.com/SpinalHDL/openocd_riscv>
 
-#### EmbeddedRiscvJtag
-
-VexRiscv also support the official RISC-V debug specification (Thanks Efinix for the funding !).
-
-To enable it, you need to add the EmbeddedRiscvJtag to the plugin list : 
-
-```scala
-new EmbeddedRiscvJtag(
-  p = DebugTransportModuleParameter(
-    addressWidth = 7,
-    version      = 1,
-    idle         = 7
-  ),
-  withTunneling = false,
-  withTap = true
-)
-```
-
-And turn on the withPrivilegedDebug option in the CsrPlugin config.
-
-Here is an example of openocd tcl script to connect : 
-
-```tcl
-# ADD HERE YOUR JTAG ADAPTER SETTINGS
-
-set _CHIPNAME riscv
-jtag newtap $_CHIPNAME cpu -irlen 5 -expected-id 0x10002FFF
-
-set _TARGETNAME $_CHIPNAME.cpu
-
-target create $_TARGETNAME.0 riscv -chain-position $_TARGETNAME
-
-init
-halt
-```
-
 #### YamlPlugin
 
 This plugin offers a service to other plugins to generate a useful Yaml file describing the CPU configuration. It contains, for instance, the sequence of instructions required
