@@ -409,88 +409,80 @@ object VexRiscvCustomSynthesisBench {
   def main(args: Array[String]) {
 
 
-    def gen(csr : CsrPlugin) = new VexRiscv(
-      config = VexRiscvConfig(
-        plugins = List(
-          new IBusSimplePlugin(
-            resetVector = 0x80000000l,
-            cmdForkOnSecondStage = false,
-            cmdForkPersistence = false,
-            prediction = NONE,
-            catchAccessFault = false,
-            compressedGen = false
-          ),
-          new DBusSimplePlugin(
-            catchAddressMisaligned = false,
-            catchAccessFault = false
-          ),
-          new DecoderSimplePlugin(
-            catchIllegalInstruction = false
-          ),
-          new RegFilePlugin(
-            regFileReadyKind = plugin.SYNC,
-            zeroBoot = false
-          ),
-          new IntAluPlugin,
-          new SrcPlugin(
-            separatedAddSub = false,
-            executeInsertion = true
-          ),
-          csr,
-          new FullBarrelShifterPlugin(),
-          new HazardSimplePlugin(
-            bypassExecute           = true,
-            bypassMemory            = true,
-            bypassWriteBack         = true,
-            bypassWriteBackBuffer   = true,
-            pessimisticUseSrc       = false,
-            pessimisticWriteRegFile = false,
-            pessimisticAddressMatch = false
-          ),
-          new BranchPlugin(
-            earlyBranch = false,
-            catchAddressMisaligned = false
-          ),
-          new YamlPlugin("cpu0.yaml")
+    def gen(csr : CsrPlugin, p : Plugin[VexRiscv]) = {
+      val cpu = new VexRiscv(
+        config = VexRiscvConfig(
+          plugins = List(
+            p,
+            new IBusSimplePlugin(
+              resetVector = 0x80000000l,
+              cmdForkOnSecondStage = false,
+              cmdForkPersistence = false,
+              prediction = NONE,
+              catchAccessFault = false,
+              compressedGen = false
+            ),
+            new DBusSimplePlugin(
+              catchAddressMisaligned = false,
+              catchAccessFault = false
+            ),
+            new DecoderSimplePlugin(
+              catchIllegalInstruction = false
+            ),
+            new RegFilePlugin(
+              regFileReadyKind = plugin.SYNC,
+              zeroBoot = false
+            ),
+            new IntAluPlugin,
+            new SrcPlugin(
+              separatedAddSub = false,
+              executeInsertion = true
+            ),
+            csr,
+            new FullBarrelShifterPlugin(),
+            new HazardSimplePlugin(
+              bypassExecute           = true,
+              bypassMemory            = true,
+              bypassWriteBack         = true,
+              bypassWriteBackBuffer   = true,
+              pessimisticUseSrc       = false,
+              pessimisticWriteRegFile = false,
+              pessimisticAddressMatch = false
+            ),
+            new BranchPlugin(
+              earlyBranch = false,
+              catchAddressMisaligned = false
+            ),
+            new YamlPlugin("cpu0.yaml")
+          )
         )
       )
-    )
-
-
-    val fixedMtvec = new Rtl {
-      override def getName(): String = "Fixed MTVEC"
-      override def getRtlPath(): String = "fixedMtvec.v"
-      SpinalVerilog(gen(new CsrPlugin(CsrPluginConfig.smallest(0x80000000l))).setDefinitionName(getRtlPath().split("\\.").head))
+      cpu.rework {
+        for (plugin <- cpu.config.plugins) plugin match {
+          case plugin: DebugPlugin => plugin.debugClockDomain {
+            plugin.io.bus.setAsDirectionLess()
+            val jtag = slave(new Jtag())
+              .setName("jtag")
+            jtag <> plugin.io.bus.fromJtag()
+          }
+          case _ =>
+        }
+      }
+      cpu
     }
 
-    val writeOnlyMtvec = new Rtl {
-      override def getName(): String = "write only MTVEC"
-      override def getRtlPath(): String = "woMtvec.v"
-      SpinalVerilog(gen(new CsrPlugin(CsrPluginConfig.smallest(null).copy(mtvecAccess = WRITE_ONLY))).setDefinitionName(getRtlPath().split("\\.").head))
-    }
-
-    val readWriteMtvec = new Rtl {
-      override def getName(): String = "read write MTVEC"
-      override def getRtlPath(): String = "wrMtvec.v"
-      SpinalVerilog(gen(new CsrPlugin(CsrPluginConfig.smallest(null).copy(mtvecAccess = READ_WRITE))).setDefinitionName(getRtlPath().split("\\.").head))
-    }
-
-    val fixedMtvecRoCounter = new Rtl {
-      override def getName(): String = "Fixed MTVEC, read only mcycle/minstret"
-      override def getRtlPath(): String = "fixedMtvecRoCounter.v"
-      SpinalVerilog(gen(new CsrPlugin(CsrPluginConfig.smallest(0x80000000l).copy(mcycleAccess = READ_ONLY, minstretAccess = READ_ONLY))).setDefinitionName(getRtlPath().split("\\.").head))
-    }
-
-
-    val rwMtvecRoCounter = new Rtl {
-      override def getName(): String = "read write MTVEC, read only mcycle/minstret"
-      override def getRtlPath(): String = "readWriteMtvecRoCounter.v"
-      SpinalVerilog(gen(new CsrPlugin(CsrPluginConfig.smallest(null).copy(mtvecAccess = READ_WRITE, mcycleAccess = READ_ONLY, minstretAccess = READ_ONLY))).setDefinitionName(getRtlPath().split("\\.").head))
+    
+    val vexDebug = new Rtl {
+      override def getName(): String = "vexDebug"
+      override def getRtlPath(): String = "vexDebug.v"
+      SpinalVerilog(gen(new CsrPlugin(CsrPluginConfig.smallest(0x80000000l)),
+        new DebugPlugin(ClockDomain.current.clone(reset = Bool().setName("debugReset")))
+      ).setDefinitionName(getRtlPath().split("\\.").head))
     }
 
 
     //    val rtls = List(twoStage, twoStageBarell, twoStageMulDiv, twoStageAll, smallestNoCsr, smallest, smallAndProductive, smallAndProductiveWithICache, fullNoMmuNoCache, noCacheNoMmuMaxPerf, fullNoMmuMaxPerf, fullNoMmu, full, linuxBalanced, linuxBalancedSmp)
-    val rtls = List(fixedMtvec, writeOnlyMtvec, readWriteMtvec,fixedMtvecRoCounter, rwMtvecRoCounter)
+    val rtls = List(vexDebug)
     //    val rtls = List(smallest)
     val targets = XilinxStdTargets() ++ AlteraStdTargets() ++  IcestormStdTargets().take(1)
 
