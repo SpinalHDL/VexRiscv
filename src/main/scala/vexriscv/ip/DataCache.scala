@@ -1063,16 +1063,18 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
     }
 
     //remove side effects on exceptions
-    when(consistancyHazard || mmuRsp.refilling || io.cpu.writeBack.accessError || io.cpu.writeBack.mmuException || io.cpu.writeBack.unalignedAccess){
-      io.mem.cmd.valid := False
-      tagsWriteCmd.valid := False
-      dataWriteCmd.valid := False
-      loaderValid := False
-      io.cpu.writeBack.haltIt := False
-      if(withInternalLrSc) lrSc.reserved := lrSc.reserved
-      if(withExternalAmo) amo.external.state := LR_CMD
+    when(io.cpu.writeBack.isValid) {
+      when(consistancyHazard || mmuRsp.refilling || io.cpu.writeBack.accessError || io.cpu.writeBack.mmuException || io.cpu.writeBack.unalignedAccess) {
+        io.mem.cmd.valid := False
+        tagsWriteCmd.valid := False
+        dataWriteCmd.valid := False
+        loaderValid := False
+        io.cpu.writeBack.haltIt := False
+        if (withInternalLrSc) lrSc.reserved := lrSc.reserved
+        if (withExternalAmo) amo.external.state := LR_CMD
+      }
+      io.cpu.redo setWhen((mmuRsp.refilling || consistancyHazard))
     }
-    io.cpu.redo setWhen(io.cpu.writeBack.isValid && (mmuRsp.refilling || consistancyHazard))
 
     assert(!(io.cpu.writeBack.isValid && !io.cpu.writeBack.haltIt && io.cpu.writeBack.isStuck), "writeBack stuck by another plugin is not allowed", ERROR)
   }
