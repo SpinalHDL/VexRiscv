@@ -855,7 +855,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
         io.cpu.execute.haltIt := True
         when(!hold) {
           counter := counter + 1
-          when(io.cpu.flush.singleLine){
+          when(io.cpu.flush.valid && io.cpu.flush.singleLine){
             counter.msb := True
           }
         }
@@ -869,7 +869,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
       when(start){
         waitDone := True
         counter := 0
-        when(io.cpu.flush.singleLine){
+        when(io.cpu.flush.valid && io.cpu.flush.singleLine){
           counter := U"0" @@ io.cpu.flush.lineId
         }
       }
