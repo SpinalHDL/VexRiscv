@@ -439,7 +439,7 @@ trait IWake{
   def askWake() : Unit
 }
 
-class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface with IWake{
+class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface with IWake with VexRiscvRegressionArg {
   import config._
   import CsrAccess._
 
@@ -456,6 +456,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   }
 
 
+  override def getVexRiscvRegressionArgs() = List(s"SUPERVISOR=${if(config.supervisorGen) "yes" else "no"}, CSR=yes")
 
   var exceptionPendings : Vec[Bool] = null
   override def isExceptionPending(stage : Stage): Bool = exceptionPendings(pipeline.stages.indexOf(stage))
