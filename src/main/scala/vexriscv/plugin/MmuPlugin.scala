@@ -281,11 +281,11 @@ class MmuPlugin(ioRange : UInt => Bool,
                 when(port.entryToReplace === lineId){
                   val superPage = state === State.L1_RSP
                   line.valid := True
-                  line.exception := dBusRsp.exception || (superPage && dBusRsp.pte.PPN0 =/= 0)
+                  line.exception := dBusRsp.exception || (superPage && dBusRsp.pte.PPN0 =/= 0) || !dBusRsp.pte.A
                   line.virtualAddress := vpn
                   line.physicalAddress := Vec(dBusRsp.pte.PPN0, dBusRsp.pte.PPN1(9 downto 0))
                   line.allowRead := dBusRsp.pte.R
-                  line.allowWrite := dBusRsp.pte.W
+                  line.allowWrite := dBusRsp.pte.W && dBusRsp.pte.D
                   line.allowExecute := dBusRsp.pte.X
                   line.allowUser := dBusRsp.pte.U
                   line.superPage := state === State.L1_RSP

@@ -7,7 +7,7 @@ Disassembly of section .crt_section:
 80000000 <_start>:
 80000000:	00000e93          	li	t4,0
 80000004:	00000097          	auipc	ra,0x0
-80000008:	4ec08093          	addi	ra,ra,1260 # 800004f0 <trap>
+80000008:	4fc08093          	addi	ra,ra,1276 # 80000500 <trap>
 8000000c:	30509073          	csrw	mtvec,ra
 
 80000010 <test1>:
@@ -360,38 +360,38 @@ Disassembly of section .crt_section:
 
 800004c0 <fail>:
 800004c0:	00000e93          	li	t4,0
-800004c4:	00000073          	ecall
+800004c4:	00000f17          	auipc	t5,0x0
+800004c8:	00cf0f13          	addi	t5,t5,12 # 800004d0 <failFence>
+800004cc:	00000073          	ecall
 
-800004c8 <failFence>:
-800004c8:	f0100137          	lui	sp,0xf0100
-800004cc:	f2410113          	addi	sp,sp,-220 # f00fff24 <test56+0x700f2e68>
-800004d0:	01c12023          	sw	t3,0(sp)
+800004d0 <failFence>:
+800004d0:	f0100137          	lui	sp,0xf0100
+800004d4:	f2410113          	addi	sp,sp,-220 # f00fff24 <test56+0x700f2e68>
+800004d8:	01c12023          	sw	t3,0(sp)
 
-800004d4 <pass>:
-800004d4:	00200e93          	li	t4,2
-800004d8:	00000073          	ecall
+800004dc <pass>:
+800004dc:	00100e93          	li	t4,1
+800004e0:	00000f17          	auipc	t5,0x0
+800004e4:	00cf0f13          	addi	t5,t5,12 # 800004ec <passFence>
+800004e8:	00000073          	ecall
 
-800004dc <passFence>:
-800004dc:	f0100137          	lui	sp,0xf0100
-800004e0:	f2010113          	addi	sp,sp,-224 # f00fff20 <test56+0x700f2e64>
-800004e4:	00012023          	sw	zero,0(sp)
-800004e8:	00000013          	nop
-800004ec:	00000013          	nop
+800004ec <passFence>:
+800004ec:	f0100137          	lui	sp,0xf0100
+800004f0:	f2010113          	addi	sp,sp,-224 # f00fff20 <test56+0x700f2e64>
+800004f4:	00012023          	sw	zero,0(sp)
+800004f8:	00000013          	nop
+800004fc:	00000013          	nop
 
-800004f0 <trap>:
-800004f0:	fc0e88e3          	beqz	t4,800004c0 <fail>
-800004f4:	342020f3          	csrr	ra,mcause
-800004f8:	341020f3          	csrr	ra,mepc
-800004fc:	300020f3          	csrr	ra,mstatus
-80000500:	343020f3          	csrr	ra,mtval
-80000504:	00200093          	li	ra,2
-80000508:	fc1e86e3          	beq	t4,ra,800004d4 <pass>
-8000050c:	341f1073          	csrw	mepc,t5
-80000510:	30200073          	mret
-80000514:	00000013          	nop
-80000518:	00000013          	nop
-8000051c:	00000013          	nop
-80000520:	00000013          	nop
+80000500 <trap>:
+80000500:	fc0e80e3          	beqz	t4,800004c0 <fail>
+80000504:	342020f3          	csrr	ra,mcause
+80000508:	341020f3          	csrr	ra,mepc
+8000050c:	300020f3          	csrr	ra,mstatus
+80000510:	343020f3          	csrr	ra,mtval
+80000514:	00200093          	li	ra,2
+80000518:	fc1e82e3          	beq	t4,ra,800004dc <pass>
+8000051c:	341f1073          	csrw	mepc,t5
+80000520:	30200073          	mret
 80000524:	00000013          	nop
 80000528:	00000013          	nop
 8000052c:	00000013          	nop

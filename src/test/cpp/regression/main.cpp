@@ -407,7 +407,10 @@ public:
 			uint32_t w : 1;
 			uint32_t x : 1;
 			uint32_t u : 1;
-			uint32_t _dummy : 5;
+			uint32_t g : 1;
+			uint32_t a : 1;
+			uint32_t d : 1;
+			uint32_t _dummy : 2;
 			uint32_t ppn : 22;
 		};
 		struct __attribute__((packed)){
@@ -505,9 +508,9 @@ public:
 			}
 			if(!tlb.u && effectivePrivilege == 0) return true;
 			if( tlb.u && effectivePrivilege == 1 && !status.sum) return true;
-			if(superPage && tlb.ppn0 != 0) return true;
+			if(superPage && tlb.ppn0 != 0 || !tlb.a) return true;
 			if(kind == READ || kind == READ_WRITE) if(!tlb.r && !(status.mxr && tlb.x)) return true;
-			if(kind == WRITE || kind == READ_WRITE) if(!tlb.w) return true;
+			if(kind == WRITE || kind == READ_WRITE) if(!tlb.w || !tlb.d) return true;
 			if(kind == EXECUTE) if(!tlb.x) return true;
 
 			*p = (tlb.ppn1 << 22) | (superPage ? v & 0x3FF000 : tlb.ppn0 << 12) | (v & 0xFFF);
@@ -628,6 +631,9 @@ public:
 
 		default: return true; break;
 		}
+//        if(csr == MSTATUS || csr == SSTATUS){
+//            printf("READ  %x %x\n", pc, *value);
+//        }
 		return false;
 	}
 
@@ -644,6 +650,9 @@ public:
 
 	virtual bool csrWrite(int32_t csr, uint32_t value){
 		if(((csr >> 8) & 0x3) > privilege) return true;
+//		if(csr == MSTATUS || csr == SSTATUS){
+//		    printf("MIAOU %x %x\n", pc, value);
+//		}
 		switch(csr){
 		case MSTATUS: status.raw = value & 0x7FFFFFFF; break;
 		case MIP: ipSoft = value; break;
@@ -675,6 +684,9 @@ public:
 
 		default: ilegalInstruction(); return true; break;
 		}
+//        if(csr == MSTATUS || csr == SSTATUS){
+//            printf("      %x %x\n", pc, status.raw);
+//        }
 		return false;
 	}
 
