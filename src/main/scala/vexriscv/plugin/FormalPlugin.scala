@@ -93,7 +93,7 @@ class FormalPlugin extends Plugin[VexRiscv]{
       rvfi.trap := False
       rvfi.halt := False
       rvfi.intr := False
-      rvfi.mode := 3
+      rvfi.mode := output(FORMAL_MODE)
       rvfi.ixl := 1
 //      rvfi.rs1.addr  := output(INSTRUCTION)(rs1Range).asUInt
 //      rvfi.rs2.addr  := output(INSTRUCTION)(rs2Range).asUInt
