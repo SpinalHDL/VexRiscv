@@ -455,7 +455,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
         //do not emit memory request if MMU refilling
         insert(MMU_FAULT) := input(MMU_RSP).exception || (!input(MMU_RSP).allowWrite && input(MEMORY_STORE)) || (!input(MMU_RSP).allowRead && !input(MEMORY_STORE))
-        skipCmd.setWhen(input(MMU_FAULT) || input(MMU_RSP).refilling)
+        skipCmd.setWhen(input(MMU_RSP).refilling)
 
         insert(MMU_RSP) := mmuBus.rsp
       }
