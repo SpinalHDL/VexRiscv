@@ -415,6 +415,8 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
         decode.arbitration.isValid clearWhen(forceNoDecodeCond)
       })
 
+      val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
+
       //Formal verification signals generation, miss prediction stuff ?
       val formal = new Area {
         val raw = if(compressedGen) decompressor.raw else inputBeforeStage.rsp.inst
@@ -437,6 +439,11 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
             info.stage.output(FORMAL_PC_NEXT) := info.interface.payload
           }
         })
+
+        // Forward the current CPU "mode" (privilege level) from the fetch
+	// stage, which is where it can begin to affect the current
+	// execution (e.g., through PMP checks).
+        decode.insert(FORMAL_MODE) := privilegeService.encodeBits()
       }
     }
 
