@@ -670,6 +670,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       }
     }
 
+    // The CSR plugin will invoke a trap handler on exception, which does not
+    // count as halt-state by the RVFI spec, and neither do other instructions
+    // such as `wfi`, etc. Hence statically drive the output:
+    pipeline.stages.head.insert(FORMAL_HALT) := False
 
     case class Xtvec() extends Bundle {
       val mode = Bits(2 bits)
