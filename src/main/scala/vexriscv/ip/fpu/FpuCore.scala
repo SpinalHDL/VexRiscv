@@ -1688,7 +1688,12 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     port.valid := input.valid && input.write
     port.address := input.source @@ input.rd
     port.data.value := input.value
-    if(p.withDouble) port.data.boxed := input.format === FpuFormat.FLOAT
+    if(p.withDouble) {
+      port.data.boxed := input.format === FpuFormat.FLOAT
+      when(port.data.boxed){
+        port.data.value.mantissa(p.internalMantissaSize-23-1 downto 0) := 0
+      }
+    }
 
     val randomSim = p.sim generate (in UInt(p.internalMantissaSize bits))
     if(p.sim) when(port.data.value.isZero || port.data.value.isInfinity){
