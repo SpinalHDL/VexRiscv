@@ -641,7 +641,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
     xretAwayFromMachine = False
 
-    injectionPort = withPrivilegedDebug generate pipeline.service(classOf[IBusFetcher]).getInjectionPort()
+    injectionPort = withPrivilegedDebug generate pipeline.service(classOf[IBusFetcher]).getInjectionPort().setCompositeName(this, "injectionPort")
     debugMode = withPrivilegedDebug generate Bool().setName("debugMode")
     debugBus = withPrivilegedDebug generate slave(DebugHartBus()).setName("debugBus")
   }

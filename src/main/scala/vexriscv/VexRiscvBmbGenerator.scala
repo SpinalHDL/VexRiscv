@@ -16,7 +16,6 @@ object VexRiscvBmbGenerator{
   val DEBUG_JTAG_CTRL = 2
   val DEBUG_BUS = 3
   val DEBUG_BMB = 4
-  val DEBUG_RISCV = 5
 }
 
 case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGenerator = null) extends Area {
@@ -24,6 +23,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
 
   val config = Handle[VexRiscvConfig]
   val withDebug = Handle[Int]
+  val withRiscvDebug = Handle[Boolean]
   val debugClockDomain = Handle[ClockDomain]
   val debugReset = Handle[Bool]
   val debugAskReset = Handle[() => Unit]
@@ -42,6 +42,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
 
   def disableDebug() = {
     withDebug.load(DEBUG_NONE)
+    withRiscvDebug.load(false)
   }
 
   def enableJtag(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator) : Unit = debugCd.rework{
@@ -49,6 +50,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
     val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
     debugAskReset.loadNothing()
     withDebug.load(DEBUG_JTAG)
+    if(!withRiscvDebug.isLoaded) withRiscvDebug.load(false)
   }
 
   def enableJtagInstructionCtrl(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator) : Unit = debugCd.rework{
@@ -56,6 +58,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
     val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
     debugAskReset.loadNothing()
     withDebug.load(DEBUG_JTAG_CTRL)
+    if(!withRiscvDebug.isLoaded) withRiscvDebug.load(false)
   }
 
   def enableDebugBus(debugCd : ClockDomainResetGenerator, resetCd : ClockDomainResetGenerator) : Unit = debugCd.rework{
@@ -63,13 +66,22 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
     val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
     debugAskReset.loadNothing()
     withDebug.load(DEBUG_BUS)
+    if(!withRiscvDebug.isLoaded) withRiscvDebug.load(false)
   }
 
   def enableRiscvDebug(debugCd :  Handle[ClockDomain], resetCd : ClockDomainResetGenerator) : Unit = debugCd.on{
     this.debugClockDomain.load(debugCd)
     debugAskReset.loadNothing()
-    withDebug.load(DEBUG_RISCV)
+    withRiscvDebug.load(true)
+    if(!withDebug.isLoaded) withDebug.load(DEBUG_NONE)
   }
+
+//  def enableRiscvAndBusDebugPlus(debugCd :  Handle[ClockDomain], resetCd : ClockDomainResetGenerator) : Unit = debugCd.on{
+//    this.debugClockDomain.load(debugCd)
+//    val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
+//    debugAskReset.loadNothing()
+//    withRiscvDebug.load(true)
+//  }
 
   val debugBmbAccessSource = Handle[BmbAccessCapabilities]
   val debugBmbAccessRequirements = Handle[BmbAccessParameter]
@@ -78,6 +90,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
     val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
     debugAskReset.loadNothing()
     withDebug.load(DEBUG_BMB)
+    if(!withRiscvDebug.isLoaded) withRiscvDebug.load(false)
     val slaveModel = debugCd on interconnectSmp.addSlave(
       accessSource = debugBmbAccessSource,
       accessCapabilities = debugBmbAccessSource.derivate(DebugExtensionBus.getBmbAccessParameter(_)),
@@ -93,13 +106,12 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
   val jtagInstructionCtrl = withDebug.produce(withDebug.get == DEBUG_JTAG_CTRL generate JtagTapInstructionCtrl())
   val debugBus = withDebug.produce(withDebug.get == DEBUG_BUS generate DebugExtensionBus())
   val debugBmb = Handle[Bmb]
-  val debugRiscv = withDebug.produce(withDebug.get == DEBUG_RISCV generate DebugHartBus())
+  val debugRiscv = withRiscvDebug.produce(withRiscvDebug.get generate DebugHartBus())
   val jtagClockDomain = Handle[ClockDomain]
 
   val logic = Handle(new Area {
     withDebug.get match {
       case DEBUG_NONE =>
-      case DEBUG_RISCV =>
       case _ => config.add(new DebugPlugin(debugClockDomain, hardwareBreakpointCount))
     }
 
@@ -142,12 +154,9 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
         timerInterrupt load plugin.timerInterrupt
         softwareInterrupt load plugin.softwareInterrupt
         if (plugin.config.supervisorGen) externalSupervisorInterrupt load plugin.externalInterruptS
-        withDebug.get match {
-          case DEBUG_RISCV => {
-            assert(plugin.debugBus != null, "You need to enable CsrPluginConfig.withPrivilegedDebug")
-            debugRiscv <> plugin.debugBus
-          }
-          case _ =>
+        if(withRiscvDebug.get) {
+          assert(plugin.debugBus != null, "You need to enable CsrPluginConfig.withPrivilegedDebug")
+          debugRiscv <> plugin.debugBus
         }
       }
       case plugin: DebugPlugin => plugin.debugClockDomain {
@@ -160,7 +169,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
         withDebug.get match {
           case DEBUG_JTAG => jtag <> plugin.io.bus.fromJtag()
           case DEBUG_JTAG_CTRL => jtagInstructionCtrl <> plugin.io.bus.fromJtagInstructionCtrl(jtagClockDomain, 0)
-          case DEBUG_BUS => debugBus <> plugin.io.bus
+          case DEBUG_BUS  => debugBus <> plugin.io.bus
           case DEBUG_BMB => debugBmb >> plugin.io.bus.fromBmb()
         }
       }
