@@ -52,7 +52,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
                        dBusCmdSlavePipe : Boolean = false,
                        dBusRspSlavePipe : Boolean = false,
                        relaxedMemoryTranslationRegister : Boolean = false,
-                       csrInfo : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService with DBusEncodingService with VexRiscvRegressionArg {
+                       csrInfo : Boolean = false,
+                       tightlyCoupledAddressStage : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService with DBusEncodingService with VexRiscvRegressionArg {
   import config._
   assert(!(config.withExternalAmo && !dBusRspSlavePipe))
   assert(isPow2(cacheSize))
@@ -405,6 +406,14 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       }
 
       if(tightlyGen){
+        tightlyCoupledAddressStage match {
+          case false =>
+          case true => {
+            val go = RegInit(False) setWhen(arbitration.isValid) clearWhen(arbitration.isMoving)
+            arbitration.haltItself.setWhen(arbitration.isValid && input(MEMORY_TIGHTLY).orR && !go)
+          }
+        }
+
         insert(MEMORY_TIGHTLY) := B(tightlyCoupledPorts.map(_.p.hit(input(SRC_ADD).asUInt)))
         when(insert(MEMORY_TIGHTLY).orR){
           cache.io.cpu.execute.isValid := False
@@ -412,7 +421,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         }
         for((port, sel) <- (tightlyCoupledPorts, input(MEMORY_TIGHTLY).asBools).zipped){
           port.bus.enable       := arbitration.isValid && input(MEMORY_ENABLE) && sel && !arbitration.isStuck
-          port.bus.address      := input(SRC_ADD).asUInt.resized
+
+          port.bus.address      := Delay(input(SRC_ADD), tightlyCoupledAddressStage.toInt).asUInt.resized
           port.bus.write_enable := input(MEMORY_WR)
           port.bus.write_data   := input(MEMORY_STORE_DATA_RF)
           port.bus.write_mask   := size.mux (
@@ -446,7 +456,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
           input(HAS_SIDE_EFFECT) := False
         }
         insert(MEMORY_TIGHTLY_DATA) := OhMux(input(MEMORY_TIGHTLY), tightlyCoupledPorts.map(_.bus.read_data))
-      }
+        KeepAttribute(insert(MEMORY_TIGHTLY_DATA))      }
     }
 
     val managementStage = stages.last
