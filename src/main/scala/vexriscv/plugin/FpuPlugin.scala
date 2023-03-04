@@ -243,7 +243,7 @@ class FpuPlugin(externalFpu : Boolean = false,
     decode plug new Area{
       import decode._
 
-      val trap = decode.input(FPU_ENABLE) && csr.fs === 0 && !stagesFromExecute.map(_.arbitration.isValid).orR
+      val trap = insert(FPU_ENABLE) && csr.fs === 0 && !stagesFromExecute.map(_.arbitration.isValid).orR
       when(trap){
         pipeline.service(classOf[DecoderService]).forceIllegal()
       }
@@ -253,6 +253,7 @@ class FpuPlugin(externalFpu : Boolean = false,
 
       val hazard = csr.pendings.msb || csr.csrActive || csr.fs === 0
 
+      input(FPU_ENABLE).clearWhen(!input(LEGAL_INSTRUCTION))
       arbitration.haltItself setWhen(arbitration.isValid && input(FPU_ENABLE) && hazard)
       arbitration.haltItself setWhen(port.cmd.isStall)
 

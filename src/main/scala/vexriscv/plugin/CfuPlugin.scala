@@ -182,12 +182,13 @@ class CfuPlugin(val stageCount : Int,
       }
     }
 
-    if(withEnable) when(decode.input(CFU_ENABLE) && !csr.en){
+    if(withEnable) when(decode.insert(CFU_ENABLE) && !csr.en){
       pipeline.service(classOf[DecoderService]).forceIllegal()
     }
 
     forkStage plug new Area{
       import forkStage._
+      input(CFU_ENABLE).clearWhen(!input(LEGAL_INSTRUCTION))
       val hazard = stages.dropWhile(_ != forkStage).tail.map(s => s.arbitration.isValid && s.input(HAS_SIDE_EFFECT)).orR
       val scheduleWish = arbitration.isValid && input(CFU_ENABLE)
       val schedule = scheduleWish && !hazard
