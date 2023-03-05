@@ -409,7 +409,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         tightlyCoupledAddressStage match {
           case false =>
           case true => {
-            val go = RegInit(False) setWhen(arbitration.isValid) clearWhen(arbitration.isMoving)
+            val go = RegInit(False) setWhen(arbitration.isValid) clearWhen(!arbitration.isStuck)
             arbitration.haltItself.setWhen(arbitration.isValid && input(MEMORY_ENABLE) && input(MEMORY_TIGHTLY).orR && !go)
           }
         }
