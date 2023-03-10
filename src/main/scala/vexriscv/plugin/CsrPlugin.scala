@@ -379,6 +379,7 @@ case class CsrMapping() extends Area with CsrInterface {
   override def allowCsr() = allowCsrSignal := True
   override def isHazardFree() = hazardFree
   override def forceFailCsr() = doForceFailCsr := True
+  override def inDebugMode(): Bool = ???
 }
 
 
@@ -429,6 +430,7 @@ trait CsrInterface{
 
   def readData() : Bits //Return the 32 bits internal signal of the CsrPlugin for you to override (if you want)
   def writeData() : Bits //Return the 32 bits value that the CsrPlugin want to write in the CSR (depend on readData combinatorialy)
+  def inDebugMode() : Bool
 }
 
 
@@ -483,6 +485,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def askWake(): Unit = thirdPartyWake := True
 
   override def isContextSwitching = contextSwitching
+
+  override def inDebugMode(): Bool = if(withPrivilegedDebug) debugMode else False
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
     val NONE, XRET = newElement()

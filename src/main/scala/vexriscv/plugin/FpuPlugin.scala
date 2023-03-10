@@ -188,7 +188,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       }
     })
 
-
+    val csrService = pipeline.service(classOf[CsrInterface])
     val csr = pipeline plug new Area{
       val pendings = Reg(UInt(6 bits)) init(0)
       pendings := pendings + U(port.cmd.fire) - U(port.completion.fire) - U(port.rsp.fire)
@@ -202,15 +202,14 @@ class FpuPlugin(externalFpu : Boolean = false,
       flags.UF init(False) setWhen(port.completion.fire && port.completion.flags.UF)
       flags.NX init(False) setWhen(port.completion.fire && port.completion.flags.NX)
 
-      val service = pipeline.service(classOf[CsrInterface])
       val rm = Reg(Bits(3 bits)) init(0)
 
-      service.rw(CSR.FCSR,   5, rm)
-      service.rw(CSR.FCSR,   0, flags)
-      service.rw(CSR.FRM,    0, rm)
-      service.rw(CSR.FFLAGS, 0, flags)
+      csrService.rw(CSR.FCSR,   5, rm)
+      csrService.rw(CSR.FCSR,   0, flags)
+      csrService.rw(CSR.FRM,    0, rm)
+      csrService.rw(CSR.FFLAGS, 0, flags)
 
-      val csrActive = service.duringAny()
+      val csrActive = csrService.duringAny()
       execute.arbitration.haltByOther setWhen(csrActive && hasPending) // pessimistic
 
       val fs = Reg(Bits(2 bits)) init(1)
@@ -219,31 +218,31 @@ class FpuPlugin(externalFpu : Boolean = false,
       when(port.completion.fire && (port.completion.written || port.completion.flags.any)){
         fs := 3
       }
-      when(List(CSR.FRM, CSR.FCSR, CSR.FFLAGS).map(id => service.isWriting(id)).orR){
+      when(List(CSR.FRM, CSR.FCSR, CSR.FFLAGS).map(id => csrService.isWriting(id)).orR){
         fs := 3
       }
 
-      service.rw(CSR.SSTATUS, 13, fs)
-      service.rw(CSR.MSTATUS, 13, fs)
+      csrService.rw(CSR.SSTATUS, 13, fs)
+      csrService.rw(CSR.MSTATUS, 13, fs)
 
-      service.r(CSR.SSTATUS, 31, sd)
-      service.r(CSR.MSTATUS, 31, sd)
+      csrService.r(CSR.SSTATUS, 31, sd)
+      csrService.r(CSR.MSTATUS, 31, sd)
 
       val accessFpuCsr = False
       for (csr <- List(CSR.FRM, CSR.FCSR, CSR.FFLAGS)) {
-        service.during(csr) {
+        csrService.during(csr) {
           accessFpuCsr := True
         }
       }
-      when(accessFpuCsr && fs === 0) {
-        service.forceFailCsr()
+      when(accessFpuCsr && fs === 0 && !csrService.inDebugMode()) {
+        csrService.forceFailCsr()
       }
     }
 
     decode plug new Area{
       import decode._
 
-      val trap = insert(FPU_ENABLE) && csr.fs === 0 && !stagesFromExecute.map(_.arbitration.isValid).orR
+      val trap = insert(FPU_ENABLE) && csr.fs === 0 && !csrService.inDebugMode() && !stagesFromExecute.map(_.arbitration.isValid).orR
       when(trap){
         pipeline.service(classOf[DecoderService]).forceIllegal()
       }
@@ -251,7 +250,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       //Maybe it might be better to not fork before fire to avoid RF stall on commits
       val forked = Reg(Bool) setWhen(port.cmd.fire) clearWhen(!arbitration.isStuck) init(False)
 
-      val hazard = csr.pendings.msb || csr.csrActive || csr.fs === 0
+      val hazard = csr.pendings.msb || csr.csrActive || csr.fs === 0 && !csrService.inDebugMode()
 
       input(FPU_ENABLE).clearWhen(!input(LEGAL_INSTRUCTION))
       arbitration.haltItself setWhen(arbitration.isValid && input(FPU_ENABLE) && hazard)
