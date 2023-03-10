@@ -645,6 +645,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
     xretAwayFromMachine = False
 
+    if(pipeline.config.FLEN == 64) pipeline.service(classOf[FpuPlugin]).requireAccessPort()
+
     injectionPort = withPrivilegedDebug generate pipeline.service(classOf[IBusFetcher]).getInjectionPort().setCompositeName(this, "injectionPort")
     debugMode = withPrivilegedDebug generate Bool().setName("debugMode")
     debugBus = withPrivilegedDebug generate slave(DebugHartBus()).setName("debugBus")
@@ -727,33 +729,56 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         timeout.clear()
       }
 
-      val inject = new Area{
-        val cmd = bus.dmToHart.translateWith(bus.dmToHart.data).takeWhen(bus.dmToHart.op === DebugDmToHartOp.EXECUTE)
-        injectionPort << cmd.toStream.stage
-
-
-        val pending = RegInit(False) setWhen(cmd.valid) clearWhen(bus.exception || bus.commit || bus.ebreak || bus.redo)
-        when(cmd.valid){ timeout.clear() }
-        bus.redo := pending && timeout.state
-      }
       val dataCsrr = new Area{
         bus.hartToDm.valid   := isWriting(DebugModule.CSR_DATA)
         bus.hartToDm.address := 0
         bus.hartToDm.data    := execute.input(SRC1)
       }
 
+      val withDebugFpuAccess = pipeline.config.FLEN == 64
       val dataCsrw = new Area{
-        val value = Reg(Bits(32 bits))
+        val value = Vec.fill(1+withDebugFpuAccess.toInt)(Reg(Bits(32 bits)))
 
         val fromDm = new Area{
           when(bus.dmToHart.valid && bus.dmToHart.op === DebugDmToHartOp.DATA){
-            value := bus.dmToHart.data
+            value(bus.dmToHart.address.resized) := bus.dmToHart.data
           }
         }
 
         val toHart = new Area{
-          r(DebugModule.CSR_DATA, value)
+          r(DebugModule.CSR_DATA, value(0))
         }
+      }
+
+      val inject = new Area{
+        val cmd = bus.dmToHart.takeWhen(bus.dmToHart.op === DebugDmToHartOp.EXECUTE || bus.dmToHart.op === DebugDmToHartOp.REG_READ || bus.dmToHart.op === DebugDmToHartOp.REG_WRITE)
+        val buffer = cmd.toStream.stage
+        injectionPort.valid := buffer.valid && buffer.op === DebugDmToHartOp.EXECUTE
+        injectionPort.payload := buffer.data
+
+        buffer.ready := injectionPort.fire
+        val fpu = withDebugFpuAccess generate new Area {
+          val access = service(classOf[FpuPlugin]).access
+          access.start := buffer.valid && buffer.op === DebugDmToHartOp.REG_READ || buffer.op === DebugDmToHartOp.REG_WRITE
+          access.regId := buffer.address
+          access.write := buffer.op === DebugDmToHartOp.REG_WRITE
+          access.writeData := dataCsrw.value.take(2).asBits
+          access.size := buffer.size
+
+          when(access.readDataValid) {
+            bus.hartToDm.valid := True
+            bus.hartToDm.address := access.readDataChunk.resized
+            bus.hartToDm.data := access.readData
+          }
+          bus.regSuccess := access.done
+          buffer.ready setWhen(access.done)
+        }
+
+        if(!withDebugFpuAccess) bus.regSuccess := False
+
+        val pending = RegInit(False) setWhen(cmd.valid && bus.dmToHart.op === DebugDmToHartOp.EXECUTE) clearWhen(bus.exception || bus.commit || bus.ebreak || bus.redo)
+        when(cmd.valid){ timeout.clear() }
+        bus.redo := pending && timeout.state
       }
 
       val dpc = Reg(UInt(32 bits))

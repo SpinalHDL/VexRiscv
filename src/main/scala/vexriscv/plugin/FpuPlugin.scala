@@ -3,11 +3,24 @@ package vexriscv.plugin
 import spinal.core._
 import spinal.core.internals.{BoolLiteral, Literal}
 import spinal.lib._
+import spinal.lib.fsm._
 import vexriscv._
 import vexriscv.Riscv._
 import vexriscv.ip.fpu._
 
 import scala.collection.mutable.ArrayBuffer
+
+class FpuAcessPort(val p : FpuParameter) extends Bundle{
+  val start = Bool()
+  val regId = UInt(5 bits)
+  val size  = UInt(3 bits)
+  val write = Bool()
+  val writeData = p.storeLoadType()
+  val readData  = Bits(32 bits)
+  val readDataValid = Bool()
+  val readDataChunk = UInt(1 bits)
+  val done = Bool()
+}
 
 class FpuPlugin(externalFpu : Boolean = false,
                 simHalt : Boolean = false,
@@ -24,6 +37,11 @@ class FpuPlugin(externalFpu : Boolean = false,
   object FPU_FORMAT extends Stageable(FpuFormat())
 
   var port : FpuPort = null //Commit port is already isolated
+  var access : FpuAcessPort = null //Meant to be used for debuging features only
+
+  def requireAccessPort(): Unit = {
+    access = new FpuAcessPort(p).setName("fpuAccess")
+  }
 
   override def getVexRiscvRegressionArgs(): Seq[String] = {
     var args = List[String]()
@@ -161,8 +179,6 @@ class FpuPlugin(externalFpu : Boolean = false,
       dBusEncoding.addLoadWordEncoding(FLD)
       dBusEncoding.addStoreWordEncoding(FSD)
     }
-
-//    exposeEncoding()
   }
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -239,6 +255,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       }
     }
 
+    val inAccess = False
     decode plug new Area{
       import decode._
 
@@ -248,7 +265,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       }
 
       //Maybe it might be better to not fork before fire to avoid RF stall on commits
-      val forked = Reg(Bool) setWhen(port.cmd.fire) clearWhen(!arbitration.isStuck) init(False)
+      val forked = Reg(Bool) setWhen(port.cmd.fire && !inAccess) clearWhen(!arbitration.isStuck) init(False)
 
       val hazard = csr.pendings.msb || csr.csrActive || csr.fs === 0 && !csrService.inDebugMode()
 
@@ -269,7 +286,7 @@ class FpuPlugin(externalFpu : Boolean = false,
       port.cmd.format    := (if(p.withDouble) input(FPU_FORMAT) else FpuFormat.FLOAT())
       port.cmd.roundMode := roundMode.as(FpuRoundMode())
 
-      insert(FPU_FORKED) := forked || port.cmd.fire
+      insert(FPU_FORKED) := forked || port.cmd.fire &&  !inAccess
 
       insert(FPU_COMMIT_SYNC) := List(FpuOpcode.LOAD, FpuOpcode.FMV_W_X, FpuOpcode.I2F).map(_ === input(FPU_OPCODE)).orR
       insert(FPU_COMMIT_LOAD) := input(FPU_OPCODE) === FpuOpcode.LOAD
@@ -324,6 +341,81 @@ class FpuPlugin(externalFpu : Boolean = false,
       }
 
       port.commit << commit.pipelined(s2m = true, m2s = false)
+    }
+
+    if(access != null) pipeline plug new StateMachine{
+      val IDLE, CMD, RSP, RSP_0, RSP_1, COMMIT, DONE = State()
+      setEntry(IDLE)
+
+      inAccess setWhen(!this.isActive(IDLE))
+      IDLE.whenIsActive{
+        when(access.start){
+          goto(CMD)
+        }
+      }
+
+      CMD.whenIsActive{
+        port.cmd.valid := True
+        port.cmd.rs2 := access.regId
+        port.cmd.rd := access.regId
+        port.cmd.format := access.size.muxListDc(List(
+          2 -> FpuFormat.FLOAT(),
+          3 -> FpuFormat.DOUBLE()
+        ))
+        when(access.write) {
+          port.cmd.opcode := FpuOpcode.LOAD
+          when(port.cmd.ready){
+            goto(COMMIT)
+          }
+        } otherwise {
+          port.cmd.opcode := FpuOpcode.STORE
+          when(port.cmd.ready){
+            goto(RSP)
+          }
+        }
+      }
+
+      access.done := False
+      COMMIT.whenIsActive{
+        port.commit.valid := True
+        port.commit.opcode := FpuOpcode.LOAD
+        port.commit.rd     := access.regId
+        port.commit.write  := True
+        port.commit.value  := access.writeData
+        when(port.commit.ready){
+          goto(DONE)
+        }
+      }
+
+      access.readDataValid := False
+      access.readDataChunk.assignDontCare()
+      access.readData.assignDontCare()
+      RSP.whenIsActive {
+        when(port.rsp.valid) {
+          goto(RSP_0)
+        }
+      }
+      RSP_0.whenIsActive {
+        access.readDataValid := True
+        access.readDataChunk := 0
+        access.readData := port.rsp.value(31 downto 0)
+        when(access.size > 2) {
+          goto(RSP_1)
+        } otherwise {
+          goto(DONE)
+        }
+      }
+      RSP_1.whenIsActive {
+        access.readDataValid := True
+        access.readDataChunk := 1
+        access.readData := port.rsp.value(63 downto 32)
+        goto(DONE)
+      }
+      DONE whenIsActive{
+        port.rsp.ready := True
+        access.done := True
+        goto(IDLE)
+      }
     }
 
     pipeline.stages.dropRight(1).foreach(s => s.output(FPU_FORKED) clearWhen(s.arbitration.isStuck))
