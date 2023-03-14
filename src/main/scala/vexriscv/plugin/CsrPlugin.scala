@@ -645,7 +645,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
     xretAwayFromMachine = False
 
-    if(pipeline.config.FLEN == 64) pipeline.service(classOf[FpuPlugin]).requireAccessPort()
+    if(withPrivilegedDebug && pipeline.config.FLEN == 64) pipeline.service(classOf[FpuPlugin]).requireAccessPort()
 
     injectionPort = withPrivilegedDebug generate pipeline.service(classOf[IBusFetcher]).getInjectionPort().setCompositeName(this, "injectionPort")
     debugMode = withPrivilegedDebug generate Bool().setName("debugMode")
@@ -735,7 +735,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         bus.hartToDm.data    := execute.input(SRC1)
       }
 
-      val withDebugFpuAccess = pipeline.config.FLEN == 64
+      val withDebugFpuAccess = withPrivilegedDebug && pipeline.config.FLEN == 64
       val dataCsrw = new Area{
         val value = Vec.fill(1+withDebugFpuAccess.toInt)(Reg(Bits(32 bits)))
 
