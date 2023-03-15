@@ -709,7 +709,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
       bus.running :=  running
       bus.halted  := !running
-      bus.unavailable := RegNext(ClockDomain.current.isResetActive)
+      bus.unavailable := BufferCC(ClockDomain.current.isResetActive)
       when(debugMode){
         inhibateInterrupts()
       }
