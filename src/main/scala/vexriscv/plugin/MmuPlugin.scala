@@ -38,7 +38,7 @@ case class MmuPort(bus : MemoryTranslatorBus, priority : Int, args : MmuPortConf
 
 case class MmuPortConfig(portTlbSize : Int, latency : Int = 0, earlyRequireMmuLockup : Boolean = false, earlyCacheHits : Boolean = false)
 
-class MmuPlugin(ioRange : UInt => Bool,
+class MmuPlugin(var ioRange : UInt => Bool,
                 virtualRange : UInt => Bool = address => True,
 //                allowUserIo : Boolean = false,
                 enableMmuInMachineMode : Boolean = false) extends Plugin[VexRiscv] with MemoryTranslator {

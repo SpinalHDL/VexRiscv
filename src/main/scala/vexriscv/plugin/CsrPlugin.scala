@@ -46,7 +46,7 @@ case class CsrPluginConfig(
                             misaExtensionsInit  : Int,
                             misaAccess          : CsrAccess,
                             mtvecAccess         : CsrAccess,
-                            mtvecInit           : BigInt,
+                            var mtvecInit       : BigInt,
                             mepcAccess          : CsrAccess,
                             mscratchGen         : Boolean,
                             mcauseAccess        : CsrAccess,
@@ -458,7 +458,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   }
 
 
-  override def getVexRiscvRegressionArgs() = List(s"SUPERVISOR=${if(config.supervisorGen) "yes" else "no"}, CSR=yes")
+  override def getVexRiscvRegressionArgs() = List(s"SUPERVISOR=${if(config.supervisorGen) "yes" else "no"} CSR=yes")
 
   var exceptionPendings : Vec[Bool] = null
   override def isExceptionPending(stage : Stage): Bool = exceptionPendings(pipeline.stages.indexOf(stage))
