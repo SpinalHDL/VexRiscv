@@ -735,8 +735,10 @@ public:
                 masked &= MIP_SSIP;
             else if (masked & MIP_STIP)
                 masked &= MIP_STIP;
-            else
-			  fail();
+            else {
+                cout << "CPU model doesn't has pending interrupt" << endl;
+			    fail();
+            }
 		}
 
 		return masked;
@@ -1963,6 +1965,7 @@ public:
 				if(*data == 0)
 					pass();
 				else
+				    cout << "0xF00FFF20 test asked for failure " << *data << endl;
 					fail();
 				break;
 			case 0xF00FFF24u:
@@ -3331,6 +3334,9 @@ public:
 		loadHex(string(REGRESSION_PATH) + "../../resources/hex/" + name + ".elf.hex");
 		out32.open (name + ".out32");
 		this->name = name;
+		if(name == "C.ADDI16SP" || name == "C.ADDI4SPN"){
+    		top->VexRiscv->RegFilePlugin_regFile[2] = 0;
+		}
 	}
 
 
@@ -3370,9 +3376,10 @@ public:
     	fread(log, 1, logSize, logFile);
     	fclose(logFile);
 
-    	if(refSize > logSize || memcmp(log,ref,refSize))
+    	if(refSize > logSize || memcmp(log,ref,refSize)){
+    	    cout << "Bad compliance check" << endl;
     		fail();
-		else
+		} else
 			Workspace::pass();
 	}
 };
