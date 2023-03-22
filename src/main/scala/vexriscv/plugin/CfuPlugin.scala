@@ -104,7 +104,8 @@ class CfuPlugin(val stageCount : Int,
                 val encodings : List[CfuPluginEncoding] = null,
                 val stateAndIndexCsrOffset : Int = 0xBC0,
                 val statusCsrOffset : Int = 0x801,
-                val withEnable : Boolean = true) extends Plugin[VexRiscv]{
+                val withEnable : Boolean = true,
+                val enableInit : Boolean = false) extends Plugin[VexRiscv]{
   def p = busParameter
 
   assert(p.CFU_INPUTS <= 2)
@@ -176,7 +177,7 @@ class CfuPlugin(val stageCount : Int,
 
     val csr = pipeline plug new Area{
       val factory = pipeline.service(classOf[CsrInterface])
-      val en = withEnable generate (Reg(Bool()) init(False))
+      val en = withEnable generate (Reg(Bool()) init(enableInit))
       if(withEnable) factory.rw(stateAndIndexCsrOffset, 31, en)
 
       val stateId = Reg(UInt(log2Up(p.CFU_STATE_INDEX_NUM) bits)) init(0)
