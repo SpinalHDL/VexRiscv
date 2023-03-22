@@ -629,7 +629,10 @@ public:
 		case UTIMEH: *value  = dutRfWriteValue; break;
 		#endif
 
-		default: return true; break;
+		default: {
+//            if(csr >= 0x3A0 && csr <= 0x3EF) break; //PMP
+            return true;
+		}break;
 		}
 //        if(csr == MSTATUS || csr == SSTATUS){
 //            printf("READ  %x %x\n", pc, *value);
@@ -657,7 +660,7 @@ public:
 		case MSTATUS: status.raw = value & 0x7FFFFFFF; break;
 		case MIP: ipSoft = value; break;
 		case MIE: ie.raw = value; break;
-		case MTVEC: mtvec.raw = value; break;
+		case MTVEC: mtvec.raw = value & 0xFFFFFFFC; break;
 		case MCAUSE: mcause.raw = value; break;
 		case MBADADDR: mbadaddr = value; break;
 		case MEPC: mepc = value; break;
@@ -669,7 +672,7 @@ public:
 		case SSTATUS: maskedWrite(status.raw, value, 0xC0133 | STATUS_FS_MASK);  break;
 		case SIP: maskedWrite(ipSoft, value,0x333); break;
 		case SIE: maskedWrite(ie.raw, value,0x333); break;
-		case STVEC: stvec.raw = value; break;
+		case STVEC: stvec.raw = value & 0xFFFFFFFC; break;
 		case SCAUSE: scause.raw = value; break;
 		case STVAL: sbadaddr = value; break;
 		case SEPC: sepc = value; break;
@@ -682,7 +685,11 @@ public:
 		case FFLAGS: fcsr.flags = value; status.fs = 3; break;
 		#endif
 
-		default: ilegalInstruction(); return true; break;
+		default: {
+//            if(csr >= 0x3A0 && csr <= 0x3EF) break; //PMP
+            ilegalInstruction();
+            return true;
+		}break;
 		}
 //        if(csr == MSTATUS || csr == SSTATUS){
 //            printf("      %x %x\n", pc, status.raw);

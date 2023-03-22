@@ -952,13 +952,20 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       }
     })
 
+    def guardedWrite(csrId : Int, bitRange: Range, allowed : Seq[Int], target : Bits) = {
+      onWrite(csrId){
+        when(allowed.map(writeData()(bitRange) === _).orR){
+          target := writeData()(bitRange)
+        }
+      }
+    }
 
     val machineCsr = pipeline plug new Area{
       //Define CSR registers
       // Status => MXR, SUM, TVM, TW, TSE ?
       val misa = new Area{
-        val base = Reg(UInt(2 bits)) init(U"01") allowUnsetRegToAvoidLatch
-        val extensions = Reg(Bits(26 bits)) init(misaExtensionsInit) allowUnsetRegToAvoidLatch
+        val base = U"01"
+        val extensions = B(misaExtensionsInit, 26 bits)
       }
 
       val mtvec = Reg(Xtvec()).allowUnsetRegToAvoidLatch
@@ -1001,7 +1008,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       if(mimpid    != null) READ_ONLY(CSR.MIMPID   , U(mimpid   ))
       if(mhartid   != null && !withExternalMhartid) READ_ONLY(CSR.MHARTID  , U(mhartid  ))
       if(withExternalMhartid) READ_ONLY(CSR.MHARTID  , externalMhartId)
-      misaAccess(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
+      if(misaAccess.canRead) {
+        READ_ONLY(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
+        onWrite(CSR.MISA){}
+      }
 
       //Machine CSR
       READ_WRITE(CSR.MSTATUS, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
@@ -1018,7 +1028,11 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
       }
 
-      mtvecAccess(CSR.MTVEC, 2 -> mtvec.base, 0 -> mtvec.mode)
+      mtvecAccess(CSR.MTVEC, 2 -> mtvec.base)
+      if(mtvecAccess.canWrite && xtvecModeGen) {
+        guardedWrite(CSR.MTVEC, 1 downto 0, List(0, 1), mtvec.mode)
+      }
+
       mepcAccess(CSR.MEPC, mepc)
       if(mscratchGen) READ_WRITE(CSR.MSCRATCH, mscratch)
       mcauseAccess(CSR.MCAUSE, xlen-1 -> mcause.interrupt, 0 -> mcause.exceptionCode)
@@ -1091,7 +1105,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         for(offset <- List(CSR.MIE, CSR.SIE)) READ_WRITE(offset, 9 -> sie.SEIE, 5 -> sie.STIE, 1 -> sie.SSIE)
 
 
-        stvecAccess(CSR.STVEC, 2 -> stvec.base, 0 -> stvec.mode)
+        stvecAccess(CSR.STVEC, 2 -> stvec.base)
+        if(mtvecAccess.canWrite && xtvecModeGen) {
+          guardedWrite(CSR.STVEC, 1 downto 0, List(0, 1), stvec.mode)
+        }
         sepcAccess(CSR.SEPC, sepc)
         if(sscratchGen) READ_WRITE(CSR.SSCRATCH, sscratch)
         scauseAccess(CSR.SCAUSE, xlen-1 -> scause.interrupt, 0 -> scause.exceptionCode)
@@ -1650,6 +1667,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             case element : CsrOnWrite => when(writeEnable){element.doThat()}
             case element : CsrOnRead => when(readEnable){element.doThat()}
           }
+
+          //When no PMP =>
+//          if(!csrMapping.mapping.contains(0x3A0)){
+//            when(arbitration.isValid && input(IS_CSR) && U(csrAddress) >= 0x3A0 && U(csrAddress) <= 0x3EF){
+//              csrMapping.allowCsrSignal := True
+//            }
+//          }
 
           illegalAccess clearWhen(csrMapping.allowCsrSignal)
 

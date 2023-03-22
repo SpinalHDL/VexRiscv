@@ -206,7 +206,7 @@ object VexRiscvSmpClusterGen {
     val csrConfig = if(withSupervisor){
       var c = CsrPluginConfig.openSbi(mhartid = hartId, misa = misa).copy(utimeAccess = CsrAccess.READ_ONLY, withPrivilegedDebug = privilegedDebug)
       if(csrFull){
-       c.copy(
+       c = c.copy(
          mcauseAccess   = CsrAccess.READ_WRITE,
          mbadaddrAccess = CsrAccess.READ_WRITE
        )
