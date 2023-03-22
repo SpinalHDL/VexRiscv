@@ -11,7 +11,7 @@ import scala.collection.mutable.ArrayBuffer
 //TODO val killLastStage = jump.pcLoad.valid || decode.arbitration.isRemoved
 // DBUSSimple check memory halt execute optimization
 
-abstract class IBusFetcherImpl(val resetVector : BigInt,
+abstract class IBusFetcherImpl(var resetVector : BigInt,
                                val keepPcPlus4 : Boolean,
                                val decodePcGen : Boolean,
                                val compressedGen : Boolean,

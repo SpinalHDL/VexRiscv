@@ -48,7 +48,7 @@ case class TightlyCoupledDataPort(p : TightlyCoupledDataPortParameter, var bus :
 
 class DBusCachedPlugin(val config : DataCacheConfig,
                        memoryTranslatorPortConfig : Any = null,
-                       dBusCmdMasterPipe : Boolean = false,
+                       var dBusCmdMasterPipe : Boolean = false,
                        dBusCmdSlavePipe : Boolean = false,
                        dBusRspSlavePipe : Boolean = false,
                        relaxedMemoryTranslationRegister : Boolean = false,

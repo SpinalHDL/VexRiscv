@@ -81,7 +81,7 @@ case class CsrPluginConfig(
                             csrOhDecoder        : Boolean = true,
                             deterministicInteruptionEntry : Boolean = false, //Only used for simulatation purposes
                             wfiOutput           : Boolean = false,
-                            withPrivilegedDebug : Boolean = false, //For the official RISC-V debug spec implementation
+                            var withPrivilegedDebug : Boolean = false, //For the official RISC-V debug spec implementation
                             var debugTriggers       : Int     = 2
                           ){
   assert(!ucycleAccess.canWrite)

@@ -23,7 +23,7 @@ class FpuAcessPort(val p : FpuParameter) extends Bundle{
 }
 
 class FpuPlugin(externalFpu : Boolean = false,
-                simHalt : Boolean = false,
+                var simHalt : Boolean = false,
                 val p : FpuParameter) extends Plugin[VexRiscv] with VexRiscvRegressionArg {
 
   object FPU_ENABLE extends Stageable(Bool())
