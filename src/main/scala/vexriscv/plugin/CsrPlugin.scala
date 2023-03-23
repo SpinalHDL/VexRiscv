@@ -1058,6 +1058,28 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         utimeAccess(CSR.UTIMEH, utime(63 downto 32))
       }
 
+      class Xcounteren(csrId : Int) extends Area{
+        val IR,TM,CY = RegInit(True) //For backward compatibility
+        if(ucycleAccess != CsrAccess.NONE)   rw(csrId, 0 -> CY)
+        if(utimeAccess != CsrAccess.NONE)    rw(csrId, 1 -> TM)
+        if(uinstretAccess != CsrAccess.NONE) rw(csrId, 2 -> IR)
+      }
+      def xcounterChecks(access : CsrAccess, csrId : Int, enable : Xcounteren => Bool) = {
+        if(access != CsrAccess.NONE) during(csrId){
+          if(userGen) when(privilege < 3 && !enable(mcounteren)){ forceFailCsr() }
+          if(supervisorGen) when(privilege < 1 && !enable(scounteren)){ forceFailCsr() }
+        }
+      }
+
+      val mcounteren = userGen generate new Xcounteren(CSR.MCOUNTEREN)
+      val scounteren = supervisorGen generate new Xcounteren(CSR.SCOUNTEREN)
+      xcounterChecks(ucycleAccess  , CSR.UCYCLE   , _.CY)
+      xcounterChecks(ucycleAccess  , CSR.UCYCLEH  , _.CY)
+      xcounterChecks(utimeAccess   , CSR.UTIME    , _.TM)
+      xcounterChecks(utimeAccess   , CSR.UTIMEH   , _.TM)
+      xcounterChecks(uinstretAccess, CSR.UINSTRET , _.IR)
+      xcounterChecks(uinstretAccess, CSR.UINSTRETH, _.IR)
+
       pipeline(MPP) := mstatus.MPP
     }
 

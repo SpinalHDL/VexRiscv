@@ -215,6 +215,7 @@ object Riscv{
     def MINSTRET  = 0xB02 // MRW Machine instructions-retired counter.
     def MCYCLEH   = 0xB80 // MRW Upper 32 bits of mcycle, RV32I only.
     def MINSTRETH = 0xB82 // MRW Upper 32 bits of minstret, RV32I only.
+    val MCOUNTEREN  = 0x306
 
     val SSTATUS     = 0x100
     val SIE         = 0x104
