@@ -188,7 +188,76 @@ test1:
     j fail
     machine_handle_trap
 
+    //Test FPU dirty
+    la x1, fail
+    csrw mtvec, x1
 
+#define checkFpuDirty() \
+    csrr x1, mstatus ;\
+    li x2, 0x80006000 ;\
+    and x1, x1, x2 ;\
+    bne x1, x2, fail
+
+#define checkFpuClean() \
+    csrr x1, mstatus ;\
+    li x2, 0x80006000 ;\
+    and x1, x1, x2 ;\
+    li x2, 0x00004000 ;\
+    bne x1, x2, fail
+
+#define fpuClean() \
+    li x1, 0x00004000 ;\
+    csrw mstatus, x1
+
+    fpuClean()
+    checkFpuClean()
+
+    la x1, fpuTwo
+    flw ft0, 0(x1)
+    checkFpuDirty(); fpuClean()
+
+    checkFpuClean();
+    la x1, fpuTwo
+    fsw ft0, 0(x1)
+    checkFpuClean();
+
+    fmv.x.w x1, ft0
+    li x2, 0x40000000
+    bne x1, x2, fail
+    checkFpuClean();
+
+    li x1, 0x80000000
+    fmv.w.x ft0, x1
+    checkFpuDirty();fpuClean();
+
+    //Check inprecise convertion
+    li x1, 0x3f000000
+    fmv.w.x ft0, x1
+    checkFpuDirty();fpuClean();
+    fcvt.w.s x1, ft0
+    checkFpuDirty();fpuClean();
+
+    //check precise convertion
+    li x1, 0x40000000
+    fmv.w.x ft0, x1
+    checkFpuDirty();fpuClean();
+    fcvt.w.s x1, ft0
+    checkFpuClean();
+
+    //check overflow convertion
+    li x1, 0x4f800000
+    fmv.w.x ft0, x1
+    checkFpuDirty();fpuClean();
+    fcvt.w.s x1, ft0
+    checkFpuDirty();fpuClean();
+
+    //Check CSR write making things dirty
+    csrw fcsr, x0
+    checkFpuDirty();fpuClean();
+    csrw frm, x0
+    checkFpuDirty();fpuClean();
+    csrw fflags, x0
+    checkFpuDirty();fpuClean();
 
     j pass
 
@@ -206,3 +275,6 @@ pass:
     nop
     nop
     nop
+
+fpuTwo:
+.word 0x40000000
