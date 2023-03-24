@@ -47,7 +47,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
 
   def enableJtag(debugCd : ClockDomainResetGeneratorIf, resetCd : ClockDomainResetGeneratorIf) : Unit = debugCd.rework{
     this.debugClockDomain.load(debugCd.outputClockDomain)
-    val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
+    val resetBridge = resetCd.relaxedReset(debugReset, ResetSensitivity.HIGH)
     debugAskReset.loadNothing()
     withDebug.load(DEBUG_JTAG)
     if(!withRiscvDebug.isLoaded) withRiscvDebug.load(false)
@@ -55,7 +55,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
 
   def enableJtagInstructionCtrl(debugCd : ClockDomainResetGeneratorIf, resetCd : ClockDomainResetGeneratorIf) : Unit = debugCd.rework{
     this.debugClockDomain.load(debugCd.outputClockDomain)
-    val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
+    val resetBridge = resetCd.relaxedReset(debugReset, ResetSensitivity.HIGH)
     debugAskReset.loadNothing()
     withDebug.load(DEBUG_JTAG_CTRL)
     if(!withRiscvDebug.isLoaded) withRiscvDebug.load(false)
@@ -63,7 +63,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
 
   def enableDebugBus(debugCd : ClockDomainResetGeneratorIf, resetCd : ClockDomainResetGeneratorIf) : Unit = debugCd.rework{
     this.debugClockDomain.load(debugCd.outputClockDomain)
-    val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
+    val resetBridge = resetCd.relaxedReset(debugReset, ResetSensitivity.HIGH)
     debugAskReset.loadNothing()
     withDebug.load(DEBUG_BUS)
     if(!withRiscvDebug.isLoaded) withRiscvDebug.load(false)
@@ -87,7 +87,7 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
   val debugBmbAccessRequirements = Handle[BmbAccessParameter]
   def enableDebugBmb(debugCd : Handle[ClockDomain], resetCd : ClockDomainResetGeneratorIf, mapping : AddressMapping)(implicit debugMaster : BmbImplicitDebugDecoder = null) : Unit = debugCd.on{
     this.debugClockDomain.load(debugCd)
-    val resetBridge = resetCd.asyncReset(debugReset, ResetSensitivity.HIGH)
+    val resetBridge = resetCd.relaxedReset(debugReset, ResetSensitivity.HIGH)
     debugAskReset.loadNothing()
     withDebug.load(DEBUG_BMB)
     if(!withRiscvDebug.isLoaded) withRiscvDebug.load(false)
