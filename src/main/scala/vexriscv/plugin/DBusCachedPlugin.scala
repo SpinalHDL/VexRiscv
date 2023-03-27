@@ -429,7 +429,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
             U(0)    -> B"0001",
             U(1)    -> B"0011",
             default -> B"1111"
-          ) //|<< port.bus.address(1 downto 0)
+          ) |<< port.bus.address(1 downto 0)
         }
       }
     }
@@ -567,7 +567,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
           cache.io.cpu.writeBack.isValid := False
           exceptionBus.valid := False
           redoBranch.valid := False
-          rspRf := input(MEMORY_TIGHTLY_DATA)
+          rspData := input(MEMORY_TIGHTLY_DATA)
           input(HAS_SIDE_EFFECT) := False
         }
       }
@@ -629,15 +629,15 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 }
 
 
-
-
-class IBusDBusCachedTightlyCoupledRam(mapping : SizeMapping, withIBus : Boolean = true) extends Plugin[VexRiscv]{
+class IBusDBusCachedTightlyCoupledRam(mapping : SizeMapping, withIBus : Boolean = true, withDBus : Boolean = true) extends Plugin[VexRiscv]{
   var dbus : TightlyCoupledDataBus = null
   var ibus : TightlyCoupledBus = null
 
   override def setup(pipeline: VexRiscv) = {
-    dbus = pipeline.service(classOf[DBusCachedPlugin]).newTightlyCoupledPort(addr => mapping.hit(addr))
-    dbus.setCompositeName(this, "dbus").setAsDirectionLess()
+    if(withDBus) {
+      dbus = pipeline.service(classOf[DBusCachedPlugin]).newTightlyCoupledPort(addr => mapping.hit(addr))
+      dbus.setCompositeName(this, "dbus").setAsDirectionLess()
+    }
 
     if(withIBus){
       ibus = pipeline.service(classOf[IBusCachedPlugin]).newTightlyCoupledPortV2(
@@ -652,32 +652,24 @@ class IBusDBusCachedTightlyCoupledRam(mapping : SizeMapping, withIBus : Boolean 
 
   override def build(pipeline: VexRiscv) = {
     val logic = pipeline plug new Area {
-      val dBusAddressReg = RegNextWhen(dbus.address, dbus.enable)
-      val banks = for (id <- 0 to 3) yield new Area {
-        val ram = Mem.fill(mapping.size.toInt)(Bits(8 bits))
-        val d = new Area {
-          val dataSel = id - dbus.address(1 downto 0)
-          val addr = (dbus.address + 3 - id) >> 2
-          val write = dbus.write_data.subdivideIn(8 bits).read(dataSel)
-          val read = ram.readWriteSync(
-            address = addr.resized,
-            data = write,
-            enable = dbus.enable,
-            write = dbus.write_enable && dbus.write_mask(dataSel)
-          )
-        }
-        val i = withIBus generate new Area {
-          val dataSel = id - ibus.address(1 downto 0)
-          val addr = (ibus.address + 3 - id) >> 2
-          val read = ram.readSync(
-            address = addr.resized,
-            enable = ibus.enable
-          )
-        }
+      val ram = Mem(Bits(32 bits), mapping.size.toInt/4)
+      ram.generateAsBlackBox()
+      val d = withDBus generate new Area {
+        dbus.read_data := ram.readWriteSync(
+          address = (dbus.address >> 2).resized,
+          data    = dbus.write_data,
+          enable  = dbus.enable,
+          write   = dbus.write_enable
+        )
       }
-
-      dbus.read_data := (0 to 3).map(id => banks.map(_.d.read).read(id + dBusAddressReg(1 downto 0))).asBits
-      if(withIBus) ibus.data := (0 to 3).map(id => banks(id).i.read).asBits
+      val i = withIBus generate new Area {
+        ibus.data := ram.readWriteSync(
+          address = (ibus.address >> 2).resized,
+          data    = B(32 bits, default -> False),
+          enable  = ibus.enable,
+          write   = False
+        )
+      }
     }
   }
 }
