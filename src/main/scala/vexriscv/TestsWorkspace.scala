@@ -144,19 +144,19 @@ object TestsWorkspace {
         withDouble = true,
         externalFpu = false,
         simHalt = true,
-        privilegedDebug = true
+        privilegedDebug = false
       )
 
-      config.plugins += new EmbeddedRiscvJtag(
-        p = DebugTransportModuleParameter(
-          addressWidth = 7,
-          version      = 1,
-          idle         = 7
-        ),
-        debugCd = ClockDomain.current.copy(reset = Bool().setName("debugReset")),
-        withTunneling = false,
-        withTap = true
-      )
+//      config.plugins += new EmbeddedRiscvJtag(
+//        p = DebugTransportModuleParameter(
+//          addressWidth = 7,
+//          version      = 1,
+//          idle         = 7
+//        ),
+//        debugCd = ClockDomain.current.copy(reset = Bool().setName("debugReset")),
+//        withTunneling = false,
+//        withTap = true
+//      )
 
 //      l.foreach{
 //        case p : EmbeddedRiscvJtag => p.debugCd.load(ClockDomain.current.copy(reset = Bool().setName("debug_reset")))
