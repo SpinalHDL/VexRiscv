@@ -53,6 +53,8 @@ case class VexRiscvConfig(){
     case None => false
   }
 
+  def FLEN = if(withRvd) 64 else if(withRvf) 32 else 0
+
   //Default Stageables
   object IS_RVC extends Stageable(Bool)
   object BYPASSABLE_EXECUTE_STAGE   extends Stageable(Bool)

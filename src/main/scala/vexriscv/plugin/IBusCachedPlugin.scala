@@ -82,6 +82,12 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
     this
   }
 
+  def newTightlyCoupledPortV2(p : TightlyCoupledPortParameter) = {
+    val port = TightlyCoupledPort(p, master(TightlyCoupledBus()))
+    tightlyCoupledPorts += port
+    port.bus
+  }
+
 
   object FLUSH_ALL extends Stageable(Bool)
   object IBUS_ACCESS_ERROR extends Stageable(Bool)
@@ -149,7 +155,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
       val stageOffset = if(relaxedPcCalculation) 1 else 0
       def stages = iBusRsp.stages.drop(stageOffset)
 
-      tightlyCoupledPorts.foreach(p => p.bus = master(TightlyCoupledBus()).setName(p.p.name))
+      tightlyCoupledPorts.filter(_.bus == null).foreach(p => p.bus = master(TightlyCoupledBus()).setName(p.p.name))
 
       val s0 = new Area {
         //address decoding

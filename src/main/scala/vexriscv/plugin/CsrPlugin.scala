@@ -46,7 +46,7 @@ case class CsrPluginConfig(
                             misaExtensionsInit  : Int,
                             misaAccess          : CsrAccess,
                             mtvecAccess         : CsrAccess,
-                            mtvecInit           : BigInt,
+                            var mtvecInit       : BigInt,
                             mepcAccess          : CsrAccess,
                             mscratchGen         : Boolean,
                             mcauseAccess        : CsrAccess,
@@ -81,8 +81,8 @@ case class CsrPluginConfig(
                             csrOhDecoder        : Boolean = true,
                             deterministicInteruptionEntry : Boolean = false, //Only used for simulatation purposes
                             wfiOutput           : Boolean = false,
-                            withPrivilegedDebug : Boolean = false, //For the official RISC-V debug spec implementation
                             exportPrivilege     : Boolean = false,
+                            var withPrivilegedDebug : Boolean = false, //For the official RISC-V debug spec implementation
                             var debugTriggers       : Int     = 2
                           ){
   assert(!ucycleAccess.canWrite)
@@ -358,6 +358,7 @@ case class CsrMapping() extends Area with CsrInterface {
   val readDataSignal, readDataInit, writeDataSignal = Bits(32 bits)
   val allowCsrSignal = False
   val hazardFree = Bool()
+  val doForceFailCsr = False
 
   readDataSignal := readDataInit
   def addMappingAt(address : Int,that : Any) = mapping.getOrElseUpdate(address,new ArrayBuffer[Any]) += that
@@ -378,6 +379,8 @@ case class CsrMapping() extends Area with CsrInterface {
   override def writeData() = writeDataSignal
   override def allowCsr() = allowCsrSignal := True
   override def isHazardFree() = hazardFree
+  override def forceFailCsr() = doForceFailCsr := True
+  override def inDebugMode(): Bool = ???
 }
 
 
@@ -400,6 +403,7 @@ trait CsrInterface{
   def onAnyWrite(body: => Unit) : Unit
   def allowCsr() : Unit  //In case your csr do not use the regular API with csrAddress but is implemented using "side channels", you can call that if the current csr is implemented
   def isHazardFree() : Bool // You should not have any side effect nor use readData() until this return True
+  def forceFailCsr() : Unit
 
   def r2w(csrAddress : Int, bitOffset : Int,that : Data): Unit
 
@@ -427,6 +431,7 @@ trait CsrInterface{
 
   def readData() : Bits //Return the 32 bits internal signal of the CsrPlugin for you to override (if you want)
   def writeData() : Bits //Return the 32 bits value that the CsrPlugin want to write in the CSR (depend on readData combinatorialy)
+  def inDebugMode() : Bool
 }
 
 
@@ -437,7 +442,7 @@ trait IWake{
   def askWake() : Unit
 }
 
-class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface with IWake{
+class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface with IWake with VexRiscvRegressionArg {
   import config._
   import CsrAccess._
 
@@ -454,6 +459,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   }
 
 
+  override def getVexRiscvRegressionArgs() = List(s"SUPERVISOR=${if(config.supervisorGen) "yes" else "no"} CSR=yes")
 
   var exceptionPendings : Vec[Bool] = null
   override def isExceptionPending(stage : Stage): Bool = exceptionPendings(pipeline.stages.indexOf(stage))
@@ -480,6 +486,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def askWake(): Unit = thirdPartyWake := True
 
   override def isContextSwitching = contextSwitching
+
+  override def inDebugMode(): Bool = if(withPrivilegedDebug) debugMode else False
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
     val NONE, XRET = newElement()
@@ -540,6 +548,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def readData() = csrMapping.readData()
   override def writeData() = csrMapping.writeData()
   override def isHazardFree() = csrMapping.isHazardFree()
+  override def forceFailCsr() = csrMapping.forceFailCsr()
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline.config._
@@ -638,7 +647,9 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
     xretAwayFromMachine = False
 
-    injectionPort = withPrivilegedDebug generate pipeline.service(classOf[IBusFetcher]).getInjectionPort()
+    if(withPrivilegedDebug && pipeline.config.FLEN == 64) pipeline.service(classOf[FpuPlugin]).requireAccessPort()
+
+    injectionPort = withPrivilegedDebug generate pipeline.service(classOf[IBusFetcher]).getInjectionPort().setCompositeName(this, "injectionPort")
     debugMode = withPrivilegedDebug generate Bool().setName("debugMode")
     debugBus = withPrivilegedDebug generate slave(DebugHartBus()).setName("debugBus")
   }
@@ -704,7 +715,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
       bus.running :=  running
       bus.halted  := !running
-      bus.unavailable := RegNext(ClockDomain.current.isResetActive)
+      bus.unavailable := BufferCC(ClockDomain.current.isResetActive)
       when(debugMode){
         inhibateInterrupts()
       }
@@ -724,33 +735,56 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         timeout.clear()
       }
 
-      val inject = new Area{
-        val cmd = bus.dmToHart.translateWith(bus.dmToHart.data).takeWhen(bus.dmToHart.op === DebugDmToHartOp.EXECUTE)
-        injectionPort << cmd.toStream.stage
-
-
-        val pending = RegInit(False) setWhen(cmd.valid) clearWhen(bus.exception || bus.commit || bus.ebreak || bus.redo)
-        when(cmd.valid){ timeout.clear() }
-        bus.redo := pending && timeout.state
-      }
       val dataCsrr = new Area{
         bus.hartToDm.valid   := isWriting(DebugModule.CSR_DATA)
         bus.hartToDm.address := 0
         bus.hartToDm.data    := execute.input(SRC1)
       }
 
+      val withDebugFpuAccess = withPrivilegedDebug && pipeline.config.FLEN == 64
       val dataCsrw = new Area{
-        val value = Reg(Bits(32 bits))
+        val value = Vec.fill(1+withDebugFpuAccess.toInt)(Reg(Bits(32 bits)))
 
         val fromDm = new Area{
           when(bus.dmToHart.valid && bus.dmToHart.op === DebugDmToHartOp.DATA){
-            value := bus.dmToHart.data
+            value(bus.dmToHart.address.resized) := bus.dmToHart.data
           }
         }
 
         val toHart = new Area{
-          r(DebugModule.CSR_DATA, value)
+          r(DebugModule.CSR_DATA, value(0))
         }
+      }
+
+      val inject = new Area{
+        val cmd = bus.dmToHart.takeWhen(bus.dmToHart.op === DebugDmToHartOp.EXECUTE || bus.dmToHart.op === DebugDmToHartOp.REG_READ || bus.dmToHart.op === DebugDmToHartOp.REG_WRITE)
+        val buffer = cmd.toStream.stage
+        injectionPort.valid := buffer.valid && buffer.op === DebugDmToHartOp.EXECUTE
+        injectionPort.payload := buffer.data
+
+        buffer.ready := injectionPort.fire
+        val fpu = withDebugFpuAccess generate new Area {
+          val access = service(classOf[FpuPlugin]).access
+          access.start := buffer.valid && buffer.op === DebugDmToHartOp.REG_READ || buffer.op === DebugDmToHartOp.REG_WRITE
+          access.regId := buffer.address
+          access.write := buffer.op === DebugDmToHartOp.REG_WRITE
+          access.writeData := dataCsrw.value.take(2).asBits
+          access.size := buffer.size
+
+          when(access.readDataValid) {
+            bus.hartToDm.valid := True
+            bus.hartToDm.address := access.readDataChunk.resized
+            bus.hartToDm.data := access.readData
+          }
+          bus.regSuccess := access.done
+          buffer.ready setWhen(access.done)
+        }
+
+        if(!withDebugFpuAccess) bus.regSuccess := False
+
+        val pending = RegInit(False) setWhen(cmd.valid && bus.dmToHart.op === DebugDmToHartOp.EXECUTE) clearWhen(bus.exception || bus.commit || bus.ebreak || bus.redo)
+        when(cmd.valid){ timeout.clear() }
+        bus.redo := pending && timeout.state
       }
 
       val dpc = Reg(UInt(32 bits))
@@ -924,13 +958,20 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       }
     })
 
+    def guardedWrite(csrId : Int, bitRange: Range, allowed : Seq[Int], target : Bits) = {
+      onWrite(csrId){
+        when(allowed.map(writeData()(bitRange) === _).orR){
+          target := writeData()(bitRange)
+        }
+      }
+    }
 
     val machineCsr = pipeline plug new Area{
       //Define CSR registers
       // Status => MXR, SUM, TVM, TW, TSE ?
       val misa = new Area{
-        val base = Reg(UInt(2 bits)) init(U"01") allowUnsetRegToAvoidLatch
-        val extensions = Reg(Bits(26 bits)) init(misaExtensionsInit) allowUnsetRegToAvoidLatch
+        val base = U"01"
+        val extensions = B(misaExtensionsInit, 26 bits)
       }
 
       val mtvec = Reg(Xtvec()).allowUnsetRegToAvoidLatch
@@ -973,7 +1014,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       if(mimpid    != null) READ_ONLY(CSR.MIMPID   , U(mimpid   ))
       if(mhartid   != null && !withExternalMhartid) READ_ONLY(CSR.MHARTID  , U(mhartid  ))
       if(withExternalMhartid) READ_ONLY(CSR.MHARTID  , externalMhartId)
-      misaAccess(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
+      if(misaAccess.canRead) {
+        READ_ONLY(CSR.MISA, xlen-2 -> misa.base , 0 -> misa.extensions)
+        onWrite(CSR.MISA){}
+      }
 
       //Machine CSR
       READ_WRITE(CSR.MSTATUS, 7 -> mstatus.MPIE, 3 -> mstatus.MIE)
@@ -990,7 +1034,11 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
       }
 
-      mtvecAccess(CSR.MTVEC, 2 -> mtvec.base, 0 -> mtvec.mode)
+      mtvecAccess(CSR.MTVEC, 2 -> mtvec.base)
+      if(mtvecAccess.canWrite && xtvecModeGen) {
+        guardedWrite(CSR.MTVEC, 1 downto 0, List(0, 1), mtvec.mode)
+      }
+
       mepcAccess(CSR.MEPC, mepc)
       if(mscratchGen) READ_WRITE(CSR.MSCRATCH, mscratch)
       mcauseAccess(CSR.MCAUSE, xlen-1 -> mcause.interrupt, 0 -> mcause.exceptionCode)
@@ -1015,6 +1063,28 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         utimeAccess(CSR.UTIME,  utime(31 downto 0))
         utimeAccess(CSR.UTIMEH, utime(63 downto 32))
       }
+
+      class Xcounteren(csrId : Int) extends Area{
+        val IR,TM,CY = RegInit(True) //For backward compatibility
+        if(ucycleAccess != CsrAccess.NONE)   rw(csrId, 0 -> CY)
+        if(utimeAccess != CsrAccess.NONE)    rw(csrId, 1 -> TM)
+        if(uinstretAccess != CsrAccess.NONE) rw(csrId, 2 -> IR)
+      }
+      def xcounterChecks(access : CsrAccess, csrId : Int, enable : Xcounteren => Bool) = {
+        if(access != CsrAccess.NONE) during(csrId){
+          if(userGen) when(privilege < 3 && !enable(mcounteren)){ forceFailCsr() }
+          if(supervisorGen) when(privilege < 1 && !enable(scounteren)){ forceFailCsr() }
+        }
+      }
+
+      val mcounteren = userGen generate new Xcounteren(CSR.MCOUNTEREN)
+      val scounteren = supervisorGen generate new Xcounteren(CSR.SCOUNTEREN)
+      xcounterChecks(ucycleAccess  , CSR.UCYCLE   , _.CY)
+      xcounterChecks(ucycleAccess  , CSR.UCYCLEH  , _.CY)
+      xcounterChecks(utimeAccess   , CSR.UTIME    , _.TM)
+      xcounterChecks(utimeAccess   , CSR.UTIMEH   , _.TM)
+      xcounterChecks(uinstretAccess, CSR.UINSTRET , _.IR)
+      xcounterChecks(uinstretAccess, CSR.UINSTRETH, _.IR)
 
       pipeline(MPP) := mstatus.MPP
     }
@@ -1063,7 +1133,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         for(offset <- List(CSR.MIE, CSR.SIE)) READ_WRITE(offset, 9 -> sie.SEIE, 5 -> sie.STIE, 1 -> sie.SSIE)
 
 
-        stvecAccess(CSR.STVEC, 2 -> stvec.base, 0 -> stvec.mode)
+        stvecAccess(CSR.STVEC, 2 -> stvec.base)
+        if(mtvecAccess.canWrite && xtvecModeGen) {
+          guardedWrite(CSR.STVEC, 1 downto 0, List(0, 1), stvec.mode)
+        }
         sepcAccess(CSR.SEPC, sepc)
         if(sscratchGen) READ_WRITE(CSR.SSCRATCH, sscratch)
         scauseAccess(CSR.SCAUSE, xlen-1 -> scause.interrupt, 0 -> scause.exceptionCode)
@@ -1623,9 +1696,16 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             case element : CsrOnRead => when(readEnable){element.doThat()}
           }
 
+          //When no PMP =>
+//          if(!csrMapping.mapping.contains(0x3A0)){
+//            when(arbitration.isValid && input(IS_CSR) && U(csrAddress) >= 0x3A0 && U(csrAddress) <= 0x3EF){
+//              csrMapping.allowCsrSignal := True
+//            }
+//          }
+
           illegalAccess clearWhen(csrMapping.allowCsrSignal)
 
-          val forceFail = False
+          val forceFail = CombInit(csrMapping.doForceFailCsr)
           forceFail setWhen(privilege < csrAddress(9 downto 8).asUInt)
           if(withPrivilegedDebug) forceFail setWhen(!debugMode && csrAddress >> 4 === 0x7B)
           when(forceFail){

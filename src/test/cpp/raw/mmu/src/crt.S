@@ -53,13 +53,13 @@ test5: //setup MMU
     la x1, MMU_TABLE_0 + 0x800
     la x2, MMU_TABLE_1
     srli x2, x2, 2
-    ori x2, x2, 0x11
+    ori x2, x2, 0x1
     sw x2, 0(x1)
 
     la x1, MMU_TABLE_1 + 0x000*4
     li x2, 0x80000000
     srli x2, x2, 2
-    ori x2, x2, 0x0F
+    ori x2, x2, 0x0F | 0xC0
     sw x2, 0(x1)
 
 
@@ -67,50 +67,50 @@ test5: //setup MMU
     la x1, MMU_TABLE_0 + 0x900
     la x2, MMU_TABLE_2
     srli x2, x2, 2
-    ori x2, x2, 0x11
+    ori x2, x2, 0x01
     sw x2, 0(x1)
 
     la x1, MMU_TABLE_2 + 0x00A*4
     la x2, ROM_4
     srli x2, x2, 2
-    ori x2, x2, 0x1F
+    ori x2, x2, 0x1F | 0xC0
     sw x2, 0(x1)
 
     la x1, MMU_TABLE_2 + 0x010*4 // Read Only
     la x2, ROM_5
     srli x2, x2, 2
-    ori x2, x2, 0x11 + (0x1 << 1)
+    ori x2, x2, 0x11 + (0x1 << 1) | 0xC0
     sw x2, 0(x1)
 
     la x1, MMU_TABLE_2 + 0x011*4 // Read Write
     la x2, ROM_5
     srli x2, x2, 2
-    ori x2, x2, 0x11 + (0x3 << 1)
+    ori x2, x2, 0x11 + (0x3 << 1) | 0xC0
     sw x2, 0(x1)
 
     la x1, MMU_TABLE_2 + 0x012*4 // Execute only
     la x2, ROM_5
     srli x2, x2, 2
-    ori x2, x2, 0x11 + (0x4 << 1)
+    ori x2, x2, 0x11 + (0x4 << 1) | 0xC0
     sw x2, 0(x1)
 
     la x1, MMU_TABLE_2 + 0x013*4 //Read Execute
     la x2, ROM_5
     srli x2, x2, 2
-    ori x2, x2, 0x11 + (0x5 << 1)
+    ori x2, x2, 0x11 + (0x5 << 1) | 0xC0
     sw x2, 0(x1)
 
     la x1, MMU_TABLE_2 + 0x014*4 //no user
     la x2, ROM_5
     srli x2, x2, 2
-    ori x2, x2, 0x01 + (0x7 << 1)
+    ori x2, x2, 0x01 + (0x7 << 1) | 0xC0
     sw x2, 0(x1)
 
     li TEST_ID, 5
     la x1, MMU_TABLE_0 + 0xA00
     la x2, ROM_SUPER_0
     srli x2, x2, 2
-    ori x2, x2, 0x1F
+    ori x2, x2, 0x1F | 0xC0
     sw x2, 0(x1)
 
     li TEST_ID, 5
@@ -124,7 +124,9 @@ test5: //setup MMU
     srli x1, x1, 12
     li x2, 0x80000000
     or x1, x1, x2
+    sfence.vma
     csrw satp, x1
+    fence.i
 
 
 test6: //read through MMU
@@ -254,8 +256,8 @@ test17: //Test limited write access
 
 test18: //Test limited execute access
     li TEST_ID, 18
-
-    la x1, test18_end
+    li TRAP_OK, 1
+    la TRAP_RET, test18_end
     li x2, 0x90012010
     jr x2
     j fail
@@ -305,7 +307,6 @@ test21: //supervisor accessing not user
     bne x1, x2, fail
 
 
-
     li x1, 1 << 18 //clear SUM
     csrc sstatus, x1
     li TRAP_OK, 1
@@ -315,6 +316,7 @@ test21: //supervisor accessing not user
     j fail
 
 test21_pass:
+
 
 
 
@@ -331,10 +333,10 @@ test50:  //User mode setup
     //remap code tlb into userspace
     csrr x10, satp
     csrw satp, x0
-    la x1, MMU_TABLE_1 + 0x000*4
-    li x2, 0x80000000
+    la x1, MMU_TABLE_1 + 0x00D*4 //test51
+    li x2, 0x8000D000
     srli x2, x2, 2
-    ori x2, x2, 0x1F
+    ori x2, x2, 0x1F | 0x40
     sw x2, 0(x1)
     csrw satp, x10
 
@@ -347,83 +349,32 @@ test50:  //User mode setup
     sret
     j fail
 
-test51: //user read/write
-    li TEST_ID, 51
-    li x1, 0x90011008
-    li x2, 0x5B5A5958
-    lw x1, 0(x1)
-    bne x1, x2, fail
-
-    li x1, 0xA000A324
-    li x2, 0xAAEE0008
-    sw x2, 0(x1)
-    lw x1, 0(x1)
-    bne x1, x2, fail
-
-test52: //user fetch
-    li TEST_ID, 52
-    la x1, test53
-    li x2, 0x90012010
-    jr x2
-    j fail
-
-test53: // user fetch page fault
-    li TEST_ID, 53
-    li TRAP_OK, 1
-    la TRAP_RET, test54
-    li x1, 0x90014390
-    jr x1
-    j fail
-    
-test54: //user load page fault
-    li TEST_ID, 54
-    li TRAP_OK, 1
-    la TRAP_RET, test55
-    li x1, 0x90014394
-    lw x1, 0(x1)
-    j fail
-    
-test55: //user store page fault
-    li TEST_ID, 55
-    li TRAP_OK, 1
-    la TRAP_RET, test56
-    li x1, 0x90014398
-    sw x1, 0(x1)
-    j fail
-
-test56:
-
-
-
-
-
-
-
-    j pass
 
 fail: //TEST_ID => error code
     li TRAP_OK, 0
+    la TRAP_RET, failFence
     ecall
 failFence:
     li x2, 0xF00FFF24
     sw TEST_ID, 0(x2)
 
 pass:
-    li TRAP_OK, 2
+    li TRAP_OK, 1
+    la TRAP_RET, passFence
     ecall
 passFence:
     li x2, 0xF00FFF20
     sw x0, 0(x2)
 
-
+.align 4
 trap:
-    beq TRAP_OK, x0, failFence
+    beq TRAP_OK, x0, fail
     csrr x1, mcause
     csrr x1, mepc
     csrr x1, mstatus
     csrr x1, mbadaddr
     li x1, 2
-    beq TRAP_OK, x1, passFence
+    beq TRAP_OK, x1, pass
     csrw mepc, TRAP_RET
     mret
 
@@ -434,6 +385,7 @@ trap:
     nop
     nop
     nop
+
 
 .align 12
 MMU_TABLE_0:
@@ -508,19 +460,53 @@ ROM_7:
 .word 0x7B7A7978
 .word 0x7F7E7D7C
 
-/*
-.align 22
-ROM_SUPER_0:
-.word 0x83828180
-.word 0x87868584
-.word 0x8B8A8988
-.word 0x8F8E8D8C
 
 .align 12
-ROM_SUPER_1:
-.word 0x93929190
-.word 0x97969594
-.word 0x9B9A9998
-.word 0x9F9E9D9C*/
+test51: //user read/write
+    li TEST_ID, 51
+    li x1, 0x90011008
+    li x2, 0x5B5A5958
+    lw x1, 0(x1)
+    bne x1, x2, fail
 
+    li x1, 0xA000A324
+    li x2, 0xAAEE0008
+    sw x2, 0(x1)
+    lw x1, 0(x1)
+    bne x1, x2, fail
 
+test52: //user fetch
+    li TEST_ID, 52
+    la x1, test53
+    li x2, 0x90012010
+    jr x2
+    j fail
+
+test53: // user fetch page fault
+    li TEST_ID, 53
+    li TRAP_OK, 1
+    la TRAP_RET, test54
+    li x1, 0x90014390
+    jr x1
+    j fail
+
+test54: //user load page fault
+    li TEST_ID, 54
+    li TRAP_OK, 1
+    la TRAP_RET, test55
+    li x1, 0x90014394
+    lw x1, 0(x1)
+    j fail
+
+test55: //user store page fault
+    li TEST_ID, 55
+    li TRAP_OK, 1
+    la TRAP_RET, test56
+    li x1, 0x90014398
+    sw x1, 0(x1)
+    j fail
+
+test56:
+
+    li TRAP_OK, 2
+    ecall

@@ -209,7 +209,7 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
     decoderService.addDefault(IS_EBREAK, False)
     decoderService.add(EBREAK,List(IS_EBREAK -> True))
 
-    injectionPort = pipeline.service(classOf[IBusFetcher]).getInjectionPort()
+    injectionPort = pipeline.service(classOf[IBusFetcher]).getInjectionPort().setCompositeName(this, "injectionPort")
 
     if(pipeline.serviceExist(classOf[ReportService])){
       val report = pipeline.service(classOf[ReportService])

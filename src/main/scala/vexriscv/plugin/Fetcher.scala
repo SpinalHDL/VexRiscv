@@ -11,7 +11,7 @@ import scala.collection.mutable.ArrayBuffer
 //TODO val killLastStage = jump.pcLoad.valid || decode.arbitration.isRemoved
 // DBUSSimple check memory halt execute optimization
 
-abstract class IBusFetcherImpl(val resetVector : BigInt,
+abstract class IBusFetcherImpl(var resetVector : BigInt,
                                val keepPcPlus4 : Boolean,
                                val decodePcGen : Boolean,
                                val compressedGen : Boolean,
@@ -42,10 +42,9 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
 
   override def withRvc(): Boolean = compressedGen
 
-  var injectionPort : Stream[Bits] = null
+  val injectionPorts = ArrayBuffer[Stream[Bits]]()
   override def getInjectionPort() = {
-    injectionPort = Stream(Bits(32 bits))
-    injectionPort
+    injectionPorts.addRet(Stream(Bits(32 bits)))
   }
   def pcRegReusedForSecondStage = allowPcRegReusedForSecondStage && prediction != DYNAMIC_TARGET //TODO might not be required for  DYNAMIC_TARGET
   var predictionJumpInterface : Flow[UInt] = null
@@ -354,9 +353,20 @@ abstract class IBusFetcherImpl(val resetVector : BigInt,
       decode.insert(INSTRUCTION) := decodeInput.rsp.inst
       if (compressedGen) decode.insert(IS_RVC) := decodeInput.isRvc
 
-      if (injectionPort != null) {
-        Component.current.addPrePopTask(() => {
+      if (injectionPorts.nonEmpty) {
+        Component.current.addPrePopTask(() => new Composite(this, "port"){
           val state = RegInit(U"000")
+          val injectionPort = injectionPorts.size match {
+            case 1 => injectionPorts.head
+            case _ => {
+              val p = Stream(Bits(32 bits))
+              //assume only one port is used at the time
+              p.valid := injectionPorts.map(_.valid).orR
+              p.payload := OHMux(injectionPorts.map(_.valid), injectionPorts.map(_.payload))
+              injectionPorts.foreach(_.ready := p.ready)
+              p
+            }
+          }
 
           injectionPort.ready := False
           if(decodePcGen){

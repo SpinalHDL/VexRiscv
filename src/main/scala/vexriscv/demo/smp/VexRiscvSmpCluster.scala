@@ -195,7 +195,8 @@ object VexRiscvSmpClusterGen {
                      withInstructionCache : Boolean = true,
                      forceMisa : Boolean = false,
                      forceMscratch : Boolean = false,
-                     privilegedDebug : Boolean = false
+                     privilegedDebug : Boolean = false,
+                     csrFull : Boolean = false
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -203,16 +204,28 @@ object VexRiscvSmpClusterGen {
 
     val misa = Riscv.misaToInt(s"ima${if(withFloat) "f" else ""}${if(withDouble) "d" else ""}${if(rvc) "c" else ""}${if(withSupervisor) "s" else ""}")
     val csrConfig = if(withSupervisor){
-      CsrPluginConfig.openSbi(mhartid = hartId, misa = misa).copy(utimeAccess = CsrAccess.READ_ONLY, withPrivilegedDebug = privilegedDebug)
+      var c = CsrPluginConfig.openSbi(mhartid = hartId, misa = misa).copy(utimeAccess = CsrAccess.READ_ONLY, withPrivilegedDebug = privilegedDebug)
+      if(csrFull){
+       c = c.copy(
+         mcauseAccess   = CsrAccess.READ_WRITE,
+         mbadaddrAccess = CsrAccess.READ_WRITE,
+         ucycleAccess   = CsrAccess.READ_ONLY,
+         uinstretAccess = CsrAccess.READ_ONLY,
+         mcycleAccess   = CsrAccess.READ_WRITE,
+         minstretAccess = CsrAccess.READ_WRITE
+       )
+      }
+      c
     } else {
+      assert(!csrFull)
       CsrPluginConfig(
         catchIllegalAccess = true,
-        mvendorid      = null,
-        marchid        = null,
-        mimpid         = null,
+        mvendorid      = 0,
+        marchid        = 0,
+        mimpid         = 0,
         mhartid        = hartId,
         misaExtensionsInit = misa,
-        misaAccess     = if(forceMisa) CsrAccess.WRITE_ONLY else CsrAccess.NONE,
+        misaAccess     = if(forceMisa) CsrAccess.READ_ONLY else CsrAccess.NONE,
         mtvecAccess    = CsrAccess.READ_WRITE,
         mtvecInit      = null,
         mepcAccess     = CsrAccess.READ_WRITE,

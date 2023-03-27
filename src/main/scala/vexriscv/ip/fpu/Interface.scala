@@ -144,6 +144,7 @@ case class FpuParameter( withDouble : Boolean,
 
 case class FpuFlags() extends Bundle{
   val NX,  UF,  OF,  DZ,  NV = Bool()
+  def any = List(NX,  UF,  OF,  DZ,  NV).orR
 }
 
 case class FpuCompletion() extends Bundle{

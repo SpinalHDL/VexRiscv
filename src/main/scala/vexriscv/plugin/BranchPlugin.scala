@@ -190,7 +190,8 @@ class BranchPlugin(earlyBranch : Boolean,
         BranchCtrlEnum.B    -> input(INSTRUCTION)(14 downto 12).mux(
           B"000"  -> eq  ,
           B"001"  -> !eq  ,
-          M"1-1"  -> !less,
+          B"101"  -> !less,
+          B"111"  -> !less,
           default -> less
         )
       )
@@ -251,7 +252,8 @@ class BranchPlugin(earlyBranch : Boolean,
         BranchCtrlEnum.B    -> input(INSTRUCTION)(14 downto 12).mux(
           B"000"  -> eq  ,
           B"001"  -> !eq  ,
-          M"1-1"  -> !less,
+          B"101"  -> !less,
+          B"111"  -> !less,
           default -> less
         )
       )
@@ -333,7 +335,8 @@ class BranchPlugin(earlyBranch : Boolean,
         BranchCtrlEnum.B    -> input(INSTRUCTION)(14 downto 12).mux(
           B"000"  -> eq  ,
           B"001"  -> !eq  ,
-          M"1-1"  -> !less,
+          B"101"  -> !less,
+          B"111"  -> !less,
           default -> less
         )
       )

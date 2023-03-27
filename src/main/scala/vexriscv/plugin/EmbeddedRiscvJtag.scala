@@ -42,8 +42,12 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
         version = p.version + 1,
         harts = 1,
         progBufSize = 2,
-        datacount   = XLEN/32,
-        xlens = List(XLEN)
+        datacount   = (XLEN max pipeline.config.FLEN)/32,
+        hartsConfig = List(DebugModuleCpuConfig(
+          xlen = XLEN,
+          flen = pipeline.config.FLEN,
+          withFpuRegAccess = pipeline.config.FLEN == 64
+        ))
       )
     )
 

@@ -19,7 +19,14 @@ import scala.collection.mutable.ArrayBuffer
 import scala.sys.process.ProcessLogger
 import scala.util.Random
 import org.scalatest.funsuite.AnyFunSuite
-
+/*
+How to install :
+git clone https://github.com/ucb-bar/berkeley-softfloat-3
+(cd berkeley-softfloat-3/build/Linux-x86_64-GCC; make SPECIALIZE_TYPE=RISCV)
+git clone https://github.com/ucb-bar/berkeley-testfloat-3
+(cd berkeley-testfloat-3/build/Linux-x86_64-GCC; make SPECIALIZE_TYPE=RISCV)
+Add the compiled binaries in the PATH
+ */
 //TODO Warning DataCache write aggregation will disable itself
 class FpuTest extends AnyFunSuite{
 
@@ -548,7 +555,7 @@ class FpuTest extends AnyFunSuite{
           load(rs2, b)
           op(rd,rs1,rs2, rounding, FpuFormat.FLOAT)
           storeFloat(rd){v =>
-            assert(f2b(v) == f2b(ref), f"## ${a}  ${opName}  $b = $v, $ref $rounding")
+            assert(f2b(v) == f2b(ref), f"## ${a}  ${opName}  $b = $v, $ref $rounding, ${f2b(a)}%x ${f2b(v)}%x ${f2b(ref)}%x")
           }
 
           flagMatch(flag, ref, f"## ${opName} ${a} $b $ref $rounding")
@@ -738,7 +745,7 @@ class FpuTest extends AnyFunSuite{
           sqrt(rd,rs1,  rounding, FpuFormat.DOUBLE)
 
           store(rd){v =>
-            assert(d2b(v) == d2b(ref), f"## sqrt${a}   = $v, $ref $rounding, ${d2b(a).toString(16)} ${d2b(ref).toString(16)}")
+            assert(d2b(v) == d2b(ref), f"## sqrt${a}   = $v, $ref $rounding, ${d2b(a).toString(16)} ${d2b(ref).toString(16)} ${d2b(v).toString(16)}")
           }
 
           flagMatch(flag, ref, f"## sqrt${a} $ref $rounding")
@@ -1328,7 +1335,11 @@ class FpuTest extends AnyFunSuite{
 
 
 
+//        testSqrtF64Exact(-1, -Double.NaN, 0, FpuRoundMode.RNE)
 
+//        for(_ <- 0 until 10000) testSgnjF32()
+//        for(_ <- 0 until 10000) testMulF64()
+        val runFactor = 1
 
         //TODO test boxing
         //TODO double <-> simple convertions
@@ -1337,7 +1348,7 @@ class FpuTest extends AnyFunSuite{
           testSqrtF64Exact(1.25*1.25, 1.25, 0, FpuRoundMode.RNE)
           testSqrtF64Exact(1.5*1.5, 1.5, 0, FpuRoundMode.RNE)
 
-          for(_ <- 0 until 10000) testSqrtF64()
+          for(_ <- 0 until runFactor*10000) testSqrtF64()
           println("f64 sqrt done")
 
 //          testDivF64Exact(1.0, 8.0, 0.125, 0, FpuRoundMode.RNE)
@@ -1346,35 +1357,35 @@ class FpuTest extends AnyFunSuite{
 //          testDivF64Exact(1.5, 2.0, 0.75, 0, FpuRoundMode.RNE)
 //          testDivF64Exact(1.875, 1.5, 1.25, 0, FpuRoundMode.RNE)
 
-          for(_ <- 0 until 10000) testDivF64()
+          for(_ <- 0 until runFactor*10000) testDivF64()
           println("f64 div done")
 
-          for(_ <- 0 until 10000) testSgnjF64()
+          for(_ <- 0 until runFactor*10000) testSgnjF64()
           println("f64 sgnj done")
 
-          for(_ <- 0 until 10000) testSgnjF32()
+          for(_ <- 0 until runFactor*10000) testSgnjF32()
           println("f32 sgnj done")
 
           //380000000001ffef 5fffffffffff9ff 8000000000100000
 //          testBinaryOpF64(mul,-5.877471754282472E-39, 8.814425663400984E-280, -5.180654E-318 ,1, FpuRoundMode.RMM,"mul")
 //          5.877471754282472E-39 8.814425663400984E-280 -5.180654E-318 RMM
 
-          for(_ <- 0 until 10000) testCvtF64F32() // 1 did not equal 3 Flag missmatch dut=1 ref=3 testCvtF64F32Raw 1.1754942807573643E-38 1.17549435E-38 RMM
+          for(_ <- 0 until runFactor*10000) testCvtF64F32() // 1 did not equal 3 Flag missmatch dut=1 ref=3 testCvtF64F32Raw 1.1754942807573643E-38 1.17549435E-38 RMM
           println("FCVT_D_S done")
-          for(_ <- 0 until 10000) testCvtF32F64()
+          for(_ <- 0 until runFactor*10000) testCvtF32F64()
           println("FCVT_S_D done")
 
-          for(_ <- 0 until 10000) testF2iF64()
+          for(_ <- 0 until runFactor*10000) testF2iF64()
           println("f64 f2i done")
-          for(_ <- 0 until 10000) testF2uiF64()
+          for(_ <- 0 until runFactor*10000) testF2uiF64()
           println("f64 f2ui done")
 
 
 
 
 
-          for(_ <- 0 until 10000) testMinF64()
-          for(_ <- 0 until 10000) testMaxF64()
+          for(_ <- 0 until runFactor*10000) testMinF64()
+          for(_ <- 0 until runFactor*10000) testMaxF64()
           println("f64 minMax done")
 
 
@@ -1384,13 +1395,13 @@ class FpuTest extends AnyFunSuite{
           println("f64 fma done") //TODO
 
 
-          for(_ <- 0 until 10000) testLeF64()
-          for(_ <- 0 until 10000) testLtF64()
-          for(_ <- 0 until 10000) testEqF64()
+          for(_ <- 0 until runFactor*10000) testLeF64()
+          for(_ <- 0 until runFactor*10000) testLtF64()
+          for(_ <- 0 until runFactor*10000) testEqF64()
           println("f64 Cmp done")
 
 
-          for(_ <- 0 until 10000) testClassF64()
+          for(_ <- 0 until runFactor*10000) testClassF64()
           println("f64 class done")
 //
 
@@ -1401,14 +1412,14 @@ class FpuTest extends AnyFunSuite{
 
 
 
-          for(_ <- 0 until 10000) testAddF64()
-          for(_ <- 0 until 10000) testSubF64()
+          for(_ <- 0 until runFactor*10000) testAddF64()
+          for(_ <- 0 until runFactor*10000) testSubF64()
           println("f64 Add done")
 
 
           //          testI2f64Exact(0x7FFFFFF5, 0x7FFFFFF5, 0, true, FpuRoundMode.RNE)
-          for(_ <- 0 until 10000) testUI2f64()
-          for(_ <- 0 until 10000) testI2f64()
+          for(_ <- 0 until runFactor*10000) testUI2f64()
+          for(_ <- 0 until runFactor*10000) testI2f64()
           println("f64 i2f done")
 
 
@@ -1424,7 +1435,7 @@ class FpuTest extends AnyFunSuite{
           testBinaryOpF64(mul,1.0, 2.0, 2.0,0 , FpuRoundMode.RNE,"mul")
           testBinaryOpF64(mul,2.5, 2.0, 5.0,0 , FpuRoundMode.RNE,"mul")
 
-          for(_ <- 0 until 10000) testMulF64()
+          for(_ <- 0 until runFactor*10000) testMulF64()
           println("f64 Mul done")
 
           testTransferF64Raw(1.0)
@@ -1439,26 +1450,27 @@ class FpuTest extends AnyFunSuite{
           testTransferF32F64Raw(b2f(0xFFFF1234), true)
           testTransferF64F32Raw(b2d(0xFFF123498765463l << 4), true)
 
-          for (_ <- 0 until 10000) testTransferF64()
+          for (_ <- 0 until runFactor*10000) testTransferF64()
           println("f64 load/store/rf transfer done")
 
-          for (_ <- 0 until 10000) testTransferF64F32()
+          for (_ <- 0 until runFactor*10000) testTransferF64F32()
           println("f64 -> f32 load/store/rf transfer done")
 
-          for (_ <- 0 until 10000) testTransferF32F64()
+          for (_ <- 0 until runFactor*10000) testTransferF32F64()
           println("f32 -> f64 load/store/rf transfer done")
 
         }
 
-        for(_ <- 0 until 10000) testTransferF32()
+
+        for(_ <- 0 until runFactor*10000) testTransferF32()
         println("f32 load/store/rf transfer done")
 
-        for(_ <- 0 until 10000) testMulF32()
+        for(_ <- 0 until runFactor*10000) testMulF32()
         println("Mul done")
 
 
-        for(_ <- 0 until 10000) testUI2f32()
-        for(_ <- 0 until 10000) testI2f32()
+        for(_ <- 0 until runFactor*10000) testUI2f32()
+        for(_ <- 0 until runFactor*10000) testI2f32()
         println("i2f done")
 
 
@@ -1470,8 +1482,8 @@ class FpuTest extends AnyFunSuite{
 
 
 
-        for(_ <- 0 until 10000) testF2uiF32()
-        for(_ <- 0 until 10000) testF2iF32()
+        for(_ <- 0 until runFactor*10000) testF2uiF32()
+        for(_ <- 0 until runFactor*10000) testF2iF32()
         println("f2i done")
 
 
@@ -1492,28 +1504,28 @@ class FpuTest extends AnyFunSuite{
         testEqRaw(Float.PositiveInfinity,Float.PositiveInfinity,1, 0)
         testEqRaw(0f, 0f,1, 0)
 
-        for(_ <- 0 until 10000) testLeF32()
-        for(_ <- 0 until 10000) testLtF32()
-        for(_ <- 0 until 10000) testEqF32()
+        for(_ <- 0 until runFactor*10000) testLeF32()
+        for(_ <- 0 until runFactor*10000) testLtF32()
+        for(_ <- 0 until runFactor*10000) testEqF32()
         println("Cmp done")
 
 
-        for(_ <- 0 until 10000) testDiv()
+        for(_ <- 0 until runFactor*10000) testDiv()
         println("f32 div done")
 
-        for(_ <- 0 until 10000) testSqrt()
+        for(_ <- 0 until runFactor*10000) testSqrt()
         println("f32 sqrt done")
 
-        for(_ <- 0 until 10000) testSgnjF32()
+        for(_ <- 0 until runFactor*10000) testSgnjF32()
         println("f32 sgnj done")
 
 
-        for(_ <- 0 until 10000) testClassF32()
+        for(_ <- 0 until runFactor*10000) testClassF32()
         println("f32 class done")
 
 
-        for(_ <- 0 until 10000) testMinF32()
-        for(_ <- 0 until 10000) testMaxF32()
+        for(_ <- 0 until runFactor*10000) testMinF32()
+        for(_ <- 0 until runFactor*10000) testMaxF32()
         println("minMax done")
 
 
@@ -1537,8 +1549,8 @@ class FpuTest extends AnyFunSuite{
 
 
 
-        for(_ <- 0 until 10000) testAddF32()
-        for(_ <- 0 until 10000) testSubF32()
+        for(_ <- 0 until runFactor*10000) testAddF32()
+        for(_ <- 0 until runFactor*10000) testSubF32()
 
         println("Add done")
 
@@ -1555,7 +1567,7 @@ class FpuTest extends AnyFunSuite{
 //        dut.clockDomain.waitSampling(1000)
 //        simSuccess()
 
-        for(i <- 0 until 100000) fxxTests.randomPick()()
+        for(i <- 0 until runFactor*100000) fxxTests.randomPick()()
         waitUntil(cpu.rspQueue.isEmpty)
       }
 

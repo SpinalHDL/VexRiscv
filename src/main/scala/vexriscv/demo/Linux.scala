@@ -130,6 +130,18 @@ cd ..
 make clean run  IBUS=CACHED DBUS=CACHED DEBUG_PLUGIN=STD DHRYSTONE=yes SUPERVISOR=yes MMU=yes CSR=yes COMPRESSED=no MUL=yes DIV=yes LRSC=yes AMO=yes REDO=10 TRACE=no COREMARK=yes LINUX_REGRESSION=yes RUN_HEX=~/pro/riscv/zephyr/samples/synchronization/build/zephyr/zephyr.hex
 
 
+
+All in one way to run :
+export ARCH_LINUX=rv32ima
+export VMLINUX=../../resources/VexRiscvRegressionData/sim/linux/${ARCH_LINUX}/Image
+export DTB=../../resources/VexRiscvRegressionData/sim/linux/${ARCH_LINUX}/rv32.dtb
+export RAMDISK=../../resources/VexRiscvRegressionData/sim/linux/${ARCH_LINUX}/rootfs.cpio
+export EMULATOR=../../resources/VexRiscvRegressionData/sim/linux/emulator/emulator.bin
+
+make clean run IBUS=CACHED DBUS=CACHED  DEBUG_PLUGIN=STD SUPERVISOR=yes CSR=yes DEBUG_PLUGIN=STD  COMPRESSED=no LRSC=yes AMO=yes REDO=0 DHRYSTONE=no LINUX_SOC=yes WITH_USER_IO=yes TRACE=no FLOW_INFO=no
+
+
+
 */
 
 

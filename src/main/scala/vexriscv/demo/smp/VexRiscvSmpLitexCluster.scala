@@ -143,7 +143,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("rvc") action { (v, c) => rvc = v.toBoolean }
     opt[String]("itlb-size") action { (v, c) => iTlbSize = v.toInt }
     opt[String]("dtlb-size") action { (v, c) => dTlbSize = v.toInt }
-  }.parse(args))
+  }.parse(args, Unit).nonEmpty)
 
   val coherency = coherentDma || cpuCount > 1
   def parameter = VexRiscvLitexSmpClusterParameter(
