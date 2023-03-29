@@ -39,10 +39,10 @@ object CsrAccess {
 case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage, priority : Int, codeWidth : Int)
 case class CsrPluginConfig(
                             catchIllegalAccess  : Boolean,
-                            mvendorid           : BigInt,
-                            marchid             : BigInt,
-                            mimpid              : BigInt,
-                            mhartid             : BigInt,
+                            var mvendorid       : BigInt,
+                            var marchid         : BigInt,
+                            var mimpid          : BigInt,
+                            var mhartid         : BigInt,
                             misaExtensionsInit  : Int,
                             misaAccess          : CsrAccess,
                             mtvecAccess         : CsrAccess,
