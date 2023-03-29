@@ -497,7 +497,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   object ENV_CTRL extends Stageable(EnvCtrlEnum())
   object IS_CSR extends Stageable(Bool)
-  object IS_SFENCE_VMA extends Stageable(Bool)
+  object RESCHEDULE_NEXT extends Stageable(Bool)
   object CSR_WRITE_OPCODE extends Stageable(Bool)
   object CSR_READ_OPCODE extends Stageable(Bool)
   object PIPELINED_CSR_READ extends Stageable(Bits(32 bits))
@@ -639,8 +639,9 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     if(utimeAccess != CsrAccess.NONE) utime = in UInt(64 bits) setName("utime")
 
     if(supervisorGen) {
-      decoderService.addDefault(IS_SFENCE_VMA, False)
-      decoderService.add(SFENCE_VMA, List(IS_SFENCE_VMA -> True))
+      decoderService.addDefault(RESCHEDULE_NEXT, False)
+      decoderService.add(SFENCE_VMA, List(RESCHEDULE_NEXT -> True))
+      decoderService.add(FENCE_I, List(RESCHEDULE_NEXT -> True))
     }
 
     xretAwayFromMachine = False
@@ -1143,7 +1144,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           redoInterface.payload := decode.input(PC)
 
           val rescheduleNext = False
-          when(execute.arbitration.isValid && execute.input(IS_SFENCE_VMA)) { rescheduleNext := True }
+          when(execute.arbitration.isValid && execute.input(RESCHEDULE_NEXT)) { rescheduleNext := True }
           duringWrite(CSR.SATP) { rescheduleNext := True }
 
           when(rescheduleNext){
@@ -1581,7 +1582,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           if(!pipelineCsrRead) output(REGFILE_WRITE_DATA) := readData
         }
 
-        when(arbitration.isValid && (input(IS_CSR) || (if(supervisorGen) input(IS_SFENCE_VMA) else False))) {
+        when(arbitration.isValid && (input(IS_CSR) || (if(supervisorGen) input(RESCHEDULE_NEXT) else False))) {
           arbitration.haltItself setWhen(blockedBySideEffects)
         }
 

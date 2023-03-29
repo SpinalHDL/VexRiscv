@@ -160,6 +160,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   object MEMORY_LRSC extends Stageable(Bool)
   object MEMORY_AMO extends Stageable(Bool)
   object MEMORY_FENCE extends Stageable(Bool)
+  object MEMORY_FENCE_WR extends Stageable(Bool)
   object MEMORY_FORCE_CONSTISTENCY extends Stageable(Bool)
   object IS_DBUS_SHARING extends Stageable(Bool())
   object MEMORY_VIRTUAL_ADDRESS extends Stageable(UInt(32 bits))
@@ -267,6 +268,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       case true => {
         decoderService.addDefault(MEMORY_FENCE, False)
         decoderService.add(FENCE, List(MEMORY_FENCE -> True))
+        decoderService.addDefault(MEMORY_FENCE_WR, False)
+        decoderService.add(FENCE_I, List(MEMORY_FENCE_WR -> True))
       }
     }
 
@@ -403,6 +406,12 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         if(writeBack != null) addPrePopTask( () =>
           KeepAttribute(memory.input(MEMORY_VIRTUAL_ADDRESS).getDrivingReg())
         )
+      }
+
+      if(withWriteResponse){
+        when(arbitration.isValid && input(MEMORY_FENCE_WR) && cache.io.cpu.writesPending){
+          arbitration.haltItself := True
+        }
       }
 
       if(tightlyGen){

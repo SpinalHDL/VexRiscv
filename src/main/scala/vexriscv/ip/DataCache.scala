@@ -207,12 +207,14 @@ case class DataCacheCpuBus(p : DataCacheConfig, mmu : MemoryTranslatorBusParamet
   val redo = Bool()
   val flush = Stream(DataCacheFlush(p.lineCount))
 
+  val writesPending = Bool()
+
   override def asMaster(): Unit = {
     master(execute)
     master(memory)
     master(writeBack)
     master(flush)
-    in(redo)
+    in(redo, writesPending)
   }
 }
 
@@ -717,6 +719,8 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
       }
       val uncached = history.readAsync(rPtr.resized)
       val full = RegNext(wPtr - rPtr >= pendingMax-1)
+      val empty = wPtr === rPtr
+      io.cpu.writesPending := !empty
       io.cpu.execute.haltIt setWhen(full)
     }
 
