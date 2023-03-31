@@ -1692,11 +1692,11 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           }
 
           //When no PMP =>
-//          if(!csrMapping.mapping.contains(0x3A0)){
-//            when(arbitration.isValid && input(IS_CSR) && U(csrAddress) >= 0x3A0 && U(csrAddress) <= 0x3EF){
-//              csrMapping.allowCsrSignal := True
-//            }
-//          }
+          if(!csrMapping.mapping.contains(0x3A0)){
+            when(arbitration.isValid && input(IS_CSR) && (csrAddress(11 downto 2) ## B"00" === 0x3A0  || csrAddress(11 downto 4) ## B"0000" === 0x3B0)){
+              csrMapping.allowCsrSignal := True
+            }
+          }
 
           illegalAccess clearWhen(csrMapping.allowCsrSignal)
 
