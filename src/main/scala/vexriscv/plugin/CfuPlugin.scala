@@ -1,6 +1,6 @@
 package vexriscv.plugin
 
-import vexriscv.{DecoderService, ExceptionCause, ExceptionService, JumpService, Stage, Stageable, VexRiscv}
+import vexriscv.{DecoderService, ExceptionCause, ExceptionService, Stage, Stageable, VexRiscv}
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.bmb.WeakConnector
@@ -92,9 +92,7 @@ object CfuPlugin{
 
 case class CfuPluginEncoding(instruction : MaskedLiteral,
                              functionId : List[Range],
-                             input2Kind : CfuPlugin.Input2Kind.E,
-                             withCmd : Boolean = true,
-                             withRsp : Boolean = true){
+                             input2Kind : CfuPlugin.Input2Kind.E){
   val functionIdWidth = functionId.map(_.size).sum
 }
 
@@ -113,7 +111,6 @@ class CfuPlugin(val stageCount : Int,
 //  assert(p.CFU_FUNCTION_ID_W == 3)
 
   var bus : CfuBus = null
-//  var redoInterface : Flow[UInt] = null
 
   lazy val forkStage = pipeline.execute
   lazy val joinStage = pipeline.stages(Math.min(pipeline.stages.length - 1, pipeline.indexOf(forkStage) + stageCount))
@@ -123,45 +120,31 @@ class CfuPlugin(val stageCount : Int,
   val CFU_IN_FLIGHT = new Stageable(Bool()).setCompositeName(this, "CFU_IN_FLIGHT")
   val CFU_ENCODING = new Stageable(UInt(log2Up(encodings.size) bits)).setCompositeName(this, "CFU_ENCODING")
   val CFU_INPUT_2_KIND = new Stageable(CfuPlugin.Input2Kind()).setCompositeName(this, "CFU_INPUT_2_KIND")
-  val CFU_WITH_CMD = new Stageable(Bool()).setCompositeName(this, "CFU_WITH_CMD")
-  val CFU_WITH_RSP = new Stageable(Bool()).setCompositeName(this, "CFU_WITH_RSP")
 
   override def setup(pipeline: VexRiscv): Unit = {
     import pipeline._
     import pipeline.config._
 
-//    val pcManagerService = pipeline.service(classOf[JumpService])
-//    if(encodings.contains(_.cmd)redoInterface = pcManagerService.createJumpInterface(pipeline.writeBack)
-
     bus = master(CfuBus(p))
 
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(CFU_ENABLE, False)
-    decoderService.addDefault(CFU_WITH_CMD, False)
-    decoderService.addDefault(CFU_WITH_RSP, False)
 
     for((encoding, id) <- encodings.zipWithIndex){
-      var actions : List[(Stageable[_ <: BaseType], Any)] = List(
+      var actions = List(
         CFU_ENABLE -> True,
+        REGFILE_WRITE_VALID      -> True,
+        BYPASSABLE_EXECUTE_STAGE -> Bool(stageCount == 0),
+        BYPASSABLE_MEMORY_STAGE  -> Bool(stageCount <= 1),
+        RS1_USE -> True,
         CFU_ENCODING -> U(id),
-        CFU_WITH_CMD -> Bool(encoding.withCmd),
-        CFU_WITH_RSP -> Bool(encoding.withRsp)
+        CFU_INPUT_2_KIND -> encoding.input2Kind()
       )
 
-      if(encoding.withCmd){
-        actions :+= RS1_USE -> True
-        actions :+= CFU_INPUT_2_KIND -> encoding.input2Kind()
-        encoding.input2Kind match {
-          case CfuPlugin.Input2Kind.RS =>
-            actions :+= RS2_USE -> True
-          case CfuPlugin.Input2Kind.IMM_I =>
-        }
-      }
-
-      if(encoding.withRsp){
-        actions :+= REGFILE_WRITE_VALID      -> True
-        actions :+= BYPASSABLE_EXECUTE_STAGE -> Bool(stageCount == 0)
-        actions :+= BYPASSABLE_MEMORY_STAGE  -> Bool(stageCount <= 1)
+      encoding.input2Kind match {
+        case CfuPlugin.Input2Kind.RS =>
+          actions :+= RS2_USE -> True
+        case CfuPlugin.Input2Kind.IMM_I =>
       }
 
       decoderService.add(
@@ -208,7 +191,7 @@ class CfuPlugin(val stageCount : Int,
       import forkStage._
       input(CFU_ENABLE).clearWhen(!input(LEGAL_INSTRUCTION))
       val hazard = stages.dropWhile(_ != forkStage).tail.map(s => s.arbitration.isValid && s.input(HAS_SIDE_EFFECT)).orR
-      val scheduleWish = arbitration.isValid && input(CFU_ENABLE) && input(CFU_WITH_CMD)
+      val scheduleWish = arbitration.isValid && input(CFU_ENABLE)
       val schedule = scheduleWish && !hazard
       arbitration.haltItself setWhen(scheduleWish && hazard)
 
@@ -251,13 +234,12 @@ class CfuPlugin(val stageCount : Int,
         bus.rsp.combStage()
       }
 
-      val hazard = stages.dropWhile(_ != joinStage).tail.map(s => s.arbitration.isValid && s.input(HAS_SIDE_EFFECT)).orR
       rsp.ready := False
-      when((arbitration.isValid || input(CFU_IN_FLIGHT)) && input(CFU_WITH_RSP)){
-        arbitration.haltItself setWhen(!rsp.valid || hazard)
-        rsp.ready := !arbitration.isStuckByOthers && !hazard
+      when(input(CFU_IN_FLIGHT)){
+        arbitration.haltItself setWhen(!rsp.valid)
+        rsp.ready := !arbitration.isStuckByOthers
         output(REGFILE_WRITE_DATA) := rsp.outputs(0)
-        if(p.CFU_WITH_STATUS) when(rsp.fire){
+        if(p.CFU_WITH_STATUS) when(arbitration.isFiring){
           switch(rsp.status) {
             for (i <- 1 to 6) is(i) {
               csr.status.flags(i-1) := True
