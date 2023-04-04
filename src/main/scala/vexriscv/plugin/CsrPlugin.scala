@@ -857,7 +857,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           wakeService.askWake()
         }
       }
-      stoptime = out(debugMode && dcsr.stoptime).setName("stoptime")
+      stoptime = out(RegNext(debugMode && dcsr.stoptime) init(False)).setName("stoptime")
 
       //Very limited subset of the trigger spec
       val trigger = (debugTriggers > 0) generate new Area {
