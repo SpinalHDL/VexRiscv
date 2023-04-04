@@ -630,7 +630,7 @@ public:
 		#endif
 
 		default: {
-//            if(csr >= 0x3A0 && csr <= 0x3EF) break; //PMP
+            if(csr >= 0x3A0 && csr <= 0x3A3 || csr >= 0x3B0 && csr <= 0x3BF) break; //PMP
             return true;
 		}break;
 		}
@@ -686,7 +686,7 @@ public:
 		#endif
 
 		default: {
-//            if(csr >= 0x3A0 && csr <= 0x3EF) break; //PMP
+            if(csr >= 0x3A0 && csr <= 0x3A3 || csr >= 0x3B0 && csr <= 0x3BF) break; //PMP
             ilegalInstruction();
             return true;
 		}break;
