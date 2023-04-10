@@ -997,8 +997,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
 
       val medeleg = supervisorGen generate new Area {
-        val IAM, IAF, II, LAM, LAF, SAM, SAF, EU, ES, IPF, LPF, SPF = RegInit(False)
-        val mapping = mutable.LinkedHashMap(0 -> IAM, 1 -> IAF, 2 -> II, 4 -> LAM, 5 -> LAF, 6 -> SAM, 7 -> SAF, 8 -> EU, 9 -> ES, 12 -> IPF, 13 -> LPF, 15 -> SPF)
+        val IAM, IAF, II, BP, LAM, LAF, SAM, SAF, EU, ES, IPF, LPF, SPF = RegInit(False)
+        val mapping = mutable.LinkedHashMap(0 -> IAM, 1 -> IAF, 2 -> II, 3 -> BP, 4 -> LAM, 5 -> LAF, 6 -> SAM, 7 -> SAF, 8 -> EU, 9 -> ES, 12 -> IPF, 13 -> LPF, 15 -> SPF)
       }
       val mideleg = supervisorGen generate new Area {
         val ST, SE, SS = RegInit(False)
