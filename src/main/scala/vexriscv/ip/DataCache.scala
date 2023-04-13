@@ -400,7 +400,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
 
   def toBmb(syncPendingMax : Int = 32,
-            timeoutCycles : Int = 16) : Bmb = new Area{
+            timeoutCycles : Int = 32) : Bmb = new Area{
     setCompositeName(DataCacheMemBus.this, "Bridge", true)
     val pipelinedMemoryBusConfig = p.getBmbParameter()
     val bus = Bmb(pipelinedMemoryBusConfig).setCompositeName(this,"toBmb", true)
