@@ -11,6 +11,54 @@ _start:
 
 test1:
     li TEST_ID, 1
+
+    machine_setup_trap
+    csrr	zero, ustatus
+    machine_handle_trap
+
+    la x1, fail
+    csrw mtvec, x1
+
+    csrrw x0, mhpmcounter3, x0
+    csrrw x0, mhpmcounter31, x0
+    csrrw x0, mhpmevent3, x0
+    csrrw x0, mhpmevent31, x0
+    csrr x0, hpmcounter3
+    csrr x0, hpmcounter31
+
+    machine_setup_trap
+    csrw hpmcounter3, x0
+    machine_handle_trap
+
+    machine_setup_trap
+    csrw hpmcounter31, x0
+    machine_handle_trap
+
+    machine_setup_trap; machine_to_user; csrrw x0, mhpmcounter3, x0; machine_handle_trap
+    machine_setup_trap; machine_to_user; csrrw x0, mhpmcounter31, x0; machine_handle_trap
+    machine_setup_trap; machine_to_user; csrrw x0, mhpmevent3, x0; machine_handle_trap
+    machine_setup_trap; machine_to_user; csrrw x0, mhpmevent31, x0; machine_handle_trap
+    machine_setup_trap; machine_to_user; csrr x0, hpmcounter3; machine_handle_trap
+    machine_setup_trap; machine_to_user; csrr x0, hpmcounter31; machine_handle_trap
+
+    machine_setup_trap
+    machine_to_supervisor
+    ebreak
+    machine_handle_trap
+    csrr x1, mstatus
+
+    li x1, 0x8
+    csrw medeleg, x1
+    machine_setup_trap
+    machine_to_supervisor
+    supervisor_setup_trap
+    ebreak
+    supervisor_handle_trap
+    csrr x1, sstatus
+    ecall
+    machine_handle_trap
+
+
     csrw misa, x0
 
     //Test xtvec mode
