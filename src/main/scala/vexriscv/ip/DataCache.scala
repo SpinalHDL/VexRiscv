@@ -168,8 +168,9 @@ case class FenceFlags() extends Bundle {
   def forceAll(): Unit ={
     List(SW,SR,SO,SI,PW,PR,PO,PI).foreach(_ := True)
   }
-  def clearAll(): Unit ={
+  def clearFlags(): this.type ={
     List(SW,SR,SO,SI,PW,PR,PO,PI).foreach(_ := False)
+    this
   }
 }
 

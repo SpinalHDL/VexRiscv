@@ -501,7 +501,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         }
 
         when(!input(MEMORY_FENCE) || !arbitration.isFiring){
-          cache.io.cpu.writeBack.fence.clearAll()
+          cache.io.cpu.writeBack.fence.clearFlags()
         }
 
         when(arbitration.isValid && (input(MEMORY_FENCE) || aquire)){
