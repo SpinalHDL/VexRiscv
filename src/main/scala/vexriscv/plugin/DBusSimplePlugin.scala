@@ -106,7 +106,7 @@ case class DBusSimpleBus(bigEndian : Boolean = false) extends Bundle with IMaste
   def cmdHalfPipe() : DBusSimpleBus = {
     val s = DBusSimpleBus(bigEndian)
     s.cmd << this.cmd.halfPipe()
-    s.rsp <> this.rsp
+    s.rsp >> this.rsp
     s
   }
 
