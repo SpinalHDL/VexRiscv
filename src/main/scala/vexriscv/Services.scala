@@ -50,6 +50,20 @@ trait PrivilegeService{
   def isSupervisor() : Bool
   def isMachine() : Bool
   def forceMachine() : Unit
+
+  def encodeBits() : Bits = {
+    val encoded = Bits(2 bits)
+
+    when(this.isUser()) {
+      encoded := "00"
+    }.elsewhen(this.isSupervisor()) {
+      encoded := "01"
+    }.otherwise {
+      encoded := "11"
+    }
+
+    encoded
+  }
 }
 
 case class PrivilegeServiceDefault() extends PrivilegeService{

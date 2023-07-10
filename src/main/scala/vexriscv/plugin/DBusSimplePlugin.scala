@@ -103,6 +103,13 @@ case class DBusSimpleBus(bigEndian : Boolean = false) extends Bundle with IMaste
     s
   }
 
+  def cmdHalfPipe() : DBusSimpleBus = {
+    val s = DBusSimpleBus(bigEndian)
+    s.cmd << this.cmd.halfPipe()
+    this.rsp := s.rsp
+    s
+  }
+
   def genMask(cmd : DBusSimpleCmd) = {
     if(bigEndian)
       cmd.size.mux(
@@ -245,7 +252,7 @@ case class DBusSimpleBus(bigEndian : Boolean = false) extends Bundle with IMaste
     }
     bus
   }
-  
+
   def toBmb() : Bmb = {
     val pipelinedMemoryBusConfig = DBusSimpleBus.getBmbParameter()
     val bus = Bmb(pipelinedMemoryBusConfig)

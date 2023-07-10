@@ -35,6 +35,8 @@ case class RvfiPort() extends Bundle with IMasterSlave {
   val trap = Bool
   val halt = Bool
   val intr = Bool
+  val mode = Bits(2 bits)
+  val ixl = Bits(2 bits)
   val rs1 = RvfiPortRsRead()
   val rs2 = RvfiPortRsRead()
   val rd = RvfiPortRsWrite()
@@ -91,6 +93,8 @@ class FormalPlugin extends Plugin[VexRiscv]{
       rvfi.trap := False
       rvfi.halt := False
       rvfi.intr := False
+      rvfi.mode := output(FORMAL_MODE)
+      rvfi.ixl := 1
 //      rvfi.rs1.addr  := output(INSTRUCTION)(rs1Range).asUInt
 //      rvfi.rs2.addr  := output(INSTRUCTION)(rs2Range).asUInt
 //      rvfi.rs1.rdata := output(RS1)

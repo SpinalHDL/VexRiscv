@@ -81,6 +81,7 @@ case class CsrPluginConfig(
                             csrOhDecoder        : Boolean = true,
                             deterministicInteruptionEntry : Boolean = false, //Only used for simulatation purposes
                             wfiOutput           : Boolean = false,
+                            exportPrivilege     : Boolean = false,
                             var withPrivilegedDebug : Boolean = false, //For the official RISC-V debug spec implementation
                             var debugTriggers       : Int     = 2
                           ){
@@ -621,6 +622,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     contextSwitching = Bool().setName("contextSwitching")
 
     privilege = UInt(2 bits).setName("CsrPlugin_privilege")
+    if (exportPrivilege) out(privilege)
     forceMachineWire = False
 
     if(catchIllegalAccess || ecallGen || withEbreak)
@@ -680,6 +682,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       }
     }
 
+    // The CSR plugin will invoke a trap handler on exception, which does not
+    // count as halt-state by the RVFI spec, and neither do other instructions
+    // such as `wfi`, etc. Hence statically drive the output:
+    pipeline.stages.head.insert(FORMAL_HALT) := False
 
     case class Xtvec() extends Bundle {
       val mode = Bits(2 bits)

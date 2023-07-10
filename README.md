@@ -319,7 +319,7 @@ If you want to get more information about how all this JTAG / GDB stuff work, yo
 
 ## Briey SoC
 As a demonstration, a SoC named Briey is implemented in `src/main/scala/vexriscv/demo/Briey.scala`. This SoC is very similar to
-the [Pinsec SoC](https://spinalhdl.github.io/SpinalDoc-RTD/SpinalHDL/Legacy/pinsec/hardware_toplevel.html#):
+the [Pinsec SoC](https://spinalhdl.github.io/SpinalDoc-RTD/v1.3.1/SpinalHDL/Legacy/pinsec/hardware_toplevel.html):
 
 ![Briey SoC](assets/brieySoc.png?raw=true "")
 
@@ -753,6 +753,12 @@ Fpu 64/32 bits ->
   Artix 7 FMax    -> 165 Mhz 3728 LUT 3175 FF 
 ```
 
+Note that if you want to debug FPU code via the openocd_riscv.vexriscv target, you need to use the GDB from : 
+
+https://static.dev.sifive.com/dev-tools/riscv64-unknown-elf-gcc-20171231-x86_64-linux-centos6.tar.gz
+
+More recent versions of gdb will not detect the FPU. Also, the openocd_riscv.vexriscv can't read CSR/FPU registers, so to have visibility on the floating points values, you need to compile your code in -O0, which will force values to be stored in memory (and so, be visible)
+
 ### Plugins
 
 This chapter describes the currently implemented plugins.
@@ -865,6 +871,41 @@ Simple and light multi-way instruction cache.
 | config.catchMemoryTranslationMiss  | Boolean  |  Catch when the MMU miss a TLB |
 
 Note: If you enable the twoCycleRam option and if wayCount is bigger than one, then the register file plugin should be configured to read the regFile in an asynchronous manner.
+
+The memory bus is defined as :
+
+```scala
+case class InstructionCacheMemCmd(p : InstructionCacheConfig) extends Bundle{
+  val address = UInt(p.addressWidth bit)
+  val size = UInt(log2Up(log2Up(p.bytePerLine) + 1) bits)
+}
+
+case class InstructionCacheMemRsp(p : InstructionCacheConfig) extends Bundle{
+  val data = Bits(p.memDataWidth bit)
+  val error = Bool
+}
+
+case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
+  val cmd = Stream (InstructionCacheMemCmd(p))
+  val rsp = Flow (InstructionCacheMemRsp(p))
+
+  override def asMaster(): Unit = {
+    master(cmd)
+    slave(rsp)
+  }
+}
+```
+
+The address is in byte and aligned to the bytePerLine config, the size will always be equal to log2(bytePerLine). 
+
+Note that the cmd stream transaction need to be consumed before starting to send back some rsp transactions (1 cycle minimal latency)
+
+Some documentation about Stream here : 
+
+https://spinalhdl.github.io/SpinalDoc-RTD/master/SpinalHDL/Libraries/stream.html?highlight=stream
+
+Flow are the same as Stream but without ready signal.
+
 
 #### DecoderSimplePlugin
 
@@ -1043,6 +1084,75 @@ There is at least one cycle latency between a cmd and the corresponding rsp. The
 Multi way cache implementation with writh-through and allocate on read strategy. (Documentation is WIP)
 
 You can invalidate the whole cache via the 0x500F instruction, and you can invalidate a address range (single line size) via the instruction 0x500F | RS1 << 15 where RS1 should not be X0 and point to one byte of the desired address to invalidate.
+
+
+The memory bus is defined as :
+
+```scala
+case class DataCacheMemCmd(p : DataCacheConfig) extends Bundle{
+  val wr = Bool
+  val uncached = Bool
+  val address = UInt(p.addressWidth bit)
+  val data = Bits(p.cpuDataWidth bits)
+  val mask = Bits(p.cpuDataWidth/8 bits)
+  val size   = UInt(p.sizeWidth bits) //... 1 => 2 bytes ... 2 => 4 bytes ...
+  val exclusive = p.withExclusive generate Bool()
+  val last = Bool
+}
+case class DataCacheMemRsp(p : DataCacheConfig) extends Bundle{
+  val aggregated = UInt(p.aggregationWidth bits)
+  val last = Bool()
+  val data = Bits(p.memDataWidth bit)
+  val error = Bool
+  val exclusive = p.withExclusive generate Bool()
+}
+case class DataCacheInv(p : DataCacheConfig) extends Bundle{
+  val enable = Bool()
+  val address = UInt(p.addressWidth bit)
+}
+case class DataCacheAck(p : DataCacheConfig) extends Bundle{
+  val hit = Bool()
+}
+
+case class DataCacheSync(p : DataCacheConfig) extends Bundle{
+  val aggregated = UInt(p.aggregationWidth bits)
+}
+
+case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave{
+  val cmd = Stream (DataCacheMemCmd(p))
+  val rsp = Flow (DataCacheMemRsp(p))
+
+  val inv = p.withInvalidate generate Stream(Fragment(DataCacheInv(p)))
+  val ack = p.withInvalidate generate Stream(Fragment(DataCacheAck(p)))
+  val sync = p.withInvalidate generate Stream(DataCacheSync(p))
+
+  override def asMaster(): Unit = {
+    master(cmd)
+    slave(rsp)
+
+    if(p.withInvalidate) {
+      slave(inv)
+      master(ack)
+      slave(sync)
+    }
+  }
+}
+```
+
+If you don't use memory coherency you can ignore the inv/ack/sync streams, also write cmd should not generate any rsp transaction.
+
+As the cache is write through, there is no write burst but only individual write transactions.
+
+The address is in byte and aligned to the bytePerLine config, the size will is encoded as log2(number of bytes in the burst). 
+last should be set only on the last transaction of a burst.
+
+Note that the cmd stream transaction need to be consumed before starting to send back some rsp transactions (1 cycle minimal latency)
+
+Some documentation about Stream here : 
+
+https://spinalhdl.github.io/SpinalDoc-RTD/master/SpinalHDL/Libraries/stream.html?highlight=stream
+
+Flow are the same as Stream but without ready signal.
 
 #### MulPlugin
 

@@ -11,6 +11,12 @@ object GenCustomInterrupt extends App{
   def cpu() = new VexRiscv(
     config = VexRiscvConfig(
       plugins = List(
+        new CsrPlugin(
+          CsrPluginConfig.smallest.copy(
+            xtvecModeGen = true,
+            mtvecAccess  = CsrAccess.WRITE_ONLY
+          )
+        ),
         new UserInterruptPlugin(
           interruptName = "miaou",
           code = 20
@@ -18,12 +24,6 @@ object GenCustomInterrupt extends App{
         new UserInterruptPlugin(
           interruptName = "rawrrr",
           code = 24
-        ),
-        new CsrPlugin(
-          CsrPluginConfig.smallest.copy(
-            xtvecModeGen = true,
-            mtvecAccess  = CsrAccess.WRITE_ONLY
-          )
         ),
         new IBusSimplePlugin(
           resetVector = 0x80000000l,
