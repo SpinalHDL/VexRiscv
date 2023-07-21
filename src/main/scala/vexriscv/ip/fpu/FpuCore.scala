@@ -1547,15 +1547,22 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     val expBase = muxDouble[UInt](input.format)(exponentF64Subnormal + 1)(exponentF32Subnormal + 1)
     val expDif = expBase -^ input.value.exponent
     val expSubnormal = !input.value.special && !expDif.msb
-    var discardCount = (expSubnormal ? expDif.resize(log2Up(p.internalMantissaSize) bits) | U(0))
+    var discardCount = (expSubnormal ? expDif | U(0))
     if (p.withDouble) when(input.format === FpuFormat.FLOAT) {
       discardCount \= discardCount + 29
     }
-    val exactMask = (List(True) ++ (0 until p.internalMantissaSize + 1).map(_ < discardCount)).asBits.asUInt
-    val roundAdjusted = (True ## (manAggregate >> 1)) (discardCount) ## ((manAggregate & exactMask) =/= 0)
+    val discardCountTrunk = discardCount.resize(log2Up(p.internalMantissaSize) bits)
+    val exactMask = (List(True) ++ (0 until p.internalMantissaSize + 1).map(_ < discardCountTrunk)).asBits.asUInt
+    val roundAdjusted = (True ## (manAggregate >> 1)) (discardCountTrunk) ## ((manAggregate & exactMask) =/= 0)
+    val rneBit = CombInit((U"01" ## (manAggregate >> 2))(discardCountTrunk))
 
+    when(discardCount >= widthOf(manAggregate)){
+      rneBit := False
+      roundAdjusted(1) := False
+      exactMask := exactMask.maxValue
+    }
     val mantissaIncrement = !input.value.special && input.roundMode.mux(
-      FpuRoundMode.RNE -> (roundAdjusted(1) && (roundAdjusted(0) || (U"01" ## (manAggregate >> 2)) (discardCount))),
+      FpuRoundMode.RNE -> (roundAdjusted(1) && (roundAdjusted(0) || rneBit)),
       FpuRoundMode.RTZ -> False,
       FpuRoundMode.RDN -> (roundAdjusted =/= 0 && input.value.sign),
       FpuRoundMode.RUP -> (roundAdjusted =/= 0 && !input.value.sign),

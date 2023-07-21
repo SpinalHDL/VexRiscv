@@ -64,6 +64,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   var exceptionBus : Flow[ExceptionCause] = null
   var privilegeService : PrivilegeService = null
   var redoBranch : Flow[UInt] = null
+  var writesPending : Bool = null
 
   @dontName var dBusAccess : DBusAccess = null
   override def newDBusAccess(): DBusAccess = {
@@ -270,6 +271,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         decoderService.add(FENCE, List(MEMORY_FENCE -> True))
         decoderService.addDefault(MEMORY_FENCE_WR, False)
         decoderService.add(FENCE_I, List(MEMORY_FENCE_WR -> True))
+        writesPending = Bool().setCompositeName(this, "writesPending")
       }
     }
 
@@ -412,6 +414,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         when(arbitration.isValid && input(MEMORY_FENCE_WR) && cache.io.cpu.writesPending){
           arbitration.haltItself := True
         }
+        writesPending := cache.io.cpu.writesPending
       }
 
       if(tightlyGen){
@@ -498,7 +501,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         }
 
         when(!input(MEMORY_FENCE) || !arbitration.isFiring){
-          cache.io.cpu.writeBack.fence.clearAll()
+          cache.io.cpu.writeBack.fence.clearFlags()
         }
 
         when(arbitration.isValid && (input(MEMORY_FENCE) || aquire)){

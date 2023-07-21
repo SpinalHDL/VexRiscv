@@ -863,7 +863,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           wakeService.askWake()
         }
       }
-      stoptime = out(debugMode && dcsr.stoptime).setName("stoptime")
+      stoptime = out(RegNext(debugMode && dcsr.stoptime) init(False)).setName("stoptime")
 
       //Very limited subset of the trigger spec
       val trigger = (debugTriggers > 0) generate new Area {
@@ -1003,8 +1003,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
 
       val medeleg = supervisorGen generate new Area {
-        val IAM, IAF, II, LAM, LAF, SAM, SAF, EU, ES, IPF, LPF, SPF = RegInit(False)
-        val mapping = mutable.LinkedHashMap(0 -> IAM, 1 -> IAF, 2 -> II, 4 -> LAM, 5 -> LAF, 6 -> SAM, 7 -> SAF, 8 -> EU, 9 -> ES, 12 -> IPF, 13 -> LPF, 15 -> SPF)
+        val IAM, IAF, II, BP, LAM, LAF, SAM, SAF, EU, ES, IPF, LPF, SPF = RegInit(False)
+        val mapping = mutable.LinkedHashMap(0 -> IAM, 1 -> IAF, 2 -> II, 3 -> BP, 4 -> LAM, 5 -> LAF, 6 -> SAM, 7 -> SAF, 8 -> EU, 9 -> ES, 12 -> IPF, 13 -> LPF, 15 -> SPF)
       }
       val mideleg = supervisorGen generate new Area {
         val ST, SE, SS = RegInit(False)
@@ -1700,6 +1700,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           //When no PMP =>
           if(!csrMapping.mapping.contains(0x3A0)){
             when(arbitration.isValid && input(IS_CSR) && (csrAddress(11 downto 2) ## B"00" === 0x3A0  || csrAddress(11 downto 4) ## B"0000" === 0x3B0)){
+              csrMapping.allowCsrSignal := True
+            }
+          }
+          //When no HPM
+          if(!csrMapping.mapping.contains(0xB03)){
+            val masked = U(csrAddress & 0xF60)
+            when(arbitration.isValid && input(IS_CSR) && U(csrAddress(4 downto 0)) >= 3 && (masked === 0xB00 || masked === 0xC00 && !writeInstruction && privilege === 3 || U(csrAddress & 0xFE0) === 0x320)){
               csrMapping.allowCsrSignal := True
             }
           }

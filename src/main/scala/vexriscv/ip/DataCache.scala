@@ -168,8 +168,9 @@ case class FenceFlags() extends Bundle {
   def forceAll(): Unit ={
     List(SW,SR,SO,SI,PW,PR,PO,PI).foreach(_ := True)
   }
-  def clearAll(): Unit ={
+  def clearFlags(): this.type ={
     List(SW,SR,SO,SI,PW,PR,PO,PI).foreach(_ := False)
+    this
   }
 }
 
@@ -400,7 +401,7 @@ case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave
 
 
   def toBmb(syncPendingMax : Int = 32,
-            timeoutCycles : Int = 16) : Bmb = new Area{
+            timeoutCycles : Int = 32) : Bmb = new Area{
     setCompositeName(DataCacheMemBus.this, "Bridge", true)
     val pipelinedMemoryBusConfig = p.getBmbParameter()
     val bus = Bmb(pipelinedMemoryBusConfig).setCompositeName(this,"toBmb", true)
