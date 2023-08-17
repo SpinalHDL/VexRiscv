@@ -193,6 +193,8 @@ object VexRiscvSmpClusterGen {
                      prediction : BranchPrediction = vexriscv.plugin.NONE,
                      withDataCache : Boolean = true,
                      withInstructionCache : Boolean = true,
+                     withBarrelShifter : Boolean = true,
+                     withMulDiv : Boolean = true,
                      forceMisa : Boolean = false,
                      forceMscratch : Boolean = false,
                      privilegedDebug : Boolean = false,
@@ -334,8 +336,10 @@ object VexRiscvSmpClusterGen {
         new SrcPlugin(
           separatedAddSub = false
         ),
-        new FullBarrelShifterPlugin(earlyInjection = earlyShifterInjection),
-        //        new LightShifterPlugin,
+        if(withBarrelShifter)
+          new FullBarrelShifterPlugin(earlyInjection = earlyShifterInjection)
+        else
+          new LightShifterPlugin,
         new HazardSimplePlugin(
           bypassExecute           = true,
           bypassMemory            = true,
@@ -345,13 +349,6 @@ object VexRiscvSmpClusterGen {
           pessimisticWriteRegFile = false,
           pessimisticAddressMatch = false
         ),
-        new MulPlugin,
-        new MulDivIterativePlugin(
-          genMul = false,
-          genDiv = true,
-          mulUnrollFactor = 32,
-          divUnrollFactor = 1
-        ),
         new CsrPlugin(csrConfig),
         new BranchPlugin(
           earlyBranch = earlyBranch,
@@ -359,6 +356,16 @@ object VexRiscvSmpClusterGen {
           fenceiGenAsAJump = false
         ),
         new YamlPlugin(s"cpu$hartId.yaml")
+      )
+    )
+
+    if(withMulDiv) config.plugins ++= List(
+      new MulPlugin,
+      new MulDivIterativePlugin(
+        genMul = false,
+        genDiv = true,
+        mulUnrollFactor = 32,
+        divUnrollFactor = 1
       )
     )
 
