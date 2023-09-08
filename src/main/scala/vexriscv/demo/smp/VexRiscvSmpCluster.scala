@@ -58,7 +58,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
     val debugBridge = debugCd.outputClockDomain on JtagInstructionDebuggerGenerator(p.jtagHeaderIgnoreWidth)
     debugBridge.jtagClockDomain.load(ClockDomain.external("jtag", withReset = false))
 
-    val debugPort = Handle(debugBridge.logic.jtagBridge.io.ctrl.toIo)
+    val debugPort = Handle(debugBridge.logic.jtagBridge.io.ctrl.toIo).setName("debugPort")
   }
 
   val dBusCoherent = BmbBridgeGenerator()
@@ -141,7 +141,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
       )
       dm.io.ctrl <> tunnel.io.bus
 
-      val debugPort = Handle(tunnel.io.instruction.toIo)
+      val debugPort = Handle(tunnel.io.instruction.toIo).setName("debugPort")
     })
   }
 }
@@ -216,7 +216,7 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
   clint.cpuCount.load(cpuCount)
 }
 
-
+//python3 -m litex_boards.targets.digilent_nexys_video --cpu-type=vexriscv_smp --with-privileged-debug --sys-clk-freq 50000000 --cpu-count 1  --build --load
 object VexRiscvSmpClusterGen {
   def vexRiscvConfig(hartId : Int,
                      ioRange : UInt => Bool = (x => x(31 downto 28) === 0xF),
