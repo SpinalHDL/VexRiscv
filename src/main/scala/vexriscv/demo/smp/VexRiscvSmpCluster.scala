@@ -214,6 +214,7 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
   }
 
   clint.cpuCount.load(cpuCount)
+  if(p.privilegedDebug) hardFork(clint.logic.io.stop := privilegedDebug.logic.clintStop)
 }
 
 //python3 -m litex_boards.targets.digilent_nexys_video --cpu-type=vexriscv_smp --with-privileged-debug --sys-clk-freq 50000000 --cpu-count 1  --build --load
