@@ -101,6 +101,7 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
 
 
 object VexRiscvLitexSmpClusterCmdGen extends App {
+  Handle.loadHandleAsync = true
   var cpuCount = 1
   var iBusWidth = 64
   var dBusWidth = 64
@@ -108,6 +109,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var dCacheSize = 8192
   var iCacheWays = 2
   var dCacheWays = 2
+  var privilegedDebug = false
   var liteDramWidth = 128
   var coherentDma = false
   var wishboneMemory = false
@@ -131,6 +133,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("dcache-size") action { (v, c) => dCacheSize = v.toInt }
     opt[String]("icache-ways") action { (v, c) => iCacheWays = v.toInt }
     opt[String]("dcache-ways") action { (v, c) => dCacheWays = v.toInt }
+    opt[Boolean]("privileged-debug") action { (v, c) => privilegedDebug = v }
     opt[String]("litedram-width") action { (v, c) => liteDramWidth = v.toInt }
     opt[String]("netlist-directory") action { (v, c) => netlistDirectory = v }
     opt[String]("netlist-name") action { (v, c) => netlistName = v }
@@ -160,6 +163,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
           iCacheWays = iCacheWays,
           dCacheWays = dCacheWays,
           coherency = coherency,
+          privilegedDebug = privilegedDebug,
           iBusRelax = true,
           earlyBranch = true,
           withFloat = fpu,
@@ -178,7 +182,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
       forcePeripheralWidth = !wishboneMemory || wishboneForce32b,
       outOfOrderDecoder = outOfOrderDecoder,
       fpu = fpu,
-      jtagHeaderIgnoreWidth = 0
+      jtagHeaderIgnoreWidth = 0,
+      privilegedDebug = privilegedDebug
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = liteDramWidth),
     liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
