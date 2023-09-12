@@ -198,7 +198,8 @@ object VexRiscvSmpClusterGen {
                      forceMisa : Boolean = false,
                      forceMscratch : Boolean = false,
                      privilegedDebug : Boolean = false,
-                     csrFull : Boolean = false
+                     csrFull : Boolean = false,
+                     reducedCsr : Boolean = false
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -226,14 +227,14 @@ object VexRiscvSmpClusterGen {
         marchid        = 0,
         mimpid         = 0,
         mhartid        = hartId,
-        misaExtensionsInit = misa,
+        misaExtensionsInit = if(reducedCsr) 0 else misa,
         misaAccess     = if(forceMisa) CsrAccess.READ_ONLY else CsrAccess.NONE,
-        mtvecAccess    = CsrAccess.READ_WRITE,
+        mtvecAccess    = if(reducedCsr) CsrAccess.WRITE_ONLY else CsrAccess.READ_WRITE,
         mtvecInit      = null,
         mepcAccess     = CsrAccess.READ_WRITE,
         mscratchGen    = forceMscratch,
         mcauseAccess   = CsrAccess.READ_ONLY,
-        mbadaddrAccess = CsrAccess.READ_ONLY,
+        mbadaddrAccess = if(reducedCsr) CsrAccess.NONE else CsrAccess.READ_ONLY,
         mcycleAccess   = CsrAccess.NONE,
         minstretAccess = CsrAccess.NONE,
         ecallGen       = true,
