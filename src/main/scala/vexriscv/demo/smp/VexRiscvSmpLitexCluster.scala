@@ -7,6 +7,7 @@ import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
 import spinal.lib.bus.wishbone.{WishboneConfig, WishboneToBmbGenerator}
 import spinal.lib.generator.GeneratorComponent
 import spinal.lib.sim.SparseMemory
+import vexriscv.demo.smp.VexRiscvLitexSmpClusterCmdGen.exposeTime
 import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
 import vexriscv.ip.fpu.{FpuCore, FpuParameter}
 import vexriscv.plugin.{AesPlugin, DBusCachedPlugin, FpuPlugin}
@@ -17,7 +18,8 @@ case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParamet
                                              liteDramMapping : AddressMapping,
                                              coherentDma : Boolean,
                                              wishboneMemory : Boolean,
-                                             cpuPerFpu : Int)
+                                             cpuPerFpu : Int,
+                                             exposeTime : Boolean)
 
 
 class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexRiscvSmpClusterWithPeripherals(p.cluster) {
@@ -97,6 +99,8 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
     interconnect.setPipelining(iBridge.bmb)(cmdHalfRate = true)
     interconnect.setPipelining(dBridge.bmb)(cmdReady = true)
   }
+
+  val clint_time = p.exposeTime generate hardFork(clint.logic.io.time.toIo)
 }
 
 
@@ -123,6 +127,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var iTlbSize = 4
   var dTlbSize = 4
   var wishboneForce32b = false
+  var exposeTime = false
   assert(new scopt.OptionParser[Unit]("VexRiscvLitexSmpClusterCmdGen") {
     help("help").text("prints this usage text")
     opt[Unit]("coherent-dma") action { (v, c) => coherentDma = true }
@@ -146,6 +151,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("rvc") action { (v, c) => rvc = v.toBoolean }
     opt[String]("itlb-size") action { (v, c) => iTlbSize = v.toInt }
     opt[String]("dtlb-size") action { (v, c) => dTlbSize = v.toInt }
+    opt[String]("expose-time") action { (v, c) => exposeTime = v.toBoolean }
   }.parse(args, Unit).nonEmpty)
 
   val coherency = coherentDma || cpuCount > 1
@@ -172,8 +178,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
           loadStoreWidth = if(fpu) 64 else 32,
           rvc = rvc,
           injectorStage = rvc,
-	  iTlbSize = iTlbSize,
-	  dTlbSize = dTlbSize
+          iTlbSize = iTlbSize,
+          dTlbSize = dTlbSize
         )
         if(aesInstruction) c.add(new AesPlugin)
         c
@@ -189,7 +195,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
     coherentDma = coherentDma,
     wishboneMemory = wishboneMemory,
-    cpuPerFpu = cpuPerFpu
+    cpuPerFpu = cpuPerFpu,
+    exposeTime = exposeTime
   )
 
   def dutGen = {
@@ -265,7 +272,8 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
     liteDramMapping = SizeMapping(0x80000000l, 0x70000000l),
     coherentDma = false,
     wishboneMemory = false,
-    cpuPerFpu = 4
+    cpuPerFpu = 4,
+    exposeTime = false
   )
 
   def dutGen = {
