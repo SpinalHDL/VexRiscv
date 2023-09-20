@@ -114,6 +114,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var iCacheWays = 2
   var dCacheWays = 2
   var privilegedDebug = false
+  var hardwareBreakpoints = 0
   var liteDramWidth = 128
   var coherentDma = false
   var wishboneMemory = false
@@ -130,7 +131,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var exposeTime = false
   assert(new scopt.OptionParser[Unit]("VexRiscvLitexSmpClusterCmdGen") {
     help("help").text("prints this usage text")
-    opt[Unit]("coherent-dma") action { (v, c) => coherentDma = true }
+    opt[Unit]  ("coherent-dma") action { (v, c) => coherentDma = true }
     opt[String]("cpu-count") action { (v, c) => cpuCount = v.toInt }
     opt[String]("ibus-width") action { (v, c) => iBusWidth = v.toInt }
     opt[String]("dbus-width") action { (v, c) => dBusWidth = v.toInt }
@@ -139,6 +140,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("icache-ways") action { (v, c) => iCacheWays = v.toInt }
     opt[String]("dcache-ways") action { (v, c) => dCacheWays = v.toInt }
     opt[Boolean]("privileged-debug") action { (v, c) => privilegedDebug = v }
+    opt[Int]   ("hardware-breakpoints") action { (v, c) => hardwareBreakpoints = v }
     opt[String]("litedram-width") action { (v, c) => liteDramWidth = v.toInt }
     opt[String]("netlist-directory") action { (v, c) => netlistDirectory = v }
     opt[String]("netlist-name") action { (v, c) => netlistName = v }
@@ -189,7 +191,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
       outOfOrderDecoder = outOfOrderDecoder,
       fpu = fpu,
       jtagHeaderIgnoreWidth = 0,
-      privilegedDebug = privilegedDebug
+      privilegedDebug = privilegedDebug,
+      hardwareBreakpoints = hardwareBreakpoints
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = liteDramWidth),
     liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),

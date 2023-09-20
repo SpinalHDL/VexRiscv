@@ -32,7 +32,8 @@ case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig],
                                        forcePeripheralWidth : Boolean = true,
                                        outOfOrderDecoder : Boolean = true,
                                        fpu : Boolean = false,
-                                       privilegedDebug : Boolean = false)
+                                       privilegedDebug : Boolean = false,
+                                       hardwareBreakpoints : Int = 0)
 
 class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with PostInitCallback{
   val cpuCount = p.cpuConfigs.size
@@ -85,6 +86,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
       cpu.dBus -> List(dBusCoherent.bmb)
     )
 
+    cpu.hardwareBreakpointCount.load(p.hardwareBreakpoints)
     if(!p.privilegedDebug) {
       cpu.enableDebugBmb(
         debugCd = debugCd.outputClockDomain,
