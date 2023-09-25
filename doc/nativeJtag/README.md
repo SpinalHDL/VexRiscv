@@ -49,7 +49,7 @@ as given could move with future changes to the file:
 ```
 [254]	val jtagCtrl = JtagTapInstructionCtrl()
 [255]	val tap = jtagCtrl.fromXilinxBscane2(userId = 2)
-[256]	jtagCtrl <> plugin.io.bus.fromJtagInstructionCtrl(ClockDomain(tap.TCK))
+[256]	jtagCtrl <> plugin.io.bus.fromJtagInstructionCtrl(ClockDomain(tap.TCK),0)
 ```
 Changing the above lines, removes the Murax SoC’s JTAG ports as pins of the FPGA and inserts the BSCANE2 Xilinx
 Debug IP to which the JTAG signals are now connected.
@@ -84,7 +84,7 @@ in e.g. the path:	`project_name.srcs\sources_1\imports\Downloads`
 [44]	wire tesic_tdo;
 [45]	reg  soc_tck,soc_tms,soc_tdi;
 [46]	wire soc_tdo;
-[47]	
+[47]
 [48]	always @(*) begin
 [49]		{soc_tck,  soc_tms,  soc_tdi  } = {tck,tms,tdi};
 [50]		tdo = soc_tdo;
