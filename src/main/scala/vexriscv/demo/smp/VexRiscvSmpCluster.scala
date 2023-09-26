@@ -227,7 +227,7 @@ object VexRiscvSmpClusterGen {
         marchid        = 0,
         mimpid         = 0,
         mhartid        = hartId,
-        misaExtensionsInit = if(reducedCsr) 0 else misa,
+        misaExtensionsInit = misa,
         misaAccess     = if(forceMisa) CsrAccess.READ_ONLY else CsrAccess.NONE,
         mtvecAccess    = if(reducedCsr) CsrAccess.WRITE_ONLY else CsrAccess.READ_WRITE,
         mtvecInit      = null,
