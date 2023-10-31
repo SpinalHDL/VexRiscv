@@ -87,6 +87,12 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   val tightlyCoupledPorts = ArrayBuffer[TightlyCoupledDataPort]()
   def tightlyGen = tightlyCoupledPorts.nonEmpty
 
+  def newTightlyCoupledPort(p: TightlyCoupledDataPortParameter) = {
+    val port = TightlyCoupledDataPort(p, null)
+    tightlyCoupledPorts += port
+    this
+  }
+
   def newTightlyCoupledPort(mapping : UInt => Bool) = {
     val port = TightlyCoupledDataPort(TightlyCoupledDataPortParameter(null, mapping), TightlyCoupledDataBus())
     tightlyCoupledPorts += port
@@ -172,6 +178,9 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
     import pipeline.config._
+
+
+    tightlyCoupledPorts.filter(_.bus == null).foreach(p => p.bus = master(TightlyCoupledDataBus()).setName(p.p.name))
 
     dBus = master(DataCacheMemBus(this.config)).setName("dBus")
 
