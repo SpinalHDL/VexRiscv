@@ -72,6 +72,7 @@ This repository hosts a RISC-V implementation written in SpinalHDL. Here are som
 - Linux compatible (SoC : https://github.com/enjoy-digital/linux-on-litex-vexriscv)
 - Zephyr compatible
 - [FreeRTOS port](https://github.com/Dolu1990/FreeRTOS-RISCV)
+- Support tightly coupled memory on I$ D$ (see GenFullWithTcm)
 
 The hardware description of this CPU is done by using a very software oriented approach
 (without any overhead in the generated hardware). Here is a list of software concepts used:
