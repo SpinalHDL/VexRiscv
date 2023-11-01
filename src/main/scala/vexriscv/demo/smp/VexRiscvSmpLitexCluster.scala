@@ -7,6 +7,7 @@ import spinal.lib.bus.misc.{AddressMapping, DefaultMapping, SizeMapping}
 import spinal.lib.bus.wishbone.{WishboneConfig, WishboneToBmbGenerator}
 import spinal.lib.generator.GeneratorComponent
 import spinal.lib.sim.SparseMemory
+import vexriscv.demo.smp.VexRiscvLitexSmpClusterCmdGen.exposeTime
 import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
 import vexriscv.ip.fpu.{FpuCore, FpuParameter}
 import vexriscv.plugin.{AesPlugin, DBusCachedPlugin, FpuPlugin}
@@ -17,7 +18,8 @@ case class VexRiscvLitexSmpClusterParameter( cluster : VexRiscvSmpClusterParamet
                                              liteDramMapping : AddressMapping,
                                              coherentDma : Boolean,
                                              wishboneMemory : Boolean,
-                                             cpuPerFpu : Int)
+                                             cpuPerFpu : Int,
+                                             exposeTime : Boolean)
 
 
 class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexRiscvSmpClusterWithPeripherals(p.cluster) {
@@ -97,10 +99,13 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
     interconnect.setPipelining(iBridge.bmb)(cmdHalfRate = true)
     interconnect.setPipelining(dBridge.bmb)(cmdReady = true)
   }
+
+  val clint_time = p.exposeTime generate hardFork(clint.logic.io.time.toIo)
 }
 
 
 object VexRiscvLitexSmpClusterCmdGen extends App {
+  Handle.loadHandleAsync = true
   var cpuCount = 1
   var iBusWidth = 64
   var dBusWidth = 64
@@ -108,6 +113,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var dCacheSize = 8192
   var iCacheWays = 2
   var dCacheWays = 2
+  var privilegedDebug = false
+  var hardwareBreakpoints = 0
   var liteDramWidth = 128
   var coherentDma = false
   var wishboneMemory = false
@@ -121,9 +128,10 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var iTlbSize = 4
   var dTlbSize = 4
   var wishboneForce32b = false
+  var exposeTime = false
   assert(new scopt.OptionParser[Unit]("VexRiscvLitexSmpClusterCmdGen") {
     help("help").text("prints this usage text")
-    opt[Unit]("coherent-dma") action { (v, c) => coherentDma = true }
+    opt[Unit]  ("coherent-dma") action { (v, c) => coherentDma = true }
     opt[String]("cpu-count") action { (v, c) => cpuCount = v.toInt }
     opt[String]("ibus-width") action { (v, c) => iBusWidth = v.toInt }
     opt[String]("dbus-width") action { (v, c) => dBusWidth = v.toInt }
@@ -131,6 +139,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("dcache-size") action { (v, c) => dCacheSize = v.toInt }
     opt[String]("icache-ways") action { (v, c) => iCacheWays = v.toInt }
     opt[String]("dcache-ways") action { (v, c) => dCacheWays = v.toInt }
+    opt[Boolean]("privileged-debug") action { (v, c) => privilegedDebug = v }
+    opt[Int]   ("hardware-breakpoints") action { (v, c) => hardwareBreakpoints = v }
     opt[String]("litedram-width") action { (v, c) => liteDramWidth = v.toInt }
     opt[String]("netlist-directory") action { (v, c) => netlistDirectory = v }
     opt[String]("netlist-name") action { (v, c) => netlistName = v }
@@ -143,6 +153,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("rvc") action { (v, c) => rvc = v.toBoolean }
     opt[String]("itlb-size") action { (v, c) => iTlbSize = v.toInt }
     opt[String]("dtlb-size") action { (v, c) => dTlbSize = v.toInt }
+    opt[String]("expose-time") action { (v, c) => exposeTime = v.toBoolean }
   }.parse(args, Unit).nonEmpty)
 
   val coherency = coherentDma || cpuCount > 1
@@ -160,6 +171,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
           iCacheWays = iCacheWays,
           dCacheWays = dCacheWays,
           coherency = coherency,
+          privilegedDebug = privilegedDebug,
           iBusRelax = true,
           earlyBranch = true,
           withFloat = fpu,
@@ -168,8 +180,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
           loadStoreWidth = if(fpu) 64 else 32,
           rvc = rvc,
           injectorStage = rvc,
-	  iTlbSize = iTlbSize,
-	  dTlbSize = dTlbSize
+          iTlbSize = iTlbSize,
+          dTlbSize = dTlbSize
         )
         if(aesInstruction) c.add(new AesPlugin)
         c
@@ -178,13 +190,16 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
       forcePeripheralWidth = !wishboneMemory || wishboneForce32b,
       outOfOrderDecoder = outOfOrderDecoder,
       fpu = fpu,
-      jtagHeaderIgnoreWidth = 0
+      jtagHeaderIgnoreWidth = 0,
+      privilegedDebug = privilegedDebug,
+      hardwareBreakpoints = hardwareBreakpoints
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = liteDramWidth),
     liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
     coherentDma = coherentDma,
     wishboneMemory = wishboneMemory,
-    cpuPerFpu = cpuPerFpu
+    cpuPerFpu = cpuPerFpu,
+    exposeTime = exposeTime
   )
 
   def dutGen = {
@@ -260,7 +275,8 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
     liteDramMapping = SizeMapping(0x80000000l, 0x70000000l),
     coherentDma = false,
     wishboneMemory = false,
-    cpuPerFpu = 4
+    cpuPerFpu = 4,
+    exposeTime = false
   )
 
   def dutGen = {

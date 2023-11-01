@@ -33,6 +33,7 @@ class PlicBench(inputCount : Int) extends Component{
 
   val targets = Seq(
     PlicTarget(
+      id = 0,
       gateways = gateways,
       priorityWidth = priorityWidth
     )

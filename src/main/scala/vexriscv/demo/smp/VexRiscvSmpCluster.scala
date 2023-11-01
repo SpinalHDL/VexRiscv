@@ -14,6 +14,7 @@ import spinal.lib.com.jtag.xilinx.Bscane2BmbMasterGenerator
 import spinal.lib.generator._
 import spinal.core.fiber._
 import spinal.idslplugin.PostInitCallback
+import spinal.lib.cpu.riscv.debug.{DebugModule, DebugModuleCpuConfig, DebugModuleParameter, DebugTransportModuleParameter, DebugTransportModuleTunneled}
 import spinal.lib.misc.plic.PlicMapping
 import spinal.lib.system.debugger.SystemDebuggerConfig
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
@@ -30,7 +31,9 @@ case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig],
                                        withExclusiveAndInvalidation : Boolean,
                                        forcePeripheralWidth : Boolean = true,
                                        outOfOrderDecoder : Boolean = true,
-                                       fpu : Boolean = false)
+                                       fpu : Boolean = false,
+                                       privilegedDebug : Boolean = false,
+                                       hardwareBreakpoints : Int = 0)
 
 class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with PostInitCallback{
   val cpuCount = p.cpuConfigs.size
@@ -52,10 +55,12 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
 
   implicit val interconnect = BmbInterconnectGenerator()
 
-  val debugBridge = debugCd.outputClockDomain on JtagInstructionDebuggerGenerator(p.jtagHeaderIgnoreWidth)
-  debugBridge.jtagClockDomain.load(ClockDomain.external("jtag", withReset = false))
+  val customDebug = !p.privilegedDebug generate new Area {
+    val debugBridge = debugCd.outputClockDomain on JtagInstructionDebuggerGenerator(p.jtagHeaderIgnoreWidth)
+    debugBridge.jtagClockDomain.load(ClockDomain.external("jtag", withReset = false))
 
-  val debugPort = Handle(debugBridge.logic.jtagBridge.io.ctrl.toIo)
+    val debugPort = Handle(debugBridge.logic.jtagBridge.io.ctrl.toIo).setName("debugPort")
+  }
 
   val dBusCoherent = BmbBridgeGenerator()
   val dBusNonCoherent = BmbBridgeGenerator()
@@ -80,12 +85,66 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
     interconnect.addConnection(
       cpu.dBus -> List(dBusCoherent.bmb)
     )
-    cpu.enableDebugBmb(
-      debugCd = debugCd.outputClockDomain,
-      resetCd = systemCd,
-      mapping = SizeMapping(cpuId*0x1000, 0x1000)
+
+    cpu.hardwareBreakpointCount.load(p.hardwareBreakpoints)
+    if(!p.privilegedDebug) {
+      cpu.enableDebugBmb(
+        debugCd = debugCd.outputClockDomain,
+        resetCd = systemCd,
+        mapping = SizeMapping(cpuId * 0x1000, 0x1000)
+      )
+      interconnect.addConnection(customDebug.debugBridge.bmb, cpu.debugBmb)
+    } else {
+      cpu.enableRiscvDebug(debugCd.outputClockDomain, systemCd)
+    }
+  }
+
+  val privilegedDebug = p.privilegedDebug generate new Area{
+    val jtagCd = ClockDomain.external("jtag", withReset = false)
+
+    val systemReset = Handle(Bool())
+    systemCd.relaxedReset(systemReset, ResetSensitivity.HIGH)
+
+    val p = DebugTransportModuleParameter(
+      addressWidth = 7,
+      version = 1,
+      idle = 7
     )
-    interconnect.addConnection(debugBridge.bmb, cpu.debugBmb)
+
+    val logic = hardFork(debugCd.outputClockDomain on new Area {
+      val XLEN = 32
+
+      val dm = DebugModule(
+        DebugModuleParameter(
+          version = p.version + 1,
+          harts = cpuCount,
+          progBufSize = 2,
+          datacount = XLEN / 32 + cores.exists(_.cpu.config.get.FLEN == 64).toInt,
+          hartsConfig = cores.map(c => DebugModuleCpuConfig(
+            xlen = XLEN,
+            flen = c.cpu.config.get.FLEN,
+            withFpuRegAccess = c.cpu.config.get.FLEN == 64
+          ))
+        )
+      )
+      systemReset := dm.io.ndmreset
+      for ((cpu, i) <- cores.zipWithIndex) {
+        val privBus = cpu.cpu.debugRiscv
+        privBus <> dm.io.harts(i)
+        privBus.dmToHart.removeAssignments() <-< dm.io.harts(i).dmToHart
+      }
+
+      val clintStop =  (cores.map(e => e.cpu.logic.cpu.service(classOf[CsrPlugin]).stoptime).andR)
+
+      val tunnel = DebugTransportModuleTunneled(
+        p = p,
+        jtagCd = jtagCd,
+        debugCd = ClockDomain.current
+      )
+      dm.io.ctrl <> tunnel.io.bus
+
+      val debugPort = Handle(tunnel.io.instruction.toIo).setName("debugPort")
+    })
   }
 }
 
@@ -157,9 +216,10 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
   }
 
   clint.cpuCount.load(cpuCount)
+  if(p.privilegedDebug) hardFork(clint.logic.io.stop := privilegedDebug.logic.clintStop)
 }
 
-
+//python3 -m litex_boards.targets.digilent_nexys_video --cpu-type=vexriscv_smp --with-privileged-debug --sys-clk-freq 50000000 --cpu-count 1  --build --load
 object VexRiscvSmpClusterGen {
   def vexRiscvConfig(hartId : Int,
                      ioRange : UInt => Bool = (x => x(31 downto 28) === 0xF),
