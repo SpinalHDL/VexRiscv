@@ -680,7 +680,8 @@ class IBusDBusCachedTightlyCoupledRam(mapping : SizeMapping, withIBus : Boolean 
           address = (dbus.address >> 2).resized,
           data    = dbus.write_data,
           enable  = dbus.enable,
-          write   = dbus.write_enable
+          write   = dbus.write_enable,
+          mask    = dbus.write_mask
         )
       }
       val i = withIBus generate new Area {
