@@ -9,7 +9,7 @@ import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
 /**
  * This an example of VexRiscv configuration which can run the official RISC-V debug.
  * You can for instance :
- * - generate this VexRiscv
+ * - sbt "runMain vexriscv.demo.GenFullWithOfficialRiscvDebug"
  * - cd src/test/cpp/regression
  * - make IBUS=CACHED IBUS_DATA_WIDTH=64 COMPRESSED=no DBUS=CACHED DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 LRSC=yes AMO=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes MUL=yes DIV=yes SUPERVISOR=yes CSR=yes RVF=yes RVD=yes DEBUG_PLUGIN=RISCV WITH_RISCV_REF=no DEBUG_PLUGIN_EXTERNAL=yes DEBUG_PLUGIN=no VEXRISCV_JTAG=yes
  *
@@ -122,9 +122,7 @@ object GenFullWithOfficialRiscvDebug extends App{
     )
   )
 
-  def cpu() = new VexRiscv(config){
-    println(config.getRegressionArgs().mkString(" "))
-  }
+  def cpu() = new VexRiscv(config)
 
   SpinalVerilog(cpu())
 }
