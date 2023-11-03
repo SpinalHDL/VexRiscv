@@ -1331,6 +1331,8 @@ init
 halt
 ```
 
+A full example can be found in GenFullWithOfficialRiscvDebug.scala
+
 #### YamlPlugin
 
 This plugin offers a service to other plugins to generate a useful Yaml file describing the CPU configuration. It contains, for instance, the sequence of instructions required
