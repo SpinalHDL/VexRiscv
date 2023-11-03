@@ -259,7 +259,12 @@ Also there is a few environnement variable that you can use to modulate the rand
 | VEXRISCV_REGRESSION_CONFIG_DEMW_RATE        | 0.0-1.0            | Chance to generate a config with writeback stage |            
 | VEXRISCV_REGRESSION_CONFIG_DEM_RATE         | 0.0-1.0            | Chance to generate a config with memory stage |            
 
+## Basic Verilator simulation
+
+To run basic simulation with stdout and no tracing, loading a binary directly is supported with the `RUN_HEX` variable of `src/test/cpp/regression/makefile`. This has a significant performance advantage over using GDB over OpenOCD with JTAG over TCP. VCD tracing is supported with the makefile variable `TRACE`.
+
 ## Interactive debug of the simulated CPU via GDB OpenOCD and Verilator
+
 To use this, you just need to use the same command as with running tests, but adding `DEBUG_PLUGIN_EXTERNAL=yes` in the make arguments.
 This works for the `GenFull` configuration, but not for `GenSmallest`, as this configuration has no debug module.
 
