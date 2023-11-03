@@ -11,7 +11,7 @@ import vexriscv.{VexRiscv, VexRiscvConfig, plugin}
  * You can for instance :
  * - sbt "runMain vexriscv.demo.GenFullWithOfficialRiscvDebug"
  * - cd src/test/cpp/regression
- * - make IBUS=CACHED IBUS_DATA_WIDTH=64 COMPRESSED=no DBUS=CACHED DBUS_LOAD_DATA_WIDTH=64 DBUS_STORE_DATA_WIDTH=64 LRSC=yes AMO=yes DBUS_EXCLUSIVE=yes DBUS_INVALIDATE=yes MUL=yes DIV=yes SUPERVISOR=yes CSR=yes RVF=yes RVD=yes DEBUG_PLUGIN=RISCV WITH_RISCV_REF=no DEBUG_PLUGIN_EXTERNAL=yes DEBUG_PLUGIN=no VEXRISCV_JTAG=yes
+ * - make IBUS=CACHED IBUS_DATA_WIDTH=32 COMPRESSED=no DBUS=CACHED DBUS_LOAD_DATA_WIDTH=32 DBUS_STORE_DATA_WIDTH=32 MUL=yes DIV=yes SUPERVISOR=no CSR=yes DEBUG_PLUGIN=RISCV WITH_RISCV_REF=no DEBUG_PLUGIN_EXTERNAL=yes DEBUG_PLUGIN=no VEXRISCV_JTAG=yes
  *
  * This will run a simulation of the CPU which wait for a tcp-jtag connection from openocd.
  * That con connection can be done via openocd :
