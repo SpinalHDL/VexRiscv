@@ -520,7 +520,7 @@ class MmuPmpDimension extends VexRiscvDimension("DBus") {
         override def testParam = "MMU=no PMP=yes"
 
         override def applyOn(config: VexRiscvConfig): Unit = {
-          config.plugins += new PmpPlugin(
+          config.plugins += new PmpPluginNapot(
             regions = 16,
             granularity = 32,
             ioRange = _ (31 downto 28) === 0xF
