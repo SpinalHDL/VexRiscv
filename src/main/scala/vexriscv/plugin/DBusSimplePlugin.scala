@@ -225,29 +225,30 @@ case class DBusSimpleBus(bigEndian : Boolean = false) extends Bundle with IMaste
     bus
   }
 
-  def toAhbLite3Master(avoidWriteToReadHazard : Boolean): AhbLite3Master = {
+  def toAhbLite3Master(avoidWriteToReadHazard : Boolean, withHalfRate : Boolean = true): AhbLite3Master = {
     val bus = AhbLite3Master(DBusSimpleBus.getAhbLite3Config())
-    bus.HADDR     := this.cmd.address
-    bus.HWRITE    := this.cmd.wr
-    bus.HSIZE     := B(this.cmd.size, 3 bits)
+    val cmdBuffer = this.cmd.pipelined(halfRate = withHalfRate)
+    bus.HADDR     := cmdBuffer.address
+    bus.HWRITE    := cmdBuffer.wr
+    bus.HSIZE     := B(cmdBuffer.size, 3 bits)
     bus.HBURST    := 0
     bus.HPROT     := "1111"
-    bus.HTRANS    := this.cmd.valid ## B"0"
+    bus.HTRANS    := cmdBuffer.valid ## B"0"
     bus.HMASTLOCK := False
-    bus.HWDATA    := RegNextWhen(this.cmd.data, bus.HREADY)
-    this.cmd.ready := bus.HREADY
+    bus.HWDATA    := RegNextWhen(cmdBuffer.data, bus.HREADY)
+    cmdBuffer.ready := bus.HREADY
 
-    val pending = RegInit(False) clearWhen(bus.HREADY) setWhen(this.cmd.fire && !this.cmd.wr)
+    val pending = RegInit(False) clearWhen(bus.HREADY) setWhen(cmdBuffer.fire && !cmdBuffer.wr)
     this.rsp.ready := bus.HREADY && pending
     this.rsp.data := bus.HRDATA
     this.rsp.error := bus.HRESP
 
     if(avoidWriteToReadHazard) {
       val writeDataPhase = RegNextWhen(bus.HTRANS === 2 && bus.HWRITE, bus.HREADY) init (False)
-      val potentialHazard = this.cmd.valid && !this.cmd.wr && writeDataPhase
+      val potentialHazard = cmdBuffer.valid && !cmdBuffer.wr && writeDataPhase
       when(potentialHazard) {
         bus.HTRANS := 0
-        this.cmd.ready := False
+        cmdBuffer.ready := False
       }
     }
     bus

@@ -82,7 +82,7 @@ public:
 		memset(serverAddr.sin_zero, '\0', sizeof serverAddr.sin_zero);
 
 		//---- Bind the address struct to the socket ----//
-		bind(serverSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
+		::bind(serverSocket, (struct sockaddr *) &serverAddr, sizeof(serverAddr));
 
 		//---- Listen on the socket, with 5 max connection requests queued ----//
 		listen(serverSocket,1);
