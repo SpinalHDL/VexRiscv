@@ -52,6 +52,7 @@ object VexRiscvUniverse{
   val CATCH_ALL = new VexRiscvUniverse
   val MMU = new VexRiscvUniverse
   val PMP = new VexRiscvUniverse
+  val PMPNAPOT = new VexRiscvUniverse
   val FORCE_MULDIV = new VexRiscvUniverse
   val SUPERVISOR = new VexRiscvUniverse
   val NO_WRITEBACK = new VexRiscvUniverse
@@ -522,6 +523,17 @@ class MmuPmpDimension extends VexRiscvDimension("DBus") {
         override def applyOn(config: VexRiscvConfig): Unit = {
           config.plugins += new PmpPlugin(
             regions = 16,
+            ioRange = _ (31 downto 28) === 0xF
+          )
+        }
+      }
+    } else if (universes.contains(VexRiscvUniverse.PMPNAPOT)) {
+      new VexRiscvPosition("WithPmpNapot") {
+        override def testParam = "MMU=no PMP=yes"
+
+        override def applyOn(config: VexRiscvConfig): Unit = {
+          config.plugins += new PmpPluginNapot(
+            regions = 16,
             granularity = 32,
             ioRange = _ (31 downto 28) === 0xF
           )
@@ -548,7 +560,7 @@ trait CatchAllPosition
 
 class CsrDimension(freertos : String, zephyr : String, linux : String) extends VexRiscvDimension("Csr") {
   override def randomPositionImpl(universes: Seq[ConfigUniverse], r: Random) = {
-    val pmp = universes.contains(VexRiscvUniverse.PMP)
+    val pmp = universes.contains(VexRiscvUniverse.PMP) || universes.contains(VexRiscvUniverse.PMPNAPOT)
     val catchAll = universes.contains(VexRiscvUniverse.CATCH_ALL)
     val supervisor = universes.contains(VexRiscvUniverse.SUPERVISOR)
     if(supervisor){
@@ -704,6 +716,7 @@ class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VE
   val demwRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEMW_RATE", "0.6").toDouble
   val demRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_DEM_RATE", "0.5").toDouble
   val stopOnError = sys.env.getOrElse("VEXRISCV_REGRESSION_STOP_ON_ERROR", "no")
+  val pmpNapotRate = sys.env.getOrElse("VEXRISCV_REGRESSION_CONFIG_PMP_NAPOT_RANGE", "0.5").toDouble
   val lock = new{}
 
 
@@ -808,7 +821,11 @@ class TestIndividualFeatures extends MultithreadedFunSuite(sys.env.getOrElse("VE
     } else if (secureRate > rand.nextDouble()) {
         universe += VexRiscvUniverse.CACHE_ALL
         universe += VexRiscvUniverse.CATCH_ALL
-        universe += VexRiscvUniverse.PMP
+        if (pmpNapotRate > rand.nextDouble()) {
+          universe += VexRiscvUniverse.PMP
+        } else {
+          universe += VexRiscvUniverse.PMPNAPOT
+        }
         if(demwRate < rand.nextDouble()){
           universe += VexRiscvUniverse.NO_WRITEBACK
         }

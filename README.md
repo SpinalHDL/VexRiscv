@@ -44,6 +44,7 @@
     - [StaticMemoryTranslatorPlugin](#staticmemorytranslatorplugin)
     - [MmuPlugin](#mmuplugin)
     - [PmpPlugin](#pmpplugin)
+      - [PmpPluginNapot](#pmppluginnapot)
     - [DebugPlugin](#debugplugin)
     - [EmbeddedRiscvJtag](#embeddedRiscvJtag)
     - [YamlPlugin](#yamlplugin)
@@ -1239,7 +1240,11 @@ fully associative TLB cache which is refilled automaticaly via a dbus access sha
 
 #### PmpPlugin
 
-This is a physical memory protection (PMP) plugin which conforms to the latest RISC-V privilege specification. PMP is configured by writing two special CSRs: `pmpcfg#` and `pmpaddr#`. The former contains the permissions and addressing modes for four protection regions, and the latter contains the encoded start address for a single region. Since the actual region bounds must be computed from the values written to these registers, writing them takes a few CPU cylces. This delay is necessary in order to centralize all of the decoding logic into a single component. Otherwise, it would have to be duplicated for each region, even though the decoding operation happens only when PMP is reprogrammed (e.g., on some context switches).
+This is a physical memory protection (PMP) plugin which conforms to the v1.12 RISC-V privilege specification, without ePMP (`Smepmp`) extension support. PMP is configured by writing two special CSRs: `pmpcfg#` and `pmpaddr#`. The former contains the permissions and addressing modes for four protection regions, and the latter contains the encoded start address for a single region. Since the actual region bounds must be computed from the values written to these registers, writing them takes a few CPU cylces. This delay is necessary in order to centralize all of the decoding logic into a single component. Otherwise, it would have to be duplicated for each region, even though the decoding operation happens only when PMP is reprogrammed (e.g., on some context switches).
+
+##### PmpPluginNapot
+
+The `PmpPluginNapot` is a specialized PMP implementation, providing only the `NAPOT` (naturally-aligned poser-of-2 regions) addressing mode. It requires fewer resources and has a less significant timing impact compared to the full `PmpPlugin`.
 
 #### DebugPlugin
 
