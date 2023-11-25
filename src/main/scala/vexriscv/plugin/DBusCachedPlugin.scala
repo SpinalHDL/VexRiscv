@@ -6,6 +6,7 @@ import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.Axi4
 import spinal.lib.bus.misc.SizeMapping
+import spinal.lib.misc.HexTools
 
 import scala.collection.mutable.ArrayBuffer
 
@@ -650,7 +651,12 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 }
 
 
-class IBusDBusCachedTightlyCoupledRam(mapping : SizeMapping, withIBus : Boolean = true, withDBus : Boolean = true) extends Plugin[VexRiscv]{
+class IBusDBusCachedTightlyCoupledRam(mapping : SizeMapping,
+                                      withIBus : Boolean = true,
+                                      withDBus : Boolean = true,
+                                      ramAsBlackbox : Boolean = true,
+                                      hexInit :   String = null,
+                                      ramOffset : Long = -1) extends Plugin[VexRiscv]{
   var dbus : TightlyCoupledDataBus = null
   var ibus : TightlyCoupledBus = null
 
@@ -674,7 +680,11 @@ class IBusDBusCachedTightlyCoupledRam(mapping : SizeMapping, withIBus : Boolean 
   override def build(pipeline: VexRiscv) = {
     val logic = pipeline plug new Area {
       val ram = Mem(Bits(32 bits), mapping.size.toInt/4)
-      ram.generateAsBlackBox()
+      if(ramAsBlackbox) ram.generateAsBlackBox()
+      if (hexInit != null) {
+        assert(ramOffset != -1)
+        initRam(ram, hexInit, ramOffset, allowOverflow = true)
+      }
       val d = withDBus generate new Area {
         dbus.read_data := ram.readWriteSync(
           address = (dbus.address >> 2).resized,
@@ -693,5 +703,21 @@ class IBusDBusCachedTightlyCoupledRam(mapping : SizeMapping, withIBus : Boolean 
         )
       }
     }
+  }
+
+  //Until new SpinalHDL release
+  def initRam[T <: Data](ram: Mem[T], onChipRamHexFile: String, hexOffset: BigInt, allowOverflow: Boolean = false): Unit = {
+    val wordSize = ram.wordType.getBitsWidth / 8
+    val initContent = Array.fill[BigInt](ram.wordCount)(0)
+    HexTools.readHexFile(onChipRamHexFile, 0, (address, data) => {
+      val addressWithoutOffset = (address - hexOffset).toLong
+      val addressWord = addressWithoutOffset / wordSize
+      if (addressWord < 0 || addressWord >= initContent.size) {
+        assert(allowOverflow)
+      } else {
+        initContent(addressWord.toInt) |= BigInt(data) << ((addressWithoutOffset.toInt % wordSize) * 8)
+      }
+    })
+    ram.initBigInt(initContent)
   }
 }
