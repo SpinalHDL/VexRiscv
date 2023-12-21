@@ -441,6 +441,69 @@ To run it :
 sbt "test:runMain vexriscv.MuraxSim"
 ```
 
+## Build all above with mill
+
+Mill is a simple tool to build Scala/Java, also fits in off-line environment very well.
+
+Github url is here: https://github.com/com-lihaoyi/mill
+
+Document is here: https://mill-build.com/mill/Intro_to_Mill.html
+
+Download executable mill: 
+
+```sh
+curl --fail -L -o mill https://github.com/com-lihaoyi/mill/releases/download/0.11.6/0.11.6-assembly
+chmod +x mill
+```
+Using mill to generate the corresponding RTL as a `VexRiscv.v` file, run the following commands in the root directory of this repository:
+
+```sh
+./mill VexRiscv.runMain vexriscv.demo.GenFull
+```
+or
+
+```sh
+./mill VexRiscv.runMain vexriscv.demo.GenSmallest
+```
+
+Using mill to run tests (need java, scala, verilator), do :
+
+```sh
+export VEXRISCV_REGRESSION_SEED=42
+export VEXRISCV_REGRESSION_TEST_ID=
+./mill VexRiscv.test.testOnly vexriscv.TestIndividualFeatures
+```
+
+Using mill to generate the Briey SoC Hardware:
+
+```sh
+./mill VexRiscv.runMain vexriscv.demo.Briey
+```
+
+Using mill to generate the Murax SoC Hardware:
+
+```sh
+# To generate the SoC without any content in the ram
+./mill VexRiscv.runMain vexriscv.demo.Murax
+
+# To generate the SoC with a demo program already in ram
+./mill VexRiscv.runMain vexriscv.demo.MuraxWithRamInit
+
+# This will generate the Murax RTL + run its testbench. You need Verilator 3.9xx installated.
+./mill VexRiscv.test.runMain vexriscv.MuraxSim
+```
+
+Mill's IDE supports:
+
+```sh
+# Build Server Protocol (BSP)
+./mill mill.bsp.BSP/install
+
+# IntelliJ IDEA Support
+./mill mill.idea.GenIdea/idea
+```
+
+
 ## Running Linux
 
 A default configuration is located in `src/main/scala/vexriscv/demo/Linux.scala`.
