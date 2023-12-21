@@ -48,6 +48,8 @@ obj_dir
 *.bin
 explor
 
+mill
+
 simWorkspace/
 tmp/
 /archive.tar.gz
