@@ -216,6 +216,9 @@ object Riscv{
     def MCYCLEH   = 0xB80 // MRW Upper 32 bits of mcycle, RV32I only.
     def MINSTRETH = 0xB82 // MRW Upper 32 bits of minstret, RV32I only.
     val MCOUNTEREN  = 0x306
+    val MCOUNTER  = 0xB03 // MRW Base address for mhpmcounterX.
+    val MCOUNTERH = 0xB83 // MRW Base address for mhpmcounterXh, RV32I only.
+    val MEVENT    = 0x323 // MRW Base address for mhpmeventX.
 
     val SSTATUS     = 0x100
     val SIE         = 0x104
@@ -234,6 +237,8 @@ object Riscv{
     def UTIMEH   = 0xC81
     def UINSTRET  = 0xC02 // UR Machine instructions-retired counter.
     def UINSTRETH = 0xC82 // UR Upper 32 bits of minstret, RV32I only.
+    val UCOUNTER  = 0xC03 // UR Base address for hpmcounter.
+    val UCOUNTERH = 0xC83 // UR Base address for hpmcounterXh, RV32I only.
 
     val FFLAGS = 0x1
     val FRM = 0x2
