@@ -117,12 +117,8 @@ object VexRiscvAvalonWithIntegratedJtag{
               mscratchGen    = false,
               mcauseAccess   = CsrAccess.READ_ONLY,
               mbadaddrAccess = CsrAccess.READ_ONLY,
-              mcycleAccess   = CsrAccess.NONE,
-              minstretAccess = CsrAccess.NONE,
               ecallGen       = false,
-              wfiGenAsWait         = false,
-              ucycleAccess   = CsrAccess.NONE,
-              uinstretAccess = CsrAccess.NONE
+              wfiGenAsWait         = false
             )
           ),
           new YamlPlugin("cpu0.yaml")
