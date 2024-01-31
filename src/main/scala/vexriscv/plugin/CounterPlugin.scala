@@ -2,7 +2,7 @@ package vexriscv.plugin
 
 import spinal.core._
 
-import vexriscv.VexRiscv
+import vexriscv._
 import vexriscv.Riscv.CSR._
 
 import scala.collection.mutable._
@@ -20,6 +20,8 @@ case class CounterPluginConfig(
       minstretAccess        : CsrAccess = CsrAccess.READ_WRITE,
       uinstretAccess        : CsrAccess = CsrAccess.READ_ONLY,
 
+      utimeAccess           : CsrAccess = CsrAccess.READ_ONLY,
+
       mcounterenAccess      : CsrAccess = CsrAccess.READ_WRITE,
       scounterenAccess      : CsrAccess = CsrAccess.READ_WRITE,
       
@@ -31,6 +33,12 @@ case class CounterPluginConfig(
       mcounterinhibitAccess : CsrAccess = CsrAccess.READ_WRITE
     ) {
   assert(!ucycleAccess.canWrite)
+}
+
+object Priv{
+  val M = 3
+  val S = 1
+  val U = 0
 }
 
 class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with CounterService {
@@ -51,15 +59,38 @@ class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with 
 
   val eventType : Map[BigInt, Bool] = new HashMap()
 
-  implicit class CsrAccessPimper(csrAccess : CsrAccess){
+  var time : UInt = null
+
+  implicit class PrivilegeHelper(p : PrivilegeService){
+    def canMachine() : Bool = p.isMachine()
+    def canSupervisor() : Bool = p.isMachine() || p.isSupervisor()
+  }
+
+  implicit class CsrAccessHelper(csrAccess : CsrAccess){
     import CsrAccess._
-    def apply(csrService : CsrInterface, csrAddress : Int, thats : (Int, Data)*) : Unit = {
-      if(csrAccess == `WRITE_ONLY` || csrAccess ==  `READ_WRITE`) for(that <- thats) csrService.w(csrAddress,that._1, that._2)
-      if(csrAccess == `READ_ONLY`  || csrAccess ==  `READ_WRITE`) for(that <- thats) csrService.r(csrAddress,that._1, that._2)
-    }
+    import Priv._
     def apply(csrService : CsrInterface, csrAddress : Int, that : Data) : Unit = {
       if(csrAccess == `WRITE_ONLY` || csrAccess ==  `READ_WRITE`) csrService.w(csrAddress, 0, that)
       if(csrAccess == `READ_ONLY`  || csrAccess ==  `READ_WRITE`) csrService.r(csrAddress, 0, that)
+    }
+    def apply(
+      csrSrv : CsrInterface,
+      prvSrv : PrivilegeService,
+      csrAddress : Int,
+      that : Data,
+      privAllows : (Int, Bool)*
+    ) : Unit = {
+      apply(csrSrv, csrAddress, that)
+      if(csrAccess != CsrAccess.NONE) csrSrv.during(csrAddress){
+        for (ii <- privAllows) {
+          if (ii._1 == M)
+            when (~prvSrv.canMachine() || ~ii._2) { csrSrv.forceFailCsr() }
+          if (ii._1 == S && prvSrv.hasSupervisor())
+            when (~prvSrv.canSupervisor() || ~ii._2) { csrSrv.forceFailCsr() }
+          if (prvSrv.hasUser())
+            when (~ii._2) { csrSrv.forceFailCsr() }
+        }
+      }
     }
   }
 
@@ -71,29 +102,80 @@ class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with 
     eventType(eventId)
   }
 
+  override def setup(pipeline : VexRiscv) : Unit = {
+    import pipeline._
+    import pipeline.config._
+
+    if (utimeAccess != CsrAccess.NONE) time = in UInt(64 bits) setName("utime")
+  }
+
   override def build(pipeline : VexRiscv) : Unit = {
     import pipeline._
     import pipeline.config._
 
     pipeline plug new Area{
-      val csrService = pipeline.service(classOf[CsrInterface])
+      val csrSrv = pipeline.service(classOf[CsrInterface])
+      val dbgSrv = pipeline.service(classOf[DebugService])
+      val prvSrv = pipeline.service(classOf[PrivilegeService])
 
-      // cycle
+      val dbgCtrEn = ~(dbgSrv.inDebugMode() && dbgSrv.debugState().dcsr.stopcount)
+
       val cycle = Reg(UInt(64 bits)) init(0)
-      cycle := cycle + 1
-      ucycleAccess(csrService, UCYCLE, cycle(31 downto 0))
-      ucycleAccess(csrService, UCYCLEH, cycle(63 downto 32))
-      mcycleAccess(csrService, MCYCLE, cycle(31 downto 0))
-      mcycleAccess(csrService, MCYCLEH, cycle(63 downto 32))
-      // instret
+      cycle := cycle + U(dbgCtrEn)
       val instret = Reg(UInt(64 bits)) init(0)
       when(pipeline.stages.last.arbitration.isFiring) {
-        instret := instret + 1
+        instret := instret + U(dbgCtrEn)
       }
-      uinstretAccess(csrService, UINSTRET, instret(31 downto 0))
-      uinstretAccess(csrService, UINSTRETH, instret(63 downto 32))
-      minstretAccess(csrService, MINSTRET, instret(31 downto 0))
-      minstretAccess(csrService, MINSTRETH, instret(63 downto 32))
+      
+      val menable = RegInit(Bits(3 + NumOfCounters bits).getAllTrue)
+      val senable = RegInit(Bits(3 + NumOfCounters bits).getAllTrue)
+      
+      val expose = new Area {
+        import Priv._
+        // enable
+        mcounterenAccess(csrSrv, prvSrv, MCOUNTEREN, menable.resize(32), S -> False, U -> False)
+        scounterenAccess(csrSrv, prvSrv, SCOUNTEREN, senable.resize(32), U -> False)
+
+        // fixed counters
+        ucycleAccess(csrSrv, prvSrv, UCYCLE,  cycle(31 downto 0),
+          S -> menable(0),
+          U -> (if (prvSrv.hasSupervisor()) senable(0) else True),
+          U -> menable(0)
+        )
+        ucycleAccess(csrSrv, prvSrv, UCYCLEH, cycle(63 downto 32),
+          S -> menable(0),
+          U -> (if (prvSrv.hasSupervisor()) senable(0) else True),
+          U -> menable(0)
+        )
+        
+        mcycleAccess(csrSrv, prvSrv, MCYCLE,  cycle(31 downto 0),  S -> False, U -> False)
+        mcycleAccess(csrSrv, prvSrv, MCYCLEH, cycle(63 downto 32), S -> False, U -> False)
+
+        utimeAccess(csrSrv, prvSrv, UTIME, time(31 downto 0),
+          S -> menable(1),
+          U -> (if (prvSrv.hasSupervisor()) senable(1) else True),
+          U -> menable(1)
+        )
+        utimeAccess(csrSrv, prvSrv, UTIMEH, time(63 downto 32),
+          S -> menable(1),
+          U -> (if (prvSrv.hasSupervisor()) senable(1) else True),
+          U -> menable(1)
+        )
+        
+        uinstretAccess(csrSrv, prvSrv, UINSTRET, instret(31 downto 0),
+          S -> menable(2),
+          U -> (if (prvSrv.hasSupervisor()) senable(2) else True),
+          U -> menable(2)
+        )
+        uinstretAccess(csrSrv, prvSrv, UINSTRETH, instret(63 downto 32),
+          S -> menable(2),
+          U -> (if (prvSrv.hasSupervisor()) senable(2) else True),
+          U -> menable(2)
+        )
+
+        minstretAccess(csrSrv, prvSrv, MINSTRET,  instret(31 downto 0),  S -> False, U -> False)
+        minstretAccess(csrSrv, prvSrv, MINSTRETH, instret(63 downto 32), S -> False, U -> False)
+      }
 
       // TODO counters
     }

@@ -65,7 +65,6 @@ case class CsrPluginConfig(
                             scauseAccess        : CsrAccess = CsrAccess.NONE,
                             sbadaddrAccess      : CsrAccess = CsrAccess.NONE,
                             satpAccess          : CsrAccess = CsrAccess.NONE,
-                            utimeAccess         :CsrAccess = CsrAccess.NONE,
                             medelegAccess       : CsrAccess = CsrAccess.NONE,
                             midelegAccess       : CsrAccess = CsrAccess.NONE,
                             withExternalMhartid : Boolean = false,
@@ -452,7 +451,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var thirdPartyWake : Bool = null
   var inWfi : Bool = null
   var externalMhartId : UInt = null
-  var utime : UInt = null
   var stoptime : Bool = null
   var xretAwayFromMachine : Bool = null
 
@@ -622,7 +620,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     pipeline.update(MPP, UInt(2 bits))
 
     if(withExternalMhartid) externalMhartId = in UInt(mhartidWidth bits)
-    if(utimeAccess != CsrAccess.NONE) utime = in UInt(64 bits) setName("utime")
 
     if(supervisorGen) {
       decoderService.addDefault(RESCHEDULE_NEXT, False)
@@ -1063,12 +1060,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       if(supervisorGen) {
         for((id, enable) <- medeleg.mapping) medelegAccess(CSR.MEDELEG, id -> enable)
         midelegAccess(CSR.MIDELEG, 9 -> mideleg.SE, 5 -> mideleg.ST, 1 -> mideleg.SS)
-      }
-
-      //User CSR
-      if(utimeAccess != CsrAccess.NONE) {
-        utimeAccess(CSR.UTIME,  utime(31 downto 0))
-        utimeAccess(CSR.UTIMEH, utime(63 downto 32))
       }
 
       pipeline(MPP) := mstatus.MPP

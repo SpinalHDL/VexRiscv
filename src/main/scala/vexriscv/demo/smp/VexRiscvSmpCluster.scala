@@ -150,7 +150,7 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
     plic.addTarget(core.cpu.externalSupervisorInterrupt)
     List(clint.logic, core.cpu.logic).produce {
       for (plugin <- core.cpu.config.plugins) plugin match {
-        case plugin: CsrPlugin if plugin.utime != null => plugin.utime := clint.logic.io.time
+        case plugin: CounterPlugin if plugin.time != null => plugin.time := clint.logic.io.time
         case _ =>
       }
     }
@@ -204,7 +204,7 @@ object VexRiscvSmpClusterGen {
 
     val misa = Riscv.misaToInt(s"ima${if(withFloat) "f" else ""}${if(withDouble) "d" else ""}${if(rvc) "c" else ""}${if(withSupervisor) "s" else ""}")
     val csrConfig = if(withSupervisor){
-      var c = CsrPluginConfig.openSbi(mhartid = hartId, misa = misa).copy(utimeAccess = CsrAccess.READ_ONLY, withPrivilegedDebug = privilegedDebug)
+      var c = CsrPluginConfig.openSbi(mhartid = hartId, misa = misa).copy(withPrivilegedDebug = privilegedDebug)
       if(csrFull){
        c = c.copy(
          mcauseAccess   = CsrAccess.READ_WRITE,
