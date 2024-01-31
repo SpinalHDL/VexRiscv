@@ -407,6 +407,7 @@ trait DebugService{
     }
   }
 
+  def hasDebugMode() : Boolean
   def inDebugMode() : Bool
   def debugState() : DebugState
 }
@@ -464,8 +465,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   override def isContextSwitching = contextSwitching
 
-  override def inDebugMode(): Bool = if(withPrivilegedDebug) debugMode else False
-  override def debugState(): DebugState = debugStateB
+  override def hasDebugMode(): Boolean = withPrivilegedDebug
+  override def inDebugMode(): Bool = if(hasDebugMode) debugMode else False
+  override def debugState(): DebugState = {
+    val state = new DebugState(xlen)
+    state := debugStateB
+    state
+  }
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
     val NONE, XRET = newElement()
@@ -640,6 +646,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def isUser() : Bool = privilege === 0
   override def isSupervisor(): Bool = privilege === 1
   override def isMachine(): Bool = privilege === 3
+  override def hasUser() : Boolean = userGen
+  override def hasSupervisor() : Boolean = supervisorGen
   override def forceMachine(): Unit = forceMachineWire := True
 
   override def build(pipeline: VexRiscv): Unit = {
@@ -939,19 +947,35 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
     // make debug state accessible
     debugStateB = new DebugState(xlen)
-    debugStateB.dcsr.xdebugver  := debug.dcsr.xdebugver
-    debugStateB.dcsr.ebreakm    := debug.dcsr.ebreakm
-    debugStateB.dcsr.ebreaks    := debug.dcsr.ebreaks
-    debugStateB.dcsr.ebreaku    := debug.dcsr.ebreaku
-    debugStateB.dcsr.stepie     := debug.dcsr.stepie
-    debugStateB.dcsr.stopcount  := debug.dcsr.stopcount
-    debugStateB.dcsr.stoptime   := debug.dcsr.stoptime
-    debugStateB.dcsr.cause      := debug.dcsr.cause
-    debugStateB.dcsr.mprven     := debug.dcsr.mprven
-    debugStateB.dcsr.nmip       := debug.dcsr.nmip
-    debugStateB.dcsr.step       := debug.dcsr.step
-    debugStateB.dcsr.prv        := debug.dcsr.prv
-    debugStateB.dpc             := debug.dpc
+    if (hasDebugMode()) {
+      debugStateB.dcsr.xdebugver  := debug.dcsr.xdebugver
+      debugStateB.dcsr.ebreakm    := debug.dcsr.ebreakm
+      debugStateB.dcsr.ebreaks    := debug.dcsr.ebreaks
+      debugStateB.dcsr.ebreaku    := debug.dcsr.ebreaku
+      debugStateB.dcsr.stepie     := debug.dcsr.stepie
+      debugStateB.dcsr.stopcount  := debug.dcsr.stopcount
+      debugStateB.dcsr.stoptime   := debug.dcsr.stoptime
+      debugStateB.dcsr.cause      := debug.dcsr.cause
+      debugStateB.dcsr.mprven     := debug.dcsr.mprven
+      debugStateB.dcsr.nmip       := debug.dcsr.nmip
+      debugStateB.dcsr.step       := debug.dcsr.step
+      debugStateB.dcsr.prv        := debug.dcsr.prv
+      debugStateB.dpc             := debug.dpc
+    } else {
+      debugStateB.dcsr.xdebugver  := 0
+      debugStateB.dcsr.ebreakm    := False
+      debugStateB.dcsr.ebreaks    := False
+      debugStateB.dcsr.ebreaku    := False
+      debugStateB.dcsr.stepie     := False
+      debugStateB.dcsr.stopcount  := False
+      debugStateB.dcsr.stoptime   := False
+      debugStateB.dcsr.cause      := 0
+      debugStateB.dcsr.mprven     := False
+      debugStateB.dcsr.nmip       := False
+      debugStateB.dcsr.step       := False
+      debugStateB.dcsr.prv        := 0
+      debugStateB.dpc             := 0
+    }
     
     def guardedWrite(csrId : Int, bitRange: Range, allowed : Seq[Int], target : Bits) = {
       onWrite(csrId){
