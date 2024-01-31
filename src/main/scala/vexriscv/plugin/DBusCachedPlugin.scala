@@ -651,12 +651,12 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 }
 
 
-class IBusDBusCachedTightlyCoupledRam(mapping : SizeMapping,
-                                      withIBus : Boolean = true,
-                                      withDBus : Boolean = true,
-                                      ramAsBlackbox : Boolean = true,
-                                      hexInit :   String = null,
-                                      ramOffset : Long = -1) extends Plugin[VexRiscv]{
+class IBusDBusCachedTightlyCoupledRam(var mapping : SizeMapping,
+                                      var withIBus : Boolean = true,
+                                      var withDBus : Boolean = true,
+                                      var ramAsBlackbox : Boolean = true,
+                                      var hexInit :   String = null,
+                                      var ramOffset : Long = -1) extends Plugin[VexRiscv]{
   var dbus : TightlyCoupledDataBus = null
   var ibus : TightlyCoupledBus = null
 
