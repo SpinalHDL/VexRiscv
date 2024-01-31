@@ -12,25 +12,25 @@ trait CounterService{
 }
 
 case class CounterPluginConfig(
-      NumOfCounters         : Byte = 29,
+      NumOfCounters       : Byte = 29,
       
-      mcycleAccess          : CsrAccess = CsrAccess.READ_WRITE,
-      ucycleAccess          : CsrAccess = CsrAccess.READ_ONLY,
+      mcycleAccess        : CsrAccess = CsrAccess.READ_WRITE,
+      ucycleAccess        : CsrAccess = CsrAccess.READ_ONLY,
       
-      minstretAccess        : CsrAccess = CsrAccess.READ_WRITE,
-      uinstretAccess        : CsrAccess = CsrAccess.READ_ONLY,
+      minstretAccess      : CsrAccess = CsrAccess.READ_WRITE,
+      uinstretAccess      : CsrAccess = CsrAccess.READ_ONLY,
 
-      utimeAccess           : CsrAccess = CsrAccess.READ_ONLY,
+      utimeAccess         : CsrAccess = CsrAccess.READ_ONLY,
 
-      mcounterenAccess      : CsrAccess = CsrAccess.READ_WRITE,
-      scounterenAccess      : CsrAccess = CsrAccess.READ_WRITE,
+      mcounterenAccess    : CsrAccess = CsrAccess.READ_WRITE,
+      scounterenAccess    : CsrAccess = CsrAccess.READ_WRITE,
       
-      mcounterAccess        : CsrAccess = CsrAccess.READ_WRITE,
-      ucounterAccess        : CsrAccess = CsrAccess.READ_ONLY,
+      mcounterAccess      : CsrAccess = CsrAccess.READ_WRITE,
+      ucounterAccess      : CsrAccess = CsrAccess.READ_ONLY,
       
       // management
-      meventAccess          : CsrAccess = CsrAccess.READ_WRITE,
-      mcounterinhibitAccess : CsrAccess = CsrAccess.READ_WRITE
+      meventAccess        : CsrAccess = CsrAccess.READ_WRITE,
+      mcountinhibitAccess : CsrAccess = CsrAccess.READ_WRITE
     ) {
   assert(!ucycleAccess.canWrite)
 }
@@ -96,7 +96,7 @@ class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with 
 
   override def getCondition(eventId : BigInt) : Bool = {
     if (!eventType.contains(eventId)) {
-      eventType(eventId) = new Bool()
+      eventType(eventId) = Bool
     }
 
     eventType(eventId)
@@ -120,21 +120,65 @@ class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with 
 
       val dbgCtrEn = ~(dbgSrv.inDebugMode() && dbgSrv.debugState().dcsr.stopcount)
 
-      val cycle = Reg(UInt(64 bits)) init(0)
-      cycle := cycle + U(dbgCtrEn)
-      val instret = Reg(UInt(64 bits)) init(0)
-      when(pipeline.stages.last.arbitration.isFiring) {
-        instret := instret + U(dbgCtrEn)
-      }
-      
       val menable = RegInit(Bits(3 + NumOfCounters bits).getAllTrue)
       val senable = RegInit(Bits(3 + NumOfCounters bits).getAllTrue)
+      val inhibit = Reg(Bits(NumOfCounters bits)) init(0)
+      val inhibitCY = RegInit(False)
+      val inhibitIR = RegInit(False)
+      
+      val cycle = Reg(UInt(64 bits)) init(0)
+      cycle := cycle + U(dbgCtrEn && ~inhibitCY)
+      val instret = Reg(UInt(64 bits)) init(0)
+      when(pipeline.stages.last.arbitration.isFiring) {
+        instret := instret + U(dbgCtrEn && ~inhibitIR)
+      }
+
+      val counter = Array.fill(NumOfCounters){Reg(UInt(64 bits)) init(0)}
+      val events = Array.fill(NumOfCounters){Reg(UInt(xlen bits)) init(0)}
+      
+      var customCounters = new Area {
+        val increment = Array.fill(NumOfCounters){Bool}
+
+        for (ii <- 0 until NumOfCounters) {
+          counter(ii) := counter(ii) + U(dbgCtrEn && ~inhibit(ii) && increment(ii))
+
+          for (event <- eventType) {
+            when (event._1 =/= U(0, xlen bits) && event._1 === events(ii)) {
+              increment(ii) := event._2
+            } otherwise {
+              increment(ii) := False
+            }
+          }
+        }
+      }
       
       val expose = new Area {
         import Priv._
+        // inhibit
+        csrSrv.during(MCOUNTINHIBIT){ when (~prvSrv.isMachine()) {csrSrv.forceFailCsr()} }
+        csrSrv.rw(MCOUNTINHIBIT, 0 -> inhibitCY, 2 -> inhibitIR, 3 -> inhibit)
+
         // enable
         mcounterenAccess(csrSrv, prvSrv, MCOUNTEREN, menable.resize(32), S -> False, U -> False)
         scounterenAccess(csrSrv, prvSrv, SCOUNTEREN, senable.resize(32), U -> False)
+
+        // custom counters
+        for (ii <- 0 until NumOfCounters) {
+          ucounterAccess(csrSrv, prvSrv, UCOUNTER + ii, counter(ii)(31 downto 0),
+            S -> menable(3 + ii),
+            U -> (if (prvSrv.hasSupervisor()) senable(3 + ii) else True),
+            U -> menable(3 + ii)
+          )
+          ucounterAccess(csrSrv, prvSrv, UCOUNTERH + ii, counter(ii)(63 downto 32),
+            S -> menable(3 + ii),
+            U -> (if (prvSrv.hasSupervisor()) senable(3 + ii) else True),
+            U -> menable(3 + ii)
+          )
+          
+          mcounterAccess(csrSrv, prvSrv, MCOUNTER + ii, counter(ii)(31 downto 0), S -> False, U -> False)
+          mcounterAccess(csrSrv, prvSrv, MCOUNTERH + ii, counter(ii)(63 downto 31), S -> False, U -> False)
+          meventAccess(csrSrv, prvSrv, MCOUNTER + ii, events(ii), S -> False, U -> False)
+        }
 
         // fixed counters
         ucycleAccess(csrSrv, prvSrv, UCYCLE,  cycle(31 downto 0),
@@ -176,8 +220,6 @@ class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with 
         minstretAccess(csrSrv, prvSrv, MINSTRET,  instret(31 downto 0),  S -> False, U -> False)
         minstretAccess(csrSrv, prvSrv, MINSTRETH, instret(63 downto 32), S -> False, U -> False)
       }
-
-      // TODO counters
     }
   }
 }

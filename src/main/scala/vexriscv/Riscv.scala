@@ -218,6 +218,7 @@ object Riscv{
     val MCOUNTEREN  = 0x306
     val MCOUNTER  = 0xB03 // MRW Base address for mhpmcounterX.
     val MCOUNTERH = 0xB83 // MRW Base address for mhpmcounterXh, RV32I only.
+    val MCOUNTINHIBIT = 0x320
     val MEVENT    = 0x323 // MRW Base address for mhpmeventX.
 
     val SSTATUS     = 0x100
