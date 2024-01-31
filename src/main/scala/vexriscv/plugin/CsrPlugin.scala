@@ -51,10 +51,6 @@ case class CsrPluginConfig(
                             mscratchGen         : Boolean,
                             mcauseAccess        : CsrAccess,
                             mbadaddrAccess      : CsrAccess,
-                            mcycleAccess        : CsrAccess,
-                            minstretAccess      : CsrAccess,
-                            ucycleAccess        : CsrAccess,
-                            uinstretAccess      : CsrAccess = CsrAccess.NONE,
                             wfiGenAsWait        : Boolean,
                             ecallGen            : Boolean,
                             xtvecModeGen        : Boolean = false,
@@ -68,8 +64,6 @@ case class CsrPluginConfig(
                             sepcAccess          : CsrAccess = CsrAccess.NONE,
                             scauseAccess        : CsrAccess = CsrAccess.NONE,
                             sbadaddrAccess      : CsrAccess = CsrAccess.NONE,
-                            scycleAccess        : CsrAccess = CsrAccess.NONE,
-                            sinstretAccess      : CsrAccess = CsrAccess.NONE,
                             satpAccess          : CsrAccess = CsrAccess.NONE,
                             utimeAccess         :CsrAccess = CsrAccess.NONE,
                             medelegAccess       : CsrAccess = CsrAccess.NONE,
@@ -85,7 +79,6 @@ case class CsrPluginConfig(
                             var withPrivilegedDebug : Boolean = false, //For the official RISC-V debug spec implementation
                             var debugTriggers       : Int     = 2
                           ){
-  assert(!ucycleAccess.canWrite)
   def privilegeGen = userGen || supervisorGen || withPrivilegedDebug
   def noException = this.copy(ecallGen = false, ebreakGen = false, catchIllegalAccess = false)
   def noExceptionButEcall = this.copy(ecallGen = true, ebreakGen = false, catchIllegalAccess = false)
@@ -111,9 +104,6 @@ object CsrPluginConfig{
     mscratchGen         = true,
     mcauseAccess        = CsrAccess.READ_ONLY,
     mbadaddrAccess      = CsrAccess.READ_ONLY,
-    mcycleAccess        = CsrAccess.NONE,
-    minstretAccess      = CsrAccess.NONE,
-    ucycleAccess        = CsrAccess.NONE,
     wfiGenAsWait        = true,
     ecallGen            = true,
     xtvecModeGen        = false,
@@ -127,8 +117,6 @@ object CsrPluginConfig{
     sepcAccess          = CsrAccess.READ_WRITE,
     scauseAccess        = CsrAccess.READ_WRITE,
     sbadaddrAccess      = CsrAccess.READ_WRITE,
-    scycleAccess        = CsrAccess.NONE,
-    sinstretAccess      = CsrAccess.NONE,
     satpAccess          = CsrAccess.NONE,
     medelegAccess       = CsrAccess.READ_WRITE,  //Could have been WRITE_ONLY :(
     midelegAccess       = CsrAccess.READ_WRITE,  //Could have been WRITE_ONLY :(
@@ -150,10 +138,6 @@ object CsrPluginConfig{
     mscratchGen         = true,
     mcauseAccess        = CsrAccess.READ_ONLY,
     mbadaddrAccess      = CsrAccess.READ_ONLY,
-    mcycleAccess        = CsrAccess.NONE,
-    minstretAccess      = CsrAccess.NONE,
-    ucycleAccess        = CsrAccess.NONE,
-    uinstretAccess      = CsrAccess.NONE,
     wfiGenAsWait        = true,
     ecallGen            = true,
     xtvecModeGen        = false,
@@ -167,8 +151,6 @@ object CsrPluginConfig{
     sepcAccess          = CsrAccess.READ_WRITE,
     scauseAccess        = CsrAccess.READ_WRITE,
     sbadaddrAccess      = CsrAccess.READ_WRITE,
-    scycleAccess        = CsrAccess.NONE,
-    sinstretAccess      = CsrAccess.NONE,
     satpAccess          = CsrAccess.NONE, //Implemented into the MMU plugin
     medelegAccess       = CsrAccess.WRITE_ONLY,
     midelegAccess       = CsrAccess.WRITE_ONLY,
@@ -191,10 +173,6 @@ object CsrPluginConfig{
     mscratchGen         = true,
     mcauseAccess        = CsrAccess.READ_WRITE,
     mbadaddrAccess      = CsrAccess.READ_WRITE,
-    mcycleAccess        = CsrAccess.READ_WRITE,
-    minstretAccess      = CsrAccess.READ_WRITE,
-    ucycleAccess        = CsrAccess.READ_ONLY,
-    uinstretAccess      = CsrAccess.READ_ONLY,
     wfiGenAsWait        = true,
     ecallGen            = true,
     xtvecModeGen        = false,
@@ -208,8 +186,6 @@ object CsrPluginConfig{
     sepcAccess          = CsrAccess.READ_WRITE,
     scauseAccess        = CsrAccess.READ_WRITE,
     sbadaddrAccess      = CsrAccess.READ_WRITE,
-    scycleAccess        = CsrAccess.READ_WRITE,
-    sinstretAccess      = CsrAccess.READ_WRITE,
     satpAccess          = CsrAccess.NONE, //Implemented into the MMU plugin
     medelegAccess       = CsrAccess.READ_WRITE,
     midelegAccess       = CsrAccess.READ_WRITE,
@@ -231,12 +207,8 @@ object CsrPluginConfig{
     mscratchGen        = true,
     mcauseAccess       = CsrAccess.READ_WRITE,
     mbadaddrAccess     = CsrAccess.READ_WRITE,
-    mcycleAccess       = CsrAccess.READ_WRITE,
-    minstretAccess     = CsrAccess.READ_WRITE,
     ecallGen           = true,
-    wfiGenAsWait       = true,
-    ucycleAccess       = CsrAccess.READ_ONLY,
-    uinstretAccess     = CsrAccess.READ_ONLY
+    wfiGenAsWait       = true
   )
 
   def all2(mtvecInit : BigInt) : CsrPluginConfig = CsrPluginConfig(
@@ -253,20 +225,14 @@ object CsrPluginConfig{
     mscratchGen    = true,
     mcauseAccess   = CsrAccess.READ_WRITE,
     mbadaddrAccess = CsrAccess.READ_WRITE,
-    mcycleAccess   = CsrAccess.READ_WRITE,
-    minstretAccess = CsrAccess.READ_WRITE,
     ecallGen       = true,
     wfiGenAsWait         = true,
-    ucycleAccess   = CsrAccess.READ_ONLY,
-    uinstretAccess = CsrAccess.READ_ONLY,
     supervisorGen  = true,
     sscratchGen    = true,
     stvecAccess    = CsrAccess.READ_WRITE,
     sepcAccess     = CsrAccess.READ_WRITE,
     scauseAccess   = CsrAccess.READ_WRITE,
     sbadaddrAccess = CsrAccess.READ_WRITE,
-    scycleAccess   = CsrAccess.READ_WRITE,
-    sinstretAccess = CsrAccess.READ_WRITE,
     satpAccess     = CsrAccess.READ_WRITE,
     medelegAccess = CsrAccess.READ_WRITE,
     midelegAccess = CsrAccess.READ_WRITE
@@ -286,12 +252,8 @@ object CsrPluginConfig{
     mscratchGen    = false,
     mcauseAccess   = CsrAccess.READ_ONLY,
     mbadaddrAccess = CsrAccess.READ_ONLY,
-    mcycleAccess   = CsrAccess.NONE,
-    minstretAccess = CsrAccess.NONE,
     ecallGen       = false,
-    wfiGenAsWait         = false,
-    ucycleAccess   = CsrAccess.NONE,
-    uinstretAccess = CsrAccess.NONE
+    wfiGenAsWait         = false
   )
 
   def smallest(mtvecInit : BigInt)  = CsrPluginConfig(
@@ -308,12 +270,8 @@ object CsrPluginConfig{
     mscratchGen    = false,
     mcauseAccess   = CsrAccess.READ_ONLY,
     mbadaddrAccess = CsrAccess.NONE,
-    mcycleAccess   = CsrAccess.NONE,
-    minstretAccess = CsrAccess.NONE,
     ecallGen       = false,
-    wfiGenAsWait         = false,
-    ucycleAccess   = CsrAccess.NONE,
-    uinstretAccess = CsrAccess.NONE
+    wfiGenAsWait         = false
   )
 
   def secure(mtvecInit : BigInt) = CsrPluginConfig(
@@ -330,10 +288,6 @@ object CsrPluginConfig{
     mscratchGen         = true,
     mcauseAccess        = CsrAccess.READ_WRITE,
     mbadaddrAccess      = CsrAccess.READ_WRITE,
-    mcycleAccess        = CsrAccess.READ_WRITE,
-    minstretAccess      = CsrAccess.READ_WRITE,
-    ucycleAccess        = CsrAccess.READ_ONLY,
-    uinstretAccess      = CsrAccess.READ_ONLY,
     wfiGenAsWait        = true,
     ecallGen            = true,
     userGen             = true,
@@ -433,7 +387,6 @@ trait CsrInterface{
   def writeData() : Bits //Return the 32 bits value that the CsrPlugin want to write in the CSR (depend on readData combinatorialy)
   def inDebugMode() : Bool
 }
-
 
 trait IContextSwitching{
   def isContextSwitching : Bool
@@ -998,9 +951,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val exceptionCode = Reg(UInt(trapCodeWidth bits))
       }
       val mtval = Reg(UInt(xlen bits))
-      val mcycle   = Reg(UInt(64 bits)) init(0)
-      val minstret = Reg(UInt(64 bits)) init(0)
-
 
       val medeleg = supervisorGen generate new Area {
         val IAM, IAF, II, BP, LAM, LAF, SAM, SAF, EU, ES, IPF, LPF, SPF = RegInit(False)
@@ -1044,10 +994,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       if(mscratchGen) READ_WRITE(CSR.MSCRATCH, mscratch)
       mcauseAccess(CSR.MCAUSE, xlen-1 -> mcause.interrupt, 0 -> mcause.exceptionCode)
       mbadaddrAccess(CSR.MBADADDR, mtval)
-      mcycleAccess(CSR.MCYCLE, mcycle(31 downto 0))
-      mcycleAccess(CSR.MCYCLEH, mcycle(63 downto 32))
-      minstretAccess(CSR.MINSTRET, minstret(31 downto 0))
-      minstretAccess(CSR.MINSTRETH, minstret(63 downto 32))
 
       if(supervisorGen) {
         for((id, enable) <- medeleg.mapping) medelegAccess(CSR.MEDELEG, id -> enable)
@@ -1055,37 +1001,10 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       }
 
       //User CSR
-      ucycleAccess(CSR.UCYCLE, mcycle(31 downto 0))
-      ucycleAccess(CSR.UCYCLEH, mcycle(63 downto 32))
-      uinstretAccess(CSR.UINSTRET, minstret(31 downto 0))
-      uinstretAccess(CSR.UINSTRETH, minstret(63 downto 32))
-
       if(utimeAccess != CsrAccess.NONE) {
         utimeAccess(CSR.UTIME,  utime(31 downto 0))
         utimeAccess(CSR.UTIMEH, utime(63 downto 32))
       }
-
-      class Xcounteren(csrId : Int) extends Area{
-        val IR,TM,CY = RegInit(True) //For backward compatibility
-        if(ucycleAccess != CsrAccess.NONE)   rw(csrId, 0 -> CY)
-        if(utimeAccess != CsrAccess.NONE)    rw(csrId, 1 -> TM)
-        if(uinstretAccess != CsrAccess.NONE) rw(csrId, 2 -> IR)
-      }
-      def xcounterChecks(access : CsrAccess, csrId : Int, enable : Xcounteren => Bool) = {
-        if(access != CsrAccess.NONE) during(csrId){
-          if(userGen) when(privilege < 3 && !enable(mcounteren)){ forceFailCsr() }
-          if(supervisorGen) when(privilege < 1 && !enable(scounteren)){ forceFailCsr() }
-        }
-      }
-
-      val mcounteren = userGen generate new Xcounteren(CSR.MCOUNTEREN)
-      val scounteren = supervisorGen generate new Xcounteren(CSR.SCOUNTEREN)
-      xcounterChecks(ucycleAccess  , CSR.UCYCLE   , _.CY)
-      xcounterChecks(ucycleAccess  , CSR.UCYCLEH  , _.CY)
-      xcounterChecks(utimeAccess   , CSR.UTIME    , _.TM)
-      xcounterChecks(utimeAccess   , CSR.UTIMEH   , _.TM)
-      xcounterChecks(uinstretAccess, CSR.UINSTRET , _.IR)
-      xcounterChecks(uinstretAccess, CSR.UINSTRETH, _.IR)
 
       pipeline(MPP) := mstatus.MPP
     }
@@ -1171,13 +1090,6 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       val lastStage = pipeline.stages.last
       val beforeLastStage = pipeline.stages(pipeline.stages.size-2)
       val stagesFromExecute = pipeline.stages.dropWhile(_ != execute)
-
-      //Manage counters
-      mcycle := mcycle + (if(withPrivilegedDebug) U(!debugMode || !debug.dcsr.stopcount) else U(1))
-      when(lastStage.arbitration.isFiring) {
-        minstret := minstret + 1
-      }
-
 
       if(supervisorGen) {
         addInterrupt(sip.STIP && sie.STIE,    id = 5, privilege = 1, delegators = List(Delegator(mideleg.ST, 3)))
