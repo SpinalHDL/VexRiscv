@@ -142,11 +142,11 @@ class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with 
         for (ii <- 0 until NumOfCounters) {
           counter(ii) := counter(ii) + U(dbgCtrEn && ~inhibit(ii) && increment(ii))
 
+          increment(ii) := False
+
           for (event <- eventType) {
             when (event._1 =/= U(0, xlen bits) && event._1 === events(ii)) {
               increment(ii) := event._2
-            } otherwise {
-              increment(ii) := False
             }
           }
         }
@@ -159,8 +159,8 @@ class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with 
         csrSrv.rw(MCOUNTINHIBIT, 0 -> inhibitCY, 2 -> inhibitIR, 3 -> inhibit)
 
         // enable
-        mcounterenAccess(csrSrv, prvSrv, MCOUNTEREN, menable.resize(32), S -> False, U -> False)
-        scounterenAccess(csrSrv, prvSrv, SCOUNTEREN, senable.resize(32), U -> False)
+        mcounterenAccess(csrSrv, prvSrv, MCOUNTEREN, menable, S -> False, U -> False)
+        scounterenAccess(csrSrv, prvSrv, SCOUNTEREN, senable, U -> False)
 
         // custom counters
         for (ii <- 0 until NumOfCounters) {
@@ -176,8 +176,8 @@ class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with 
           )
           
           mcounterAccess(csrSrv, prvSrv, MCOUNTER + ii, counter(ii)(31 downto 0), S -> False, U -> False)
-          mcounterAccess(csrSrv, prvSrv, MCOUNTERH + ii, counter(ii)(63 downto 31), S -> False, U -> False)
-          meventAccess(csrSrv, prvSrv, MCOUNTER + ii, events(ii), S -> False, U -> False)
+          mcounterAccess(csrSrv, prvSrv, MCOUNTERH + ii, counter(ii)(63 downto 32), S -> False, U -> False)
+          meventAccess(csrSrv, prvSrv, MEVENT + ii, events(ii), S -> False, U -> False)
         }
 
         // fixed counters
