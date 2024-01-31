@@ -334,7 +334,7 @@ case class CsrMapping() extends Area with CsrInterface {
   override def allowCsr() = allowCsrSignal := True
   override def isHazardFree() = hazardFree
   override def forceFailCsr() = doForceFailCsr := True
-  override def inDebugMode(): Bool = ???
+  override def inDebugMode() : Bool = ???
 }
 
 
@@ -388,6 +388,29 @@ trait CsrInterface{
   def inDebugMode() : Bool
 }
 
+trait DebugService{
+  case class DebugState(xlen : Int) extends Bundle{
+    val dpc         = UInt(xlen bits)
+    val dcsr = new Bundle{
+      val prv       = UInt(2 bits)
+      val step      = Bool
+      val nmip      = Bool
+      val mprven    = Bool
+      val cause     = UInt(3 bits)
+      val stoptime  = Bool
+      val stopcount = Bool
+      val stepie    = Bool
+      val ebreaku   = Bool
+      val ebreaks   = Bool
+      val ebreakm   = Bool
+      val xdebugver = UInt(4 bits)
+    }
+  }
+
+  def inDebugMode() : Bool
+  def debugState() : DebugState
+}
+
 trait IContextSwitching{
   def isContextSwitching : Bool
 }
@@ -395,7 +418,7 @@ trait IWake{
   def askWake() : Unit
 }
 
-class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface with IWake with VexRiscvRegressionArg {
+class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with ExceptionService with PrivilegeService with DebugService with InterruptionInhibitor with ExceptionInhibitor with IContextSwitching with CsrInterface with IWake with VexRiscvRegressionArg {
   import config._
   import CsrAccess._
 
@@ -434,6 +457,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
   var debugBus : DebugHartBus = null
   var debugMode : Bool = null
+  var debugStateB : DebugState = null
   var injectionPort : Stream[Bits] = null
 
   override def askWake(): Unit = thirdPartyWake := True
@@ -441,6 +465,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def isContextSwitching = contextSwitching
 
   override def inDebugMode(): Bool = if(withPrivilegedDebug) debugMode else False
+  override def debugState(): DebugState = debugStateB
 
   object EnvCtrlEnum extends SpinalEnum(binarySequential){
     val NONE, XRET = newElement()
@@ -912,6 +937,22 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       }
     })
 
+    // make debug state accessible
+    debugStateB = new DebugState(xlen)
+    debugStateB.dcsr.xdebugver  := debug.dcsr.xdebugver
+    debugStateB.dcsr.ebreakm    := debug.dcsr.ebreakm
+    debugStateB.dcsr.ebreaks    := debug.dcsr.ebreaks
+    debugStateB.dcsr.ebreaku    := debug.dcsr.ebreaku
+    debugStateB.dcsr.stepie     := debug.dcsr.stepie
+    debugStateB.dcsr.stopcount  := debug.dcsr.stopcount
+    debugStateB.dcsr.stoptime   := debug.dcsr.stoptime
+    debugStateB.dcsr.cause      := debug.dcsr.cause
+    debugStateB.dcsr.mprven     := debug.dcsr.mprven
+    debugStateB.dcsr.nmip       := debug.dcsr.nmip
+    debugStateB.dcsr.step       := debug.dcsr.step
+    debugStateB.dcsr.prv        := debug.dcsr.prv
+    debugStateB.dpc             := debug.dpc
+    
     def guardedWrite(csrId : Int, bitRange: Range, allowed : Seq[Int], target : Bits) = {
       onWrite(csrId){
         when(allowed.map(writeData()(bitRange) === _).orR){
