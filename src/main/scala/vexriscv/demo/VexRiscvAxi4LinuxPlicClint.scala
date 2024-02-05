@@ -97,6 +97,19 @@ object VexRiscvAxi4LinuxPlicClint{
             catchAddressMisaligned = true
           ),
           new CsrPlugin(CsrPluginConfig.openSbi(mhartid = 0, misa = Riscv.misaToInt(s"ima"))),
+          new CounterPlugin(CounterPluginConfig(
+            NumOfCounters       = 0,
+            mcycleAccess        = CsrAccess.NONE,
+            ucycleAccess        = CsrAccess.NONE,
+            minstretAccess      = CsrAccess.NONE,
+            uinstretAccess      = CsrAccess.NONE,
+            mcounterenAccess    = CsrAccess.NONE,
+            scounterenAccess    = CsrAccess.NONE,
+            mcounterAccess      = CsrAccess.NONE,
+            ucounterAccess      = CsrAccess.NONE,
+            meventAccess        = CsrAccess.NONE,
+            mcountinhibitAccess = CsrAccess.NONE
+          )),
           new YamlPlugin("cpu0.yaml")
         )
       )

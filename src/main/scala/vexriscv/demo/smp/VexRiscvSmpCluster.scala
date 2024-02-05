@@ -351,6 +351,19 @@ object VexRiscvSmpClusterGen {
           catchAddressMisaligned = true,
           fenceiGenAsAJump = false
         ),
+        new CounterPlugin(if(csrFull) CounterPluginConfig() else CounterPluginConfig(
+          NumOfCounters       = 0,
+          mcycleAccess        = CsrAccess.NONE,
+          ucycleAccess        = CsrAccess.NONE,
+          minstretAccess      = CsrAccess.NONE,
+          uinstretAccess      = CsrAccess.NONE,
+          mcounterenAccess    = CsrAccess.NONE,
+          scounterenAccess    = CsrAccess.NONE,
+          mcounterAccess      = CsrAccess.NONE,
+          ucounterAccess      = CsrAccess.NONE,
+          meventAccess        = CsrAccess.NONE,
+          mcountinhibitAccess = CsrAccess.NONE
+        )),
         new YamlPlugin(s"cpu$hartId.yaml")
       )
     )
