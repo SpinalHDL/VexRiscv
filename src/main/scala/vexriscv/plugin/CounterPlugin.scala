@@ -120,8 +120,8 @@ class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with 
 
       val dbgCtrEn = ~(dbgSrv.inDebugMode() && dbgSrv.debugState().dcsr.stopcount)
 
-      val menable = RegInit(Bits(3 + NumOfCounters bits).getAllTrue)
-      val senable = RegInit(Bits(3 + NumOfCounters bits).getAllTrue)
+      val menable = RegInit(Bits(3 + NumOfCounters bits).getAllTrue) allowUnsetRegToAvoidLatch
+      val senable = RegInit(Bits(3 + NumOfCounters bits).getAllTrue) allowUnsetRegToAvoidLatch
       val inhibit = Reg(Bits(NumOfCounters bits)) init(0)
       val inhibitCY = RegInit(False)
       val inhibitIR = RegInit(False)
