@@ -106,7 +106,7 @@ class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with 
     import pipeline._
     import pipeline.config._
 
-    if (utimeAccess != CsrAccess.NONE) time = in UInt(64 bits) setName("time")
+    if (utimeAccess != CsrAccess.NONE) time = in UInt(64 bits) setName("utime")
   }
 
   override def build(pipeline : VexRiscv) : Unit = {

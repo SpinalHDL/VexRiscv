@@ -76,7 +76,13 @@ case class CsrPluginConfig(
                             wfiOutput           : Boolean = false,
                             exportPrivilege     : Boolean = false,
                             var withPrivilegedDebug : Boolean = false, //For the official RISC-V debug spec implementation
-                            var debugTriggers       : Int     = 2
+                            var debugTriggers       : Int     = 2,
+                            // these options only have effect, when no CounterService is present in Pipeline
+                            utimeAccess         : CsrAccess = CsrAccess.NONE,
+                            mcycleAccess        : CsrAccess = CsrAccess.NONE,
+                            minstretAccess      : CsrAccess = CsrAccess.NONE,
+                            ucycleAccess        : CsrAccess = CsrAccess.NONE,
+                            uinstretAccess      : CsrAccess = CsrAccess.NONE
                           ){
   def privilegeGen = userGen || supervisorGen || withPrivilegedDebug
   def noException = this.copy(ecallGen = false, ebreakGen = false, catchIllegalAccess = false)
@@ -189,7 +195,11 @@ object CsrPluginConfig{
     medelegAccess       = CsrAccess.READ_WRITE,
     midelegAccess       = CsrAccess.READ_WRITE,
     pipelineCsrRead     = false,
-    deterministicInteruptionEntry  = false
+    deterministicInteruptionEntry  = false,
+    mcycleAccess        = CsrAccess.READ_WRITE,
+    minstretAccess      = CsrAccess.READ_WRITE,
+    ucycleAccess        = CsrAccess.READ_ONLY,
+    uinstretAccess      = CsrAccess.READ_ONLY
   )
 
   def all(mtvecInit : BigInt) : CsrPluginConfig = CsrPluginConfig(
@@ -207,7 +217,11 @@ object CsrPluginConfig{
     mcauseAccess       = CsrAccess.READ_WRITE,
     mbadaddrAccess     = CsrAccess.READ_WRITE,
     ecallGen           = true,
-    wfiGenAsWait       = true
+    wfiGenAsWait       = true,
+    mcycleAccess       = CsrAccess.READ_WRITE,
+    minstretAccess     = CsrAccess.READ_WRITE,
+    ucycleAccess       = CsrAccess.READ_ONLY,
+    uinstretAccess     = CsrAccess.READ_ONLY
   )
 
   def all2(mtvecInit : BigInt) : CsrPluginConfig = CsrPluginConfig(
@@ -234,7 +248,11 @@ object CsrPluginConfig{
     sbadaddrAccess = CsrAccess.READ_WRITE,
     satpAccess     = CsrAccess.READ_WRITE,
     medelegAccess = CsrAccess.READ_WRITE,
-    midelegAccess = CsrAccess.READ_WRITE
+    midelegAccess = CsrAccess.READ_WRITE,
+    mcycleAccess       = CsrAccess.READ_WRITE,
+    minstretAccess     = CsrAccess.READ_WRITE,
+    ucycleAccess       = CsrAccess.READ_ONLY,
+    uinstretAccess     = CsrAccess.READ_ONLY
   )
 
   def small(mtvecInit : BigInt)  = CsrPluginConfig(
@@ -291,7 +309,11 @@ object CsrPluginConfig{
     ecallGen            = true,
     userGen             = true,
     medelegAccess       = CsrAccess.READ_WRITE,
-    midelegAccess       = CsrAccess.READ_WRITE
+    midelegAccess       = CsrAccess.READ_WRITE,
+    mcycleAccess        = CsrAccess.READ_WRITE,
+    minstretAccess      = CsrAccess.READ_WRITE,
+    ucycleAccess        = CsrAccess.READ_ONLY,
+    uinstretAccess      = CsrAccess.READ_ONLY
   )
 
 }
@@ -333,7 +355,7 @@ case class CsrMapping() extends Area with CsrInterface {
   override def allowCsr() = allowCsrSignal := True
   override def isHazardFree() = hazardFree
   override def forceFailCsr() = doForceFailCsr := True
-  override def inDebugMode() : Bool = ???
+  override def inDebugMode(): Bool = ???
 }
 
 
@@ -451,6 +473,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   var thirdPartyWake : Bool = null
   var inWfi : Bool = null
   var externalMhartId : UInt = null
+  var utime : UInt = null
   var stoptime : Bool = null
   var xretAwayFromMachine : Bool = null
 
@@ -464,7 +487,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
   override def isContextSwitching = contextSwitching
 
   override def hasDebugMode(): Boolean = withPrivilegedDebug
-  override def inDebugMode(): Bool = if(hasDebugMode) debugMode else False
+  override def inDebugMode(): Bool = if(hasDebugMode()) debugMode else False
   override def debugState(): DebugState = {
     val state = new DebugState(xlen)
     state := debugStateB
@@ -620,6 +643,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     pipeline.update(MPP, UInt(2 bits))
 
     if(withExternalMhartid) externalMhartId = in UInt(mhartidWidth bits)
+    if(pipeline.serviceExist(classOf[CounterService]) && utimeAccess != CsrAccess.NONE) utime = in UInt(64 bits) setName("utime")
 
     if(supervisorGen) {
       decoderService.addDefault(RESCHEDULE_NEXT, False)
@@ -1060,6 +1084,58 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
       if(supervisorGen) {
         for((id, enable) <- medeleg.mapping) medelegAccess(CSR.MEDELEG, id -> enable)
         midelegAccess(CSR.MIDELEG, 9 -> mideleg.SE, 5 -> mideleg.ST, 1 -> mideleg.SS)
+      }
+
+      // legacy counter/timer generation, when no counter-plugin exists
+      var counters : Area = (!pipeline.serviceExist(classOf[CounterService])) generate new Area {
+        SpinalInfo("No CounterService was found. Generating legacy counters and timer")
+        val mcycle = Reg(UInt(64 bits)) init(0)
+        val minstret = Reg(UInt(64 bits)) init(0)
+
+        mcycleAccess(CSR.MCYCLE, mcycle(31 downto 0))
+        mcycleAccess(CSR.MCYCLEH, mcycle(63 downto 32))
+        minstretAccess(CSR.MINSTRET, minstret(31 downto 0))
+        minstretAccess(CSR.MINSTRETH, minstret(63 downto 32))
+
+        ucycleAccess(CSR.UCYCLE, mcycle(31 downto 0))
+        ucycleAccess(CSR.UCYCLEH, mcycle(63 downto 32))
+        uinstretAccess(CSR.UINSTRET, minstret(31 downto 0))
+        uinstretAccess(CSR.UINSTRETH, minstret(63 downto 32))
+    
+        if(utimeAccess != CsrAccess.NONE) {
+          utimeAccess(CSR.UTIME,  utime(31 downto 0))
+          utimeAccess(CSR.UTIMEH, utime(63 downto 32))
+        }
+
+        class Xcounteren(csrId : Int) extends Area{
+          val IR,TM,CY = RegInit(True) //For backward compatibility
+          if(ucycleAccess != CsrAccess.NONE)   rw(csrId, 0 -> CY)
+          if(utimeAccess != CsrAccess.NONE)    rw(csrId, 1 -> TM)
+          if(uinstretAccess != CsrAccess.NONE) rw(csrId, 2 -> IR)
+        }
+
+        def xcounterChecks(access : CsrAccess, csrId : Int, enable : Xcounteren => Bool) = {
+          if(access != CsrAccess.NONE) during(csrId){
+            if(userGen) when(privilege < 3 && !enable(mcounteren)){forceFailCsr()}
+            if(supervisorGen) when(privilege < 1 && !enable(scounteren)){forceFailCsr()}
+          }
+        }
+
+        val mcounteren = userGen generate new Xcounteren(CSR.MCOUNTEREN)
+        val scounteren = supervisorGen generate new Xcounteren(CSR.SCOUNTEREN)
+  
+        xcounterChecks(ucycleAccess  , CSR.UCYCLE   , _.CY)
+        xcounterChecks(ucycleAccess  , CSR.UCYCLEH  , _.CY)
+        xcounterChecks(utimeAccess   , CSR.UTIME    , _.TM)
+        xcounterChecks(utimeAccess   , CSR.UTIMEH   , _.TM)
+        xcounterChecks(uinstretAccess, CSR.UINSTRET , _.IR)
+        xcounterChecks(uinstretAccess, CSR.UINSTRETH, _.IR)
+
+        // update
+        mcycle := mcycle + (if(hasDebugMode()) U(!debugMode || !debug.dcsr.stopcount) else U(1))
+        when(pipeline.stages.last.arbitration.isFiring) {
+          minstret := minstret + (if(hasDebugMode()) U(!debugMode || !debug.dcsr.stopcount) else U(1))
+        }
       }
 
       pipeline(MPP) := mstatus.MPP
