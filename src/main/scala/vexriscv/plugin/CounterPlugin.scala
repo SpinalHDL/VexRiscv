@@ -195,16 +195,18 @@ class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with 
         mcycleAccess(csrSrv, prvSrv, MCYCLE,  cycle(31 downto 0),  S -> False, U -> False)
         mcycleAccess(csrSrv, prvSrv, MCYCLEH, cycle(63 downto 32), S -> False, U -> False)
 
-        utimeAccess(csrSrv, prvSrv, UTIME, time(31 downto 0),
-          S -> menable(1),
-          U -> (if (prvSrv.hasSupervisor()) senable(1) else True),
-          U -> menable(1)
-        )
-        utimeAccess(csrSrv, prvSrv, UTIMEH, time(63 downto 32),
-          S -> menable(1),
-          U -> (if (prvSrv.hasSupervisor()) senable(1) else True),
-          U -> menable(1)
-        )
+        if(utimeAccess != CsrAccess.NONE) {
+          utimeAccess(csrSrv, prvSrv, UTIME, time(31 downto 0),
+            S -> menable(1),
+            U -> (if (prvSrv.hasSupervisor()) senable(1) else True),
+            U -> menable(1)
+          )
+          utimeAccess(csrSrv, prvSrv, UTIMEH, time(63 downto 32),
+            S -> menable(1),
+            U -> (if (prvSrv.hasSupervisor()) senable(1) else True),
+            U -> menable(1)
+          )
+        }
         
         uinstretAccess(csrSrv, prvSrv, UINSTRET, instret(31 downto 0),
           S -> menable(2),
