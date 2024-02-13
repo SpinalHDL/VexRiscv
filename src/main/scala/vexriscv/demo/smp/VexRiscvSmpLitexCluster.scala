@@ -107,6 +107,7 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
 object VexRiscvLitexSmpClusterCmdGen extends App {
   Handle.loadHandleAsync = true
   var cpuCount = 1
+  var resetVector = 0l
   var iBusWidth = 64
   var dBusWidth = 64
   var iCacheSize = 8192
@@ -134,6 +135,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     help("help").text("prints this usage text")
     opt[Unit]  ("coherent-dma") action { (v, c) => coherentDma = true }
     opt[String]("cpu-count") action { (v, c) => cpuCount = v.toInt }
+    opt[String]("reset-vector") action { (v, c) => resetVector = v.toLong }
     opt[String]("ibus-width") action { (v, c) => iBusWidth = v.toInt }
     opt[String]("dbus-width") action { (v, c) => dBusWidth = v.toInt }
     opt[String]("icache-size") action { (v, c) => iCacheSize = v.toInt }
@@ -165,7 +167,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
         val c = vexRiscvConfig(
           hartId = hartId,
           ioRange = address => address.msb,
-          resetVector = 0,
+          resetVector = resetVector,
           iBusWidth = iBusWidth,
           dBusWidth = dBusWidth,
           iCacheSize = iCacheSize,
