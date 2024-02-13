@@ -14,7 +14,7 @@ import spinal.lib.com.jtag.xilinx.Bscane2BmbMasterGenerator
 import spinal.lib.generator._
 import spinal.core.fiber._
 import spinal.idslplugin.PostInitCallback
-import spinal.lib.cpu.riscv.debug.{DebugModule, DebugModuleCpuConfig, DebugModuleParameter, DebugTransportModuleParameter, DebugTransportModuleTunneled}
+import spinal.lib.cpu.riscv.debug.{DebugModule, DebugModuleCpuConfig, DebugModuleParameter, DebugTransportModuleJtagTap, DebugTransportModuleJtagTapWithTunnel, DebugTransportModuleParameter, DebugTransportModuleTunneled}
 import spinal.lib.misc.plic.PlicMapping
 import spinal.lib.system.debugger.SystemDebuggerConfig
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
@@ -33,7 +33,8 @@ case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig],
                                        outOfOrderDecoder : Boolean = true,
                                        fpu : Boolean = false,
                                        privilegedDebug : Boolean = false,
-                                       hardwareBreakpoints : Int = 0)
+                                       hardwareBreakpoints : Int = 0,
+                                       jtagTap : Boolean = false)
 
 class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with PostInitCallback{
   val cpuCount = p.cpuConfigs.size
@@ -100,12 +101,11 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
   }
 
   val privilegedDebug = p.privilegedDebug generate new Area{
-    val jtagCd = ClockDomain.external("jtag", withReset = false)
 
     val systemReset = Handle(Bool())
     systemCd.relaxedReset(systemReset, ResetSensitivity.HIGH)
 
-    val p = DebugTransportModuleParameter(
+    val dp = DebugTransportModuleParameter(
       addressWidth = 7,
       version = 1,
       idle = 7
@@ -116,7 +116,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
 
       val dm = DebugModule(
         DebugModuleParameter(
-          version = p.version + 1,
+          version = dp.version + 1,
           harts = cpuCount,
           progBufSize = 2,
           datacount = XLEN / 32 + cores.exists(_.cpu.config.get.FLEN == 64).toInt,
@@ -136,14 +136,26 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
 
       val clintStop =  (cores.map(e => e.cpu.logic.cpu.service(classOf[CsrPlugin]).stoptime).andR)
 
-      val tunnel = DebugTransportModuleTunneled(
-        p = p,
-        jtagCd = jtagCd,
-        debugCd = ClockDomain.current
-      )
-      dm.io.ctrl <> tunnel.io.bus
+      val noTap = !p.jtagTap generate new Area {
+        val jtagCd = ClockDomain.external("jtag", withReset = false)
 
-      val debugPort = Handle(tunnel.io.instruction.toIo).setName("debugPort")
+        val tunnel = DebugTransportModuleTunneled(
+          p = dp,
+          jtagCd = jtagCd,
+          debugCd = ClockDomain.current
+        )
+        dm.io.ctrl <> tunnel.io.bus
+        val debugPort = Handle(tunnel.io.instruction.toIo).setName("debugPort")
+      }
+
+      val withTap = p.jtagTap generate new Area {
+        val tunnel = DebugTransportModuleJtagTapWithTunnel(
+          p = dp,
+          debugCd = ClockDomain.current
+        )
+        dm.io.ctrl <> tunnel.io.bus
+        val debugPort = Handle(tunnel.io.jtag.toIo).setName("debugPort")
+      }
     })
   }
 }

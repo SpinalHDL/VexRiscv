@@ -114,6 +114,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var iCacheWays = 2
   var dCacheWays = 2
   var privilegedDebug = false
+  var jtagTap = false
   var hardwareBreakpoints = 0
   var liteDramWidth = 128
   var coherentDma = false
@@ -140,6 +141,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("icache-ways") action { (v, c) => iCacheWays = v.toInt }
     opt[String]("dcache-ways") action { (v, c) => dCacheWays = v.toInt }
     opt[Boolean]("privileged-debug") action { (v, c) => privilegedDebug = v }
+    opt[Boolean]("jtag-tap") action { (v, c) => jtagTap = v }
     opt[Int]   ("hardware-breakpoints") action { (v, c) => hardwareBreakpoints = v }
     opt[String]("litedram-width") action { (v, c) => liteDramWidth = v.toInt }
     opt[String]("netlist-directory") action { (v, c) => netlistDirectory = v }
@@ -192,7 +194,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
       fpu = fpu,
       jtagHeaderIgnoreWidth = 0,
       privilegedDebug = privilegedDebug,
-      hardwareBreakpoints = hardwareBreakpoints
+      hardwareBreakpoints = hardwareBreakpoints,
+      jtagTap = jtagTap
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = liteDramWidth),
     liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
