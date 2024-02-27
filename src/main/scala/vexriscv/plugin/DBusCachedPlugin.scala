@@ -66,6 +66,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   var privilegeService : PrivilegeService = null
   var redoBranch : Flow[UInt] = null
   var writesPending : Bool = null
+  var trigger : LsuTriggerInterface = null
 
   @dontName var dBusAccess : DBusAccess = null
   override def newDBusAccess(): DBusAccess = {
@@ -184,6 +185,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     tightlyCoupledPorts.filter(_.bus == null).foreach(p => p.bus = master(TightlyCoupledDataBus()).setName(p.p.name))
 
     dBus = master(DataCacheMemBus(this.config)).setName("dBus")
+    trigger = new LsuTriggerInterface()
 
     val decoderService = pipeline.service(classOf[DecoderService])
 
@@ -593,6 +595,21 @@ class DBusCachedPlugin(val config : DataCacheConfig,
           input(HAS_SIDE_EFFECT) := False
         }
       }
+
+      trigger.valid     := arbitration.isFiring && input(MEMORY_ENABLE)
+      trigger.load      := !input(MEMORY_WR)
+      trigger.store     := input(MEMORY_WR)
+      trigger.virtual   := U(input(REGFILE_WRITE_DATA))
+      trigger.writeData := input(MEMORY_STORE_DATA_RF)
+      trigger.readData      := rspFormated
+      trigger.readDataValid := !redoBranch.valid && arbitration.isStuck
+      trigger.dpc       := input(PC) + (if(pipeline.config.withRvc) ((input(IS_RVC)) ? U(2) | U(4)) else 4)
+//      val armed = RegInit(False) setWhen(trigger.hit)
+//      when(arbitration.isValid && armed){
+//        exceptionBus.valid := True
+//        exceptionBus.code := 3
+//        armed := False
+//      }
     }
 
     //Share access to the dBus (used by self refilled MMU)
