@@ -598,7 +598,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
 
       trigger.valid     := arbitration.isFiring && input(MEMORY_ENABLE)
       trigger.load      := !input(MEMORY_WR)
-      trigger.store     := input(MEMORY_WR)
+      trigger.store := input(MEMORY_WR)
+      trigger.size := input(INSTRUCTION)(13 downto 12).asUInt
       trigger.virtual   := U(input(REGFILE_WRITE_DATA))
       trigger.writeData := input(MEMORY_STORE_DATA_RF)
       trigger.readData      := rspFormated
