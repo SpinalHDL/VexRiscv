@@ -8,6 +8,7 @@ import vexriscv.Riscv.CSR._
 import scala.collection.mutable._
 
 trait CounterService{
+  def createEvent(eventId : BigInt) : Unit
   def getCondition(eventId : BigInt) : Bool
 }
 
@@ -94,11 +95,13 @@ class CounterPlugin(config : CounterPluginConfig) extends Plugin[VexRiscv] with 
     }
   }
 
-  override def getCondition(eventId : BigInt) : Bool = {
+  override def createEvent(eventId : BigInt) : Unit = {
     if (!eventType.contains(eventId)) {
       eventType(eventId) = Bool
     }
+  }
 
+  override def getCondition(eventId : BigInt) : Bool = {
     eventType(eventId)
   }
 

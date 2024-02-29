@@ -1326,6 +1326,12 @@ Speed up of 4 was observed in libressl running in linux. <https://github.com/Spi
 Provides performance-counter and time CSRs.
 
 Here is how to provide a custom event condition (which can then be configured by code):
+In setup phase
+```scala
+val ctrSrv = pipeline.service(classOf[CounterService])
+ctrSrv.createEvent(eventId)
+```
+In build phase
 ```scala
 val ctrSrv = pipeline.service(classOf[CounterService])
 ctrSrv.getCondition(eventId) := boolCond
