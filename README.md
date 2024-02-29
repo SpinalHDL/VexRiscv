@@ -1337,3 +1337,4 @@ val ctrSrv = pipeline.service(classOf[CounterService])
 ctrSrv.getCondition(eventId) := boolCond
 ```
 eventId is BigInt, but only events between 0 and 2 ** XLEN (excluding boundaries) can be selected by cpu.
+The configured counter counts clockcycles with boolCond asserted.
