@@ -596,15 +596,19 @@ class DBusCachedPlugin(val config : DataCacheConfig,
         }
       }
 
-      trigger.valid     := arbitration.isFiring && input(MEMORY_ENABLE)
-      trigger.load      := !input(MEMORY_WR)
-      trigger.store := input(MEMORY_WR)
-      trigger.size := input(INSTRUCTION)(13 downto 12).asUInt
-      trigger.virtual   := U(input(REGFILE_WRITE_DATA))
-      trigger.writeData := input(MEMORY_STORE_DATA_RF)
+      trigger.valid         := arbitration.isValid && input(MEMORY_ENABLE)
+      trigger.load          := !input(MEMORY_WR)
+      trigger.store         := input(MEMORY_WR)
+      trigger.size          := input(INSTRUCTION)(13 downto 12).asUInt
+      trigger.virtual       := U(input(REGFILE_WRITE_DATA))
+      trigger.writeData     := input(MEMORY_STORE_DATA_RF)
       trigger.readData      := rspFormated
       trigger.readDataValid := !redoBranch.valid && arbitration.isStuck
-      trigger.dpc       := input(PC) + (if(pipeline.config.withRvc) ((input(IS_RVC)) ? U(2) | U(4)) else 4)
+      trigger.dpc           := input(PC)// + (if(pipeline.config.withRvc) ((input(IS_RVC)) ? U(2) | U(4)) else 4)
+      when(trigger.hitBefore){
+        arbitration.flushIt := True
+        arbitration.flushNext := True
+      }
 //      val armed = RegInit(False) setWhen(trigger.hit)
 //      when(arbitration.isValid && armed){
 //        exceptionBus.valid := True

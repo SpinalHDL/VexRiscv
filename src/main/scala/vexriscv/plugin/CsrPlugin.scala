@@ -43,6 +43,7 @@ class LsuTriggerInterface extends Bundle {
   val size = UInt(2 bits)
   val dpc = UInt(32 bits)
   val hit = Bool()
+  val hitBefore = Bool()
 }
 
 case class ExceptionPortInfo(port : Flow[ExceptionCause],stage : Stage, priority : Int, codeWidth : Int)
@@ -959,7 +960,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             val select = RegInit(False)
             val matcher = Reg(Bits(4 bits)) init(0)
             csrrw(CSR.TDATA1, read, 19 -> select, 11 -> chain, 0 -> load, 1 -> store, 7 -> matcher)
-            csrr(CSR.TDATA1, read, 18 -> !execute)
+            csrr(CSR.TDATA1, read, 18 -> select)
 
             //TODO action sizelo select sizehi maskmax
           }
@@ -1027,8 +1028,9 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
 
         lsuTrigger.hit := slots.map(s => s.tdata2.lsu.hit).orR
+        lsuTrigger.hitBefore := slots.map(s => s.tdata2.lsu.hit && !s.tdata1.select).orR
         val lsuBreak = new Area {
-          val enabled = RegNext(lsuTrigger.hit)
+          val enabled = RegNext(lsuTrigger.hit && !debugMode)
           val dpcReg = RegNext(lsuTrigger.dpc)
           when(enabled) {
             decode.arbitration.haltByOther := True
