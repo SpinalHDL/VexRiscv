@@ -103,7 +103,7 @@ object GenFullWithOfficialRiscvDebug extends App{
       ),
       new MulPlugin,
       new DivPlugin,
-      new CsrPlugin(CsrPluginConfig.small(0x80000020l).copy(withPrivilegedDebug = true)),
+      new CsrPlugin(CsrPluginConfig.small(0x80000020l).copy(withPrivilegedDebug = true, debugTriggers = 4, debugTriggersLsu = true)),
       new EmbeddedRiscvJtag(
         p = DebugTransportModuleParameter(
           addressWidth = 7,

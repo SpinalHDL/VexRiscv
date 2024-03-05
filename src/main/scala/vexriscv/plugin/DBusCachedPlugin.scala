@@ -66,6 +66,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   var privilegeService : PrivilegeService = null
   var redoBranch : Flow[UInt] = null
   var writesPending : Bool = null
+  var trigger : LsuTriggerInterface = null
 
   @dontName var dBusAccess : DBusAccess = null
   override def newDBusAccess(): DBusAccess = {
@@ -184,6 +185,8 @@ class DBusCachedPlugin(val config : DataCacheConfig,
     tightlyCoupledPorts.filter(_.bus == null).foreach(p => p.bus = master(TightlyCoupledDataBus()).setName(p.p.name))
 
     dBus = master(DataCacheMemBus(this.config)).setName("dBus")
+    trigger = new LsuTriggerInterface()
+    trigger.hitBefore.default(False)
 
     val decoderService = pipeline.service(classOf[DecoderService])
 
@@ -478,7 +481,22 @@ class DBusCachedPlugin(val config : DataCacheConfig,
           input(HAS_SIDE_EFFECT) := False
         }
         insert(MEMORY_TIGHTLY_DATA) := OhMux(input(MEMORY_TIGHTLY), tightlyCoupledPorts.map(_.bus.read_data))
-        KeepAttribute(insert(MEMORY_TIGHTLY_DATA))      }
+        KeepAttribute(insert(MEMORY_TIGHTLY_DATA))
+      }
+
+      trigger.valid := arbitration.isValid && !arbitration.isStuck && !arbitration.isFlushed && input(MEMORY_ENABLE)
+      trigger.load := !input(MEMORY_WR)
+      trigger.store := input(MEMORY_WR)
+      trigger.size := input(INSTRUCTION)(13 downto 12).asUInt
+      trigger.virtual := U(input(REGFILE_WRITE_DATA))
+      trigger.writeData := input(MEMORY_STORE_DATA_RF)
+      trigger.readData := 0
+      trigger.readDataValid := False
+      trigger.dpc := input(PC) // + (if(pipeline.config.withRvc) ((input(IS_RVC)) ? U(2) | U(4)) else 4)
+      when(trigger.hitBefore) {
+        arbitration.removeIt := True
+        arbitration.flushNext := True
+      }
     }
 
     val managementStage = stages.last
