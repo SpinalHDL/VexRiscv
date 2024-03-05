@@ -93,7 +93,8 @@ case class CsrPluginConfig(
                             wfiOutput           : Boolean = false,
                             exportPrivilege     : Boolean = false,
                             var withPrivilegedDebug : Boolean = false, //For the official RISC-V debug spec implementation
-                            var debugTriggers       : Int     = 2
+                            var debugTriggers       : Int     = 2,
+                            var debugTriggersLsu : Boolean = false
                           ){
   assert(!ucycleAccess.canWrite)
   def privilegeGen = userGen || supervisorGen || withPrivilegedDebug
@@ -891,6 +892,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
 
         val decodeBreak = new Area {
+          val doIt = False
           val enabled = False
           val timeout = Timeout(3).clearWhen(!enabled || stages.tail.map(_.arbitration.isValid).orR)
           when(enabled) {
@@ -904,12 +906,15 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
               dcsr.cause := 2
               dcsr.prv := privilege
               privilegeReg := 3
+              doIt := True
             }
           }
         }
 
-        val lsuTrigger = pipeline.service(classOf[DBusCachedPlugin]).trigger
-        val lsuTriggerData = lsuTrigger.load.mux(lsuTrigger.readData, lsuTrigger.writeData)
+        val lsuTrigger = pipeline.serviceExist(classOf[DBusCachedPlugin]) generate new Area{
+          val bus = pipeline.service(classOf[DBusCachedPlugin]).trigger
+          val data = bus.load.mux(bus.readData, bus.writeData)
+        }
         val slots = for(slotId <- 0 until debugTriggers) yield new Area {
           val selected = tselect.index === slotId
           def csrw(csrId : Int, thats : (Int, Data)*): Unit ={
@@ -954,15 +959,14 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             csrr(CSR.TDATA1, read, 32 - 4 -> tpe)
             csrr(CSR.TDATA1, read, 21 -> B(12))
 
-            //TODO match
             val load, store = RegInit(False)
-            val chain = RegInit(False)
-            val select = RegInit(False)
+            val chain = RegInit(False).allowUnsetRegToAvoidLatch
+            val select = False
             val matcher = Reg(Bits(4 bits)) init(0)
-            csrrw(CSR.TDATA1, read, 19 -> select, 11 -> chain, 0 -> load, 1 -> store, 7 -> matcher)
-            csrr(CSR.TDATA1, read, 18 -> select)
-
-            //TODO action sizelo select sizehi maskmax
+            if(debugTriggersLsu){
+              csrrw(CSR.TDATA1, read, /*19 -> select,*/ 11 -> chain, 0 -> load, 1 -> store, 7 -> matcher)
+              csrr(CSR.TDATA1, read, 18 -> (load && select))
+            }
           }
 
           val chainBroken = Bool()
@@ -974,18 +978,20 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             val execute = new Area{
               val hit = enabled && tdata1.execute && value === B(decode.input(PC))
               decodeBreak.enabled.setWhen(hit)
+              when(decodeBreak.doIt && hit){
+                tdata1.hit := True
+              }
             }
-            val lsu = new Area{
+            val lsu = debugTriggersLsu generate new Area{
               val sizeOk = tdata1.size.mux(
                 0 -> True,
-                1 -> (lsuTrigger.size === 0),
-                2 -> (lsuTrigger.size === 1),
-                3 -> (lsuTrigger.size === 2)
-//                5 -> (lsuTrigger.size === 3),
-//                default -> False
+                1 -> (lsuTrigger.bus.size === 0),
+                2 -> (lsuTrigger.bus.size === 1),
+                3 -> (lsuTrigger.bus.size === 2)
               )
               val matcher = new Area {
-                val cpu = tdata1.select.mux(lsuTriggerData, B(lsuTrigger.virtual))
+//                val cpu = tdata1.select.mux(lsuTriggerData, B(lsuTrigger.virtual))
+                val cpu = B(lsuTrigger.bus.virtual)
                 val cmp = U(cpu) < U(value)
 
                 val mask = B(32-12 bits, default -> true) ## Napot(value(12-2 downto 0)).orMask(tdata1.matcher =/= 1)
@@ -1006,13 +1012,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
                   default -> False
                 )
               }
-              val dataTrigger = tdata1.store && lsuTrigger.store ||
-                                tdata1.load && lsuTrigger.load && lsuTrigger.readDataValid
-              val virtualTrigger =  (tdata1.store && lsuTrigger.store || tdata1.load && lsuTrigger.load)
-              val hitNoChain = enabled && lsuTrigger.valid && sizeOk && matcher.ok && tdata1.select.mux(dataTrigger, virtualTrigger)
+              val dataTrigger = tdata1.store && lsuTrigger.bus.store ||
+                                tdata1.load && lsuTrigger.bus.load && lsuTrigger.bus.readDataValid
+              val virtualTrigger =  (tdata1.store && lsuTrigger.bus.store || tdata1.load && lsuTrigger.bus.load)
+              val hitNoChain = enabled && lsuTrigger.bus.valid && sizeOk && matcher.ok && tdata1.select.mux(dataTrigger, virtualTrigger)
               val hit = hitNoChain && !tdata1.chain
+              tdata1.hit setWhen(hit)
             }
-            tdata1.hit setWhen(lsu.hit)
           }
         }
 
@@ -1022,16 +1028,17 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
             case 0 => slot.chainBroken := False
             case _ => {
               val prev = slots(slotId-1)
-              slot.chainBroken := prev.tdata1.chain && (prev.chainBroken || !prev.tdata2.lsu.hitNoChain)
+              slot.chainBroken := prev.tdata1.chain && (prev.chainBroken || debugTriggersLsu.mux(!prev.tdata2.lsu.hitNoChain, False))
             }
           }
         }
 
-        lsuTrigger.hit := slots.map(s => s.tdata2.lsu.hit).orR
-        lsuTrigger.hitBefore := slots.map(s => s.tdata2.lsu.hit && !s.tdata1.select).orR
-        val lsuBreak = new Area {
-          val enabled = RegNext(lsuTrigger.hit && !debugMode)
-          val dpcReg = RegNext(lsuTrigger.dpc)
+        val lsuBreak = debugTriggersLsu generate new Area {
+          lsuTrigger.bus.hit := slots.map(s => s.tdata2.lsu.hit).orR
+          lsuTrigger.bus.hitBefore := slots.map(s => s.tdata2.lsu.hit && !s.tdata1.select).orR
+
+          val enabled = RegNext(lsuTrigger.bus.hit && !debugMode)
+          val dpcReg = RegNext(lsuTrigger.bus.dpc)
           when(enabled) {
             decode.arbitration.haltByOther := True
             trapEvent := True
