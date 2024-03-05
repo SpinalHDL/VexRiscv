@@ -120,10 +120,6 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
       case _ =>
     }
 
-    config.plugins += new IBusDBusCachedTightlyCoupledRam(
-      mapping = SizeMapping(0x20000000, 0x1000)
-    )
-
     val cpu = new VexRiscv(config)
     def doExport(value : => Any, postfix : String) = {
       sexport(Handle(value).setCompositeName(VexRiscvBmbGenerator.this, postfix))

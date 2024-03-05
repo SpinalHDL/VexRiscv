@@ -107,6 +107,7 @@ class VexRiscvLitexSmpCluster(p : VexRiscvLitexSmpClusterParameter) extends VexR
 object VexRiscvLitexSmpClusterCmdGen extends App {
   Handle.loadHandleAsync = true
   var cpuCount = 1
+  var resetVector = 0l
   var iBusWidth = 64
   var dBusWidth = 64
   var iCacheSize = 8192
@@ -114,6 +115,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
   var iCacheWays = 2
   var dCacheWays = 2
   var privilegedDebug = false
+  var jtagTap = false
   var hardwareBreakpoints = 0
   var liteDramWidth = 128
   var coherentDma = false
@@ -133,6 +135,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     help("help").text("prints this usage text")
     opt[Unit]  ("coherent-dma") action { (v, c) => coherentDma = true }
     opt[String]("cpu-count") action { (v, c) => cpuCount = v.toInt }
+    opt[String]("reset-vector") action { (v, c) => resetVector = v.toLong }
     opt[String]("ibus-width") action { (v, c) => iBusWidth = v.toInt }
     opt[String]("dbus-width") action { (v, c) => dBusWidth = v.toInt }
     opt[String]("icache-size") action { (v, c) => iCacheSize = v.toInt }
@@ -140,6 +143,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     opt[String]("icache-ways") action { (v, c) => iCacheWays = v.toInt }
     opt[String]("dcache-ways") action { (v, c) => dCacheWays = v.toInt }
     opt[Boolean]("privileged-debug") action { (v, c) => privilegedDebug = v }
+    opt[Boolean]("jtag-tap") action { (v, c) => jtagTap = v }
     opt[Int]   ("hardware-breakpoints") action { (v, c) => hardwareBreakpoints = v }
     opt[String]("litedram-width") action { (v, c) => liteDramWidth = v.toInt }
     opt[String]("netlist-directory") action { (v, c) => netlistDirectory = v }
@@ -163,7 +167,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
         val c = vexRiscvConfig(
           hartId = hartId,
           ioRange = address => address.msb,
-          resetVector = 0,
+          resetVector = resetVector,
           iBusWidth = iBusWidth,
           dBusWidth = dBusWidth,
           iCacheSize = iCacheSize,
@@ -192,7 +196,8 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
       fpu = fpu,
       jtagHeaderIgnoreWidth = 0,
       privilegedDebug = privilegedDebug,
-      hardwareBreakpoints = hardwareBreakpoints
+      hardwareBreakpoints = hardwareBreakpoints,
+      jtagTap = jtagTap
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = liteDramWidth),
     liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
@@ -252,12 +257,13 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
 ////addAttribute("""mark_debug = "true"""")
 object VexRiscvLitexSmpClusterOpenSbi extends App{
   import spinal.core.sim._
+  Handle.loadHandleAsync = true
 
   val simConfig = SimConfig
-  simConfig.withWave
+  simConfig.withFstWave
   simConfig.allOptimisation
 
-  val cpuCount = 2
+  val cpuCount = 1
 
   def parameter = VexRiscvLitexSmpClusterParameter(
     cluster = VexRiscvSmpClusterParameter(
@@ -265,14 +271,15 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
         vexRiscvConfig(
           hartId = hartId,
           ioRange =  address => address(31 downto 28) === 0xF,
-          resetVector = 0x80000000l
+          resetVector = 0x40f00000l,
+          rvc = true
         )
       },
       withExclusiveAndInvalidation = true,
       jtagHeaderIgnoreWidth = 0
     ),
     liteDram = LiteDramNativeParameter(addressWidth = 32, dataWidth = 128),
-    liteDramMapping = SizeMapping(0x80000000l, 0x70000000l),
+    liteDramMapping = SizeMapping(0x40000000l, 0x40000000l),
     coherentDma = false,
     wishboneMemory = false,
     cpuPerFpu = 4,
@@ -305,12 +312,24 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
   
   simConfig.compile(dutGen).doSimUntilVoid(seed = 42){dut =>
     dut.body.debugCd.inputClockDomain.get.forkStimulus(10)
+    fork{
+      sleep(20)
+      dut.body.debugCd.inputClockDomain.clockToggle()
+      sleep(20)
+      dut.body.debugCd.inputClockDomain.clockToggle()
+    }
 
     val ram = SparseMemory()
-    ram.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin")
-    ram.loadBin(0xC0000000l, "../buildroot/output/images/Image")
-    ram.loadBin(0xC1000000l, "../buildroot/output/images/dtb")
-    ram.loadBin(0xC2000000l, "../buildroot/output/images/rootfs.cpio")
+    val dist = "/media/data2/proj/upstream/nuttex/test1/dist"
+//    ram.write(0x80000000l, Seq(0xb7, 0x0f, 0x00, 0x40, 0xe7, 0x80, 0x0f,0x00).map(_.toByte).toArray)  //Seq(0x80000fb7, 0x000f80e7)
+    ram.loadBin(0xC00000, dist + "/romfs.img")
+    ram.loadBin(0x0000000, dist + "/nuttx.bin")
+    ram.loadBin(0xf00000, dist + "/opensbi.bin")
+
+//    ram.loadBin(0x80000000l, "../opensbi/build/platform/spinal/vexriscv/sim/smp/firmware/fw_jump.bin")
+//    ram.loadBin(0xC0000000l, "../buildroot/output/images/Image")
+//    ram.loadBin(0xC1000000l, "../buildroot/output/images/dtb")
+//    ram.loadBin(0xC2000000l, "../buildroot/output/images/rootfs.cpio")
 
 
     dut.body.iBridge.dram.simSlave(ram, dut.body.debugCd.inputClockDomain)
@@ -328,13 +347,13 @@ object VexRiscvLitexSmpClusterOpenSbi extends App{
       }
     }
 
-    fork{
-      while(true) {
-        disableSimWave()
-        sleep(100000 * 10)
-        enableSimWave()
-        sleep(  100 * 10)
-      }
-    }
+//    fork{
+//      while(true) {
+//        disableSimWave()
+//        sleep(100000 * 10)
+//        enableSimWave()
+//        sleep(  100 * 10)
+//      }
+//    }
   }
 }
