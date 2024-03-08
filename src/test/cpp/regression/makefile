@@ -61,6 +61,10 @@ ADDCFLAGS += -CFLAGS -DDBUS_${DBUS}
 ADDCFLAGS += -CFLAGS -DREDO=${REDO}
 ADDCFLAGS += -CFLAGS -pthread
 ADDCFLAGS += -CFLAGS -Wno-unused-result
+ADDCFLAGS += -CFLAGS -Wno-parentheses
+ADDCFLAGS += -CFLAGS -Wno-misleading-indentation
+ADDCFLAGS += -CFLAGS -Wno-catch-value
+ADDCFLAGS += -CFLAGS -Wno-float-conversion
 
 
 
