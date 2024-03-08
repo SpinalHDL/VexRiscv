@@ -722,8 +722,8 @@ public:
 
 
     uint32_t getPendingInterrupt(){
-    	uint32_t mEnabled = status.mie && privilege == 3 || privilege < 3;
-    	uint32_t sEnabled = status.sie && privilege == 1 || privilege < 1;
+    	uint32_t mEnabled = status.mie && (privilege == 3) || privilege < 3;
+    	uint32_t sEnabled = status.sie && (privilege == 1) || privilege < 1;
 
     	uint32_t masked = getIp().raw & ~mideleg & -mEnabled & ie.raw;
 		if (masked == 0)
