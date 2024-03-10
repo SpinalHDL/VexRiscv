@@ -206,7 +206,9 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
     plic.priorityWidth.load(2)
     plic.mapping.load(PlicMapping.sifive)
     plic.addTarget(core.cpu.externalInterrupt)
-    plic.addTarget(core.cpu.externalSupervisorInterrupt)
+    if(core.cpu.config.withSupervisor) {
+      plic.addTarget(core.cpu.externalSupervisorInterrupt)
+    }
     List(clint.logic, core.cpu.logic).produce {
       for (plugin <- core.cpu.config.plugins) plugin match {
         case plugin: CsrPlugin if plugin.utime != null => plugin.utime := clint.logic.io.time

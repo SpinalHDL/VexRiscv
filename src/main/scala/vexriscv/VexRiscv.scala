@@ -53,6 +53,11 @@ case class VexRiscvConfig(){
     case None => false
   }
 
+  def withSupervisor = find(classOf[CsrPlugin]) match {
+    case Some(x) => x.config.supervisorGen
+    case None => false
+  }
+
   def FLEN = if(withRvd) 64 else if(withRvf) 32 else 0
 
   //Default Stageables
