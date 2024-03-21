@@ -208,7 +208,11 @@ object VexRiscvSmpClusterGen {
       if(csrFull){
        c = c.copy(
          mcauseAccess   = CsrAccess.READ_WRITE,
-         mbadaddrAccess = CsrAccess.READ_WRITE
+         mbadaddrAccess = CsrAccess.READ_WRITE,
+         ucycleAccess   = CsrAccess.READ_ONLY,
+         uinstretAccess = CsrAccess.READ_ONLY,
+         mcycleAccess   = CsrAccess.READ_WRITE,
+         minstretAccess = CsrAccess.READ_WRITE
        )
       }
       c
@@ -228,10 +232,13 @@ object VexRiscvSmpClusterGen {
         mscratchGen    = forceMscratch,
         mcauseAccess   = CsrAccess.READ_ONLY,
         mbadaddrAccess = CsrAccess.READ_ONLY,
+        mcycleAccess   = CsrAccess.NONE,
+        minstretAccess = CsrAccess.NONE,
         ecallGen       = true,
         ebreakGen      = true,
         wfiGenAsWait   = false,
         wfiGenAsNop    = true,
+        ucycleAccess   = CsrAccess.NONE,
         withPrivilegedDebug = privilegedDebug
       )
     }

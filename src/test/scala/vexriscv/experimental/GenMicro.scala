@@ -93,10 +93,13 @@ object GenMicro extends App{
             mscratchGen    = false,
             mcauseAccess   = CsrAccess.READ_ONLY,
             mbadaddrAccess = CsrAccess.NONE,
+            mcycleAccess   = CsrAccess.NONE,
+            minstretAccess = CsrAccess.NONE,
             ecallGen       = false,
             ebreakGen      = false,
             wfiGenAsWait         = false,
             wfiGenAsNop    = false,
+            ucycleAccess   = CsrAccess.NONE,
             noCsrAlu       = true
           ) else CsrPluginConfig(
             catchIllegalAccess = false,
@@ -112,10 +115,13 @@ object GenMicro extends App{
             mscratchGen    = true,
             mcauseAccess   = CsrAccess.READ_ONLY,
             mbadaddrAccess = CsrAccess.READ_ONLY,
+            mcycleAccess   = CsrAccess.NONE,
+            minstretAccess = CsrAccess.NONE,
             ecallGen       = true,
             ebreakGen      = true,
             wfiGenAsWait   = false,
-            wfiGenAsNop    = true
+            wfiGenAsNop    = true,
+            ucycleAccess   = CsrAccess.NONE
           )
         )))
       )
