@@ -87,7 +87,7 @@ case class CsrPluginConfig(
                             exportPrivilege     : Boolean = false,
                             var withPrivilegedDebug : Boolean = false, //For the official RISC-V debug spec implementation
                             var debugTriggers       : Int     = 2,
-                            var debugTriggersLsu : Boolean = false
+                            var debugTriggersLsu : Boolean = false,
                             // these options only have effect, when no CounterService is present in Pipeline
                             utimeAccess         : CsrAccess = CsrAccess.NONE,
                             mcycleAccess        : CsrAccess = CsrAccess.NONE,
