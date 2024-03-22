@@ -654,7 +654,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     pipeline.update(MPP, UInt(2 bits))
 
     if(withExternalMhartid) externalMhartId = in UInt(mhartidWidth bits)
-    if(pipeline.serviceExist(classOf[CounterService]) && utimeAccess != CsrAccess.NONE) utime = in UInt(64 bits) setName("utime")
+    if(!pipeline.serviceExist(classOf[CounterService]) && utimeAccess != CsrAccess.NONE) utime = in UInt(64 bits) setName("utime")
 
     if(supervisorGen) {
       decoderService.addDefault(RESCHEDULE_NEXT, False)
