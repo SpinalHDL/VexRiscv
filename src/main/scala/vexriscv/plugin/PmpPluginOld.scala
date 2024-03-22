@@ -98,7 +98,29 @@ case class PmpRegister(previous : PmpRegister) extends Area {
   // Computed PMP region bounds
   val region = new Area {
     val valid, locked = Bool
-    val start, end = UInt(32 bits)
+
+    // The calculated start & end addresses can overflow xlen by 4 bit:
+    //
+    // - 2 bit, as the pmpaddrX registers are defined as to encode
+    //   [XLEN + 2 downto 2] addresses.
+    //
+    // - 2 bit, as for NAPOT the most significant 0 bit encodes the region
+    //   length, with this bit included in the range!
+    //
+    // This means that (for xlen == 32 bit)
+    //
+    //   pmpcfg(X / 4)(X % 4) = NAPOT
+    //   pmpaddrX = 0xFFFFFFFF
+    //
+    // will expand to
+    //
+    //  start (inclusive): 0x000000000 << 2
+    //  end (exclusive):   0x200000000 << 2
+    //
+    // hence requiring xlen + 2 + 2 bit to represent the exclusive end
+    // address. This could be optimized by using a saturating add, or making the
+    // end address exclusive.
+    val start, end = UInt(36 bits)
   }
 
   when(~state.l) {
@@ -114,9 +136,12 @@ case class PmpRegister(previous : PmpRegister) extends Area {
     }
   }
 
-  val shifted = state.addr |<< 2
-  val mask = state.addr & ~(state.addr + 1)
-  val masked = (state.addr & ~mask) |<< 2
+  // Extend state.addr to 36 bits, to avoid these computations overflowing (as
+  // explained above):
+  val extended_addr = (B"00" ## state.addr.asBits).asUInt
+  val shifted = extended_addr << 2
+  val mask = extended_addr ^ (extended_addr + 1)
+  val masked = (extended_addr & ~mask) << 2
 
   // PMP changes take effect two clock cycles after the initial CSR write (i.e.,
   // settings propagate from csr -> state -> region).
@@ -135,7 +160,7 @@ case class PmpRegister(previous : PmpRegister) extends Area {
     }
     is(NAPOT) {
       region.start := masked
-      region.end := masked + ((mask + 1) |<< 3)
+      region.end := masked + ((mask + 1) << 2)
     }
     default {
       region.start := 0

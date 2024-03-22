@@ -2,7 +2,7 @@ package vexriscv
 
 import spinal.core._
 import spinal.lib.bus.bmb.{Bmb, BmbAccessCapabilities, BmbAccessParameter, BmbImplicitDebugDecoder, BmbInterconnectGenerator, BmbInvalidationParameter, BmbParameter}
-import spinal.lib.bus.misc.AddressMapping
+import spinal.lib.bus.misc.{AddressMapping, SizeMapping}
 import spinal.lib.com.jtag.{Jtag, JtagTapInstructionCtrl}
 import spinal.lib.generator._
 import spinal.lib.{sexport, slave}
@@ -141,6 +141,10 @@ case class VexRiscvBmbGenerator()(implicit interconnectSmp: BmbInterconnectGener
         doExport(plugin.config.wayCount, "dcacheWays")
         doExport(plugin.config.cacheSize, "dcacheSize")
         doExport(plugin.config.bytePerLine, "bytesPerLine")
+      }
+      case plugin : IBusDBusCachedTightlyCoupledRam => {
+        doExport(plugin.mapping.base, "coupledRamBase")
+        doExport(plugin.mapping.size, "coupledRamSize")
       }
       case plugin: MmuPlugin => {
         doExport(true, "mmu")

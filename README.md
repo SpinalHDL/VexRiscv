@@ -73,6 +73,7 @@ This repository hosts a RISC-V implementation written in SpinalHDL. Here are som
 - Linux compatible (SoC : https://github.com/enjoy-digital/linux-on-litex-vexriscv)
 - Zephyr compatible
 - [FreeRTOS port](https://github.com/Dolu1990/FreeRTOS-RISCV)
+- Support tightly coupled memory on I$ D$ (see GenFullWithTcm / GenFullWithTcmIntegrated)
 
 The hardware description of this CPU is done by using a very software oriented approach
 (without any overhead in the generated hardware). Here is a list of software concepts used:
@@ -259,7 +260,12 @@ Also there is a few environnement variable that you can use to modulate the rand
 | VEXRISCV_REGRESSION_CONFIG_DEMW_RATE        | 0.0-1.0            | Chance to generate a config with writeback stage |            
 | VEXRISCV_REGRESSION_CONFIG_DEM_RATE         | 0.0-1.0            | Chance to generate a config with memory stage |            
 
+## Basic Verilator simulation
+
+To run basic simulation with stdout and no tracing, loading a binary directly is supported with the `RUN_HEX` variable of `src/test/cpp/regression/makefile`. This has a significant performance advantage over using GDB over OpenOCD with JTAG over TCP. VCD tracing is supported with the makefile variable `TRACE`.
+
 ## Interactive debug of the simulated CPU via GDB OpenOCD and Verilator
+
 To use this, you just need to use the same command as with running tests, but adding `DEBUG_PLUGIN_EXTERNAL=yes` in the make arguments.
 This works for the `GenFull` configuration, but not for `GenSmallest`, as this configuration has no debug module.
 
@@ -1294,6 +1300,44 @@ Write Address 0x04 ->
 ```
 
 The OpenOCD port is here: <https://github.com/SpinalHDL/openocd_riscv>
+
+#### EmbeddedRiscvJtag
+
+VexRiscv also support the official RISC-V debug specification (Thanks Efinix for the funding !).
+
+To enable it, you need to add the EmbeddedRiscvJtag to the plugin list : 
+
+```scala
+new EmbeddedRiscvJtag(
+  p = DebugTransportModuleParameter(
+    addressWidth = 7,
+    version      = 1,
+    idle         = 7
+  ),
+  withTunneling = false,
+  withTap = true
+)
+```
+
+And turn on the withPrivilegedDebug option in the CsrPlugin config.
+
+Here is an example of openocd tcl script to connect : 
+
+```tcl
+# ADD HERE YOUR JTAG ADAPTER SETTINGS
+
+set _CHIPNAME riscv
+jtag newtap $_CHIPNAME cpu -irlen 5 -expected-id 0x10002FFF
+
+set _TARGETNAME $_CHIPNAME.cpu
+
+target create $_TARGETNAME.0 riscv -chain-position $_TARGETNAME
+
+init
+halt
+```
+
+A full example can be found in GenFullWithOfficialRiscvDebug.scala
 
 #### YamlPlugin
 

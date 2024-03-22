@@ -168,7 +168,7 @@ object VexRiscvAhbLite3{
 //            // On Artix FPGA jtag :
 //            val jtagCtrl = JtagTapInstructionCtrl()
 //            val tap = jtagCtrl.fromXilinxBscane2(userId = 1)
-//            jtagCtrl <> plugin.io.bus.fromJtagInstructionCtrl(ClockDomain(tap.TCK))
+//            jtagCtrl <> plugin.io.bus.fromJtagInstructionCtrl(ClockDomain(tap.TCK),0)
           }
           case _ =>
         }
