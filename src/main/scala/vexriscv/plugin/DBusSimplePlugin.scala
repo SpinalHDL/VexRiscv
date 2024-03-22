@@ -199,13 +199,13 @@ case class DBusSimpleBus(bigEndian : Boolean = false) extends Bundle with IMaste
     bus.WE  := cmdStage.wr
     bus.DAT_MOSI := cmdStage.data
 
-    cmdStage.ready := cmdStage.valid && bus.ACK
+    cmdStage.ready := cmdStage.valid && (bus.ACK || bus.ERR)
     bus.CYC := cmdStage.valid
     bus.STB := cmdStage.valid
 
-    rsp.ready := cmdStage.valid && !bus.WE && bus.ACK
+    rsp.ready := cmdStage.valid && !bus.WE && (bus.ACK || bus.ERR)
     rsp.data  := bus.DAT_MISO
-    rsp.error := False //TODO
+    rsp.error := bus.ERR
     bus
   }
 
