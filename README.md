@@ -49,6 +49,7 @@
     - [YamlPlugin](#yamlplugin)
     - [FpuPlugin](#fpuplugin)
     - [AesPlugin](#aesplugin)
+    - [CounterPlugin](#counterplugin)
 
 
 
@@ -1363,3 +1364,21 @@ It was also ported on libressl via the following patch :
 <https://github.com/SpinalHDL/buildroot-spinal-saxon/blob/main/patches/libressl/0000-vexriscv-aes.patch>
 
 Speed up of 4 was observed in libressl running in linux. <https://github.com/SpinalHDL/SaxonSoc/pull/53#issuecomment-730133020>
+
+#### CounterPlugin
+
+Provides performance-counter and time CSRs.
+
+Here is how to provide a custom event condition (which can then be configured by code):
+In setup phase
+```scala
+val ctrSrv = pipeline.service(classOf[CounterService])
+ctrSrv.createEvent(eventId)
+```
+In build phase
+```scala
+val ctrSrv = pipeline.service(classOf[CounterService])
+ctrSrv.getCondition(eventId) := boolCond
+```
+eventId is BigInt, but only events between 0 and 2 ** XLEN (excluding boundaries) can be selected by cpu.
+The configured counter counts clockcycles with boolCond asserted.

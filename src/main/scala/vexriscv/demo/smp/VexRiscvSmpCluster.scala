@@ -221,7 +221,7 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
     plic.addTarget(core.cpu.externalSupervisorInterrupt)
     List(clint.logic, core.cpu.logic).produce {
       for (plugin <- core.cpu.config.plugins) plugin match {
-        case plugin: CsrPlugin if plugin.utime != null => plugin.utime := clint.logic.io.time
+        case plugin: CounterPlugin if plugin.time != null => plugin.time := clint.logic.io.time
         case _ =>
       }
     }
@@ -276,7 +276,7 @@ object VexRiscvSmpClusterGen {
 
     val misa = Riscv.misaToInt(s"ima${if(withFloat) "f" else ""}${if(withDouble) "d" else ""}${if(rvc) "c" else ""}${if(withSupervisor) "su" else ""}")
     val csrConfig = if(withSupervisor){
-      var c = CsrPluginConfig.openSbi(mhartid = hartId, misa = misa).copy(utimeAccess = CsrAccess.READ_ONLY, withPrivilegedDebug = privilegedDebug)
+      var c = CsrPluginConfig.openSbi(mhartid = hartId, misa = misa).copy(withPrivilegedDebug = privilegedDebug)
       if(csrFull){
        c = c.copy(
          mcauseAccess   = CsrAccess.READ_WRITE,
@@ -430,6 +430,19 @@ object VexRiscvSmpClusterGen {
           catchAddressMisaligned = true,
           fenceiGenAsAJump = false
         ),
+        new CounterPlugin(if(csrFull) CounterPluginConfig() else CounterPluginConfig(
+          NumOfCounters       = 0,
+          mcycleAccess        = CsrAccess.NONE,
+          ucycleAccess        = CsrAccess.NONE,
+          minstretAccess      = CsrAccess.NONE,
+          uinstretAccess      = CsrAccess.NONE,
+          mcounterenAccess    = CsrAccess.NONE,
+          scounterenAccess    = CsrAccess.NONE,
+          mcounterAccess      = CsrAccess.NONE,
+          ucounterAccess      = CsrAccess.NONE,
+          meventAccess        = CsrAccess.NONE,
+          mcountinhibitAccess = CsrAccess.NONE
+        )),
         new YamlPlugin(s"cpu$hartId.yaml")
       )
     )

@@ -96,7 +96,20 @@ object VexRiscvAxi4LinuxPlicClint{
             earlyBranch = false,
             catchAddressMisaligned = true
           ),
-          new CsrPlugin(CsrPluginConfig.openSbi(mhartid = 0, misa = Riscv.misaToInt(s"ima")).copy(utimeAccess = CsrAccess.READ_ONLY)),
+          new CsrPlugin(CsrPluginConfig.openSbi(mhartid = 0, misa = Riscv.misaToInt(s"ima"))),
+          new CounterPlugin(CounterPluginConfig(
+            NumOfCounters       = 0,
+            mcycleAccess        = CsrAccess.NONE,
+            ucycleAccess        = CsrAccess.NONE,
+            minstretAccess      = CsrAccess.NONE,
+            uinstretAccess      = CsrAccess.NONE,
+            mcounterenAccess    = CsrAccess.NONE,
+            scounterenAccess    = CsrAccess.NONE,
+            mcounterAccess      = CsrAccess.NONE,
+            ucounterAccess      = CsrAccess.NONE,
+            meventAccess        = CsrAccess.NONE,
+            mcountinhibitAccess = CsrAccess.NONE
+          )),
           new YamlPlugin("cpu0.yaml")
         )
       )
@@ -152,7 +165,9 @@ object VexRiscvAxi4LinuxPlicClint{
             plugin.softwareInterrupt  setAsDirectionLess() := cpu.clintCtrl.io.softwareInterrupt(0)
             plugin.externalInterrupt  setAsDirectionLess() := cpu.plicCtrl.io.targets(0)
             plugin.externalInterruptS setAsDirectionLess() := cpu.plicCtrl.io.targets(1)
-            plugin.utime              setAsDirectionLess() := cpu.clintCtrl.io.time
+          }
+          case plugin: CounterPlugin => {
+            plugin.time              setAsDirectionLess() := cpu.clintCtrl.io.time
           }
           case _ =>
         }

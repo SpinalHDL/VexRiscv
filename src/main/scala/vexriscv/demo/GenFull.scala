@@ -80,6 +80,7 @@ object GenFull extends App{
         earlyBranch = false,
         catchAddressMisaligned = true
       ),
+      new CounterPlugin(CounterPluginConfig()),
       new YamlPlugin("cpu0.yaml")
     )
   )

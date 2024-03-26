@@ -49,6 +49,8 @@ trait PrivilegeService{
   def isUser() : Bool
   def isSupervisor() : Bool
   def isMachine() : Bool
+  def hasUser() : Boolean
+  def hasSupervisor() : Boolean
   def forceMachine() : Unit
 
   def encodeBits() : Bits = {
@@ -70,6 +72,8 @@ case class PrivilegeServiceDefault() extends PrivilegeService{
   override def isUser(): Bool = False
   override def isSupervisor(): Bool = False
   override def isMachine(): Bool = True
+  override def hasUser(): Boolean = false
+  override def hasSupervisor(): Boolean = false
   override def forceMachine(): Unit = {}
 }
 
