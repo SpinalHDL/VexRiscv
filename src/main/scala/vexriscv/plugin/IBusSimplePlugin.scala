@@ -156,10 +156,10 @@ case class IBusSimpleBus(plugin: IBusSimplePlugin) extends Bundle with IMasterSl
     bus.STB := cmdPipe.valid
 
 
-    cmdPipe.ready := cmdPipe.valid && bus.ACK
-    rsp.valid := bus.CYC && bus.ACK
+    cmdPipe.ready := cmdPipe.valid && (bus.ACK || bus.ERR)
+    rsp.valid := bus.CYC && (bus.ACK || bus.ERR)
     rsp.inst := bus.DAT_MISO
-    rsp.error := False //TODO
+    rsp.error := bus.ERR
     bus
   }
 

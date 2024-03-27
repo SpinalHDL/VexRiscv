@@ -239,15 +239,15 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
     when(cmd.valid || pending){
       bus.CYC := True
       bus.STB := True
-      when(bus.ACK){
+      when(bus.ACK || bus.ERR){
         counter := counter + 1
       }
     }
 
-    cmd.ready := cmd.valid && bus.ACK
-    rsp.valid := RegNext(bus.CYC && bus.ACK) init(False)
+    cmd.ready := cmd.valid && (bus.ACK || bus.ERR)
+    rsp.valid := RegNext(bus.CYC && (bus.ACK || bus.ERR)) init(False)
     rsp.data := RegNext(bus.DAT_MISO)
-    rsp.error := False //TODO
+    rsp.error := RegNext(bus.ERR)
     bus
   }
 
