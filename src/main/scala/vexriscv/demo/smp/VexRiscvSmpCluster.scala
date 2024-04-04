@@ -267,7 +267,9 @@ object VexRiscvSmpClusterGen {
                      withInstructionCache : Boolean = true,
                      forceMisa : Boolean = false,
                      forceMscratch : Boolean = false,
-                     privilegedDebug : Boolean = false,
+                     privilegedDebug: Boolean = false,
+                     privilegedDebugTriggers: Int = 2,
+                     privilegedDebugTriggersLsu: Boolean = false,
                      csrFull : Boolean = false
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
@@ -276,7 +278,12 @@ object VexRiscvSmpClusterGen {
 
     val misa = Riscv.misaToInt(s"ima${if(withFloat) "f" else ""}${if(withDouble) "d" else ""}${if(rvc) "c" else ""}${if(withSupervisor) "su" else ""}")
     val csrConfig = if(withSupervisor){
-      var c = CsrPluginConfig.openSbi(mhartid = hartId, misa = misa).copy(withPrivilegedDebug = privilegedDebug)
+      var c = CsrPluginConfig.openSbi(mhartid = hartId, misa = misa).copy(
+        utimeAccess = CsrAccess.READ_ONLY,
+        withPrivilegedDebug = privilegedDebug,
+        debugTriggers = privilegedDebugTriggers,
+        debugTriggersLsu = privilegedDebugTriggersLsu
+      )
       if(csrFull){
        c = c.copy(
          mcauseAccess   = CsrAccess.READ_WRITE,
