@@ -217,7 +217,7 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
     toplevel
   }
 
-  val genConfig = SpinalConfig(targetDirectory = netlistDirectory, inlineRom = true).addStandardMemBlackboxing(blackboxByteEnables)
+  val genConfig = SpinalConfig(targetDirectory = netlistDirectory, inlineRom = true, withTimescale = true).addStandardMemBlackboxing(blackboxByteEnables)
   genConfig.generateVerilog(dutGen.setDefinitionName(netlistName))
 
 }
