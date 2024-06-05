@@ -16,6 +16,7 @@ import scala.collection.mutable.ArrayBuffer
 
 case class DBusSimpleCmd() extends Bundle{
   val wr = Bool
+  val mask = Bits(4 bit)
   val address = UInt(32 bits)
   val data = Bits(32 bit)
   val size = UInt(2 bit)
@@ -441,6 +442,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
       //formal
       val formalMask = dBus.genMask(dBus.cmd)
+      dBus.cmd.mask := formalMask
 
       insert(FORMAL_MEM_ADDR) := dBus.cmd.address & U"xFFFFFFFC"
       insert(FORMAL_MEM_WMASK) := (dBus.cmd.valid &&  dBus.cmd.wr) ? formalMask | B"0000"
