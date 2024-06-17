@@ -22,8 +22,8 @@ import scala.collection.Seq
  * Created by PIC32F_USER on 28/07/2017.
  *
  * Murax is a very light SoC which could work without any external component.
- * - ICE40-hx8k + icestorm =>  53 Mhz, 2142 LC
- * - 0.37 DMIPS/Mhz
+ * - ICE40-hx8k + icestorm =>  53 MHz, 2142 LC
+ * - 0.37 DMIPS/MHz
  * - 8 kB of on-chip ram
  * - JTAG debugger (eclipse/GDB/openocd ready)
  * - Interrupt support
