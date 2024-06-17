@@ -473,7 +473,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       cache.io.cpu.memory.mmuRsp.isIoAccess setWhen(pipeline(DEBUG_BYPASS_CACHE) && !cache.io.cpu.memory.isWrite)
 
       if(tightlyGen){
-        when(input(MEMORY_TIGHTLY).orR){
+        when(input(MEMORY_ENABLE) && input(MEMORY_TIGHTLY).orR){
           cache.io.cpu.memory.isValid := False
           input(HAS_SIDE_EFFECT) := False
         }
@@ -585,7 +585,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       insert(MEMORY_LOAD_DATA) := rspShifted
 
       if(tightlyGen){
-        when(input(MEMORY_TIGHTLY).orR){
+        when(input(MEMORY_ENABLE) && input(MEMORY_TIGHTLY).orR){
           cache.io.cpu.writeBack.isValid := False
           exceptionBus.valid := False
           redoBranch.valid := False
