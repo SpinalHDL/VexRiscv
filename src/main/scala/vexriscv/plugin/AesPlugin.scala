@@ -53,7 +53,7 @@ import vexriscv.{DecoderService, Stageable, VexRiscv}
   * - SS specify which byte should be used from RS2 for the processing
   *
   * In practice the aes-256-cbc performances should improve by a factor 4. See the following results from libopenssl
-  * from a SoC running linux at 100 Mhz
+  * from a SoC running linux at 100 MHz
   *   type                 16 bytes     64 bytes    256 bytes   1024 bytes   8192 bytes  16384 bytes
   *   aes-256-cbc SW         492.58k      700.22k      796.41k      831.49k      830.09k      832.81k
   *   aes-256 cbc HW        1781.52k     2834.07k     3323.07k     3486.72k     3465.22k     3440.10k

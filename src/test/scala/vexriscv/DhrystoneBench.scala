@@ -45,7 +45,7 @@ class DhrystoneBench extends AnyFunSuite {
       val coremarkIterations = intFind.findFirstIn("Iterations       \\: (\\d+.?)+".r.findAllIn(str).toList.last).get.toDouble
       val coremarkHzs = intFind.findFirstIn("DCLOCKS_PER_SEC=(\\d+.?)+".r.findAllIn(str).toList.last).get.toDouble
       val coremarkPerMhz = 1e6 * coremarkIterations / coremarkTicks
-      report ++= s"$name -> $dmips DMIPS/Mhz $coremarkPerMhz Coremark/Mhz\n"
+      report ++= s"$name -> $dmips DMIPS/MHz $coremarkPerMhz Coremark/MHz\n"
     }
 
   }
