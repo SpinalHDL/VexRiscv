@@ -1071,8 +1071,8 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
     if (hasDebugMode()) {
       debugStateB.dcsr.xdebugver  := debug.dcsr.xdebugver
       debugStateB.dcsr.ebreakm    := debug.dcsr.ebreakm
-      debugStateB.dcsr.ebreaks    := debug.dcsr.ebreaks
-      debugStateB.dcsr.ebreaku    := debug.dcsr.ebreaku
+      if(supervisorGen) debugStateB.dcsr.ebreaks := debug.dcsr.ebreaks
+      if(userGen) debugStateB.dcsr.ebreaku := debug.dcsr.ebreaku
       debugStateB.dcsr.stepie     := debug.dcsr.stepie
       debugStateB.dcsr.stopcount  := debug.dcsr.stopcount
       debugStateB.dcsr.stoptime   := debug.dcsr.stoptime
