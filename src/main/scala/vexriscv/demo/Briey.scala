@@ -12,6 +12,7 @@ import spinal.lib.com.jtag.Jtag
 import spinal.lib.com.jtag.sim.JtagTcp
 import spinal.lib.com.uart.sim.{UartDecoder, UartEncoder}
 import spinal.lib.com.uart.{Apb3UartCtrl, Uart, UartCtrlGenerics, UartCtrlMemoryMappedConfig}
+import spinal.lib.cpu.riscv.debug.DebugTransportModuleParameter
 import spinal.lib.graphic.RgbConfig
 import spinal.lib.graphic.vga.{Axi4VgaCtrl, Axi4VgaCtrlGenerics, Vga}
 import spinal.lib.io.TriStateArray
@@ -31,11 +32,13 @@ case class BrieyConfig(axiFrequency : HertzNumber,
                        sdramLayout: SdramLayout,
                        sdramTimings: SdramTimings,
                        cpuPlugins : ArrayBuffer[Plugin[VexRiscv]],
-                       uartCtrlConfig : UartCtrlMemoryMappedConfig)
+                       uartCtrlConfig : UartCtrlMemoryMappedConfig,
+                       privilegedDebug : Boolean = false)
 
 object BrieyConfig{
 
-  def default = {
+  def default : BrieyConfig = default(privilegedDebug = false)
+  def default (privilegedDebug : Boolean) : BrieyConfig = {
     val config = BrieyConfig(
       axiFrequency = 50 MHz,
       onChipRamSize  = 4 kB,
@@ -52,6 +55,7 @@ object BrieyConfig{
         txFifoDepth = 16,
         rxFifoDepth = 16
       ),
+      privilegedDebug = privilegedDebug,
       cpuPlugins = ArrayBuffer(
         new PcManagerSimplePlugin(0x80000000l, false),
         //          new IBusSimplePlugin(
@@ -151,7 +155,8 @@ object BrieyConfig{
             ecallGen       = false,
             wfiGenAsWait         = false,
             ucycleAccess   = CsrAccess.NONE,
-            uinstretAccess = CsrAccess.NONE
+            uinstretAccess = CsrAccess.NONE,
+            withPrivilegedDebug = privilegedDebug
           )
         ),
         new YamlPlugin("cpu0.yaml")
@@ -290,9 +295,20 @@ class Briey(val config: BrieyConfig) extends Component{
 
 
     val core = new Area{
-      val config = VexRiscvConfig(
-        plugins = cpuPlugins += new DebugPlugin(debugClockDomain)
+      cpuPlugins += privilegedDebug.mux(
+        new EmbeddedRiscvJtag(
+          p = DebugTransportModuleParameter(
+            addressWidth = 7,
+            version = 1,
+            idle = 7
+          ),
+          debugCd = debugClockDomain,
+          withTunneling = false,
+          withTap = true
+        ),
+        new DebugPlugin(debugClockDomain)
       )
+      val config = VexRiscvConfig(cpuPlugins)
 
       val cpu = new VexRiscv(config)
       var iBus : Axi4ReadOnly = null
@@ -309,6 +325,10 @@ class Briey(val config: BrieyConfig) extends Component{
         case plugin : DebugPlugin      => debugClockDomain{
           resetCtrl.axiReset setWhen(RegNext(plugin.io.resetOut))
           io.jtag <> plugin.io.bus.fromJtag()
+        }
+        case plugin : EmbeddedRiscvJtag => debugClockDomain{
+          resetCtrl.axiReset setWhen(RegNext(plugin.ndmreset))
+          io.jtag <> plugin.jtag
         }
         case _ =>
       }
@@ -391,7 +411,7 @@ object Briey{
   def main(args: Array[String]) {
     val config = SpinalConfig()
     config.generateVerilog({
-      val toplevel = new Briey(BrieyConfig.default)
+      val toplevel = new Briey(BrieyConfig.default(privilegedDebug = false))
       toplevel.axi.vgaCtrl.vga.ctrl.io.error.addAttribute(Verilator.public)
       toplevel.axi.vgaCtrl.vga.ctrl.io.frameStart.addAttribute(Verilator.public)
       toplevel
@@ -454,7 +474,7 @@ import spinal.core.sim._
 object BrieySim {
   def main(args: Array[String]): Unit = {
     val simSlowDown = false
-    SimConfig.allOptimisation.compile(new Briey(BrieyConfig.default)).doSimUntilVoid{dut =>
+    SimConfig.allOptimisation.compile(new Briey(BrieyConfig.default(privilegedDebug = false))).doSimUntilVoid{dut =>
       val mainClkPeriod = (1e12/dut.config.axiFrequency.toDouble).toLong
       val jtagClkPeriod = mainClkPeriod*4
       val uartBaudRate = 115200
