@@ -265,12 +265,16 @@ object VexRiscvSmpClusterGen {
                      prediction : BranchPrediction = vexriscv.plugin.NONE,
                      withDataCache : Boolean = true,
                      withInstructionCache : Boolean = true,
+                     withBarrelShifter : Boolean = true,
+                     withMulDiv : Boolean = true,
                      forceMisa : Boolean = false,
                      forceMscratch : Boolean = false,
                      privilegedDebug: Boolean = false,
                      privilegedDebugTriggers: Int = 2,
                      privilegedDebugTriggersLsu: Boolean = false,
-                     csrFull : Boolean = false
+                     csrFull : Boolean = false,
+                     reducedCsr : Boolean = false,
+                     withCounterPlugin : Boolean = false
                     ) = {
     assert(iCacheSize/iCacheWays <= 4096, "Instruction cache ways can't be bigger than 4096 bytes")
     assert(dCacheSize/dCacheWays <= 4096, "Data cache ways can't be bigger than 4096 bytes")
@@ -305,12 +309,12 @@ object VexRiscvSmpClusterGen {
         mhartid        = hartId,
         misaExtensionsInit = misa,
         misaAccess     = if(forceMisa) CsrAccess.READ_ONLY else CsrAccess.NONE,
-        mtvecAccess    = CsrAccess.READ_WRITE,
+        mtvecAccess    = if(reducedCsr) CsrAccess.WRITE_ONLY else CsrAccess.READ_WRITE,
         mtvecInit      = null,
         mepcAccess     = CsrAccess.READ_WRITE,
         mscratchGen    = forceMscratch,
         mcauseAccess   = CsrAccess.READ_ONLY,
-        mbadaddrAccess = CsrAccess.READ_ONLY,
+        mbadaddrAccess = if(reducedCsr) CsrAccess.NONE else CsrAccess.READ_ONLY,
         mcycleAccess   = CsrAccess.NONE,
         minstretAccess = CsrAccess.NONE,
         ecallGen       = true,
@@ -413,8 +417,10 @@ object VexRiscvSmpClusterGen {
         new SrcPlugin(
           separatedAddSub = false
         ),
-        new FullBarrelShifterPlugin(earlyInjection = earlyShifterInjection),
-        //        new LightShifterPlugin,
+        if(withBarrelShifter)
+          new FullBarrelShifterPlugin(earlyInjection = earlyShifterInjection)
+        else
+          new LightShifterPlugin,
         new HazardSimplePlugin(
           bypassExecute           = true,
           bypassMemory            = true,
@@ -424,33 +430,37 @@ object VexRiscvSmpClusterGen {
           pessimisticWriteRegFile = false,
           pessimisticAddressMatch = false
         ),
-        new MulPlugin,
-        new MulDivIterativePlugin(
-          genMul = false,
-          genDiv = true,
-          mulUnrollFactor = 32,
-          divUnrollFactor = 1
-        ),
         new CsrPlugin(csrConfig),
         new BranchPlugin(
           earlyBranch = earlyBranch,
           catchAddressMisaligned = true,
           fenceiGenAsAJump = false
         ),
-        new CounterPlugin(if(csrFull) CounterPluginConfig() else CounterPluginConfig(
-          NumOfCounters       = 0,
-          mcycleAccess        = CsrAccess.NONE,
-          ucycleAccess        = CsrAccess.NONE,
-          minstretAccess      = CsrAccess.NONE,
-          uinstretAccess      = CsrAccess.NONE,
-          mcounterenAccess    = CsrAccess.NONE,
-          scounterenAccess    = CsrAccess.NONE,
-          mcounterAccess      = CsrAccess.NONE,
-          ucounterAccess      = CsrAccess.NONE,
-          meventAccess        = CsrAccess.NONE,
-          mcountinhibitAccess = CsrAccess.NONE
-        )),
         new YamlPlugin(s"cpu$hartId.yaml")
+      ) ++ withCounterPlugin.option(
+        new CounterPlugin(if (csrFull) CounterPluginConfig() else CounterPluginConfig(
+          NumOfCounters = 0,
+          mcycleAccess = CsrAccess.NONE,
+          ucycleAccess = CsrAccess.NONE,
+          minstretAccess = CsrAccess.NONE,
+          uinstretAccess = CsrAccess.NONE,
+          mcounterenAccess = CsrAccess.NONE,
+          scounterenAccess = CsrAccess.NONE,
+          mcounterAccess = CsrAccess.NONE,
+          ucounterAccess = CsrAccess.NONE,
+          meventAccess = CsrAccess.NONE,
+          mcountinhibitAccess = CsrAccess.NONE
+        ))
+      )
+    )
+
+    if(withMulDiv) config.plugins ++= List(
+      new MulPlugin,
+      new MulDivIterativePlugin(
+        genMul = false,
+        genDiv = true,
+        mulUnrollFactor = 32,
+        divUnrollFactor = 1
       )
     )
 
