@@ -194,6 +194,7 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
 
   var io : DebugExtensionIo = null
   var injectionPort : Stream[Bits] = null
+  var stopTime : Bool = null
 
 
   object IS_EBREAK extends Stageable(Bool)
@@ -233,6 +234,7 @@ class DebugPlugin(var debugClockDomain : ClockDomain, hardwareBreakpointCount : 
       val resetIt = RegInit(False)
       val haltIt = RegInit(False)
       val stepIt = RegInit(False)
+      stopTime = out(CombInit(haltIt)).setName("stopTime")
 
       val isPipBusy = RegNext(stages.map(_.arbitration.isValid).orR || iBusFetcher.incoming())
       val godmode = RegInit(False) setWhen(haltIt && !isPipBusy)
