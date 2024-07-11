@@ -40,17 +40,6 @@ import vexriscv.{DecoderService, Stageable, VexRiscv}
   * 3) Permute the rom read data depending the instruction and the 'sel' argument
   * 4) Xor the result with RS1 and return that as instruction result
   *
-  * The instructions are encoded by default as following :
-  * --SS-LDXXXXXYYYYY000ZZZZZ0001011
-  *
-  * Where :
-  * - XXXXX is the register file source 2 (RS2)
-  * - YYYYY is the register file source 1 (RS1)
-  * - ZZZZZ is the register file destination
-  * - D=1 mean decrypt, D=0 mean encrypt
-  * - L=1 mean last round, L=0 mean full round
-  * - SS specify which byte should be used from RS2 for the processing
-  *
   * The ratified AES instruction format is as follows:
   * SS10DM1XXXXXYYYYY000ZZZZZ0110011
   * - XXXXX is the register file source 2 (RS2)
