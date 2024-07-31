@@ -814,7 +814,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         val nmip = False
         val mprven = True
         val cause = RegInit(U"000")
-        val stoptime = RegInit(False)
+        val stoptime = RegInit(True)
         val stopcount = RegInit(False)
         val stepie = RegInit(False) //TODO
         val ebreaku = userGen generate RegInit(False)
