@@ -14,6 +14,7 @@ import vexriscv._
 
 class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
                         var debugCd : ClockDomain = null,
+                        var jtagCd : ClockDomain = null,
                         var withTap : Boolean = true,
                         var withTunneling : Boolean = false
                         ) extends Plugin[VexRiscv] with VexRiscvRegressionArg{
@@ -61,13 +62,22 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
       dm.io.ctrl <> logic.io.bus
       logic.io.jtag <> jtag
     }
-    val dmiTunneled = if(withTap && withTunneling) new Area {
+    val dmiTunneledWithTap = if(withTap && withTunneling) new Area {
       val logic = DebugTransportModuleJtagTapWithTunnel(
         p.copy(addressWidth = 7),
         debugCd = ClockDomain.current
       )
       dm.io.ctrl <> logic.io.bus
       logic.io.jtag <> jtag
+    }
+    val dmiTunneledNoTap = if (!withTap && withTunneling) new Area {
+      val logic = DebugTransportModuleTunneled(
+        p.copy(addressWidth = 7),
+        debugCd = ClockDomain.current,
+        jtagCd = jtagCd
+      )
+      logic.io.instruction <> jtagInstruction
+      dm.io.ctrl <> logic.io.bus
     }
 
     val privBus = pipeline.service(classOf[CsrPlugin]).debugBus.setAsDirectionLess()
