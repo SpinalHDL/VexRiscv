@@ -1404,6 +1404,62 @@ halt
 
 A full example can be found in GenFullWithOfficialRiscvDebug.scala
 
+##### Tunneled JTAG
+
+The EmbeddedRiscvJtag plugin can also be used with tunneled JTAG. This allows debugging with the same cable used to configure an FPGA.
+
+This uses an FPGA-specific primitive for JTAG access (e.g. Xilinx BSCANE2):
+```scala
+val xilJtag = BSCANE2(userId = 4) // must be userId = 4
+val jtagClockDomain = ClockDomain(
+  clock = xilJtag.TCK
+)
+```
+
+Then, the EmbeddedRiscvJtag plugin must be configured for tunneling without a TAP. Note, the debug clock domain must have a separate reset from the CPU clock domain.
+
+```scala
+// in plugins
+new EmbeddedRiscvJtag(
+  p = DebugTransportModuleParameter(
+    addressWidth = 7,
+    version      = 1,
+    idle         = 7
+  ),
+  withTunneling = true,
+  withTap = false,
+  debugCd = debugClockDomain,
+  jtagCd = jtagClockDomain
+)
+```
+
+Then connect the EmbeddedRiscvJtag to the FPGA-specific JTAG primitive:
+
+```scala
+for (plugin <- cpuConfig.plugins) plugin match {
+  case plugin: EmbeddedRiscvJtag => {
+    plugin.jtagInstruction <> xilJtag.toJtagTapInstructionCtrl()
+  }
+  case _ =>
+}
+```
+
+Here is an example OpenOCD TCL script to connect on a Xilinx 7-Series FPGA: 
+
+```tcl
+# ADD HERE YOUR JTAG ADAPTER SETTINGS
+
+source [find cpld/xilinx-xc7.cfg]
+set TAP_NAME xc7.tap
+
+set _TARGETNAME cpu
+target create $_TARGETNAME.0 riscv -chain-position $TAP_NAME
+riscv use_bscan_tunnel 6 1
+
+init
+halt
+```
+
 #### YamlPlugin
 
 This plugin offers a service to other plugins to generate a useful Yaml file describing the CPU configuration. It contains, for instance, the sequence of instructions required
