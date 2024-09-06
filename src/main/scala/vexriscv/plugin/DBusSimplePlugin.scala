@@ -194,9 +194,6 @@ case class DBusSimpleBus(bigEndian : Boolean = false) extends Bundle with IMaste
     bus.CTI :=B"000"
     bus.BTE := "00"
     bus.SEL := genMask(cmdStage).resized
-    when(!cmdStage.wr) {
-      bus.SEL := "1111"
-    }
     bus.WE  := cmdStage.wr
     bus.DAT_MOSI := cmdStage.data
 
