@@ -88,7 +88,7 @@ class DecoderSimplePlugin(catchIllegalInstruction : Boolean = false,
     }
   }
 
-  val detectLegalInstructions = catchIllegalInstruction || throwIllegalInstruction || forceLegalInstructionComputation || assertIllegalInstruction
+  val detectLegalInstructions = true
 
   object ASSERT_ERROR extends Stageable(Bool)
 
