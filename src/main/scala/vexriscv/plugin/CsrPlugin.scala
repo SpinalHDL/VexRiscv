@@ -766,7 +766,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         buffer.ready := injectionPort.fire
         val fpu = withDebugFpuAccess generate new Area {
           val access = service(classOf[FpuPlugin]).access
-          access.start := buffer.valid && buffer.op === DebugDmToHartOp.REG_READ || buffer.op === DebugDmToHartOp.REG_WRITE
+          access.start := buffer.valid && (buffer.op === DebugDmToHartOp.REG_READ || buffer.op === DebugDmToHartOp.REG_WRITE)
           access.regId := buffer.address
           access.write := buffer.op === DebugDmToHartOp.REG_WRITE
           access.writeData := dataCsrw.value.take(2).asBits
