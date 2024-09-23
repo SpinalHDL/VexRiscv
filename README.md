@@ -520,9 +520,12 @@ A prebuild GCC toolsuite can be found here:
 
 - https://www.sifive.com/software/  => Prebuilt RISC‑V GCC Toolchain and Emulator
 
-The VexRiscvSocSoftware makefiles are expecting to find this prebuild version in /opt/riscv/__contentOfThisPreBuild__
+The VexRiscvSocSoftware makefiles are expecting to find a Sifive GCC toolchain in /opt/riscv/__contentOfThisPreBuild__ .
+
+You can manualy download it via https://static.dev.sifive.com/dev-tools/riscv64-unknown-elf-gcc-8.3.0-2019.08.0-x86_64-linux-ubuntu14.tar.gz
 
 ```sh
+# Download and install the Sifive GCC toolchain
 version=riscv64-unknown-elf-gcc-8.3.0-2019.08.0-x86_64-linux-ubuntu14
 wget -O riscv64-unknown-elf-gcc.tar.gz riscv https://static.dev.sifive.com/dev-tools/$version.tar.gz
 tar -xzvf riscv64-unknown-elf-gcc.tar.gz
