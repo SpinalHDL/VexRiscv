@@ -31,7 +31,7 @@ run: compile
 verilate: ../../../../Murax.v
 	rm -f Murax.v*.bin
 	cp ../../../../Murax.v*.bin . | true
-	verilator -I../../../.. -cc  ../../../../Murax.v -CFLAGS -std=c++11  ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-WIDTH -Wno-UNOPTFLAT --x-assign unique --exe main.cpp
+	verilator -I../../../.. -cc  ../../../../Murax.v ${ADDCFLAGS} --gdbbt ${VERILATOR_ARGS} -Wno-WIDTH -Wno-UNOPTFLAT --x-assign unique --exe main.cpp
  	
 compile: verilate
 	make  -j  -C obj_dir/ -f VMurax.mk VMurax
