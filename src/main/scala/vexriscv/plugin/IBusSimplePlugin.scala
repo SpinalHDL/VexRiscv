@@ -371,6 +371,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
         }
 
         val fetchRsp = FetchRsp()
+        fetchRsp.isRvc := False
         fetchRsp.pc := stages.last.output.payload
         fetchRsp.rsp := rspBuffer.output.payload
         fetchRsp.rsp.error.clearWhen(!rspBuffer.output.valid) //Avoid interference with instruction injection from the debug plugin
