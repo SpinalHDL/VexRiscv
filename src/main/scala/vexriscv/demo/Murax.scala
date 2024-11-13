@@ -175,10 +175,10 @@ case class Murax(config : MuraxConfig) extends Component{
     val xip = ifGen(genXip)(master(SpiXdrMaster(xipConfig.ctrl.spi)))
   }
 
-    val jtagNative = withNativeJtag generate new ClockingArea(debugClockDomain){
-          val jtagCtrl = JtagTapInstructionCtrl()
-          val tap = jtagCtrl.fromXilinxBscane2(userId = 2)
-    }
+  val jtagNative = withNativeJtag generate new ClockingArea(debugClockDomain){
+    val jtagCtrl = JtagTapInstructionCtrl()
+    val tap = jtagCtrl.fromXilinxBscane2(userId = 2)
+  }
 
   val resetCtrlClockDomain = ClockDomain(
     clock = io.mainClk,
