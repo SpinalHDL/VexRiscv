@@ -540,7 +540,10 @@ object MuraxWithRamInit{
 
 object MuraxWithRamInitWithNativeJtag{
   def main(args: Array[String]) {
-    SpinalVerilog(Murax(MuraxConfig.default.copy(withNativeJtag = true, onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")))
+    val coreFrequency = if (args.nonEmpty) HertzNumber(BigDecimal(args(0))) else MuraxConfig.default.coreFrequency
+    val (scaledValue, unit) = coreFrequency.decompose
+    println(s"coreFrequency = $scaledValue $unit")
+    SpinalVerilog(Murax(MuraxConfig.default.copy(coreFrequency=coreFrequency, withNativeJtag = true, onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")))
   }
 }
 
