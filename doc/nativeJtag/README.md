@@ -24,47 +24,15 @@ reader is capable of generating the Murax SoC as it is described there.
 The BSCANE2 allows access between the internal FPGA logic and the JTAG Boundary Scan logic controller. This allows
 for communication between the internally running design and the dedicated JTAG pins of the FPGA.
 
-### Steps to enable Bscane2
+Run the following command at the top level of the repository.
 
-After cloning all files from https://github.com/SpinalHDL/VexRiscv, go to the path: `src/main/scala/vexriscv/demo`
-and find the `Murax.scala` file.
-* Comment out the following lines to remove the toplevel jtag I/O pins in `Murax.scala`. Be aware that line numbers
-as given could move with future changes to the file:
+```sh
+sbt "runMain vexriscv.demo.MuraxWithRamInitWithNativeJtag"
 ```
-[164]	val jtag = slave(Jtag())
-…
-[392]	val jtagClkBuffer = SB_GB()
-[393]	jtagClkBuffer.USER_SIGNAL_TO_GLOBAL_BUFFER <> io.jtag_tck
-[394]	jtagClkBuffer.GLOBAL_BUFFER_OUTPUT <> murax.io.jtag.tck
-…
-[398]	murax.io.jtag.tdi <> io.jtag_tdi
-[399]	murax.io.jtag.tdo <> io.jtag_tdo
-[400]	murax.io.jtag.tms <> io.jtag_tms
-```
-* In the `Murax.scala` file, delete the line:
-```
-[253]	io.jtag <> plugin.io.bus.fromJtag()
-```
-* And add the lines:
-```
-[254]	val jtagCtrl = JtagTapInstructionCtrl()
-[255]	val tap = jtagCtrl.fromXilinxBscane2(userId = 2)
-[256]	jtagCtrl <> plugin.io.bus.fromJtagInstructionCtrl(ClockDomain(tap.TCK),0)
-```
-Changing the above lines, removes the Murax SoC’s JTAG ports as pins of the FPGA and inserts the BSCANE2 Xilinx
-Debug IP to which the JTAG signals are now connected.
-* Add the following import statement at the beginning of `Murax.scala`:
-```
-import spinal.lib.com.jtag.JtagTapInstructionCtrl
-```
-With these changes in place, you generate the SoC with a demo program already in ram by use of:
-```
-sbt "runMain vexriscv.demo.MuraxWithRamInit"
-```
-A Verilog file is generated with the name `Murax.v` next to four `.bin` files inside the `VexRiscv` folder. These
-files are the input to the Xilinx FPGA synthesis. Inside the `Murax.v` file, we can see that the BSCANE2 ports are
-instantiated, confirming that the BSCANE2 has successfully been instantiated within the Murax SoC as a debug brige
-to JTAG.
+
+The Murax configuration `MuraxWithRamInitWithNativeJtag` activates `WithNativeJtag` flag, which removes toplevel Jtag signals from the default Murax configuration and integrates `BSCANE2` plugin.
+
+After code generation you will see the Verilog file `Murax.v` next to four `.bin` files at the top level of the repository. These files are the input to the Xilinx FPGA synthesis. Inside the `Murax.v` file, we can see that the BSCANE2 ports are instantiated, confirming that the BSCANE2 has successfully been instantiated within the Murax SoC as a debug bridge to JTAG.
 
 ## 3. Xilinx Vivado - Programming Arty A7 FPGA
 There are many applications to program a FPGA. In our work we referred to the freely available Xilinx Vivado 2020

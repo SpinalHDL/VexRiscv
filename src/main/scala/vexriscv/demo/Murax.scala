@@ -17,6 +17,7 @@ import spinal.lib.com.spi.ddr._
 import spinal.lib.bus.simple._
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.Seq
+import spinal.lib.com.jtag.JtagTapInstructionCtrl
 
 /**
  * Created by PIC32F_USER on 28/07/2017.
@@ -44,7 +45,9 @@ case class MuraxConfig(coreFrequency : HertzNumber,
                        uartCtrlConfig     : UartCtrlMemoryMappedConfig,
                        xipConfig          : SpiXdrMasterCtrl.MemoryMappingParameters,
                        hardwareBreakpointCount : Int,
-                       cpuPlugins         : ArrayBuffer[Plugin[VexRiscv]]){
+                       withNativeJtag      : Boolean,
+                       cpuPlugins         : ArrayBuffer[Plugin[VexRiscv]]
+                       ){
   require(pipelineApbBridge || pipelineMainBus, "At least pipelineMainBus or pipelineApbBridge should be enable to avoid wipe transactions")
   val genXip = xipConfig != null
 
@@ -69,6 +72,7 @@ object MuraxConfig{
       xip = SpiXdrMasterCtrl.XipBusParameters(addressWidth = 24, lengthWidth = 2)
     )),
     hardwareBreakpointCount = if(withXip) 3 else 0,
+    withNativeJtag = false,
     cpuPlugins = ArrayBuffer( //DebugPlugin added by the toplevel
       new IBusSimplePlugin(
         resetVector = if(withXip) 0xF001E000l else 0x80000000l,
@@ -162,7 +166,7 @@ case class Murax(config : MuraxConfig) extends Component{
     val mainClk = in Bool()
 
     //Main components IO
-    val jtag = slave(Jtag())
+    val jtag = ifGen(!config.withNativeJtag) (slave(Jtag()))
 
     //Peripherals IO
     val gpioA = master(TriStateArray(gpioWidth bits))
@@ -171,6 +175,10 @@ case class Murax(config : MuraxConfig) extends Component{
     val xip = ifGen(genXip)(master(SpiXdrMaster(xipConfig.ctrl.spi)))
   }
 
+  val jtagNative = withNativeJtag generate new ClockingArea(debugClockDomain){
+    val jtagCtrl = JtagTapInstructionCtrl()
+    val tap = jtagCtrl.fromXilinxBscane2(userId = 2)
+  }
 
   val resetCtrlClockDomain = ClockDomain(
     clock = io.mainClk,
@@ -251,7 +259,11 @@ case class Murax(config : MuraxConfig) extends Component{
       }
       case plugin : DebugPlugin         => plugin.debugClockDomain{
         resetCtrl.systemReset setWhen(RegNext(plugin.io.resetOut))
-        io.jtag <> plugin.io.bus.fromJtag()
+        if (withNativeJtag) {
+          jtagNative.jtagCtrl <> plugin.io.bus.fromJtagInstructionCtrl(ClockDomain(jtagNative.tap.TCK),0)
+        } else {
+          io.jtag <> plugin.io.bus.fromJtag()
+        }
       }
       case _ =>
     }
@@ -526,6 +538,15 @@ object MuraxWithRamInit{
   }
 }
 
+object MuraxWithRamInitWithNativeJtag{
+  def main(args: Array[String]) {
+    val coreFrequency = if (args.nonEmpty) HertzNumber(BigDecimal(args(0))) else MuraxConfig.default.coreFrequency
+    val (scaledValue, unit) = coreFrequency.decompose
+    println(s"coreFrequency = $scaledValue $unit")
+    SpinalVerilog(Murax(MuraxConfig.default.copy(coreFrequency=coreFrequency, withNativeJtag = true, onChipRamSize = 4 kB, onChipRamHexFile = "src/main/ressource/hex/muraxDemo.hex")))
+  }
+}
+
 object Murax_arty{
   def main(args: Array[String]) {
     val hex = "src/main/c/murax/hello_world/build/hello_world.hex"
@@ -533,11 +554,9 @@ object Murax_arty{
   }
 }
 
-
 object MuraxAsicBlackBox extends App{
   println("Warning this soc do not has any rom to boot on.")
   val config = SpinalConfig()
   config.addStandardMemBlackboxing(blackboxAll)
   config.generateVerilog(Murax(MuraxConfig.default()))
 }
-
