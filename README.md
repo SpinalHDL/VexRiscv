@@ -87,6 +87,8 @@ There is a gitter channel for all questions about VexRiscv :<br>
 
 For commercial support, please contact spinalhdl@gmail.com.
 
+Note you may be interested VexiiRiscv (https://github.com/SpinalHDL/VexiiRiscv).
+
 ## Area usage and maximal frequency
 
 The following numbers were obtained by synthesizing the CPU as toplevel on the fastest speed grade without any specific synthesis options to save area or to get better maximal frequency (neutral).<br>
