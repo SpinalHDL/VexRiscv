@@ -7,7 +7,7 @@ import spinal.lib.bus.amba3.ahblite.{AhbLite3Config, AhbLite3Master}
 import spinal.lib.bus.amba4.axi._
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.bmb.{Bmb, BmbParameter}
-import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
+import spinal.lib.bus.wishbone.{AddressGranularity, Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 import vexriscv.ip.DataCacheMemCmd
 
@@ -66,7 +66,8 @@ object DBusSimpleBus{
     tgcWidth = 0,
     tgdWidth = 0,
     useBTE = true,
-    useCTI = true
+    useCTI = true,
+    addressGranularity = AddressGranularity.WORD
   )
 
   def getPipelinedMemoryBusConfig() = PipelinedMemoryBusConfig(
