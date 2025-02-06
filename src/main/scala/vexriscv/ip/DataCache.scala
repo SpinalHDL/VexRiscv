@@ -6,7 +6,7 @@ import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4Shared}
 import spinal.lib.bus.avalon.{AvalonMM, AvalonMMConfig}
 import spinal.lib.bus.bmb.{Bmb, BmbAccessParameter, BmbCmd, BmbInvalidationParameter, BmbParameter, BmbSourceParameter}
-import spinal.lib.bus.wishbone.{Wishbone, WishboneConfig}
+import spinal.lib.bus.wishbone.{AddressGranularity, Wishbone, WishboneConfig}
 import spinal.lib.bus.simple._
 import vexriscv.plugin.DBusSimpleBus
 
@@ -89,7 +89,8 @@ case class DataCacheConfig(cacheSize : Int,
     tgcWidth = 0,
     tgdWidth = 0,
     useBTE = true,
-    useCTI = true
+    useCTI = true,
+    addressGranularity = AddressGranularity.WORD
   )
 
   def getBmbParameter() = BmbParameter(
