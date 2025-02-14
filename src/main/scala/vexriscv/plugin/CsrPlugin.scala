@@ -942,12 +942,12 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
           }
 
           val tdata2 = new Area{
-            val value = Reg(PC)
-            csrw(CSR.TDATA2, 0 -> value)
+            val value = Reg(Bits(32 bits))
+            csrrw(CSR.TDATA2, value, 0 -> value)
 
             val execute = new Area{
               val enabled = !debugMode && tdata1.action === 1 && tdata1.execute && tdata1.privilegeHit
-              val hit =  enabled && value === decode.input(PC)
+              val hit =  enabled && value.asUInt === decode.input(PC)
               decodeBreak.enabled.setWhen(hit)
             }
           }
