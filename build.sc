@@ -1,6 +1,6 @@
 import mill._, scalalib._
 
-val spinalVersion = "1.10.1"
+val spinalVersion = "1.12.0"
 
 object ivys {
   val sv = "2.11.12"
