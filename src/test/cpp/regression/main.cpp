@@ -2503,7 +2503,7 @@ public:
         if(top->dBusAhbLite3_HREADY && dBusAhbLite3_HTRANS == 2 && dBusAhbLite3_HWRITE){
             uint32_t data = top->dBusAhbLite3_HWDATA;
             bool error;
-            ws->dBusAccess(dBusAhbLite3_HADDR, 1, dBusAhbLite3_HSIZE, ((1 << (1 << dBusAhbLite3_HSIZE))-1) << (dBusAhbLite3_HADDR & 0x3),&data,&error);
+            ws->dBusAccess(dBusAhbLite3_HADDR, 1, (1<<dBusAhbLite3_HSIZE),((uint8_t*)&data) + (dBusAhbLite3_HADDR&0x3),&error);
         }
 
         if(top->dBusAhbLite3_HREADY){
@@ -2516,16 +2516,15 @@ public:
 
 	virtual void postCycle(){
 		if(ws->iStall)
-			top->dBusAhbLite3_HREADY = (!ws->iStall || VL_RANDOM_I_WIDTH(7) < 100);
+                    top->dBusAhbLite3_HREADY = (!ws->iStall || VL_RANDOM_I_WIDTH(7) < 100);
 
-        top->dBusAhbLite3_HRDATA = VL_RANDOM_I_WIDTH(32);
-        top->dBusAhbLite3_HRESP = VL_RANDOM_I_WIDTH(1);
+                top->dBusAhbLite3_HRDATA = VL_RANDOM_I_WIDTH(32);
+                top->dBusAhbLite3_HRESP = VL_RANDOM_I_WIDTH(1);
 
 		if(top->dBusAhbLite3_HREADY && dBusAhbLite3_HTRANS == 2 && !dBusAhbLite3_HWRITE){
-
 		    bool error;
-		    ws->dBusAccess(dBusAhbLite3_HADDR, 0, dBusAhbLite3_HSIZE, ((1 << (1 << dBusAhbLite3_HSIZE))-1) << (dBusAhbLite3_HADDR & 0x3),&top->dBusAhbLite3_HRDATA,&error);
-            top->dBusAhbLite3_HRESP  = error;
+		    ws->dBusAccess(dBusAhbLite3_HADDR, 0, (1<<dBusAhbLite3_HSIZE),((uint8_t*)&top->dBusAhbLite3_HRDATA) + (dBusAhbLite3_HADDR&0x3),&error);
+		    top->dBusAhbLite3_HRESP  = error;
 		}
 	}
 };
