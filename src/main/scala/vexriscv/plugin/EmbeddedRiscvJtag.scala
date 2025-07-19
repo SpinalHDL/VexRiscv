@@ -50,9 +50,9 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
           xlen = XLEN,
           flen = pipeline.config.FLEN,
           withFpuRegAccess = pipeline.config.FLEN == 64
-        ))
+        )),
+        withSysBus = withSysBus
       ),
-      withSysBus = withSysBus
     )
     if (withSysBus) {
       sysBus = master(DBusSimpleBus())
