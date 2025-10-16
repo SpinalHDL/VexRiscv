@@ -34,7 +34,9 @@ case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig],
                                        fpu : Boolean = false,
                                        privilegedDebug : Boolean = false,
                                        hardwareBreakpoints : Int = 0,
-                                       jtagTap : Boolean = false)
+                                       jtagTap : Boolean = false,
+                                       interruptCount : Int = 32
+                                      )
 
 class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with PostInitCallback{
   val cpuCount = p.cpuConfigs.size
@@ -209,8 +211,8 @@ class VexRiscvSmpClusterWithPeripherals(p : VexRiscvSmpClusterParameter) extends
   }
   val clintWishbone = clintWishboneBridge.produceIo(clintWishboneBridge.logic.bridge.io.input)
 
-  val interrupts = in Bits(32 bits)
-  for(i <- 1 to 31) yield plic.addInterrupt(interrupts(i), i)
+  val interrupts = in Bits(p.interruptCount bits)
+  for(i <- 1 until p.interruptCount) yield plic.addInterrupt(interrupts(i), i)
 
   for ((core, cpuId) <- cores.zipWithIndex) {
     core.cpu.setTimerInterrupt(clint.timerInterrupt(cpuId))
