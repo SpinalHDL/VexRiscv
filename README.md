@@ -1465,6 +1465,41 @@ init
 halt
 ```
 
+##### System Bus
+The EmbeddedRiscvJtag plugin can also be configured to support system bus accesses per the RISC-V Debug Specification v1.0. This allows memory access without impacting CPU execution and can be handy when a debug host is regularly polling (e.g. RTT logging).
+
+```scala
+new EmbeddedRiscvJtag(
+  p = DebugTransportModuleParameter(
+    addressWidth = 7,
+    version      = 1,
+    idle         = 7
+  ),
+  withTunneling = false,
+  withTap = true,
+  withSysBus = true
+)
+```
+
+Then connect `sysBus` to your logic just like a data bus (`sysBus` is a `DBusSimpleBus`).
+
+```scala
+var debugSysBus: Axi4Shared = null
+
+...
+
+for (plugin <- cpuConfig.plugins) plugin match {
+  case plugin: EmbeddedRiscvJtag => {
+    debugSysBus = plugin.sysBus.toAxi4Shared()
+  }
+  case _ =>
+}
+
+...
+
+// Connect debugSysBus to a crossbar, etc.
+```
+
 #### YamlPlugin
 
 This plugin offers a service to other plugins to generate a useful Yaml file describing the CPU configuration. It contains, for instance, the sequence of instructions required

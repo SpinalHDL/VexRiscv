@@ -16,7 +16,8 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
                         var debugCd : ClockDomain = null,
                         var jtagCd : ClockDomain = null,
                         var withTap : Boolean = true,
-                        var withTunneling : Boolean = false
+                        var withTunneling : Boolean = false,
+                        var withSysBus : Boolean = false
                         ) extends Plugin[VexRiscv] with VexRiscvRegressionArg{
 
 
@@ -25,6 +26,7 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
   var jtag : Jtag = null
   var jtagInstruction : JtagTapInstructionCtrl = null
   var ndmreset : Bool = null
+  var sysBus : DBusSimpleBus = null
 
 
   def setDebugCd(cd : ClockDomain) : this.type = {debugCd = cd; this}
@@ -48,9 +50,24 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
           xlen = XLEN,
           flen = pipeline.config.FLEN,
           withFpuRegAccess = pipeline.config.FLEN == 64
-        ))
-      )
+        )),
+        withSysBus = withSysBus
+      ),
     )
+    if (withSysBus) {
+      sysBus = master(DBusSimpleBus())
+
+      sysBus.cmd.valid := dm.io.sysBus.cmd.valid
+      dm.io.sysBus.cmd.ready := sysBus.cmd.ready
+      sysBus.cmd.payload.wr := dm.io.sysBus.cmd.wr
+      sysBus.cmd.payload.address := dm.io.sysBus.cmd.address
+      sysBus.cmd.payload.data := dm.io.sysBus.cmd.data
+      sysBus.cmd.payload.size := dm.io.sysBus.cmd.size
+
+      dm.io.sysBus.rsp.ready := sysBus.rsp.ready
+      dm.io.sysBus.rsp.error := sysBus.rsp.error
+      dm.io.sysBus.rsp.data := sysBus.rsp.data
+    }
 
     ndmreset := dm.io.ndmreset
 
