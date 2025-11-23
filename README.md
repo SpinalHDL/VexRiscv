@@ -1385,7 +1385,8 @@ new EmbeddedRiscvJtag(
     idle         = 7
   ),
   withTunneling = false,
-  withTap = true
+  withTap = true,
+  jtagId = 0x10002FFF
 )
 ```
 
