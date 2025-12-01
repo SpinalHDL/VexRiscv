@@ -16,7 +16,8 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
                         var debugCd : ClockDomain = null,
                         var jtagCd : ClockDomain = null,
                         var withTap : Boolean = true,
-                        var withTunneling : Boolean = false
+                        var withTunneling : Boolean = false,
+                        var jtagId : Int = 0x10002FFF
                         ) extends Plugin[VexRiscv] with VexRiscvRegressionArg{
 
 
@@ -57,7 +58,8 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
     val dmiDirect = if(withTap && !withTunneling) new Area {
       val logic = DebugTransportModuleJtagTap(
         p.copy(addressWidth = 7),
-        debugCd = ClockDomain.current
+        debugCd = ClockDomain.current,
+        jtagId = jtagId
       )
       dm.io.ctrl <> logic.io.bus
       logic.io.jtag <> jtag
