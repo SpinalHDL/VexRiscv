@@ -195,6 +195,7 @@ object Riscv{
     def MIMPID    = 0xF13 // MRO Implementation ID.
     def MHARTID   = 0xF14 // MRO Hardware thread ID.Machine Trap Setup
     def MSTATUS   = 0x300 // MRW Machine status register.
+    def MSTATUSH  = 0x310 // MRW Upper 32 bits of mstatus, RV32I only.
     def MISA      = 0x301 // MRW ISA and extensions
     def MEDELEG   = 0x302 // MRW Machine exception delegation register.
     def MIDELEG   = 0x303 // MRW Machine interrupt delegation register.
