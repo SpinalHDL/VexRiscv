@@ -1,7 +1,9 @@
 package vexriscv.demo
 
-
+import spinal.lib.misc.Apb3Clint
+import spinal.lib.misc.plic.Apb3Plic
 import vexriscv.plugin._
+import vexriscv.ip.fpu._
 import vexriscv._
 import vexriscv.ip.{DataCacheConfig, InstructionCacheConfig}
 import spinal.core._
@@ -36,6 +38,16 @@ case class BrieyConfig(axiFrequency : HertzNumber,
 object BrieyConfig{
 
   def default = {
+     val fpuParam = FpuParameter(
+  withDouble = false,  // no RV32D
+  withAdd    = true,   // FADD / FSUB
+  withMul    = true,   // FMUL
+  withDiv    = true,   // FDIV
+  withSqrt   = true,   // FSQRT
+  withFma    = true,   // FMADD / FMSUB / FNMSUB / FNMADD
+  withCmp    = true,   // FEQ / FLT / FLE / FCLASS
+  withConv   = true    // FCVT / FMV
+)
     val config = BrieyConfig(
       axiFrequency = 50 MHz,
       onChipRamSize  = 4 kB,
@@ -84,28 +96,34 @@ object BrieyConfig{
         //                      catchAccessFault = true
         //                    ),
         new DBusCachedPlugin(
-          config = new DataCacheConfig(
-            cacheSize         = 4096,
-            bytePerLine       = 32,
-            wayCount          = 1,
-            addressWidth      = 32,
-            cpuDataWidth      = 32,
-            memDataWidth      = 32,
-            catchAccessError  = true,
-            catchIllegal      = true,
-            catchUnaligned    = true
-          ),
-          memoryTranslatorPortConfig = null
-          //            memoryTranslatorPortConfig = MemoryTranslatorPortConfig(
-          //              portTlbSize = 6
-          //            )
-        ),
-        new StaticMemoryTranslatorPlugin(
-          ioRange      = _(31 downto 28) === 0xF
-        ),
+  config = new DataCacheConfig(
+    cacheSize = 4096,
+    bytePerLine = 32,
+    wayCount = 1,
+    addressWidth = 32,
+    cpuDataWidth = 32,
+    memDataWidth = 32,
+    catchAccessError = true,
+    catchIllegal = true,
+    catchUnaligned = true,
+    withLrSc = true,
+    withAmo  = true
+  ),
+  memoryTranslatorPortConfig = MmuPortConfig(
+    portTlbSize = 4
+  )
+),
+
+        new MmuPlugin(
+           ioRange = _(31 downto 28) === 0xF
+       ),
+
+        
         new DecoderSimplePlugin(
           catchIllegalInstruction = true
         ),
+
+       
         new RegFilePlugin(
           regFileReadyKind = plugin.SYNC,
           zeroBoot = false
@@ -118,6 +136,13 @@ object BrieyConfig{
         new FullBarrelShifterPlugin,
         new MulPlugin,
         new DivPlugin,
+       
+
+new FpuPlugin(
+  externalFpu = false,
+  p = fpuParam
+),
+
         new HazardSimplePlugin(
           bypassExecute           = true,
           bypassMemory            = true,
@@ -132,28 +157,12 @@ object BrieyConfig{
           catchAddressMisaligned = true
         ),
         new CsrPlugin(
-          config = CsrPluginConfig(
-            catchIllegalAccess = false,
-            mvendorid      = null,
-            marchid        = null,
-            mimpid         = null,
-            mhartid        = null,
-            misaExtensionsInit = 66,
-            misaAccess     = CsrAccess.NONE,
-            mtvecAccess    = CsrAccess.NONE,
-            mtvecInit      = 0x80000020l,
-            mepcAccess     = CsrAccess.READ_WRITE,
-            mscratchGen    = false,
-            mcauseAccess   = CsrAccess.READ_ONLY,
-            mbadaddrAccess = CsrAccess.READ_ONLY,
-            mcycleAccess   = CsrAccess.NONE,
-            minstretAccess = CsrAccess.NONE,
-            ecallGen       = false,
-            wfiGenAsWait         = false,
-            ucycleAccess   = CsrAccess.NONE,
-            uinstretAccess = CsrAccess.NONE
-          )
-        ),
+    CsrPluginConfig.linuxMinimal(0x80000020l).copy(
+    ebreakGen = false
+    utimeAccess = CsrAccess.READ_ONLY
+  )
+),
+
         new YamlPlugin("cpu0.yaml")
       )
     )
@@ -190,8 +199,8 @@ class Briey(val config: BrieyConfig) extends Component{
     val gpioB         = master(TriStateArray(32 bits))
     val uart          = master(Uart())
     val vga           = master(Vga(vgaRgbConfig))
-    val timerExternal = in(PinsecTimerCtrlExternal())
-    val coreInterrupt = in Bool()
+    
+    
   }
 
   val resetCtrlClockDomain = ClockDomain(
@@ -260,6 +269,17 @@ class Briey(val config: BrieyConfig) extends Component{
       dataWidth    = 32,
       idWidth      = 4
     )
+   val clint = Apb3Clint(hartCount = 1)
+
+    val plic = Apb3Plic(
+  sourceCount = 32,  // IRQ sources
+  targetCount = 2    // M-mode + S-mode
+)
+// IRQ[0] is reserved, all others inactive for now
+plic.io.sources := (
+  False ## B(31 bits, default -> False)
+)
+
 
     val gpioACtrl = Apb3Gpio(
       gpioWidth = 32,
@@ -269,7 +289,7 @@ class Briey(val config: BrieyConfig) extends Component{
       gpioWidth = 32,
       withReadSync = true
     )
-    val timerCtrl = PinsecTimerCtrl()
+    
 
 
     val uartCtrl = Apb3UartCtrl(uartCtrlConfig)
@@ -302,10 +322,17 @@ class Briey(val config: BrieyConfig) extends Component{
         case plugin : IBusCachedPlugin => iBus = plugin.iBus.toAxi4ReadOnly()
         case plugin : DBusSimplePlugin => dBus = plugin.dBus.toAxi4Shared()
         case plugin : DBusCachedPlugin => dBus = plugin.dBus.toAxi4Shared(true)
-        case plugin : CsrPlugin        => {
-          plugin.externalInterrupt := BufferCC(io.coreInterrupt)
-          plugin.timerInterrupt := timerCtrl.io.interrupt
-        }
+        case plugin : CsrPlugin => {
+  // CLINT → CSR
+  plugin.timerInterrupt     := clint.io.timerInterrupt(0)     // MTIP
+  plugin.softwareInterrupt  := clint.io.softwareInterrupt(0)  // MSIP
+  plugin.utime              := clint.io.time                  // time CSR
+
+  // PLIC → CSR
+  plugin.externalInterrupt  := plic.io.targets(0)             // MEIP
+  plugin.externalInterruptS := plic.io.targets(1)             // SEIP
+}
+
         case plugin : DebugPlugin      => debugClockDomain{
           resetCtrl.axiReset setWhen(RegNext(plugin.io.resetOut))
           io.jtag <> plugin.io.bus.fromJtag()
@@ -372,15 +399,15 @@ class Briey(val config: BrieyConfig) extends Component{
         gpioACtrl.io.apb -> (0x00000, 4 kB),
         gpioBCtrl.io.apb -> (0x01000, 4 kB),
         uartCtrl.io.apb  -> (0x10000, 4 kB),
-        timerCtrl.io.apb -> (0x20000, 4 kB),
-        vgaCtrl.io.apb   -> (0x30000, 4 kB)
+        clint.io.bus -> (0x20000, 4 kB),
+        vgaCtrl.io.apb   -> (0x30000, 4 kB),
+        plic.io.bus -> (0x40000, 4 kB)
       )
     )
   }
 
   io.gpioA          <> axi.gpioACtrl.io.gpio
-  io.gpioB          <> axi.gpioBCtrl.io.gpio
-  io.timerExternal  <> axi.timerCtrl.io.external
+  io.gpioB          <> axi.gpioBCtrl.io.gpio  
   io.uart           <> axi.uartCtrl.io.uart
   io.sdram          <> axi.sdramCtrl.io.sdram
   io.vga            <> axi.vgaCtrl.io.vga
