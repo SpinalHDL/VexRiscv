@@ -148,11 +148,11 @@ object VexRiscvAxi4LinuxPlicClint{
               .parent = null //Avoid the io bundle to be interpreted as a QSys conduit
           }
           case plugin: CsrPlugin => {
-            plugin.timerInterrupt     setAsDirectionLess() := cpu.clintCtrl.io.timerInterrupt(0)
-            plugin.softwareInterrupt  setAsDirectionLess() := cpu.clintCtrl.io.softwareInterrupt(0)
-            plugin.externalInterrupt  setAsDirectionLess() := cpu.plicCtrl.io.targets(0)
-            plugin.externalInterruptS setAsDirectionLess() := cpu.plicCtrl.io.targets(1)
-            plugin.utime              setAsDirectionLess() := cpu.clintCtrl.io.time
+            plugin.timerInterrupt     .setAsDirectionLess() := cpu.clintCtrl.io.timerInterrupt(0)
+            plugin.softwareInterrupt  .setAsDirectionLess() := cpu.clintCtrl.io.softwareInterrupt(0)
+            plugin.externalInterrupt  .setAsDirectionLess() := cpu.plicCtrl.io.targets(0)
+            plugin.externalInterruptS .setAsDirectionLess() := cpu.plicCtrl.io.targets(1)
+            plugin.utime              .setAsDirectionLess() := cpu.clintCtrl.io.time
           }
           case _ =>
         }

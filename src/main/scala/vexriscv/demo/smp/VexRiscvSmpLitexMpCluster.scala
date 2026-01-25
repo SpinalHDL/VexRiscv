@@ -7,6 +7,8 @@ import spinal.lib.bus.wishbone.{WishboneConfig, WishboneToBmbGenerator}
 import spinal.lib.sim.SparseMemory
 import vexriscv.demo.smp.VexRiscvSmpClusterGen.vexRiscvConfig
 
+case class __Unused_Because_EmptyCompilationUnitsCauseScala213IncrementalCompilationIssues();
+
 //case class VexRiscvLitexSmpMpClusterParameter( cluster : VexRiscvSmpClusterParameter,
 //                                             liteDram : LiteDramNativeParameter,
 //                                             liteDramMapping : AddressMapping)

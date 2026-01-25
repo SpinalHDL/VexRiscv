@@ -841,7 +841,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
               goto(IDLE)
             }
           }
-          build()
+          this.build()
         }
 
 
