@@ -53,7 +53,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
     this
   }
 
-  implicit val interconnect = BmbInterconnectGenerator()
+  implicit val interconnect: BmbInterconnectGenerator = BmbInterconnectGenerator()
 
   val customDebug = !p.privilegedDebug generate new Area {
     val debugBridge = debugCd.outputClockDomain on JtagInstructionDebuggerGenerator(p.jtagHeaderIgnoreWidth)
