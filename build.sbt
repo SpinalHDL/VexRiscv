@@ -4,7 +4,7 @@ lazy val root = (project in file(".")).
   settings(
     inThisBuild(List(
       organization       := "com.github.spinalhdl",
-      crossScalaVersions := Seq("2.13.18", "2.12.18"),
+      crossScalaVersions := Seq("2.12.18", "2.13.18"),
       scalaVersion       := "2.12.18",
       version            := "2.1.0"
     )),
