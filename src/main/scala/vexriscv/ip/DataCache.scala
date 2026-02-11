@@ -114,7 +114,7 @@ case class DataCacheConfig(cacheSize : Int,
 }
 
 object DataCacheCpuExecute{
-  implicit def implArgs(that : DataCacheCpuExecute) = that.args
+  implicit def implArgs(that : DataCacheCpuExecute): DataCacheCpuExecuteArgs = that.args
 }
 
 case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterSlave{
