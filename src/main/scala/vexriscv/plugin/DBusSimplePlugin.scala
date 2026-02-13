@@ -306,7 +306,11 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
   var rspStage : Stage = null
   var mmuBus : MemoryTranslatorBus = null
   var redoBranch : Flow[UInt] = null
-  val catchSomething = catchAccessFault || catchAddressMisaligned || memoryTranslatorPortConfig != null
+
+  // Whether the IBus plugin should catch faults. Automatically determined
+  // in setup based on whether catchAccessFault or catchAddressMisaligned
+  // is set, or the pipeline has a MemoryTranslator plugin.
+  var catchSomething = false
 
   @dontName var dBusAccess : DBusAccess = null
   override def newDBusAccess(): DBusAccess = {
@@ -319,6 +323,8 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
     import Riscv._
     import pipeline.config._
     import pipeline._
+
+    catchSomething = catchAccessFault || catchAddressMisaligned || pipeline.serviceExist(classOf[MemoryTranslator])
 
     val decoderService = pipeline.service(classOf[DecoderService])
 
@@ -384,7 +390,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
       memoryExceptionPort = exceptionService.newExceptionPort(rspStage)
     }
 
-    if(memoryTranslatorPortConfig != null) {
+    if(pipeline.serviceExist(classOf[MemoryTranslator])) {
       mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_DATA, memoryTranslatorPortConfig)
       redoBranch = pipeline.service(classOf[JumpService]).createJumpInterface(if(pipeline.memory != null) pipeline.memory else pipeline.execute)
     }
@@ -457,7 +463,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
         //do not emit memory request if MMU refilling
         insert(MMU_FAULT) := input(MMU_RSP).exception || (!input(MMU_RSP).allowWrite && input(MEMORY_STORE)) || (!input(MMU_RSP).allowRead && !input(MEMORY_STORE))
-        skipCmd.setWhen(input(MMU_FAULT) || input(MMU_RSP).refilling)
+        skipCmd.setWhen(input(MMU_RSP).refilling)
 
         insert(MMU_RSP) := mmuBus.rsp
       }
@@ -504,7 +510,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
           memoryExceptionPort.valid := True
         }
 
-        if(memoryTranslatorPortConfig != null) {
+        if(mmuBus != null) {
           redoBranch.valid := False
           redoBranch.payload := input(PC)
 
@@ -522,7 +528,7 @@ class DBusSimplePlugin(catchAddressMisaligned : Boolean = false,
 
         when(!(arbitration.isValid && input(MEMORY_ENABLE) && (Bool(cmdStage != rspStage) || !arbitration.isStuckByOthers))){
           if(catchSomething) memoryExceptionPort.valid := False
-          if(memoryTranslatorPortConfig != null) redoBranch.valid := False
+          if(mmuBus != null) redoBranch.valid := False
         }
 
       }
