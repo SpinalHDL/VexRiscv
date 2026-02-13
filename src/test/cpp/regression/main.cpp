@@ -3692,7 +3692,7 @@ public:
 	    stdinRestore();
 	    #endif
 	}
-	virtual bool isDBusCheckedRegion(uint32_t address){ return true;}
+	virtual bool isDBusCheckedRegion(uint32_t address){ return isPerifRegion(address);} // Should only check IO region
 	virtual bool isPerifRegion(uint32_t addr) { return (addr & 0xF0000000) == 0xF0000000 || (addr & 0xE0000000) == 0xE0000000;}
     virtual bool isMmuRegion(uint32_t addr) { return true; }
 
