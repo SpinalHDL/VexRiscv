@@ -1,6 +1,7 @@
 package vexriscv.ip
 
 import vexriscv._
+import vexriscv.ihp.sg13g2._
 import spinal.core._
 import spinal.lib._
 import spinal.lib.bus.amba4.axi.{Axi4Config, Axi4Shared}
@@ -11,572 +12,7 @@ import spinal.lib.bus.simple._
 import vexriscv.plugin.DBusSimpleBus
 
 
-case class DataCacheConfig(cacheSize : Int,
-                           bytePerLine : Int,
-                           wayCount : Int,
-                           addressWidth : Int,
-                           cpuDataWidth : Int,
-                           var rfDataWidth : Int = -1, //-1 mean cpuDataWidth
-                           memDataWidth : Int,
-                           catchAccessError : Boolean,
-                           catchIllegal : Boolean,
-                           catchUnaligned : Boolean,
-                           earlyWaysHits : Boolean = true,
-                           earlyDataMux : Boolean = false,
-                           tagSizeShift : Int = 0, //Used to force infering ram
-                           withLrSc : Boolean = false,
-                           withAmo : Boolean = false,
-                           withExclusive : Boolean = false,
-                           withInvalidate : Boolean = false,
-                           pendingMax : Int = 64,
-                           directTlbHit : Boolean = false,
-                           mergeExecuteMemory : Boolean = false,
-                           asyncTagMemory : Boolean = false,
-                           withWriteAggregation : Boolean = false){
-
-  if(rfDataWidth == -1)  rfDataWidth = cpuDataWidth 
-  assert(!(mergeExecuteMemory && (earlyDataMux || earlyWaysHits)))
-  assert(!(earlyDataMux && !earlyWaysHits))
-  assert(isPow2(pendingMax))
-  assert(rfDataWidth <= memDataWidth)
-
-  def lineCount = cacheSize/bytePerLine/wayCount
-  def sizeMax = log2Up(bytePerLine)
-  def sizeWidth = log2Up(sizeMax + 1)
-  val aggregationWidth = if(withWriteAggregation) log2Up(memDataBytes+1) else 0
-  def withWriteResponse = withExclusive
-  def burstSize = bytePerLine*8/memDataWidth
-  val burstLength = bytePerLine/(cpuDataWidth/8)
-  def catchSomething = catchUnaligned || catchIllegal || catchAccessError
-  def withInternalAmo = withAmo && !withExclusive
-  def withInternalLrSc = withLrSc && !withExclusive
-  def withExternalLrSc = withLrSc && withExclusive
-  def withExternalAmo = withAmo && withExclusive
-  def cpuDataBytes = cpuDataWidth/8
-  def rfDataBytes = rfDataWidth/8
-  def memDataBytes = memDataWidth/8
-  def getAxi4SharedConfig() = Axi4Config(
-    addressWidth = addressWidth,
-    dataWidth = memDataWidth,
-    useId = false,
-    useRegion = false,
-    useBurst = false,
-    useLock = false,
-    useQos = false
-  )
-
-
-  def getAvalonConfig() = AvalonMMConfig.bursted(
-    addressWidth = addressWidth,
-    dataWidth = memDataWidth,
-    burstCountWidth = log2Up(burstSize + 1)).copy(
-    useByteEnable = true,
-    constantBurstBehavior = true,
-    burstOnBurstBoundariesOnly = true,
-    useResponse = true,
-    maximumPendingReadTransactions = 2
-  )
-
-  def getWishboneConfig() = WishboneConfig(
-    addressWidth = 32-log2Up(memDataWidth/8),
-    dataWidth = memDataWidth,
-    selWidth = memDataBytes,
-    useSTALL = false,
-    useLOCK = false,
-    useERR = true,
-    useRTY = false,
-    tgaWidth = 0,
-    tgcWidth = 0,
-    tgdWidth = 0,
-    useBTE = true,
-    useCTI = true,
-    addressGranularity = AddressGranularity.WORD
-  )
-
-  def getBmbParameter() = BmbParameter(
-    BmbAccessParameter(
-      addressWidth = 32,
-      dataWidth = memDataWidth
-    ).addSources(1, BmbSourceParameter(
-      lengthWidth = log2Up(this.bytePerLine),
-      contextWidth = (if(!withWriteResponse) 1 else 0) + aggregationWidth,
-      alignment  = BmbParameter.BurstAlignement.LENGTH,
-      canExclusive = withExclusive,
-      withCachedRead = true,
-      canInvalidate = withInvalidate,
-      canSync = withInvalidate
-    )),
-    BmbInvalidationParameter(
-      invalidateLength = log2Up(this.bytePerLine),
-      invalidateAlignment = BmbParameter.BurstAlignement.LENGTH
-    )
-  )
-}
-
-object DataCacheCpuExecute{
-  implicit def implArgs(that : DataCacheCpuExecute): DataCacheCpuExecuteArgs = that.args
-}
-
-case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterSlave{
-  val isValid = Bool
-  val address = UInt(p.addressWidth bit)
-  val haltIt = Bool
-  val args = DataCacheCpuExecuteArgs(p)
-  val refilling = Bool
-
-  override def asMaster(): Unit = {
-    out(isValid, args, address)
-    in(haltIt, refilling)
-  }
-}
-
-case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
-  val wr = Bool
-  val size = UInt(log2Up(log2Up(p.cpuDataBytes)+1) bits)
-  val isLrsc = p.withLrSc generate Bool()
-  val isAmo = p.withAmo generate Bool()
-  val amoCtrl = p.withAmo generate new Bundle {
-    val swap = Bool()
-    val alu = Bits(3 bits)
-  }
-
-  val totalyConsistent = Bool() //Only for AMO/LRSC
-}
-
-case class DataCacheCpuMemory(p : DataCacheConfig, mmu : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave{
-  val isValid = Bool
-  val isStuck = Bool
-  val isWrite = Bool
-  val address = UInt(p.addressWidth bit)
-  val mmuRsp  = MemoryTranslatorRsp(mmu)
-
-  override def asMaster(): Unit = {
-    out(isValid, isStuck, address)
-    in(isWrite)
-    out(mmuRsp)
-  }
-}
-
-
-case class FenceFlags() extends Bundle {
-  val SW,SR,SO,SI,PW,PR,PO,PI = Bool()
-  val FM = Bits(4 bits)
-
-  def SL = SR || SI
-  def SS = SW || SO
-  def PL = PR || PI
-  def PS = PW || PO
-  def forceAll(): Unit ={
-    List(SW,SR,SO,SI,PW,PR,PO,PI).foreach(_ := True)
-  }
-  def clearFlags(): this.type ={
-    List(SW,SR,SO,SI,PW,PR,PO,PI).foreach(_ := False)
-    this
-  }
-}
-
-case class DataCacheCpuWriteBack(p : DataCacheConfig) extends Bundle with IMasterSlave{
-  val isValid = Bool()
-  val isStuck = Bool()
-  val isFiring = Bool()
-  val isUser = Bool()
-  val haltIt = Bool()
-  val isWrite = Bool()
-  val storeData = Bits(p.cpuDataWidth bit)
-  val data = Bits(p.cpuDataWidth bit)
-  val address = UInt(p.addressWidth bit)
-  val mmuException, unalignedAccess, accessError = Bool()
-  val keepMemRspData = Bool() //Used by external AMO to avoid having an internal buffer
-  val fence = FenceFlags()
-  val exclusiveOk = Bool()
-
-  override def asMaster(): Unit = {
-    out(isValid,isStuck,isUser, address, fence, storeData, isFiring)
-    in(haltIt, data, mmuException, unalignedAccess, accessError, isWrite, keepMemRspData, exclusiveOk)
-  }
-}
-
-case class DataCacheFlush(lineCount : Int) extends Bundle{
-  val singleLine = Bool()
-  val lineId = UInt(log2Up(lineCount) bits)
-}
-
-case class DataCacheCpuBus(p : DataCacheConfig, mmu : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave{
-  val execute   = DataCacheCpuExecute(p)
-  val memory    = DataCacheCpuMemory(p, mmu)
-  val writeBack = DataCacheCpuWriteBack(p)
-
-  val redo = Bool()
-  val flush = Stream(DataCacheFlush(p.lineCount))
-
-  val writesPending = Bool()
-
-  override def asMaster(): Unit = {
-    master(execute)
-    master(memory)
-    master(writeBack)
-    master(flush)
-    in(redo, writesPending)
-  }
-}
-
-
-case class DataCacheMemCmd(p : DataCacheConfig) extends Bundle{
-  val wr = Bool
-  val uncached = Bool
-  val address = UInt(p.addressWidth bit)
-  val data = Bits(p.cpuDataWidth bits)
-  val mask = Bits(p.cpuDataWidth/8 bits)
-  val size   = UInt(p.sizeWidth bits) //... 1 => 2 bytes ... 2 => 4 bytes ...
-  val exclusive = p.withExclusive generate Bool()
-  val last = Bool
-
-//  def beatCountMinusOne = size.muxListDc((0 to p.sizeMax).map(i => i -> U((1 << i)/p.memDataBytes)))
-//  def beatCount = size.muxListDc((0 to p.sizeMax).map(i => i -> U((1 << i)/p.memDataBytes-1)))
-
-  //Utilities which does quite a few assumtions about the bus utilisation
-  def byteCountMinusOne = size.muxListDc((0 to p.sizeMax).map(i => i -> U((1 << i)-1, log2Up(p.bytePerLine) bits)))
-  def beatCountMinusOne = (size === log2Up(p.bytePerLine)) ? U(p.burstSize-1) | U(0)
-  def beatCount         = (size === log2Up(p.bytePerLine)) ? U(p.burstSize) | U(1)
-  def isBurst           = size === log2Up(p.bytePerLine)
-}
-case class DataCacheMemRsp(p : DataCacheConfig) extends Bundle{
-  val aggregated = UInt(p.aggregationWidth bits)
-  val last = Bool()
-  val data = Bits(p.memDataWidth bit)
-  val error = Bool
-  val exclusive = p.withExclusive generate Bool()
-}
-case class DataCacheInv(p : DataCacheConfig) extends Bundle{
-  val enable = Bool()
-  val address = UInt(p.addressWidth bit)
-}
-case class DataCacheAck(p : DataCacheConfig) extends Bundle{
-  val hit = Bool()
-}
-
-case class DataCacheSync(p : DataCacheConfig) extends Bundle{
-  val aggregated = UInt(p.aggregationWidth bits)
-}
-
-case class DataCacheMemBus(p : DataCacheConfig) extends Bundle with IMasterSlave{
-  val cmd = Stream (DataCacheMemCmd(p))
-  val rsp = Flow (DataCacheMemRsp(p))
-
-  val inv = p.withInvalidate generate Stream(Fragment(DataCacheInv(p)))
-  val ack = p.withInvalidate generate Stream(Fragment(DataCacheAck(p)))
-  val sync = p.withInvalidate generate Stream(DataCacheSync(p))
-
-  override def asMaster(): Unit = {
-    master(cmd)
-    slave(rsp)
-
-    if(p.withInvalidate) {
-      slave(inv)
-      master(ack)
-      slave(sync)
-    }
-  }
-
-  def toAxi4Shared(stageCmd : Boolean = false, pendingWritesMax  : Int = 7): Axi4Shared = new Area{
-    setName("dBusToAxi4Shared")
-    val axi = Axi4Shared(p.getAxi4SharedConfig()).setName("dbus_axi")
-
-    val cmdPreFork = if (stageCmd) cmd.stage.stage().s2mPipe() else cmd
-
-    val pendingWrites = CounterUpDown(
-      stateCount = pendingWritesMax + 1,
-      incWhen = cmdPreFork.fire && cmdPreFork.wr,
-      decWhen = axi.writeRsp.fire
-    )
-
-    val hazard = (pendingWrites =/= 0 && !cmdPreFork.wr) || pendingWrites === pendingWritesMax
-    val (cmdFork, dataFork) = StreamFork2(cmdPreFork.haltWhen(hazard))
-    val cmdStage  = cmdFork.throwWhen(RegNextWhen(!cmdFork.last,cmdFork.fire).init(False))
-    val dataStage = dataFork.throwWhen(!dataFork.wr)
-
-    axi.sharedCmd.arbitrationFrom(cmdStage)
-    axi.sharedCmd.write := cmdStage.wr
-    axi.sharedCmd.prot := "010"
-    axi.sharedCmd.cache := "1111"
-    axi.sharedCmd.size := log2Up(p.memDataBytes)
-    axi.sharedCmd.addr := cmdStage.address
-    axi.sharedCmd.len  := cmdStage.beatCountMinusOne.resized
-
-    axi.writeData.arbitrationFrom(dataStage)
-    axi.writeData.data := dataStage.data
-    axi.writeData.strb := dataStage.mask
-    axi.writeData.last := dataStage.last
-
-    rsp.valid := axi.r.valid
-    rsp.error := !axi.r.isOKAY()
-    rsp.data := axi.r.data
-
-    axi.r.ready := True
-    axi.b.ready := True
-  }.axi
-
-
-  def toAvalon(): AvalonMM = {
-    val avalonConfig = p.getAvalonConfig()
-    val mm = AvalonMM(avalonConfig)
-    mm.read := cmd.valid && !cmd.wr
-    mm.write := cmd.valid && cmd.wr
-    mm.address := cmd.address(cmd.address.high downto log2Up(p.memDataWidth/8)) @@ U(0,log2Up(p.memDataWidth/8) bits)
-    mm.burstCount := cmd.beatCount
-    mm.byteEnable := cmd.mask
-    mm.writeData := cmd.data
-
-    cmd.ready := mm.waitRequestn
-    rsp.valid := mm.readDataValid
-    rsp.data  := mm.readData
-    rsp.error := mm.response =/= AvalonMM.Response.OKAY
-
-    mm
-  }
-
-  def toWishbone(): Wishbone = {
-    val wishboneConfig = p.getWishboneConfig()
-    val bus = Wishbone(wishboneConfig)
-    val counter = Reg(UInt(log2Up(p.burstSize) bits)) init(0)
-    val addressShift = log2Up(p.memDataWidth/8)
-
-    val cmdBridge = Stream (DataCacheMemCmd(p))
-    val isBurst = cmdBridge.isBurst
-    cmdBridge.valid := cmd.valid
-    cmdBridge.address := (isBurst ? (cmd.address(31 downto widthOf(counter) + addressShift) @@ counter @@ U(0, addressShift bits)) | (cmd.address(31 downto addressShift) @@ U(0, addressShift bits)))
-    cmdBridge.wr := cmd.wr
-    cmdBridge.mask := cmd.mask
-    cmdBridge.data := cmd.data
-    cmdBridge.size := cmd.size
-    cmdBridge.last := !isBurst || counter === p.burstSize-1
-    cmd.ready := cmdBridge.ready && (cmdBridge.wr || cmdBridge.last)
-
-
-    when(cmdBridge.fire){
-      counter := counter + 1
-      when(cmdBridge.last){
-        counter := 0
-      }
-    }
-
-
-    bus.ADR := cmdBridge.address >> addressShift
-    bus.CTI := Mux(isBurst, cmdBridge.last ? B"111" | B"010", B"000")
-    bus.BTE := B"00"
-    bus.SEL := cmdBridge.wr ? cmdBridge.mask | B((1 << p.memDataBytes)-1)
-    bus.WE  := cmdBridge.wr
-    bus.DAT_MOSI := cmdBridge.data
-
-    cmdBridge.ready := cmdBridge.valid && (bus.ACK || bus.ERR)
-    bus.CYC := cmdBridge.valid
-    bus.STB := cmdBridge.valid
-
-    rsp.valid := RegNext(cmdBridge.valid && !bus.WE && (bus.ACK || bus.ERR)) init(False)
-    rsp.data  := RegNext(bus.DAT_MISO)
-    rsp.error := RegNext(bus.ERR)
-    bus
-  }
-
-
-
-  def toPipelinedMemoryBus(): PipelinedMemoryBus = {
-    val bus = PipelinedMemoryBus(32,32)
-
-    val counter = Reg(UInt(log2Up(p.burstSize) bits)) init(0)
-    when(bus.cmd.fire){ counter := counter + 1 }
-    when(    cmd.fire && cmd.last){ counter := 0 }
-
-    bus.cmd.valid := cmd.valid
-    bus.cmd.address := (cmd.address(31 downto 2) | counter.resized) @@ U"00"
-    bus.cmd.write := cmd.wr
-    bus.cmd.mask := cmd.mask
-    bus.cmd.data := cmd.data
-    cmd.ready := bus.cmd.ready && (cmd.wr || counter === p.burstSize-1)
-    rsp.valid := bus.rsp.valid
-    rsp.data  := bus.rsp.payload.data
-    rsp.error := False
-    bus
-  }
-
-
-  def toBmb(syncPendingMax : Int = 32,
-            timeoutCycles : Int = 32) : Bmb = new Area{
-    setCompositeName(DataCacheMemBus.this, "Bridge", true)
-    val pipelinedMemoryBusConfig = p.getBmbParameter()
-    val bus = Bmb(pipelinedMemoryBusConfig).setCompositeName(this,"toBmb", true)
-
-    case class Context() extends Bundle{
-      val isWrite = !p.withWriteResponse generate Bool()
-      val rspCount = (p.aggregationWidth != 0) generate UInt(p.aggregationWidth bits)
-    }
-
-
-    def sizeToLength(size : UInt) = size.muxListDc((0 to log2Up(p.cpuDataBytes)).map(i => U(i) -> U((1 << i)-1, log2Up(p.cpuDataBytes) bits)))
-
-    val withoutWriteBuffer = if(p.aggregationWidth == 0) new Area {
-      val busCmdContext = Context()
-
-      bus.cmd.valid := cmd.valid
-      bus.cmd.last := cmd.last
-      bus.cmd.opcode := (cmd.wr ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
-      bus.cmd.address := cmd.address.resized
-      bus.cmd.data := cmd.data
-      bus.cmd.length := cmd.byteCountMinusOne
-      bus.cmd.mask := cmd.mask
-      if (p.withExclusive) bus.cmd.exclusive := cmd.exclusive
-      if (!p.withWriteResponse) busCmdContext.isWrite := cmd.wr
-      bus.cmd.context := B(busCmdContext)
-
-      cmd.ready := bus.cmd.ready
-      if(p.withInvalidate) sync.arbitrationFrom(bus.sync)
-    }
-
-    val withWriteBuffer = if(p.aggregationWidth != 0) new Area {
-      val buffer = new Area {
-        val stream = cmd.toEvent().m2sPipe()
-        val address = Reg(UInt(p.addressWidth bits))
-        val length = Reg(UInt(pipelinedMemoryBusConfig.access.lengthWidth bits))
-        val write  = Reg(Bool)
-        val exclusive = Reg(Bool)
-        val data = Reg(Bits(p.memDataWidth bits))
-        val mask = Reg(Bits(p.memDataWidth/8 bits)) init(0)
-      }
-
-      val aggregationRange = log2Up(p.memDataWidth/8)-1 downto log2Up(p.cpuDataWidth/8)
-      val tagRange = p.addressWidth-1 downto aggregationRange.high+1
-      val aggregationEnabled = Reg(Bool)
-      val aggregationCounter = Reg(UInt(p.aggregationWidth bits)) init(0)
-      val aggregationCounterFull = aggregationCounter === aggregationCounter.maxValue
-      val timer = Reg(UInt(log2Up(timeoutCycles)+1 bits)) init(0)
-      val timerFull = timer.msb
-      val hit = cmd.address(tagRange) === buffer.address(tagRange)
-      val cmdExclusive = if(p.withExclusive) cmd.exclusive else False
-      val canAggregate = cmd.valid && cmd.wr && !cmd.uncached && !cmdExclusive && !timerFull && !aggregationCounterFull && (!buffer.stream.valid || aggregationEnabled && hit)
-      val doFlush = cmd.valid && !canAggregate || timerFull || aggregationCounterFull || !aggregationEnabled
-//      val canAggregate = False
-//      val doFlush = True
-      val busCmdContext = Context()
-      val halt = False
-
-      when(cmd.fire){
-        aggregationCounter := aggregationCounter + 1
-      }
-      when(buffer.stream.valid && !timerFull){
-        timer := timer + 1
-      }
-      when(bus.cmd.fire || !buffer.stream.valid){
-        buffer.mask := 0
-        aggregationCounter := 0
-        timer := 0
-      }
-
-      buffer.stream.ready := (bus.cmd.ready && doFlush || canAggregate) && !halt
-      bus.cmd.valid := buffer.stream.valid && doFlush && !halt
-      bus.cmd.last := True
-      bus.cmd.opcode := (buffer.write ? B(Bmb.Cmd.Opcode.WRITE) | B(Bmb.Cmd.Opcode.READ))
-      bus.cmd.address := buffer.address
-      bus.cmd.length := buffer.length
-      bus.cmd.data := buffer.data
-      bus.cmd.mask := buffer.mask
-
-      if (p.withExclusive) bus.cmd.exclusive := buffer.exclusive
-      bus.cmd.context.removeAssignments() := B(busCmdContext)
-      if (!p.withWriteResponse) busCmdContext.isWrite := bus.cmd.isWrite
-      busCmdContext.rspCount := aggregationCounter
-
-      val aggregationSel = cmd.address(aggregationRange)
-      when(cmd.fire){
-        val dIn = cmd.data.subdivideIn(8 bits)
-        val dReg = buffer.data.subdivideIn(8 bits)
-        for(byteId <- 0 until p.memDataBytes){
-          when(aggregationSel === byteId / p.cpuDataBytes && cmd.mask(byteId % p.cpuDataBytes)){
-            dReg.write(byteId, dIn(byteId % p.cpuDataBytes))
-            buffer.mask(byteId) := True
-          }
-        }
-      }
-
-      when(cmd.fire){
-        buffer.write := cmd.wr
-        buffer.address := cmd.address.resized
-        buffer.length := cmd.byteCountMinusOne
-        if (p.withExclusive) buffer.exclusive := cmd.exclusive
-
-        when(cmd.wr && !cmd.uncached && !cmdExclusive){
-          aggregationEnabled := True
-          buffer.address(aggregationRange.high downto 0) := 0
-          buffer.length := p.memDataBytes-1
-        } otherwise {
-          aggregationEnabled := False
-        }
-      }
-
-
-      val rspCtx = bus.rsp.context.as(Context())
-      rsp.aggregated := rspCtx.rspCount
-
-      val syncLogic = p.withInvalidate generate new Area{
-        val cmdCtx = Stream(UInt(p.aggregationWidth bits))
-        cmdCtx.valid := bus.cmd.fire && bus.cmd.isWrite
-        cmdCtx.payload := aggregationCounter
-        halt setWhen(!cmdCtx.ready)
-
-        val syncCtx = cmdCtx.queue(syncPendingMax).s2mPipe().m2sPipe() //Assume latency of sync is at least 3 cycles
-        syncCtx.ready := bus.sync.fire
-
-        sync.arbitrationFrom(bus.sync)
-        sync.aggregated := syncCtx.payload
-      }
-    }
-
-
-    rsp.valid := bus.rsp.valid
-    if(!p.withWriteResponse) rsp.valid clearWhen(bus.rsp.context(0))
-    rsp.data  := bus.rsp.data
-    rsp.error := bus.rsp.isError
-    rsp.last := bus.rsp.last
-    if(p.withExclusive) rsp.exclusive := bus.rsp.exclusive
-    bus.rsp.ready := True
-
-    val invalidateLogic = p.withInvalidate generate new Area{
-      val beatCountMinusOne = bus.inv.transferBeatCountMinusOne(p.bytePerLine)
-      val counter = Reg(UInt(widthOf(beatCountMinusOne) bits)) init(0)
-
-      inv.valid := bus.inv.valid
-      inv.address := bus.inv.address + (counter << log2Up(p.bytePerLine))
-      inv.enable  := bus.inv.all
-      inv.last := counter === beatCountMinusOne
-      bus.inv.ready := inv.last && inv.ready
-
-      if(widthOf(counter) != 0) when(inv.fire){
-        counter := counter + 1
-        when(inv.last){
-          counter := 0
-        }
-      }
-
-      bus.ack.arbitrationFrom(ack.throwWhen(!ack.last))
-    }
-  }.bus
-
-}
-
-object DataCacheExternalAmoStates extends SpinalEnum{
-  val LR_CMD, LR_RSP, SC_CMD, SC_RSP = newElement();
-}
-
-//If external amo, mem rsp should stay
-trait DataCacheIp extends Component {
-  val p: DataCacheConfig
-  val io: Bundle {
-    val cpu: DataCacheCpuBus
-    val mem: DataCacheMemBus
-  }
-  val cpuWordToRfWordRange: Range
-}
-
-class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParameter) extends Component with DataCacheIp{
+class IhpDataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParameter) extends Component with DataCacheIp{
   import p._
 
   val io = new Bundle{
@@ -608,10 +44,15 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
   val cpuWordToRfWordRange = log2Up(bytePerWord)-1 downto log2Up(p.rfDataBytes)
 
 
+  class LineInfoNoAddr() extends Bundle{
+    val valid, error = Bool()
+  }
+
   class LineInfo() extends Bundle{
     val valid, error = Bool()
     val address = UInt(tagRange.length bit)
   }
+
 
   val tagsReadCmd =  Flow(UInt(log2Up(wayLineCount) bits))
   val tagsInvReadCmd = withInvalidate generate Flow(UInt(log2Up(wayLineCount) bits))
@@ -633,34 +74,72 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
 
 
   val ways = for(i <- 0 until wayCount) yield new Area{
-    val tags = Mem(new LineInfo(), wayLineCount)
-    val data = Mem(Bits(memDataWidth bit), wayMemWordCount)
+    val tags = Mem(new LineInfoNoAddr(), wayLineCount)
+    //val data = Mem(Bits(memDataWidth bit), wayMemWordCount)
+    val addr = Memory(22, cacheSize)
+    addr.connectDefaults()
+    addr.A_MEN := True
+    addr.A_REN := False
+    addr.A_WEN := False
+    addr.A_DIN := B(0)
+    addr.B_MEN := True
+    addr.B_REN := False
+    addr.B_WEN := False
+    val data = Memory(memDataWidth, cacheSize)
+    data.connectDefaults()
+    data.A_MEN := True
+    data.A_REN := False
+    data.A_WEN := False
+    data.A_DIN := B(0)
+    data.B_MEN := True
+    data.B_REN := False
+    data.B_WEN := False
 
     //Reads
-    val tagsReadRsp = asyncTagMemory match {
-      case false => tags.readSync(tagsReadCmd.payload, tagsReadCmd.valid && !io.cpu.memory.isStuck)
-      case true => tags.readAsync(RegNextWhen(tagsReadCmd.payload, io.cpu.execute.isValid && !io.cpu.memory.isStuck))
+    val tagsReadRsp = new LineInfo()
+    val tagsReadRspMem = tags.readSync(tagsReadCmd.payload, tagsReadCmd.valid && !io.cpu.memory.isStuck)
+    tagsReadRsp.valid := tagsReadRspMem.valid
+    tagsReadRsp.error := tagsReadRspMem.error
+    tagsReadRsp.address := addr.A_DOUT.asUInt
+    addr.A_ADDR := tagsReadCmd.payload.asBits
+    when (tagsReadCmd.valid && !io.cpu.memory.isStuck) {
+      addr.A_REN := True
     }
-    val dataReadRspMem = data.readSync(dataReadCmd.payload, dataReadCmd.valid && !io.cpu.memory.isStuck)
+    data.A_ADDR := dataReadCmd.payload.asBits
+    when (dataReadCmd.valid && !io.cpu.memory.isStuck) {
+      data.A_REN := True
+    }
+    val dataReadRspMem = data.A_DOUT
     val dataReadRspSel = if(mergeExecuteMemory) io.cpu.writeBack.address else io.cpu.memory.address
     val dataReadRsp = dataReadRspMem.subdivideIn(cpuDataWidth bits).read(dataReadRspSel(memWordToCpuWordRange))
 
-    val tagsInvReadRsp = withInvalidate generate(asyncTagMemory match {
-      case false => tags.readSync(tagsInvReadCmd.payload, tagsInvReadCmd.valid)
-      case true => tags.readAsync(RegNextWhen(tagsInvReadCmd.payload, tagsInvReadCmd.valid))
+    require(withInvalidate == false, "withInvalidate not supported")
+    val tagsInvReadRsp = withInvalidate generate({
+      val tagsReadRsp = new LineInfo()
+      val tagsReadRspMem = tags.readSync(tagsInvReadCmd.payload, tagsInvReadCmd.valid)
+      tagsReadRsp.valid := tagsReadRspMem.valid
+      tagsReadRsp.error := tagsReadRspMem.error
+      // Would require third memory port
+      tagsReadRsp.address := U(0)
+      tagsReadRsp
     })
 
     //Writes
     when(tagsWriteCmd.valid && tagsWriteCmd.way(i)){
-      tags.write(tagsWriteCmd.address, tagsWriteCmd.data)
+      val tagNoAddr = new LineInfoNoAddr()
+      tagNoAddr.valid := tagsWriteCmd.data.valid
+      tagNoAddr.error := tagsWriteCmd.data.error
+      tags.write(tagsWriteCmd.address, tagNoAddr)
+      addr.B_WEN := True
     }
+    addr.B_ADDR := tagsWriteCmd.address.asBits
+    addr.B_DIN := tagsWriteCmd.data.address.asBits
+
     when(dataWriteCmd.valid && dataWriteCmd.way(i)){
-      data.write(
-        address = dataWriteCmd.address,
-        data = dataWriteCmd.data,
-        mask = dataWriteCmd.mask
-      )
+      data.B_WEN := True
     }
+    data.B_ADDR := dataWriteCmd.address.asBits
+    data.B_DIN := dataWriteCmd.data
   }
 
 
@@ -947,7 +426,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
 
     val badPermissions = (!mmuRsp.allowWrite && request.wr) || (!mmuRsp.allowRead && (!request.wr || isAmo))
     val loadStoreFault = io.cpu.writeBack.isValid && (mmuRsp.exception || badPermissions)
-    
+
     io.cpu.redo := False
     io.cpu.writeBack.accessError := False
     io.cpu.writeBack.mmuException :=  loadStoreFault && (if(catchIllegal) mmuRsp.isPaging else False)
