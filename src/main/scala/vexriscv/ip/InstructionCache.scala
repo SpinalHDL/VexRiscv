@@ -279,7 +279,15 @@ case class InstructionCacheFlushBus() extends Bundle with IMasterSlave{
   }
 }
 
-class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslatorBusParameter) extends Component{
+trait InstructionCacheIp extends Component {
+  val io: Bundle {
+    val flush: Bool
+    val cpu: InstructionCacheCpuBus
+    val mem: InstructionCacheMemBus
+  }
+}
+
+class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslatorBusParameter) extends Component with InstructionCacheIp{
   import p._
   val io = new Bundle{
     val flush = in Bool()
@@ -354,8 +362,6 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
       flushPending := False
     }
 
-
-
     val cmdSent = RegInit(False) setWhen(io.mem.cmd.fire) clearWhen(fire)
     io.mem.cmd.valid := valid && !cmdSent
     io.mem.cmd.address := address(tagRange.high downto lineRange.low) @@ U(0,lineRange.low bit)
@@ -363,7 +369,6 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
 
     val wayToAllocate = Counter(wayCount, !valid)
     val wordIndex = KeepAttribute(Reg(UInt(log2Up(memWordPerLine) bits)) init(0))
-
 
     val write = new Area{
       val tag = ways.map(_.tags.writePort)
@@ -418,10 +423,8 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
         }else {
           way.tags.readSync(io.cpu.prefetch.pc(lineRange), !io.cpu.fetch.isStuck)
         }
-//        val data = CombInit(banksValue(wayId).data)
       }
     }
-
 
     val hit = (!twoCycleRam) generate new Area{
       val hits = read.waysValues.map(way => way.tag.valid && way.tag.address === io.cpu.fetch.mmuRsp.physicalAddress(tagRange))
@@ -454,8 +457,6 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
     })
   }
 
-
-
   val decodeStage = ifGen(twoCycleCache) (new Area{
     def stage[T <: Data](that : T) = RegNextWhen(that,!io.cpu.decode.isStuck)
     val mmuRsp = stage(io.cpu.fetch.mmuRsp)
@@ -485,4 +486,3 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
     io.cpu.decode.physicalAddress := mmuRsp.physicalAddress
   })
 }
-

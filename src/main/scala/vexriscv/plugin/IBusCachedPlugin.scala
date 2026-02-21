@@ -1,6 +1,7 @@
 package vexriscv.plugin
 
 import vexriscv.{plugin, _}
+import vexriscv.ihp.sg13g2._
 import vexriscv.ip._
 import spinal.core._
 import spinal.lib._
@@ -32,11 +33,12 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
                        compressedGen : Boolean = false,
                        keepPcPlus4 : Boolean = false,
                        val config : InstructionCacheConfig,
-                       memoryTranslatorPortConfig : Any = null,
+                       val memoryTranslatorPortConfig : Any = null,
                        injectorStage : Boolean = false,
                        withoutInjectorStage : Boolean = false,
                        relaxPredictorAddress : Boolean = true,
-                       predictionBuffer : Boolean = true)  extends IBusFetcherImpl(
+                       predictionBuffer : Boolean = true,
+                       instructionCacheGen : (InstructionCacheConfig, MemoryTranslatorBusParameter) => InstructionCacheIp = new InstructionCache(_, _))  extends IBusFetcherImpl(
   resetVector = resetVector,
   keepPcPlus4 = keepPcPlus4,
   decodePcGen = compressedGen,
@@ -60,7 +62,6 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
 
   assert(!(withoutInjectorStage && injectorStage))
 
-
   override def getVexRiscvRegressionArgs(): Seq[String] = {
     var args = List[String]()
     args :+= "IBUS=CACHED"
@@ -75,6 +76,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
   var decodeExceptionPort : Flow[ExceptionCause] = null
   val tightlyCoupledPorts = ArrayBuffer[TightlyCoupledPort]()
   def tightlyGen = tightlyCoupledPorts.nonEmpty
+  var cacheIp: InstructionCacheIp = null
 
   def newTightlyCoupledPort(p : TightlyCoupledPortParameter) = {
     val port = TightlyCoupledPort(p, null)
@@ -98,6 +100,7 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
     import pipeline.config._
 
     super.setup(pipeline)
+
 
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.addDefault(FLUSH_ALL, False)
@@ -141,10 +144,11 @@ class IBusCachedPlugin(resetVector : BigInt = 0x80000000l,
     import pipeline.config._
 
     pipeline plug new FetchArea(pipeline) {
-      val cache = new InstructionCache(IBusCachedPlugin.this.config.copy(bypassGen = tightlyGen), if(mmuBus != null) mmuBus.p else MemoryTranslatorBusParameter(0,0))
+      val cache = instructionCacheGen(IBusCachedPlugin.this.config.copy(bypassGen = tightlyGen), if(mmuBus != null) mmuBus.p else MemoryTranslatorBusParameter(0,0))
       iBus = master(new InstructionCacheMemBus(IBusCachedPlugin.this.config)).setName("iBus")
       iBus <> cache.io.mem
       iBus.cmd.address.allowOverride := cache.io.mem.cmd.address
+      cacheIp = cache
 
       //Memory bandwidth counter
       val rspCounter = Reg(UInt(32 bits)) init(0)
