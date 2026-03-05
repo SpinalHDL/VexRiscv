@@ -48,13 +48,14 @@ case class TightlyCoupledDataPortParameter(name : String, hit : UInt => Bool)
 case class TightlyCoupledDataPort(p : TightlyCoupledDataPortParameter, var bus : TightlyCoupledDataBus)
 
 class DBusCachedPlugin(val config : DataCacheConfig,
-                       memoryTranslatorPortConfig : Any = null,
+                       val memoryTranslatorPortConfig : Any = null,
                        var dBusCmdMasterPipe : Boolean = false,
                        dBusCmdSlavePipe : Boolean = false,
                        dBusRspSlavePipe : Boolean = false,
                        relaxedMemoryTranslationRegister : Boolean = false,
                        csrInfo : Boolean = false,
-                       tightlyCoupledAddressStage : Boolean = false)  extends Plugin[VexRiscv] with DBusAccessService with DBusEncodingService with VexRiscvRegressionArg {
+                       tightlyCoupledAddressStage : Boolean = false,
+                       dataCacheGen : (DataCacheConfig, MemoryTranslatorBusParameter) => DataCacheIp = new DataCache(_, _))  extends Plugin[VexRiscv] with DBusAccessService with DBusEncodingService with VexRiscvRegressionArg {
   import config._
   assert(!(config.withExternalAmo && !dBusRspSlavePipe))
   assert(isPow2(cacheSize))
@@ -66,6 +67,7 @@ class DBusCachedPlugin(val config : DataCacheConfig,
   var privilegeService : PrivilegeService = null
   var redoBranch : Flow[UInt] = null
   var writesPending : Bool = null
+  var cacheIp: DataCacheIp = null
 
   @dontName var dBusAccess : DBusAccess = null
   override def newDBusAccess(): DBusAccess = {
@@ -305,14 +307,14 @@ class DBusCachedPlugin(val config : DataCacheConfig,
       case 0 => false
       case 1 => true
     }
-
-    val cache = new DataCache(
+    val cache = dataCacheGen(
       this.config.copy(
         mergeExecuteMemory = writeBack == null,
         rfDataWidth = 32
       ),
-      mmuParameter = mmuBus.p
+      mmuBus.p
     )
+    cacheIp = cache
 
     //Interconnect the plugin dBus with the cache dBus with some optional pipelining
     def optionPipe[T](cond : Boolean, on : T)(f : T => T) : T = if(cond) f(on) else on
