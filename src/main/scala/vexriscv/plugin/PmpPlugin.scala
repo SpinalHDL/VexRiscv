@@ -81,7 +81,7 @@ case class PmpRegister(previous : PmpRegister) extends Area {
   // registers. This makes locking and WARL possible.
   val csr = new Area {
     val r, w, x = Bool
-    val l = Bool
+    val l = Bool()
     val a = UInt(2 bits)
     val addr = UInt(32 bits)
   }

@@ -18,10 +18,10 @@ object BRANCH_CTRL extends Stageable(BranchCtrlEnum())
 
 
 case class DecodePredictionCmd() extends Bundle {
-  val hadBranch = Bool
+  val hadBranch = Bool()
 }
 case class DecodePredictionRsp(stage : Stage) extends Bundle {
-  val wasWrong = Bool
+  val wasWrong = Bool()
 }
 case class DecodePredictionBus(stage : Stage) extends Bundle {
   val cmd = DecodePredictionCmd()
@@ -29,11 +29,11 @@ case class DecodePredictionBus(stage : Stage) extends Bundle {
 }
 
 case class FetchPredictionCmd() extends Bundle{
-  val hadBranch = Bool
+  val hadBranch = Bool()
   val targetPc = UInt(32 bits)
 }
 case class FetchPredictionRsp() extends Bundle{
-  val wasRight = Bool
+  val wasRight = Bool()
   val finalPc = UInt(32 bits)
   val sourceLastWord = UInt(32 bits)
 }

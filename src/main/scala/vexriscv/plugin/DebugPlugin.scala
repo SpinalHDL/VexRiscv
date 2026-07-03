@@ -17,7 +17,7 @@ import scala.collection.mutable.ArrayBuffer
 
 
 case class DebugExtensionCmd() extends Bundle{
-  val wr = Bool
+  val wr = Bool()
   val address = UInt(8 bit)
   val data = Bits(32 bit)
 }
@@ -182,7 +182,7 @@ case class DebugExtensionBus() extends Bundle with IMasterSlave{
 
 case class DebugExtensionIo() extends Bundle with IMasterSlave{
   val bus = DebugExtensionBus()
-  val resetOut = Bool
+  val resetOut = Bool()
 
   override def asMaster(): Unit = {
     master(bus)

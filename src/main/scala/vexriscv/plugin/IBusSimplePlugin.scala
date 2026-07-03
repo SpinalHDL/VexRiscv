@@ -17,7 +17,7 @@ case class IBusSimpleCmd() extends Bundle{
 }
 
 case class IBusSimpleRsp() extends Bundle with IMasterSlave{
-  val error = Bool
+  val error = Bool()
   val inst  = Bits(32 bits)
 
   override def asMaster(): Unit = {

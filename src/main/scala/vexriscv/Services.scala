@@ -89,19 +89,19 @@ trait RegFileService{
 
 
 case class MemoryTranslatorCmd() extends Bundle{
-  val isValid = Bool
-  val isStuck = Bool
+  val isValid = Bool()
+  val isStuck = Bool()
   val virtualAddress  = UInt(32 bits)
-  val bypassTranslation = Bool
+  val bypassTranslation = Bool()
 }
 case class MemoryTranslatorRsp(p : MemoryTranslatorBusParameter) extends Bundle{
   val physicalAddress = UInt(32 bits)
-  val isIoAccess = Bool
-  val isPaging = Bool
-  val allowRead, allowWrite, allowExecute = Bool
-  val exception = Bool
-  val refilling = Bool
-  val bypassTranslation = Bool
+  val isIoAccess = Bool()
+  val isPaging = Bool()
+  val allowRead, allowWrite, allowExecute = Bool()
+  val exception = Bool()
+  val refilling = Bool()
+  val bypassTranslation = Bool()
   val ways = Vec(MemoryTranslatorRspWay(), p.wayCount)
 }
 case class MemoryTranslatorRspWay() extends Bundle{
@@ -113,8 +113,8 @@ case class MemoryTranslatorBusParameter(wayCount : Int = 0, latency : Int = 0)
 case class MemoryTranslatorBus(p : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave{
   val cmd = Vec(MemoryTranslatorCmd(), p.latency + 1)
   val rsp = MemoryTranslatorRsp(p)
-  val end = Bool
-  val busy = Bool
+  val end = Bool()
+  val busy = Bool()
 
   override def asMaster() : Unit = {
     out(cmd, end)

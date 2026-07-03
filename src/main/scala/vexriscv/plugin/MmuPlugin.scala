@@ -13,7 +13,7 @@ trait DBusAccessService{
 case class DBusAccessCmd() extends Bundle {
   val address = UInt(32 bits)
   val size = UInt(2 bits)
-  val write = Bool
+  val write = Bool()
   val data = Bits(32 bits)
   val writeMask = Bits(4 bits)
 }

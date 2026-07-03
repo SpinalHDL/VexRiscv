@@ -51,13 +51,13 @@ class Stage() extends Area{
     val removeIt    = False   //When settable, unschedule the instruction as if it was never executed (no side effect)
     val flushIt    = False   //When settable, unschedule the current instruction
     val flushNext    = False   //When settable, unschedule instruction above in the pipeline
-    val isValid     = Bool //Inform if a instruction is in the current stage
-    val isStuck     = Bool           //Inform if the instruction is stuck (haltItself || haltByOther)
-    val isStuckByOthers = Bool       //Inform if the instruction is stuck by sombody else
+    val isValid     = Bool() //Inform if a instruction is in the current stage
+    val isStuck     = Bool()           //Inform if the instruction is stuck (haltItself || haltByOther)
+    val isStuckByOthers = Bool()       //Inform if the instruction is stuck by sombody else
     def isRemoved   = removeIt       //Inform if the instruction is going to be unschedule the current cycle
-    val isFlushed   = Bool           //Inform if the instruction is flushed (flushAll set in the current or subsequents stages)
-    val isMoving     = Bool           //Inform if the instruction is going somewere else (next stage or unscheduled)
-    val isFiring    = Bool           //Inform if the current instruction will go to the next stage the next cycle (isValid && !isStuck && !removeIt)
+    val isFlushed   = Bool()           //Inform if the instruction is flushed (flushAll set in the current or subsequents stages)
+    val isMoving     = Bool()           //Inform if the instruction is going somewere else (next stage or unscheduled)
+    val isFiring    = Bool()           //Inform if the current instruction will go to the next stage the next cycle (isValid && !isStuck && !removeIt)
   }
 
 
