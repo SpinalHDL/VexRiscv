@@ -250,6 +250,7 @@ object VexRiscvSmpClusterGen {
                      decoderStupid : Boolean = false,
                      regfileRead : RegFileReadKind = plugin.ASYNC,
                      rvc : Boolean = false,
+                     mstatush : Boolean = true,
                      iTlbSize : Int = 4,
                      dTlbSize : Int = 4,
                      prediction : BranchPrediction = vexriscv.plugin.NONE,
@@ -423,6 +424,11 @@ object VexRiscvSmpClusterGen {
         new YamlPlugin(s"cpu$hartId.yaml")
       )
     )
+
+    // RV32 OpenSBI >= 1.6 clears MSTATUSH_MDT unconditionally in its trap paths, so a core without
+    // mstatush traps inside the trap handler. readOnly = false because a read-only mstatush only
+    // tolerates that write by accident of opcode decoding.
+    if(mstatush) config.plugins += new MstatushPlugin(readOnly = false)
 
     if(withFloat) config.plugins += new FpuPlugin(
       externalFpu = externalFpu,
