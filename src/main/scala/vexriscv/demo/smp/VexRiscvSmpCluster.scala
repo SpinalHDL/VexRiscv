@@ -14,7 +14,7 @@ import spinal.lib.com.jtag.xilinx.Bscane2BmbMasterGenerator
 import spinal.lib.generator._
 import spinal.core.fiber._
 import spinal.idslplugin.PostInitCallback
-import spinal.lib.cpu.riscv.debug.{DebugModule, DebugModuleCpuConfig, DebugModuleParameter, DebugTransportModuleJtagTap, DebugTransportModuleJtagTapWithTunnel, DebugTransportModuleParameter, DebugTransportModuleTunneled}
+import spinal.lib.cpu.riscv.debug.{DebugModule, DebugModuleCpuConfig, DebugModuleParameter, DebugTransportModuleJtagTap, DebugTransportModuleJtagTapWithTunnel, DebugTransportModuleParameter, DebugTransportModuleSwd, DebugTransportModuleTunneled}
 import spinal.lib.misc.plic.PlicMapping
 import spinal.lib.system.debugger.SystemDebuggerConfig
 import vexriscv.ip.{DataCacheAck, DataCacheConfig, DataCacheMemBus, InstructionCache, InstructionCacheConfig}
@@ -35,8 +35,12 @@ case class VexRiscvSmpClusterParameter(cpuConfigs : Seq[VexRiscvConfig],
                                        privilegedDebug : Boolean = false,
                                        hardwareBreakpoints : Int = 0,
                                        jtagTap : Boolean = false,
-                                       interruptCount : Int = 32
-                                      )
+                                       interruptCount : Int = 32,
+                                       swd : Boolean = false){
+  // One transport per DebugBus: JTAG DTM and SWD DTM cannot both drive dm.io.ctrl.
+  assert(!(swd && jtagTap), "VexRiscvSmpCluster: swd and jtagTap are mutually exclusive (single DebugBus, no arbitration)")
+  assert(!swd || privilegedDebug, "VexRiscvSmpCluster: swd requires privilegedDebug (official RISC-V DM only)")
+}
 
 class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with PostInitCallback{
   val cpuCount = p.cpuConfigs.size
@@ -138,7 +142,7 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
 
       val clintStop =  (cores.map(e => e.cpu.logic.cpu.service(classOf[CsrPlugin]).stoptime).andR)
 
-      val noTap = !p.jtagTap generate new Area {
+      val noTap = (!p.jtagTap && !p.swd) generate new Area {
         val jtagCd = ClockDomain.external("jtag", withReset = false)
 
         val tunnel = DebugTransportModuleTunneled(
@@ -157,6 +161,26 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
         )
         dm.io.ctrl <> tunnel.io.bus
         val debugPort = Handle(tunnel.io.jtag.toIo).setName("debugPort")
+      }
+
+      // SWD transport: SWCLK/SWDIO replace the JTAG DTM entirely (mutually exclusive with
+      // noTap/withTap above). SWDIO is exposed as three wires (i/o/oe) — the IOBUF belongs
+      // at the platform level, not inside this black box.
+      val withSwd = p.swd generate new Area {
+        val transport = DebugTransportModuleSwd(
+          p = dp,
+          debugCd = ClockDomain.current
+        )
+        dm.io.ctrl <> transport.io.bus
+        // Per-signal toIo: io.swd is an anonymous nested Bundle, so cloneOf (and therefore
+        // whole-bundle toIo) fails on it. Names are pinned explicitly because the LiteX
+        // black-box port map in vexriscv_smp/core.py depends on them.
+        val debugPort = Handle(new Area {
+          val swclk    = transport.io.swd.swclk    .toIo.setName("debugPort_swclk")
+          val swdio_i  = transport.io.swd.swdio.i  .toIo.setName("debugPort_swdio_i")
+          val swdio_o  = transport.io.swd.swdio.o  .toIo.setName("debugPort_swdio_o")
+          val swdio_oe = transport.io.swd.swdio.oe .toIo.setName("debugPort_swdio_oe")
+        })
       }
     })
   }
