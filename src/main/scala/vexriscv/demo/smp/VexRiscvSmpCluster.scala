@@ -172,14 +172,14 @@ class VexRiscvSmpClusterBase(p : VexRiscvSmpClusterParameter) extends Area with 
           debugCd = ClockDomain.current
         )
         dm.io.ctrl <> transport.io.bus
-        // Per-signal toIo: io.swd is an anonymous nested Bundle, so cloneOf (and therefore
-        // whole-bundle toIo) fails on it. Names are pinned explicitly because the LiteX
-        // black-box port map in vexriscv_smp/core.py depends on them.
+        // Per-signal toIo rather than transport.io.swd.toIo: the names are pinned because the
+        // LiteX black-box port map in vexriscv_smp/core.py depends on them (i/o/oe, not the
+        // TriState read/write/writeEnable of spinal.lib.com.swd.Swd).
         val debugPort = Handle(new Area {
-          val swclk    = transport.io.swd.swclk    .toIo.setName("debugPort_swclk")
-          val swdio_i  = transport.io.swd.swdio.i  .toIo.setName("debugPort_swdio_i")
-          val swdio_o  = transport.io.swd.swdio.o  .toIo.setName("debugPort_swdio_o")
-          val swdio_oe = transport.io.swd.swdio.oe .toIo.setName("debugPort_swdio_oe")
+          val swclk    = transport.io.swd.swclk             .toIo.setName("debugPort_swclk")
+          val swdio_i  = transport.io.swd.swdio.read        .toIo.setName("debugPort_swdio_i")
+          val swdio_o  = transport.io.swd.swdio.write       .toIo.setName("debugPort_swdio_o")
+          val swdio_oe = transport.io.swd.swdio.writeEnable .toIo.setName("debugPort_swdio_oe")
         })
       }
     })
