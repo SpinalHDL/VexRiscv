@@ -118,11 +118,11 @@ object DataCacheCpuExecute{
 }
 
 case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterSlave{
-  val isValid = Bool
+  val isValid = Bool()
   val address = UInt(p.addressWidth bit)
-  val haltIt = Bool
+  val haltIt = Bool()
   val args = DataCacheCpuExecuteArgs(p)
-  val refilling = Bool
+  val refilling = Bool()
 
   override def asMaster(): Unit = {
     out(isValid, args, address)
@@ -131,7 +131,7 @@ case class DataCacheCpuExecute(p : DataCacheConfig) extends Bundle with IMasterS
 }
 
 case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
-  val wr = Bool
+  val wr = Bool()
   val size = UInt(log2Up(log2Up(p.cpuDataBytes)+1) bits)
   val isLrsc = p.withLrSc generate Bool()
   val isAmo = p.withAmo generate Bool()
@@ -144,9 +144,9 @@ case class DataCacheCpuExecuteArgs(p : DataCacheConfig) extends Bundle{
 }
 
 case class DataCacheCpuMemory(p : DataCacheConfig, mmu : MemoryTranslatorBusParameter) extends Bundle with IMasterSlave{
-  val isValid = Bool
-  val isStuck = Bool
-  val isWrite = Bool
+  val isValid = Bool()
+  val isStuck = Bool()
+  val isWrite = Bool()
   val address = UInt(p.addressWidth bit)
   val mmuRsp  = MemoryTranslatorRsp(mmu)
 
@@ -222,14 +222,14 @@ case class DataCacheCpuBus(p : DataCacheConfig, mmu : MemoryTranslatorBusParamet
 
 
 case class DataCacheMemCmd(p : DataCacheConfig) extends Bundle{
-  val wr = Bool
-  val uncached = Bool
+  val wr = Bool()
+  val uncached = Bool()
   val address = UInt(p.addressWidth bit)
   val data = Bits(p.cpuDataWidth bits)
   val mask = Bits(p.cpuDataWidth/8 bits)
   val size   = UInt(p.sizeWidth bits) //... 1 => 2 bytes ... 2 => 4 bytes ...
   val exclusive = p.withExclusive generate Bool()
-  val last = Bool
+  val last = Bool()
 
 //  def beatCountMinusOne = size.muxListDc((0 to p.sizeMax).map(i => i -> U((1 << i)/p.memDataBytes)))
 //  def beatCount = size.muxListDc((0 to p.sizeMax).map(i => i -> U((1 << i)/p.memDataBytes-1)))
@@ -244,7 +244,7 @@ case class DataCacheMemRsp(p : DataCacheConfig) extends Bundle{
   val aggregated = UInt(p.aggregationWidth bits)
   val last = Bool()
   val data = Bits(p.memDataWidth bit)
-  val error = Bool
+  val error = Bool()
   val exclusive = p.withExclusive generate Bool()
 }
 case class DataCacheInv(p : DataCacheConfig) extends Bundle{
@@ -709,7 +709,7 @@ class DataCache(val p : DataCacheConfig, mmuParameter : MemoryTranslatorBusParam
     io.mem.sync.ready := True
     val syncCount = io.mem.sync.aggregated +^ 1
     val syncContext = new Area{
-      val history = Mem(Bool, pendingMax)
+      val history = Mem(Bool(), pendingMax)
       val wPtr, rPtr = Reg(UInt(log2Up(pendingMax)+1 bits)) init(0)
       when(io.mem.cmd.fire && io.mem.cmd.wr){
         history.write(wPtr.resized, io.mem.cmd.uncached)

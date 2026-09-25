@@ -483,7 +483,7 @@ abstract class IBusFetcherImpl(var resetVector : BigInt,
           val hazard = historyWriteLast.valid && historyWriteLast.address === (iBusRsp.stages(0).input.payload >> 2).resized
 
           case class DynamicContext() extends Bundle{
-            val hazard = Bool
+            val hazard = Bool()
             val line = BranchPredictorLine()
           }
           val fetchContext = DynamicContext()
@@ -539,7 +539,7 @@ abstract class IBusFetcherImpl(var resetVector : BigInt,
         case class BranchPredictorLine()  extends Bundle{
           val source = Bits(30 - historyRamSizeLog2 bits)
           val branchWish = UInt(2 bits)
-          val last2Bytes = ifGen(compressedGen)(Bool)
+          val last2Bytes = ifGen(compressedGen)(Bool())
           val target = UInt(32 bits)
         }
 
@@ -576,8 +576,8 @@ abstract class IBusFetcherImpl(var resetVector : BigInt,
         fetchPc.predictionPcLoad.payload := line.target
 
         case class PredictionResult()  extends Bundle{
-          val hazard = Bool
-          val hit = Bool
+          val hazard = Bool()
+          val hit = Bool()
           val line = BranchPredictorLine()
         }
 

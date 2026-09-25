@@ -5,13 +5,13 @@ import spinal.lib._
 import spinal.lib.IMasterSlave
 
 case class GCDDataControl() extends Bundle with IMasterSlave{
-  val cmpAgtB = Bool
-  val cmpAltB = Bool
-  val loadA = Bool
-  val loadB = Bool
-  val init = Bool
-  val selL = Bool
-  val selR = Bool
+  val cmpAgtB = Bool()
+  val cmpAltB = Bool()
+  val loadA = Bool()
+  val loadB = Bool()
+  val init = Bool()
+  val selL = Bool()
+  val selR = Bool()
   // define <> semantic
   override def asMaster(): Unit = {
     // as controller: output, input

@@ -28,7 +28,7 @@ class MemoryTranslatorPlugin(tlbSize : Int,
     port.bus
   }
 
-  object IS_TLB extends Stageable(Bool)
+  object IS_TLB extends Stageable(Bool())
   override def setup(pipeline: VexRiscv): Unit = {
     import Riscv._
     import pipeline.config._
@@ -49,10 +49,10 @@ class MemoryTranslatorPlugin(tlbSize : Int,
     val sortedPortsInfo = portsInfo.sortWith((a,b) => a.priority > b.priority)
 
     case class CacheLine() extends Bundle {
-      val valid = Bool
+      val valid = Bool()
       val virtualAddress = UInt(20 bits)
       val physicalAddress = UInt(20 bits)
-      val allowRead, allowWrite, allowExecute, allowUser = Bool
+      val allowRead, allowWrite, allowExecute, allowUser = Bool()
 
       def init = {
         valid init (False)

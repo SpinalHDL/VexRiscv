@@ -15,7 +15,7 @@ import scala.collection.mutable.ArrayBuffer
 
 
 case class DBusSimpleCmd() extends Bundle{
-  val wr = Bool
+  val wr = Bool()
   val mask = Bits(4 bit)
   val address = UInt(32 bits)
   val data = Bits(32 bit)
@@ -23,8 +23,8 @@ case class DBusSimpleCmd() extends Bundle{
 }
 
 case class DBusSimpleRsp() extends Bundle with IMasterSlave{
-  val ready = Bool
-  val error = Bool
+  val ready = Bool()
+  val error = Bool()
   val data = Bits(32 bit)
 
   override def asMaster(): Unit = {

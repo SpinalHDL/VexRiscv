@@ -29,12 +29,12 @@ case class RvfiPortMem() extends Bundle{
 }
 
 case class RvfiPort() extends Bundle with IMasterSlave {
-  val valid = Bool
+  val valid = Bool()
   val order = UInt(64 bits)
   val insn = Bits(32 bits)
-  val trap = Bool
-  val halt = Bool
-  val intr = Bool
+  val trap = Bool()
+  val halt = Bool()
+  val intr = Bool()
   val mode = Bits(2 bits)
   val ixl = Bits(2 bits)
   val rs1 = RvfiPortRsRead()

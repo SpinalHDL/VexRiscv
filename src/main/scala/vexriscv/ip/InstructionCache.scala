@@ -88,8 +88,8 @@ case class InstructionCacheConfig( cacheSize : Int,
 
 
 case class InstructionCacheCpuPrefetch(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
-  val isValid  = Bool
-  val haltIt   = Bool
+  val isValid  = Bool()
+  val haltIt   = Bool()
   val pc  = UInt(p.addressWidth bit)
 
   override def asMaster(): Unit = {
@@ -129,8 +129,8 @@ case class InstructionCacheCpuFetch(p : InstructionCacheConfig, mmuParameter : M
 
 
 case class InstructionCacheCpuDecode(p : InstructionCacheConfig) extends Bundle with IMasterSlave with InstructionCacheCommons {
-  val isValid = Bool
-  val isStuck  = Bool
+  val isValid = Bool()
+  val isStuck  = Bool()
   val pc = UInt(p.addressWidth bits)
   val physicalAddress = UInt(p.addressWidth bits)
   val data  =  Bits(p.cpuDataWidth bits)
@@ -161,7 +161,7 @@ case class InstructionCacheMemCmd(p : InstructionCacheConfig) extends Bundle{
 
 case class InstructionCacheMemRsp(p : InstructionCacheConfig) extends Bundle{
   val data = Bits(p.memDataWidth bit)
-  val error = Bool
+  val error = Bool()
 }
 
 case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle with IMasterSlave{
@@ -271,7 +271,7 @@ case class InstructionCacheMemBus(p : InstructionCacheConfig) extends Bundle wit
 
 case class InstructionCacheFlushBus() extends Bundle with IMasterSlave{
   val cmd = Event
-  val rsp = Bool
+  val rsp = Bool()
 
   override def asMaster(): Unit = {
     master(cmd)
@@ -298,8 +298,8 @@ class InstructionCache(p : InstructionCacheConfig, mmuParameter : MemoryTranslat
   val lineRange = tagRange.low-1 downto log2Up(bytePerLine)
 
   case class LineTag() extends Bundle{
-    val valid = Bool
-    val error = Bool
+    val valid = Bool()
+    val error = Bool()
     val address = UInt(tagRange.length bit)
   }
 

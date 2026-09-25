@@ -172,8 +172,8 @@ case class FpuCore( portCount : Int, p : FpuParameter) extends Component{
     }
 
     val scoreboards = Array.fill(portCount)(new Area{
-      val target, hit = Mem(Bool, 32) // XOR
-      val writes = Mem(Bool, 32)
+      val target, hit = Mem(Bool(), 32) // XOR
+      val writes = Mem(Bool(), 32)
 
       val targetWrite = init(target.writePort)
       val hitWrite = init(hit.writePort)
