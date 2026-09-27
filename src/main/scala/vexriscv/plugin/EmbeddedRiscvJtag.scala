@@ -8,15 +8,23 @@ package vexriscv.plugin
 import spinal.core._
 import spinal.lib._
 import spinal.lib.com.jtag._
+import spinal.lib.com.swd.Swd
 import spinal.lib.cpu.riscv.debug._
 import vexriscv._
 
 
+/**
+  * Integrates the RISC-V debug module (DM) and its transport (DTM) in the CPU itself.
+  *
+  * withSwd replaces the JTAG transport by a SWD one (SWCLK/SWDIO, a RISC-V debug spec custom DTM). withTap and
+  * withTunneling are then ignored, as only one debug transport can be used at a time (RISC-V debug spec Ch. 6).
+  */
 class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
                         var debugCd : ClockDomain = null,
                         var withTap : Boolean = true,
                         var withTunneling : Boolean = false,
-                        var jtagCd : ClockDomain = null
+                        var jtagCd : ClockDomain = null,
+                        var withSwd : Boolean = false
                         ) extends Plugin[VexRiscv] with VexRiscvRegressionArg{
 
 
@@ -24,14 +32,16 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
 
   var jtag : Jtag = null
   var jtagInstruction : JtagTapInstructionCtrl = null
+  var swd : Swd = null
   var ndmreset : Bool = null
 
 
   def setDebugCd(cd : ClockDomain) : this.type = {debugCd = cd; this}
 
   override def setup(pipeline: VexRiscv): Unit = {
-    jtag = withTap generate slave(Jtag()).setName("jtag")
-    jtagInstruction = !withTap generate slave(JtagTapInstructionCtrl()).setName("jtagInstruction")
+    jtag = (withTap && !withSwd) generate slave(Jtag()).setName("jtag")
+    jtagInstruction = (!withTap && !withSwd) generate slave(JtagTapInstructionCtrl()).setName("jtagInstruction")
+    swd = withSwd generate slave(Swd()).setName("swd")
     ndmreset = out(Bool()).setName("ndmreset")
     assert(debugCd != null, "You need to set the debugCd of the VexRiscv EmbeddedRiscvJtag.")
   }
@@ -54,7 +64,7 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
 
     ndmreset := dm.io.ndmreset
 
-    val dmiDirect = if(withTap && !withTunneling) new Area {
+    val dmiDirect = if(withTap && !withTunneling && !withSwd) new Area {
       val logic = DebugTransportModuleJtagTap(
         p.copy(addressWidth = 7),
         debugCd = ClockDomain.current
@@ -62,7 +72,7 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
       dm.io.ctrl <> logic.io.bus
       logic.io.jtag <> jtag
     }
-    val dmiTunneled = if(withTap && withTunneling) new Area {
+    val dmiTunneled = if(withTap && withTunneling && !withSwd) new Area {
       val logic = DebugTransportModuleJtagTapWithTunnel(
         p.copy(addressWidth = 7),
         debugCd = ClockDomain.current
@@ -70,7 +80,7 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
       dm.io.ctrl <> logic.io.bus
       logic.io.jtag <> jtag
     }
-    val dmiDirectInstr = if (!withTap && withTunneling) new Area {
+    val dmiDirectInstr = if (!withTap && withTunneling && !withSwd) new Area {
       val logic = DebugTransportModuleTunneled(
         p.copy(addressWidth = 7),
         debugCd = ClockDomain.current,
@@ -78,6 +88,15 @@ class EmbeddedRiscvJtag(var p : DebugTransportModuleParameter,
       )
       dm.io.ctrl <> logic.io.bus
       logic.io.instruction <> jtagInstruction
+    }
+    // SWCLK is a pin of the transport itself, so unlike the JTAG instruction port no clock domain is needed.
+    val dmiSwd = if(withSwd) new Area {
+      val logic = DebugTransportModuleSwd(
+        p.copy(addressWidth = 7),
+        debugCd = ClockDomain.current
+      )
+      dm.io.ctrl <> logic.io.bus
+      logic.io.swd <> swd
     }
 
     val privBus = pipeline.service(classOf[CsrPlugin]).debugBus.setAsDirectionLess()
