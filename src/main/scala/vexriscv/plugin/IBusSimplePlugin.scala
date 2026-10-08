@@ -256,7 +256,10 @@ class IBusSimplePlugin(    resetVector : BigInt,
 
   var iBus : IBusSimpleBus = null
   var decodeExceptionPort : Flow[ExceptionCause] = null
-  val catchSomething = memoryTranslatorPortConfig != null || catchAccessFault
+  // Whether the IBus plugin should catch faults. Automatically determined
+  // in setup based on whether catchAccessFault is set or the pipeline has a
+  // MemoryTranslator plugin.
+  var catchSomething = false;
   var mmuBus : MemoryTranslatorBus = null
 
 //  if(rspHoldValue) assert(busLatencyMin <= 1)
@@ -267,6 +270,8 @@ class IBusSimplePlugin(    resetVector : BigInt,
     super.setup(pipeline)
     iBus = master(IBusSimpleBus(this)).setName("iBus")
 
+    catchSomething = pipeline.serviceExist(classOf[MemoryTranslator]) || catchAccessFault
+
     val decoderService = pipeline.service(classOf[DecoderService])
     decoderService.add(FENCE_I, Nil)
 
@@ -274,7 +279,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
       decodeExceptionPort = pipeline.service(classOf[ExceptionService]).newExceptionPort(pipeline.decode,1)
     }
 
-    if(memoryTranslatorPortConfig != null) {
+    if(pipeline.serviceExist(classOf[MemoryTranslator])) {
       mmuBus = pipeline.service(classOf[MemoryTranslator]).newTranslationPort(MemoryTranslatorPort.PRIORITY_INSTRUCTION, memoryTranslatorPortConfig)
     }
   }
@@ -405,7 +410,7 @@ class IBusSimplePlugin(    resetVector : BigInt,
             decodeExceptionPort.code  := 1
             exceptionDetected := True
           }
-          if(memoryTranslatorPortConfig != null) {
+          if(mmuBus != null) {
             val privilegeService = pipeline.serviceElse(classOf[PrivilegeService], PrivilegeServiceDefault())
             when(stages.last.input.valid && !mmu.joinCtx.refilling && (mmu.joinCtx.exception || !mmu.joinCtx.allowExecute)){
               decodeExceptionPort.code  := 12
