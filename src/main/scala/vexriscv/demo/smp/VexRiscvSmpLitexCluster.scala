@@ -190,7 +190,12 @@ object VexRiscvLitexSmpClusterCmdGen extends App {
           rvc = rvc,
           injectorStage = rvc,
           iTlbSize = iTlbSize,
-          dTlbSize = dTlbSize
+          dTlbSize = dTlbSize,
+          // Upstream gated CounterPlugin behind withCounterPlugin (default false), but the
+          // cluster still sets CsrPlugin utimeAccess = READ_ONLY. With no CounterService the
+          // CsrPlugin allocates its own `utime` input, and the clint->time binding below only
+          // matches CounterPlugin -- leaving utime undriven. Restore the pre-gating behaviour.
+          withCounterPlugin = true
         )
         if(aesInstruction) c.add(new AesPlugin)
         c
