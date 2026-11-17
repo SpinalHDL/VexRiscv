@@ -936,14 +936,13 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
 
             csrrw(CSR.TDATA1, read, 2 -> execute , 3 -> u, 4-> s, 6 -> m, 32 - 5 -> dmode, 12 -> action)
             csrr(CSR.TDATA1, read, 32 - 4 -> tpe)
-            csrr(CSR.TDATA1, read, 20 -> B"011111")
 
-            //TODO action sizelo timing select sizehi maskmax
+            // Exact address matching only: maskmax is zero, and hit is unimplemented.
           }
 
           val tdata2 = new Area{
             val value = Reg(Bits(32 bits))
-            csrrw(CSR.TDATA2, value, 0 -> value)
+            csrw(CSR.TDATA2, 0 -> value)
 
             val execute = new Area{
               val enabled = !debugMode && tdata1.action === 1 && tdata1.execute && tdata1.privilegeHit
@@ -954,6 +953,7 @@ class CsrPlugin(val config: CsrPluginConfig) extends Plugin[VexRiscv] with Excep
         }
 
         r(CSR.TDATA1, 0 -> slots.map(_.tdata1.read).read(tselect.index))
+        r(CSR.TDATA2, 0 -> slots.map(_.tdata2.value).read(tselect.index))
 
         decodeBreak.enabled clearWhen(!decode.arbitration.isValid)
       }
